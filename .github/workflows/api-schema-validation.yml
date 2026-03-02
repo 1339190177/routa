@@ -73,6 +73,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: schema-static-validation
 
+    # Set environment variables at the job level so they're available to all steps
+    env:
+      DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
+      NODE_ENV: test
+
     services:
       postgres:
         image: postgres:16
@@ -101,23 +106,14 @@ jobs:
         run: npm ci
 
       - name: Build Next.js app
-        env:
-          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
-          # Disable Next.js build cache to ensure fresh environment variables
-          NEXT_TELEMETRY_DISABLED: 1
         run: |
           rm -rf .next
           npm run build
 
       - name: Sync database schema
-        env:
-          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
         run: npm run db:push:ci
 
       - name: Start Next.js server
-        env:
-          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
-          NODE_ENV: test
         run: |
           npm run start &
           echo "Waiting for Next.js server to start..."
@@ -127,13 +123,11 @@ jobs:
       - name: Run schema validation tests against Next.js
         env:
           BASE_URL: http://localhost:3000
-          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
         run: npm run api:test:schema:nextjs
 
       - name: Run full API contract tests against Next.js
         env:
           BASE_URL: http://localhost:3000
-          DATABASE_URL: postgresql://routa:routa_test@localhost:5432/routa_test
         run: npm run api:test:nextjs
 
   # ── Runtime schema validation (Rust backend) ──────────────────────
