@@ -5,6 +5,7 @@ members = [
     "crates/routa-server",
     "crates/routa-cli",
     "crates/routa-rpc",
+    "apps/desktop/src-tauri",
 ]
 
 [workspace.package]
