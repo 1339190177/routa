@@ -101,7 +101,7 @@ export function WorkspacePageClient() {
   const [traces, setTraces] = useState<TraceInfo[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAgentInstallPopup, setShowAgentInstallPopup] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "notes" | "bg_tasks" | "tasks">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "notes" | "bg_tasks">("overview");
   const [bgTasks, setBgTasks] = useState<BackgroundTaskInfo[]>([]);
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [dispatchPrompt, setDispatchPrompt] = useState("");
@@ -380,6 +380,33 @@ export function WorkspacePageClient() {
     setRefreshKey((k) => k + 1);
   };
 
+  const handleDeleteAllSessions = async () => {
+    await Promise.all(
+      sessions.map((s) =>
+        fetch(`/api/sessions/${encodeURIComponent(s.sessionId)}`, { method: "DELETE" })
+      )
+    );
+    setRefreshKey((k) => k + 1);
+  };
+
+  const handleDeleteAllNotes = async () => {
+    await Promise.all(
+      notesHook.notes.map((n) =>
+        fetch(`/api/notes?noteId=${encodeURIComponent(n.id)}&workspaceId=${encodeURIComponent(workspaceId)}`, { method: "DELETE" })
+      )
+    );
+    setRefreshKey((k) => k + 1);
+  };
+
+  const handleDeleteAllTasks = async () => {
+    await Promise.all(
+      tasks.map((t) =>
+        fetch(`/api/tasks?taskId=${encodeURIComponent(t.id)}`, { method: "DELETE" })
+      )
+    );
+    setRefreshKey((k) => k + 1);
+  };
+
   return (
     <div className="h-screen flex flex-col bg-[#fafafa] dark:bg-[#0a0c12]">
       {/* ─── Top Bar ───────────────────────────────────────────────── */}
@@ -515,18 +542,10 @@ export function WorkspacePageClient() {
           <div className="flex items-center gap-1 mb-6 border-b border-gray-200/60 dark:border-[#191c28]">
             <TabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>Overview</TabButton>
             <TabButton active={activeTab === "notes"} onClick={() => setActiveTab("notes")}>
-              Notes
-              {notesHook.notes.length > 0 && (
+              Workspace Notes
+              {(notesHook.notes.length + tasks.length) > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 dark:bg-[#191c28] text-gray-500 dark:text-gray-400 font-mono">
-                  {notesHook.notes.length}
-                </span>
-              )}
-            </TabButton>
-            <TabButton active={activeTab === "tasks"} onClick={() => setActiveTab("tasks")}>
-              Tasks
-              {tasks.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 dark:bg-[#191c28] text-gray-500 dark:text-gray-400 font-mono">
-                  {tasks.length}
+                  {notesHook.notes.length + tasks.length}
                 </span>
               )}
             </TabButton>
@@ -550,6 +569,16 @@ export function WorkspacePageClient() {
                   title="Recent Sessions"
                   count={sessions.length}
                   emptyText="No sessions yet. Start one above."
+                  action={
+                    sessions.length > 0 ? (
+                      <button
+                        onClick={handleDeleteAllSessions}
+                        className="text-[11px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors"
+                      >
+                        Clear all
+                      </button>
+                    ) : undefined
+                  }
                 >
                   {sessions.slice(0, 8).map((s) => (
                     <button
@@ -1207,6 +1236,7 @@ export function WorkspacePageClient() {
               loading={notesHook.loading}
               workspaceId={workspaceId}
               sessions={sessions}
+              tasks={tasks}
               onCreateNote={async (title, content, type, sessionId) => {
                 await notesHook.createNote({ title, content, type, sessionId });
               }}
@@ -1216,21 +1246,14 @@ export function WorkspacePageClient() {
               onDeleteNote={async (noteId) => {
                 await notesHook.deleteNote(noteId);
               }}
-            />
-          )}
-
-          {activeTab === "tasks" && (
-            <TasksTab
-              tasks={tasks}
-              workspaceId={workspaceId}
-              sessions={sessions}
-              allNotes={notesHook.notes}
-              onRefresh={() => setRefreshKey((k) => k + 1)}
+              onDeleteAllNotes={handleDeleteAllNotes}
               onCreateTask={handleCreateTask}
               onDeleteTask={handleDeleteTaskEntry}
               onUpdateTaskStatus={handleUpdateTaskStatus}
+              onDeleteAllTasks={handleDeleteAllTasks}
             />
           )}
+
         </div>
       </div>
 
@@ -1428,330 +1451,6 @@ function AgentStatusDot({ status }: { status: string }) {
   );
 }
 
-// ─── Tasks Tab ─────────────────────────────────────────────────────
-
-function TasksTab({
-  tasks,
-  workspaceId: _workspaceId,
-  sessions,
-  allNotes,
-  onRefresh,
-  onCreateTask,
-  onDeleteTask,
-  onUpdateTaskStatus,
-}: {
-  tasks: TaskInfo[];
-  workspaceId: string;
-  sessions: SessionInfo[];
-  allNotes: NoteData[];
-  onRefresh: () => void;
-  onCreateTask: (title: string, objective: string, sessionId?: string) => Promise<void>;
-  onDeleteTask: (taskId: string) => Promise<void>;
-  onUpdateTaskStatus: (taskId: string, status: string) => Promise<void>;
-}) {
-  const [expandedTask, setExpandedTask] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [createForm, setCreateForm] = useState({ title: "", objective: "", sessionId: "" });
-  const [createLoading, setCreateLoading] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
-  const [deletingTask, setDeletingTask] = useState<string | null>(null);
-
-  const TASK_STATUSES = ["PENDING", "IN_PROGRESS", "REVIEW_REQUIRED", "NEEDS_FIX", "COMPLETED", "BLOCKED", "CANCELLED"];
-
-  const statusCounts: Record<string, number> = {};
-  for (const t of tasks) {
-    const s = t.status.toUpperCase();
-    statusCounts[s] = (statusCounts[s] ?? 0) + 1;
-  }
-
-  const filteredTasks = statusFilter === "all" ? tasks : tasks.filter((t) => t.status.toUpperCase() === statusFilter);
-
-  const getLinkedNotes = (taskId: string) =>
-    allNotes.filter((n) => n.metadata?.linkedTaskId === taskId);
-
-  const handleCreate = async () => {
-    if (!createForm.title.trim() || !createForm.objective.trim()) return;
-    setCreateLoading(true);
-    try {
-      await onCreateTask(createForm.title.trim(), createForm.objective.trim(), createForm.sessionId || undefined);
-      setCreateForm({ title: "", objective: "", sessionId: "" });
-      setShowCreateForm(false);
-    } finally {
-      setCreateLoading(false);
-    }
-  };
-
-  const handleStatusChange = async (taskId: string, newStatus: string) => {
-    setUpdatingStatus(taskId);
-    try {
-      await onUpdateTaskStatus(taskId, newStatus);
-    } finally {
-      setUpdatingStatus(null);
-    }
-  };
-
-  const handleDelete = async (taskId: string) => {
-    setDeletingTask(taskId);
-    try {
-      await onDeleteTask(taskId);
-    } finally {
-      setDeletingTask(null);
-    }
-  };
-
-  return (
-    <div className="max-w-5xl">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Tasks</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Manage workspace tasks and track their progress
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onRefresh}
-            className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#191c28] transition-colors"
-            title="Refresh"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-amber-500 hover:bg-amber-600 text-white transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            New Task
-          </button>
-        </div>
-      </div>
-
-      {/* Status filter */}
-      {tasks.length > 0 && (
-        <div className="flex gap-2 flex-wrap mb-4">
-          {(["all", ...TASK_STATUSES] as const).map((s) => {
-            const cnt = s === "all" ? tasks.length : (statusCounts[s] ?? 0);
-            if (s !== "all" && cnt === 0) return null;
-            const active = statusFilter === s;
-            const colorMap: Record<string, string> = {
-              all: "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
-              PENDING: "bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400",
-              IN_PROGRESS: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
-              REVIEW_REQUIRED: "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400",
-              NEEDS_FIX: "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400",
-              COMPLETED: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400",
-              BLOCKED: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",
-              CANCELLED: "bg-gray-100 dark:bg-gray-700/30 text-gray-400",
-            };
-            return (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
-                  active
-                    ? "ring-2 ring-amber-400 border-amber-400 " + (colorMap[s] || colorMap.all)
-                    : "border-transparent " + (colorMap[s] || colorMap.all) + " hover:opacity-80"
-                }`}
-              >
-                <span>{s === "all" ? "All" : s.replace(/_/g, " ")}</span>
-                <span className="font-bold ml-0.5">{cnt}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Create task form */}
-      {showCreateForm && (
-        <div className="mb-6 p-4 bg-white dark:bg-[#12141c] rounded-xl border border-gray-200/60 dark:border-[#1c1f2e]">
-          <h3 className="text-[13px] font-semibold text-gray-800 dark:text-gray-200 mb-3">New Task</h3>
-          <div className="space-y-3">
-            <input
-              type="text"
-              placeholder="Task title (required)"
-              value={createForm.title}
-              onChange={(e) => setCreateForm((f) => ({ ...f, title: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#0e1019] text-[13px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
-            />
-            <textarea
-              rows={3}
-              placeholder="Objective — describe what needs to be done (required)"
-              value={createForm.objective}
-              onChange={(e) => setCreateForm((f) => ({ ...f, objective: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#0e1019] text-[13px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-amber-500/30"
-            />
-            {sessions.length > 0 && (
-              <div>
-                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Bind to session <span className="text-gray-400 font-normal">(optional)</span>
-                </label>
-                <select
-                  value={createForm.sessionId}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, sessionId: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#0e1019] text-[13px] text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
-                >
-                  <option value="">— No session —</option>
-                  {sessions.map((s) => (
-                    <option key={s.sessionId} value={s.sessionId}>
-                      {s.name || s.provider || s.sessionId.slice(0, 12)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <button
-                onClick={handleCreate}
-                disabled={createLoading || !createForm.title.trim() || !createForm.objective.trim()}
-                className="px-4 py-2 rounded-lg text-[12px] font-medium text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-40 transition-colors"
-              >
-                {createLoading ? "Creating…" : "Create Task"}
-              </button>
-              <button
-                onClick={() => { setShowCreateForm(false); setCreateForm({ title: "", objective: "", sessionId: "" }); }}
-                className="px-4 py-2 rounded-lg text-[12px] font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {filteredTasks.length === 0 ? (
-        <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-          <svg className="w-10 h-10 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p className="text-sm font-medium">{tasks.length === 0 ? "No tasks yet" : `No ${statusFilter.replace(/_/g, " ")} tasks`}</p>
-          {tasks.length === 0 && <p className="text-[12px] mt-1">Click &ldquo;New Task&rdquo; to create one.</p>}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filteredTasks.map((task) => {
-            const isExpanded = expandedTask === task.id;
-            const taskLinkedNotes = getLinkedNotes(task.id);
-            const isUpdating = updatingStatus === task.id;
-            const isDeleting = deletingTask === task.id;
-
-            return (
-              <div
-                key={task.id}
-                className="bg-white dark:bg-[#12141c] rounded-xl border border-gray-200/60 dark:border-[#1c1f2e] overflow-hidden transition-shadow hover:shadow-sm"
-              >
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <button onClick={() => setExpandedTask(isExpanded ? null : task.id)} className="shrink-0">
-                    <TaskStatusIcon status={task.status} />
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[13px] font-medium text-gray-700 dark:text-gray-300 truncate block">
-                      {task.title}
-                    </span>
-                    {task.objective && (
-                      <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate block">
-                        {task.objective}
-                      </span>
-                    )}
-                  </div>
-                  <TaskStatusBadge status={task.status} />
-                  <span className="text-[10px] text-gray-400 dark:text-gray-600 font-mono shrink-0 w-12 text-right">
-                    {formatRelativeTime(task.createdAt)}
-                  </span>
-                  {/* Inline status updater */}
-                  <select
-                    value={task.status}
-                    disabled={isUpdating}
-                    onChange={(e) => handleStatusChange(task.id, e.target.value)}
-                    title="Update task status"
-                    className="text-[10px] border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#0e1019] text-gray-600 dark:text-gray-400 rounded-md px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-amber-500/30 disabled:opacity-50 cursor-pointer"
-                  >
-                    {["PENDING", "IN_PROGRESS", "REVIEW_REQUIRED", "NEEDS_FIX", "COMPLETED", "BLOCKED", "CANCELLED"].map((s) => (
-                      <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-                    ))}
-                  </select>
-                  {/* Delete */}
-                  <button
-                    onClick={() => handleDelete(task.id)}
-                    disabled={isDeleting}
-                    className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 shrink-0"
-                    title="Delete task"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                  {/* Expand chevron */}
-                  <button onClick={() => setExpandedTask(isExpanded ? null : task.id)} className="shrink-0">
-                    <svg
-                      className={`w-3.5 h-3.5 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                    </svg>
-                  </button>
-                </div>
-
-                {isExpanded && (
-                  <div className="px-4 pb-4 border-t border-gray-100 dark:border-[#191c28]">
-                    <div className="mt-3 space-y-2 text-[12px] text-gray-600 dark:text-gray-400">
-                      <div><span className="font-semibold">ID:</span> <code className="font-mono text-[11px]">{task.id}</code></div>
-                      {task.assignedTo && <div><span className="font-semibold">Assigned to:</span> {task.assignedTo}</div>}
-                      {task.sessionId && (
-                        <div><span className="font-semibold">Session:</span> <code className="font-mono text-[11px]">{task.sessionId}</code></div>
-                      )}
-                      <div><span className="font-semibold">Created:</span> {new Date(task.createdAt).toLocaleString()}</div>
-                      {task.objective && (
-                        <div className="mt-3 p-3 bg-gray-50 dark:bg-[#0a0c12] rounded-lg">
-                          <div className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Objective</div>
-                          <div className="text-[12px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{task.objective}</div>
-                        </div>
-                      )}
-                      {/* Linked notes */}
-                      {taskLinkedNotes.length > 0 && (
-                        <div className="mt-3">
-                          <div className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5">
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.07-9.07a4.5 4.5 0 00-6.364 0l-4.5 4.5a4.5 4.5 0 000 6.364l1.757 1.757" />
-                            </svg>
-                            Linked Notes ({taskLinkedNotes.length})
-                          </div>
-                          <div className="space-y-1.5">
-                            {taskLinkedNotes.map((n) => (
-                              <div key={n.id} className="p-2.5 bg-violet-50 dark:bg-violet-900/15 rounded-lg border border-violet-100 dark:border-violet-900/30">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400">
-                                    {n.metadata.type}
-                                  </span>
-                                  <span className="text-[12px] font-medium text-gray-700 dark:text-gray-300">{n.title}</span>
-                                  <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-600 font-mono shrink-0">{formatRelativeTime(n.updatedAt)}</span>
-                                </div>
-                                {n.content && (
-                                  <pre className="text-[11px] text-gray-500 dark:text-gray-400 whitespace-pre-wrap font-mono max-h-24 overflow-y-auto leading-relaxed">
-                                    {n.content.slice(0, 300)}{n.content.length > 300 ? "…" : ""}
-                                  </pre>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Notes Tab ─────────────────────────────────────────────────────
 
 function NotesTab({
@@ -1759,9 +1458,15 @@ function NotesTab({
   loading,
   workspaceId,
   sessions,
+  tasks,
   onCreateNote,
   onUpdateNote,
   onDeleteNote,
+  onDeleteAllNotes,
+  onCreateTask,
+  onDeleteTask,
+  onUpdateTaskStatus,
+  onDeleteAllTasks,
 }: {
   notes: NoteData[];
   loading: boolean;
@@ -1770,6 +1475,12 @@ function NotesTab({
   onCreateNote: (title: string, content: string, type: "spec" | "task" | "general", sessionId?: string) => Promise<void>;
   onUpdateNote: (noteId: string, update: { title?: string; content?: string }) => Promise<void>;
   onDeleteNote: (noteId: string) => Promise<void>;
+  onDeleteAllNotes: () => Promise<void>;
+  tasks: TaskInfo[];
+  onCreateTask: (title: string, objective: string, sessionId?: string) => Promise<void>;
+  onDeleteTask: (taskId: string) => Promise<void>;
+  onUpdateTaskStatus: (taskId: string, status: string) => Promise<void>;
+  onDeleteAllTasks: () => Promise<void>;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -1783,6 +1494,58 @@ function NotesTab({
   const [editLoading, setEditLoading] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+
+  // ── Task state ─────────────────────────────────────────────────
+  const [taskStatusFilter, setTaskStatusFilter] = useState<string>("all");
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskCreateForm, setTaskCreateForm] = useState({ title: "", objective: "", sessionId: "" });
+  const [taskCreateLoading, setTaskCreateLoading] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [updatingTaskStatus, setUpdatingTaskStatus] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [clearingNotes, setClearingNotes] = useState(false);
+  const [clearingTasks, setClearingTasks] = useState(false);
+
+  const TASK_STATUSES = ["PENDING", "IN_PROGRESS", "REVIEW_REQUIRED", "NEEDS_FIX", "COMPLETED", "BLOCKED", "CANCELLED"];
+  const taskStatusCounts: Record<string, number> = {};
+  for (const t of tasks) { taskStatusCounts[t.status.toUpperCase()] = (taskStatusCounts[t.status.toUpperCase()] ?? 0) + 1; }
+  const filteredTasks = taskStatusFilter === "all" ? tasks : tasks.filter((t) => t.status.toUpperCase() === taskStatusFilter);
+
+  const handleCreateTask = async () => {
+    if (!taskCreateForm.title.trim() || !taskCreateForm.objective.trim()) return;
+    setTaskCreateLoading(true);
+    try {
+      await onCreateTask(taskCreateForm.title.trim(), taskCreateForm.objective.trim(), taskCreateForm.sessionId || undefined);
+      setTaskCreateForm({ title: "", objective: "", sessionId: "" });
+      setShowTaskForm(false);
+    } finally {
+      setTaskCreateLoading(false);
+    }
+  };
+
+  const handleTaskStatusChange = async (taskId: string, newStatus: string) => {
+    setUpdatingTaskStatus(taskId);
+    try { await onUpdateTaskStatus(taskId, newStatus); }
+    finally { setUpdatingTaskStatus(null); }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    setDeletingTaskId(taskId);
+    try { await onDeleteTask(taskId); }
+    finally { setDeletingTaskId(null); }
+  };
+
+  const handleClearNotes = async () => {
+    setClearingNotes(true);
+    try { await onDeleteAllNotes(); }
+    finally { setClearingNotes(false); }
+  };
+
+  const handleClearTasks = async () => {
+    setClearingTasks(true);
+    try { await onDeleteAllTasks(); }
+    finally { setClearingTasks(false); }
+  };
 
   const sortedNotes = [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   const filteredNotes = typeFilter === "all" ? sortedNotes : sortedNotes.filter((n) => n.metadata?.type === typeFilter);
@@ -1855,15 +1618,26 @@ function NotesTab({
             Notes are bound to workspace: {workspaceId}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          New Note
-        </button>
+        <div className="flex items-center gap-2">
+          {notes.length > 0 && (
+            <button
+              onClick={handleClearNotes}
+              disabled={clearingNotes}
+              className="text-[11px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors disabled:opacity-50"
+            >
+              {clearingNotes ? "Clearing…" : "Clear all"}
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            New Note
+          </button>
+        </div>
       </div>
 
       {/* Type filter */}
@@ -2083,11 +1857,224 @@ function NotesTab({
           ))}
         </div>
       )}
+
+      {/* ─── Note Tasks section ──────────────────────────────────── */}
+      <div className="mt-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Note Tasks</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Tasks created from spec notes and @@@task blocks
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {tasks.length > 0 && (
+              <button
+                onClick={handleClearTasks}
+                disabled={clearingTasks}
+                className="text-[11px] text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors disabled:opacity-50"
+              >
+                {clearingTasks ? "Clearing…" : "Clear all"}
+              </button>
+            )}
+            <button
+              onClick={() => setShowTaskForm(!showTaskForm)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              New Task
+            </button>
+          </div>
+        </div>
+
+        {/* Task status filter */}
+        {tasks.length > 0 && (
+          <div className="flex gap-2 flex-wrap mb-4">
+            {(["all", ...TASK_STATUSES] as const).map((s) => {
+              const cnt = s === "all" ? tasks.length : (taskStatusCounts[s] ?? 0);
+              if (s !== "all" && cnt === 0) return null;
+              const active = taskStatusFilter === s;
+              const colorMap: Record<string, string> = {
+                all: "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300",
+                PENDING: "bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400",
+                IN_PROGRESS: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
+                REVIEW_REQUIRED: "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400",
+                NEEDS_FIX: "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400",
+                COMPLETED: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400",
+                BLOCKED: "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400",
+                CANCELLED: "bg-gray-100 dark:bg-gray-700/30 text-gray-400",
+              };
+              return (
+                <button
+                  key={s}
+                  onClick={() => setTaskStatusFilter(s)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+                    active
+                      ? "ring-2 ring-emerald-400 border-emerald-400 " + (colorMap[s] || colorMap.all)
+                      : "border-transparent " + (colorMap[s] || colorMap.all) + " hover:opacity-80"
+                  }`}
+                >
+                  <span>{s === "all" ? "All" : s.replace(/_/g, " ")}</span>
+                  <span className="font-bold ml-0.5">{cnt}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Create task form */}
+        {showTaskForm && (
+          <div className="mb-6 p-4 bg-white dark:bg-[#12141c] rounded-xl border border-gray-200/60 dark:border-[#1c1f2e]">
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Task title (required)"
+                value={taskCreateForm.title}
+                onChange={(e) => setTaskCreateForm((f) => ({ ...f, title: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#0e1019] text-[13px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+              <textarea
+                rows={3}
+                placeholder="Objective — describe what needs to be done (required)"
+                value={taskCreateForm.objective}
+                onChange={(e) => setTaskCreateForm((f) => ({ ...f, objective: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#0e1019] text-[13px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+              {sessions.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Bind to session <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <select
+                    value={taskCreateForm.sessionId}
+                    onChange={(e) => setTaskCreateForm((f) => ({ ...f, sessionId: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#0e1019] text-[13px] text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  >
+                    <option value="">— No session —</option>
+                    {sessions.map((s) => (
+                      <option key={s.sessionId} value={s.sessionId}>
+                        {s.name || s.provider || s.sessionId.slice(0, 12)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateTask}
+                  disabled={taskCreateLoading || !taskCreateForm.title.trim() || !taskCreateForm.objective.trim()}
+                  className="px-4 py-2 rounded-lg text-[12px] font-medium text-white bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 transition-colors"
+                >
+                  {taskCreateLoading ? "Creating…" : "Create Task"}
+                </button>
+                <button
+                  onClick={() => { setShowTaskForm(false); setTaskCreateForm({ title: "", objective: "", sessionId: "" }); }}
+                  className="px-4 py-2 rounded-lg text-[12px] font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {filteredTasks.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 dark:text-gray-500">
+            <svg className="w-8 h-8 mx-auto mb-2.5 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm">{tasks.length === 0 ? "No tasks yet" : `No ${taskStatusFilter.replace(/_/g, " ")} tasks`}</p>
+            {tasks.length === 0 && <p className="text-[11px] mt-1">Click \"New Task\" or create @@@task blocks in a spec note.</p>}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredTasks.map((task) => {
+              const isExpanded = expandedTaskId === task.id;
+              const linkedNote = notes.find((n) => n.id === task.id || n.metadata?.linkedTaskId === task.id);
+              return (
+                <div key={task.id} className="bg-white dark:bg-[#12141c] rounded-xl border border-gray-200/60 dark:border-[#1c1f2e] overflow-hidden transition-shadow hover:shadow-sm">
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <button onClick={() => setExpandedTaskId(isExpanded ? null : task.id)} className="shrink-0">
+                      <TaskStatusIcon status={task.status} />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[13px] font-medium text-gray-700 dark:text-gray-300 truncate block">{task.title}</span>
+                      {task.objective && (
+                        <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate block">{task.objective}</span>
+                      )}
+                    </div>
+                    {linkedNote && (
+                      <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400">
+                        spec
+                      </span>
+                    )}
+                    <TaskStatusBadge status={task.status} />
+                    <span className="text-[10px] text-gray-400 dark:text-gray-600 font-mono shrink-0 w-12 text-right">{formatRelativeTime(task.createdAt)}</span>
+                    <select
+                      value={task.status}
+                      disabled={updatingTaskStatus === task.id}
+                      onChange={(e) => handleTaskStatusChange(task.id, e.target.value)}
+                      className="text-[10px] border border-gray-200 dark:border-[#252838] bg-gray-50 dark:bg-[#0e1019] text-gray-600 dark:text-gray-400 rounded-md px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-50 cursor-pointer"
+                    >
+                      {TASK_STATUSES.map((s) => (
+                        <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => handleDeleteTask(task.id)}
+                      disabled={deletingTaskId === task.id}
+                      className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 shrink-0"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                    <button onClick={() => setExpandedTaskId(isExpanded ? null : task.id)} className="shrink-0">
+                      <svg className={`w-3.5 h-3.5 text-gray-400 dark:text-gray-500 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                    </button>
+                  </div>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 border-t border-gray-100 dark:border-[#191c28]">
+                      <div className="mt-3 space-y-2 text-[12px] text-gray-600 dark:text-gray-400">
+                        <div><span className="font-semibold">ID:</span> <code className="font-mono text-[11px]">{task.id}</code></div>
+                        {task.assignedTo && <div><span className="font-semibold">Assigned to:</span> {task.assignedTo}</div>}
+                        {task.sessionId && <div><span className="font-semibold">Session:</span> <code className="font-mono text-[11px]">{task.sessionId}</code></div>}
+                        <div><span className="font-semibold">Created:</span> {new Date(task.createdAt).toLocaleString()}</div>
+                        {task.objective && (
+                          <div className="mt-2 p-3 bg-gray-50 dark:bg-[#0a0c12] rounded-lg">
+                            <div className="text-[11px] font-semibold mb-1">Objective</div>
+                            <div className="whitespace-pre-wrap">{task.objective}</div>
+                          </div>
+                        )}
+                        {linkedNote && (
+                          <div className="mt-2 p-3 bg-violet-50 dark:bg-violet-900/15 rounded-lg border border-violet-100 dark:border-violet-900/30">
+                            <div className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 mb-1">Linked Spec Note</div>
+                            <div className="font-medium text-gray-700 dark:text-gray-300">{linkedNote.title}</div>
+                            {linkedNote.content && (
+                              <pre className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 font-mono whitespace-pre-wrap max-h-24 overflow-y-auto">
+                                {linkedNote.content.slice(0, 300)}{linkedNote.content.length > 300 ? "…" : ""}
+                              </pre>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// ─── Overlay Modal ─────────────────────────────────────────────────
+// ─── Overlay Modal ─────────────────────────────────────────────────────────────
 
 function OverlayModal({
   onClose,
