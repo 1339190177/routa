@@ -418,7 +418,7 @@ interface AGUITracePanelProps {
 }
 
 export function AGUITracePanel({ sessionId, traces }: AGUITracePanelProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [viewMode, setViewMode] = useState<ViewMode>("chat");
 
   // Replay traces through AG-UI adapter
   const agUIEvents = useMemo(() => {
@@ -428,15 +428,6 @@ export function AGUITracePanel({ sessionId, traces }: AGUITracePanelProps) {
 
   // Assemble into display items
   const displayItems = useMemo(() => assembleDisplayItems(agUIEvents), [agUIEvents]);
-
-  // Event type counts
-  const eventTypeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const e of agUIEvents) {
-      counts[e.type] = (counts[e.type] ?? 0) + 1;
-    }
-    return counts;
-  }, [agUIEvents]);
 
   if (!sessionId) {
     return (
@@ -476,18 +467,6 @@ export function AGUITracePanel({ sessionId, traces }: AGUITracePanelProps) {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* Event type stats */}
-      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 shrink-0 overflow-x-auto">
-        {Object.entries(eventTypeCounts).map(([type, count]) => {
-          const c = EVENT_COLORS[type] ?? DEFAULT_EVENT_COLOR;
-          return (
-            <span key={type} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${c.bg} ${c.text} border ${c.border}`}>
-              {type} ({count})
-            </span>
-          );
-        })}
       </div>
 
       {/* Empty state */}

@@ -45,7 +45,8 @@ type EventGroup = {
 /**
  * Group semantic events into logical conversation turns.
  * User messages (message_block with role=user) start a new user turn.
- * Agent content (messages, thoughts, tools) are grouped together.
+ * Agent content is grouped per turn — a turn ends at usage_reported
+ * (which marks the end of one generation) or at the next user message.
  */
 function groupSemanticEvents(events: WorkspaceAgentEvent[]): EventGroup[] {
   const groups: EventGroup[] = [];
@@ -65,6 +66,11 @@ function groupSemanticEvents(events: WorkspaceAgentEvent[]): EventGroup[] {
     } else if (evt.type === "message_block" && evt.role === "user") {
       flushAgent();
       groups.push({ kind: "user_message", events: [evt] });
+    } else if (evt.type === "usage_reported") {
+      // usage_reported marks end of a generation turn — flush current group,
+      // then add it as a standalone event in the new flushed group
+      currentAgent.push(evt);
+      flushAgent();
     } else {
       currentAgent.push(evt);
     }
@@ -424,34 +430,33 @@ function SemanticEventCard({ event }: { event: WorkspaceAgentEvent }) {
 
 /** Agent response group — avatar + content block */
 function AgentGroup({ events }: { events: WorkspaceAgentEvent[] }) {
-  // Collect thoughts separately, show as toggle
-  const thoughts = events.filter((e): e is WorkspaceAgentEvent & { type: "thought_block" } => e.type === "thought_block");
-  const others = events.filter((e) => e.type !== "thought_block");
-  const [showThoughts, setShowThoughts] = useState(false);
-
-  // Merge consecutive message_block content
-  const mergedOthers: WorkspaceAgentEvent[] = [];
-  for (const evt of others) {
+  // Merge consecutive assistant message_block events while preserving order
+  const orderedEvents: WorkspaceAgentEvent[] = [];
+  for (const evt of events) {
     if (evt.type === "message_block" && evt.role === "assistant") {
-      const last = mergedOthers[mergedOthers.length - 1];
+      const last = orderedEvents[orderedEvents.length - 1];
       if (last && last.type === "message_block" && last.role === "assistant") {
-        // Merge
-        mergedOthers[mergedOthers.length - 1] = {
+        // Merge into preceding message
+        orderedEvents[orderedEvents.length - 1] = {
           ...last,
           content: last.content + evt.content,
         };
         continue;
       }
     }
-    mergedOthers.push(evt);
+    orderedEvents.push(evt);
   }
 
   const firstTimestamp = events[0]?.timestamp;
   const lastTimestamp = events[events.length - 1]?.timestamp;
+  const sameSecond =
+    firstTimestamp &&
+    lastTimestamp &&
+    firstTimestamp.toLocaleTimeString() === lastTimestamp.toLocaleTimeString();
 
   return (
     <div className="flex items-start gap-3 group">
-      <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
+      <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0 mt-0.5">
         <span className="text-sm">🤖</span>
       </div>
       <div className="flex-1 min-w-0">
@@ -459,26 +464,13 @@ function AgentGroup({ events }: { events: WorkspaceAgentEvent[] }) {
           <span className="text-xs font-semibold text-purple-700 dark:text-purple-300">Agent</span>
           <span className="text-[10px] text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
             {firstTimestamp?.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-            {firstTimestamp !== lastTimestamp && lastTimestamp && ` → ${lastTimestamp.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
+            {!sameSecond && lastTimestamp && ` → ${lastTimestamp.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
           </span>
         </div>
 
-        {/* Thoughts toggle */}
-        {thoughts.length > 0 && (
-          <button
-            onClick={() => setShowThoughts(!showThoughts)}
-            className="flex items-center gap-1.5 mb-2 text-[10px] text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 dark:hover:text-yellow-300"
-          >
-            <svg className={`w-3 h-3 transition-transform ${showThoughts ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            💭 {thoughts.length} thought{thoughts.length > 1 ? "s" : ""}
-          </button>
-        )}
-        {showThoughts && thoughts.map((t, i) => <ThoughtBubble key={i} event={t} />)}
-
+        {/* Events rendered IN ORDER — thoughts appear inline where they occurred */}
         <div className="space-y-1">
-          {mergedOthers.map((evt, i) => (
+          {orderedEvents.map((evt, i) => (
             <SemanticEventCard key={i} event={evt} />
           ))}
         </div>
@@ -527,15 +519,6 @@ export function EventBridgeTracePanel({ sessionId, traces }: EventBridgeTracePan
   // Group into conversation structure
   const groups = useMemo(() => groupSemanticEvents(filteredEvents), [filteredEvents]);
 
-  // Stats
-  const blockTypeCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const e of semanticEvents) {
-      counts[e.type] = (counts[e.type] ?? 0) + 1;
-    }
-    return counts;
-  }, [semanticEvents]);
-
   if (!sessionId) {
     return (
       <div className="h-full flex items-center justify-center p-8">
@@ -557,18 +540,6 @@ export function EventBridgeTracePanel({ sessionId, traces }: EventBridgeTracePan
             </span>
           )}
         </div>
-      </div>
-
-      {/* Block type stats */}
-      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2 text-[10px] text-gray-500 dark:text-gray-400 shrink-0 overflow-x-auto">
-        {Object.entries(blockTypeCounts).map(([type, count]) => {
-          const c = BLOCK_COLORS[type] ?? DEFAULT_COLOR;
-          return (
-            <span key={type} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${c.bg} ${c.text} border ${c.border}`}>
-              {c.icon} {type.replace(/_/g, " ")} ({count})
-            </span>
-          );
-        })}
       </div>
 
       {/* Filter bar */}
