@@ -491,7 +491,7 @@ export class RoutaOrchestrator {
     if (isClaudeCode) {
       const mcpConfigJson = JSON.stringify({
         mcpServers: {
-          routa: { url: mcpUrl, type: "sse" },
+          routa: { url: mcpUrl, type: "http" },
         },
       });
 

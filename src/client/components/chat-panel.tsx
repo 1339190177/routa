@@ -444,6 +444,12 @@ export function ChatPanel({
         const kind = update.sessionUpdate as string | undefined;
         if (!sid || !kind) continue;
 
+        // Skip child agent updates — these are pushed to the parent session's SSE
+        // but belong to the TaskPanel CrafterAgent view, not the main chat.
+        const rawNotification = notification as Record<string, unknown>;
+        const isChildAgentUpdate = !!(rawNotification.childAgentId ?? (update.childAgentId as unknown));
+        if (isChildAgentUpdate) continue;
+
         const arr = getSessionMessages(sid);
         const extractText = (): string => {
           const content = update.content as
