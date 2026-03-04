@@ -36,12 +36,12 @@ interface SessionContextPanelProps {
     };
     sessionId?: string;
   }>;
-  refreshTrigger?: number; // 用于触发刷新
+  refreshTrigger?: number;
 }
 
 export function SessionContextPanel({
   sessionId,
-  workspaceId,
+  workspaceId: _workspaceId,
   onSelectSession,
   notes = [],
   refreshTrigger = 0,
@@ -49,7 +49,8 @@ export function SessionContextPanel({
   const [context, setContext] = useState<SessionContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedSections, setExpandedSections] = useState({
-    hierarchy: true, // 默认展开 hierarchy
+    hierarchy: true,
+    tasks: true,
     related: false,
   });
 
@@ -268,12 +269,7 @@ export function SessionContextPanel({
                       {context.children.length > 1 ? "s" : ""}
                     </span>
                   </div>
-                  {context.children.map((child) => {
-                    // Find task associated with this child session
-                    const childTask = relatedTasks.find(
-                      (task) => task.sessionId === child.sessionId
-                    );
-                    return (
+                  {context.children.map((child) => (
                       <div key={child.sessionId} className="ml-5">
                         <div
                           onClick={() => onSelectSession(child.sessionId)}
@@ -299,101 +295,124 @@ export function SessionContextPanel({
                             <div className="text-[10px] text-gray-400 dark:text-gray-500">
                               {child.role} • {formatTimeAgo(child.createdAt)}
                             </div>
-                            {childTask && (
-                              <div className="mt-0.5 flex items-center gap-1">
-                                <svg
-                                  className="w-2.5 h-2.5 text-blue-500"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                                  />
-                                </svg>
-                                <span className="text-[10px] text-blue-600 dark:text-blue-400 truncate">
-                                  {childTask.title}
-                                </span>
-                                {childTask.metadata.taskStatus && (
-                                  <span
-                                    className={`text-[9px] px-1 py-0.5 rounded ${
-                                      childTask.metadata.taskStatus ===
-                                      "COMPLETED"
-                                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                                        : childTask.metadata.taskStatus ===
-                                          "IN_PROGRESS"
-                                        ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
-                                        : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                                    }`}
-                                  >
-                                    {childTask.metadata.taskStatus}
-                                  </span>
-                                )}
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
+                  ))}
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
 
-              {/* Tasks from parent session (if current is a child) */}
-              {hasTasks && context.parent && (
-                <div className="mt-2 space-y-0.5">
-                  <div className="flex items-center gap-1.5 px-2 py-1">
-                    <svg
-                      className="w-3 h-3 text-blue-500 shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                      />
-                    </svg>
-                    <span className="text-[10px] text-gray-400 dark:text-gray-500">
-                      Related Tasks ({relatedTasks.length})
-                    </span>
-                  </div>
-                  {relatedTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="ml-5 px-2 py-1.5 rounded-md bg-blue-50 dark:bg-blue-900/10"
-                    >
-                      <div className="flex items-start gap-1.5">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[11px] font-medium text-blue-700 dark:text-blue-300 truncate">
-                            {task.title}
-                          </div>
+      {/* Collaborative Tasks */}
+      {hasTasks && (
+        <div className="border-b border-gray-100 dark:border-gray-800">
+          <button
+            onClick={() =>
+              setExpandedSections((prev) => ({
+                ...prev,
+                tasks: !prev.tasks,
+              }))
+            }
+            className="w-full px-3 py-2 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
+          >
+            <div className="flex items-center gap-1.5">
+              <svg
+                className="w-3.5 h-3.5 text-blue-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                />
+              </svg>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Tasks
+              </span>
+              <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
+                {relatedTasks.length}
+              </span>
+            </div>
+            <svg
+              className={`w-3 h-3 text-gray-400 transition-transform ${
+                expandedSections.tasks ? "rotate-180" : ""
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
+
+          {expandedSections.tasks && (
+            <div className="px-3 pb-2 space-y-1">
+              {relatedTasks.map((task) => {
+                const isCurrentSession = task.sessionId === sessionId;
+                const linkedChild = context?.children.find(
+                  (c) => c.sessionId === task.sessionId
+                );
+                return (
+                  <div
+                    key={task.id}
+                    className={`px-2 py-1.5 rounded-md ${
+                      isCurrentSession
+                        ? "bg-blue-50 dark:bg-blue-900/10"
+                        : "bg-gray-50 dark:bg-gray-800/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                    }`}
+                    onClick={
+                      !isCurrentSession && task.sessionId
+                        ? () => onSelectSession(task.sessionId!)
+                        : undefined
+                    }
+                  >
+                    <div className="flex items-start gap-1.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] font-medium text-gray-700 dark:text-gray-300 truncate">
+                          {task.title}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1">
                           {task.metadata.taskStatus && (
-                            <div className="mt-0.5">
-                              <span
-                                className={`text-[9px] px-1.5 py-0.5 rounded ${
-                                  task.metadata.taskStatus === "COMPLETED"
-                                    ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                                    : task.metadata.taskStatus === "IN_PROGRESS"
-                                    ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
-                                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                                }`}
-                              >
-                                {task.metadata.taskStatus}
-                              </span>
-                            </div>
+                            <span
+                              className={`text-[9px] px-1.5 py-0.5 rounded ${
+                                task.metadata.taskStatus === "COMPLETED"
+                                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                  : task.metadata.taskStatus === "IN_PROGRESS"
+                                  ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+                                  : task.metadata.taskStatus === "FAILED"
+                                  ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                              }`}
+                            >
+                              {task.metadata.taskStatus}
+                            </span>
+                          )}
+                          {task.sessionId && (
+                            <span className="text-[9px] text-gray-400 dark:text-gray-500 font-mono">
+                              {linkedChild?.name
+                                ? linkedChild.name
+                                : isCurrentSession
+                                ? "this session"
+                                : task.sessionId.slice(0, 8)}
+                            </span>
                           )}
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

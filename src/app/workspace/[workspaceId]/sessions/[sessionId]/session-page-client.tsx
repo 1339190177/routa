@@ -15,9 +15,8 @@
 
 import {useCallback, useEffect, useRef, useState} from "react";
 import {useRouter, useParams} from "next/navigation";
-import {SkillPanel} from "@/client/components/skill-panel";
 import {ChatPanel} from "@/client/components/chat-panel";
-import {SessionPanel} from "@/client/components/session-panel";
+import {SessionContextPanel} from "@/client/components/session-context-panel";
 import {SpecialistManager} from "@/client/components/specialist-manager";
 import {type CrafterAgent, type CrafterMessage, TaskPanel} from "@/client/components/task-panel";
 import {CollaborativeTaskEditor} from "@/client/components/collaborative-task-editor";
@@ -26,7 +25,6 @@ import {WorkspaceSwitcher} from "@/client/components/workspace-switcher";
 import {CodebasePicker} from "@/client/components/codebase-picker";
 import {useWorkspaces, useCodebases} from "@/client/hooks/use-workspaces";
 import {useAcp} from "@/client/hooks/use-acp";
-import {useSkills} from "@/client/hooks/use-skills";
 import {useNotes} from "@/client/hooks/use-notes";
 import type {RepoSelection} from "@/client/components/repo-picker";
 import type {ParsedTask} from "@/client/utils/task-block-parser";
@@ -166,7 +164,6 @@ export function SessionPageClient() {
   }, [workspacesHook, router]);
 
   const acp = useAcp();
-  const skillsHook = useSkills();
   const notesHook = useNotes(workspaceId, sessionId);
 
   // ── Collaborative editing panel view ──────────────────────────────────
@@ -341,16 +338,6 @@ export function SessionPageClient() {
       console.error("Failed to toggle tool mode:", error);
     }
   }, []);
-
-  // Load repo skills when repo selection changes
-  useEffect(() => {
-    if (repoSelection?.path) {
-      skillsHook.loadRepoSkills(repoSelection.path);
-    } else {
-      skillsHook.clearRepoSkills();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repoSelection?.path]);
 
   // Agent Install popup: body scroll lock + Escape to close
   useEffect(() => {
@@ -766,11 +753,6 @@ export function SessionPageClient() {
     }
     return null;
   }, [acp, sessionId, ensureConnected, selectedAgent, selectedSpecialistId, workspaceId, router, resolveAgentConfig]);
-
-  const handleLoadSkill = useCallback(async (name: string): Promise<string | null> => {
-    const skill = await skillsHook.loadSkill(name, repoSelection?.path);
-    return skill?.content ?? null;
-  }, [skillsHook, repoSelection?.path]);
 
   const handleAgentChange = useCallback((value: string) => {
     // Check if selecting a custom specialist (prefixed with "specialist:")
@@ -1597,7 +1579,7 @@ export function SessionPageClient() {
 
           {/* Sessions header + New Session */}
           <div className="px-3 py-2 flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
-            <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sessions</span>
+            <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Session Context</span>
             <button
               onClick={() => handleCreateSession("")}
               disabled={acp.providers.length === 0 || !acp.selectedProvider}
@@ -1607,28 +1589,14 @@ export function SessionPageClient() {
             </button>
           </div>
 
-          {/* Sessions - scrollable with max height */}
-          <div className="flex-1 min-h-0 max-h-[50%] overflow-y-auto">
-            <SessionPanel
-              selectedSessionId={sessionId}
-              onSelect={handleSelectSession}
-              refreshKey={refreshKey}
-              workspaceId={workspaceId}
-              onSessionDeleted={(deletedId) => {
-                if (sessionId === deletedId) {
-                  router.push(`/workspace/${workspaceId}`);
-                }
-              }}
-            />
-          </div>
-
-          {/* Divider */}
-          <div className="mx-3 my-1 border-t border-gray-100 dark:border-gray-800 shrink-0" />
-
-          {/* Skills - scrollable, takes remaining space */}
+          {/* Session Context - focused on current session hierarchy */}
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <SkillPanel
-              skillsHook={skillsHook}
+            <SessionContextPanel
+              sessionId={sessionId}
+              workspaceId={workspaceId}
+              onSelectSession={handleSelectSession}
+              notes={sessionNotes}
+              refreshTrigger={refreshKey}
             />
           </div>
 
@@ -1676,9 +1644,6 @@ export function SessionPageClient() {
             activeSessionId={sessionId}
             onEnsureSession={ensureSessionForChat}
             onSelectSession={handleSelectSession}
-            skills={skillsHook.skills}
-            repoSkills={skillsHook.repoSkills}
-            onLoadSkill={handleLoadSkill}
             repoSelection={repoSelection}
             onRepoChange={setRepoSelection}
             onTasksDetected={handleTasksDetected}
