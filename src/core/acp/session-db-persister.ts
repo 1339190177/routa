@@ -19,6 +19,8 @@ export interface SessionPersistData {
   role: string;
   modeId?: string;
   model?: string;
+  /** Parent session ID for child (CRAFTER/GATE) sessions */
+  parentSessionId?: string;
 }
 
 export async function persistSessionToDb(data: SessionPersistData): Promise<void> {
@@ -37,6 +39,7 @@ export async function persistSessionToDb(data: SessionPersistData): Promise<void
     modeId: data.modeId,
     firstPromptSent: false,
     messageHistory: [] as never[],
+    parentSessionId: data.parentSessionId,
     createdAt: now,
     updatedAt: now,
   };
@@ -111,6 +114,7 @@ export async function hydrateSessionsFromDb(): Promise<Array<{
   role?: string;
   modeId?: string;
   model?: string;
+  parentSessionId?: string;
   createdAt: Date | null;
 }>> {
   const driver = getDatabaseDriver();

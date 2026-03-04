@@ -728,6 +728,7 @@ export class SqliteAcpSessionStore implements AcpSessionStore {
         modeId: session.modeId,
         firstPromptSent: session.firstPromptSent ?? false,
         messageHistory: session.messageHistory,
+        parentSessionId: session.parentSessionId,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
       })
@@ -814,6 +815,7 @@ export class SqliteAcpSessionStore implements AcpSessionStore {
       modeId: row.modeId ?? undefined,
       firstPromptSent: row.firstPromptSent ?? false,
       messageHistory: row.messageHistory ?? [],
+      parentSessionId: row.parentSessionId ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

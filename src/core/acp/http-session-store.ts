@@ -664,6 +664,7 @@ class HttpSessionStore {
           provider: s.provider,
           role: s.role,
           modeId: s.modeId,
+          parentSessionId: s.parentSessionId,
           createdAt: s.createdAt?.toISOString() ?? new Date().toISOString(),
         });
       }

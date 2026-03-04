@@ -381,6 +381,19 @@ export async function POST(request: NextRequest) {
               parentSessionId: childSession.parentSessionId,
               createdAt: new Date().toISOString(),
             });
+            // Persist child session to DB so parent-child relationship survives restarts
+            persistSessionToDb({
+              id: childSession.sessionId,
+              name: childSession.name,
+              cwd: childSession.cwd,
+              workspaceId: childSession.workspaceId,
+              routaAgentId: childSession.routaAgentId ?? "",
+              provider: childSession.provider ?? "",
+              role: childSession.role ?? "CRAFTER",
+              parentSessionId: childSession.parentSessionId,
+            }).catch((err: unknown) =>
+              console.error(`[ACP Route] Failed to persist child session ${childSession.sessionId}:`, err)
+            );
             console.log(
               `[ACP Route] Child session registered: ${childSession.sessionId} (parent: ${childSession.parentSessionId})`
             );

@@ -78,6 +78,13 @@
       "when": 1772250000000,
       "tag": "0010_add_background_tasks_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1772583000000,
+      "tag": "0011_add_parent_session_id",
+      "breakpoints": true
     }
   ]
 }

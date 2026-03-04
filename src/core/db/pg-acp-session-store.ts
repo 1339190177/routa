@@ -25,6 +25,7 @@ export class PgAcpSessionStore implements AcpSessionStore {
         model: session.model,
         firstPromptSent: session.firstPromptSent ?? false,
         messageHistory: session.messageHistory,
+        parentSessionId: session.parentSessionId,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
       })
@@ -111,6 +112,7 @@ export class PgAcpSessionStore implements AcpSessionStore {
       model: row.model ?? undefined,
       firstPromptSent: row.firstPromptSent ?? false,
       messageHistory: row.messageHistory ?? [],
+      parentSessionId: row.parentSessionId ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

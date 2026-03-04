@@ -171,6 +171,8 @@ export const acpSessions = pgTable("acp_sessions", {
   firstPromptSent: boolean("first_prompt_sent").default(false),
   /** Message history stored as JSONB array */
   messageHistory: jsonb("message_history").$type<AcpSessionNotification[]>().default([]),
+  /** Parent session ID for child (CRAFTER/GATE) sessions */
+  parentSessionId: text("parent_session_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

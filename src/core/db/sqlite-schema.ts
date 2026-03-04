@@ -166,6 +166,8 @@ export const acpSessions = sqliteTable("acp_sessions", {
   firstPromptSent: integer("first_prompt_sent", { mode: "boolean" }).default(false),
   /** Message history stored as JSON array */
   messageHistory: text("message_history", { mode: "json" }).$type<AcpSessionNotification[]>().default([]),
+  /** Parent session ID for child (CRAFTER/GATE) sessions */
+  parentSessionId: text("parent_session_id"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });

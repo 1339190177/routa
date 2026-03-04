@@ -29,6 +29,8 @@ export interface AcpSession {
   messageHistory: AcpSessionNotification[];
   createdAt: Date;
   updatedAt: Date;
+  /** Parent session ID for child (CRAFTER/GATE) sessions */
+  parentSessionId?: string;
 }
 
 export interface AcpSessionStore {
