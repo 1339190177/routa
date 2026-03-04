@@ -668,12 +668,17 @@ export function SessionPageClient() {
     if (!sid) return;
 
     // Never delete child sessions (they belong to a parent orchestration)
+    // Also never delete ROUTA-role sessions (they are long-running orchestrators)
     try {
       const resp = await fetch(`/api/sessions/${sid}`);
       if (resp.ok) {
         const sessionData = await resp.json();
         if (sessionData?.session?.parentSessionId) {
           console.log(`[deleteEmptySession] Skipping child session: ${sid} (parent: ${sessionData.session.parentSessionId})`);
+          return;
+        }
+        if (sessionData?.session?.role === "ROUTA") {
+          console.log(`[deleteEmptySession] Skipping ROUTA orchestrator session: ${sid}`);
           return;
         }
       }

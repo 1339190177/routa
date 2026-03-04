@@ -581,8 +581,9 @@ class HttpSessionStore {
 
       // Only remove if stale AND not actively used
       if (isStale && !hasActiveSse && !isStreaming) {
-        // Protect child sessions whose parent is still active
         const session = this.sessions.get(sessionId);
+
+        // Protect child sessions whose parent is still active
         const isChildSession = !!session?.parentSessionId;
         const parentStillActive = isChildSession && this.sessions.has(session!.parentSessionId!);
         if (parentStillActive) {
@@ -590,6 +591,14 @@ class HttpSessionStore {
           this.lastAccessTime.set(sessionId, now);
           continue;
         }
+
+        // Protect ROUTA orchestrator sessions — they are long-running and must not
+        // be evicted while child CRAFTERs / GATEs could still be running.
+        if (session?.role === "ROUTA") {
+          this.lastAccessTime.set(sessionId, now);
+          continue;
+        }
+
         this.deleteSession(sessionId);
         this.lastAccessTime.delete(sessionId);
         removedCount++;

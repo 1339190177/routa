@@ -8,7 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { RoutaMcpToolManager, ToolMode } from "./routa-mcp-tool-manager";
 import { RoutaSystem, getRoutaSystem } from "../routa-system";
-import { getRoutaOrchestrator } from "../orchestration/orchestrator-singleton";
+import { initRoutaOrchestrator } from "../orchestration/orchestrator-singleton";
 
 export interface RoutaMcpServerResult {
   server: McpServer;
@@ -62,11 +62,10 @@ export function createRoutaMcpServer(
     toolManager.setSessionId(opts.sessionId);
   }
 
-  // Wire in orchestrator if available
-  const orchestrator = getRoutaOrchestrator();
-  if (orchestrator) {
-    toolManager.setOrchestrator(orchestrator);
-  }
+  // Wire in orchestrator — auto-initialize if not yet created (e.g. after server restart).
+  // initRoutaOrchestrator is idempotent: returns existing instance if already created.
+  const orchestrator = initRoutaOrchestrator();
+  toolManager.setOrchestrator(orchestrator);
 
   // Wire in note tools and workspace tools
   toolManager.setNoteTools(routaSystem.noteTools);
