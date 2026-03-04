@@ -412,7 +412,12 @@ class HttpSessionStore {
 
     // Skip SSE push while a prompt stream is actively delivering events via
     // its own HTTP response body — prevents each event being dispatched twice.
-    if (this.streamingSessionIds.has(sessionId)) {
+    // Exception: child agent notifications (with childAgentId) are NOT part of
+    // the prompt response stream — they arrive only via pushNotification(), so
+    // they must always be forwarded to the SSE controller to enable real-time
+    // CRAFTER progress in the UI.
+    const isChildAgentUpdate = !!(notification as Record<string, unknown>).childAgentId;
+    if (this.streamingSessionIds.has(sessionId) && !isChildAgentUpdate) {
       return;
     }
 
