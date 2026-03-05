@@ -291,10 +291,12 @@ export function CraftersView({
               if (text) {
                 const last = messages[messages.length - 1];
                 if (last && last.role === "assistant" && !last.toolName) {
+                  // Append to existing message, keep original ID
                   last.content += text;
                 } else {
+                  // Create new message with unique ID
                   messages.push({
-                    id: crypto.randomUUID(),
+                    id: `assistant-${crypto.randomUUID()}`,
                     role: "assistant",
                     content: text,
                     timestamp: new Date(),
@@ -307,10 +309,12 @@ export function CraftersView({
               if (text) {
                 const last = messages[messages.length - 1];
                 if (last && last.role === "thought") {
+                  // Append to existing thought message, keep original ID
                   last.content += text;
                 } else {
+                  // Create new thought message with unique ID
                   messages.push({
-                    id: crypto.randomUUID(),
+                    id: `thought-${crypto.randomUUID()}`,
                     role: "thought",
                     content: text,
                     timestamp: new Date(),
@@ -320,7 +324,7 @@ export function CraftersView({
               break;
             case "tool_call":
               messages.push({
-                id: crypto.randomUUID(),
+                id: `tool-${crypto.randomUUID()}`,
                 role: "tool",
                 content: update.title ?? "tool",
                 timestamp: new Date(),
