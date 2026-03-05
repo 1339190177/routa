@@ -179,6 +179,18 @@ export const acpSessions = pgTable("acp_sessions", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Session Messages (per-message storage, split from JSONB) ─────────
+
+export const sessionMessages = pgTable("session_messages", {
+  id: text("id").primaryKey(),
+  sessionId: text("session_id").notNull().references(() => acpSessions.id, { onDelete: "cascade" }),
+  messageIndex: integer("message_index").notNull(),
+  eventType: text("event_type").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+
 // ─── Traces ───────────────────────────────────────────────────────────
 
 export const traces = pgTable("traces", {
