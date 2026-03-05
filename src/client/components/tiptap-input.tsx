@@ -515,7 +515,7 @@ export function TiptapInput({
   const [modelLoading, setModelLoading] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const modelBtnRef = useRef<HTMLButtonElement>(null);
-  const [modelDropdownPos, setModelDropdownPos] = useState<{ left: number; bottom: number } | null>(null);
+  const [modelDropdownPos, setModelDropdownPos] = useState<{ left: number; bottom?: number; top?: number; maxHeight: number } | null>(null);
   const [modelFilter, setModelFilter] = useState("");
 
   // Keep mode chips aligned with the current session mode when switching sessions.
@@ -1041,7 +1041,15 @@ export function TiptapInput({
                 onClick={async () => {
                   if (!modelDropdownOpen && modelBtnRef.current) {
                     const rect = modelBtnRef.current.getBoundingClientRect();
-                    setModelDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
+                    const spaceAbove = rect.top - 8;
+                    const spaceBelow = window.innerHeight - rect.bottom - 8;
+                    if (spaceAbove >= spaceBelow) {
+                      // open upward, cap height to available space
+                      setModelDropdownPos({ left: rect.left, bottom: window.innerHeight - rect.top + 4, maxHeight: Math.min(spaceAbove, 280) });
+                    } else {
+                      // open downward
+                      setModelDropdownPos({ left: rect.left, top: rect.bottom + 4, maxHeight: Math.min(spaceBelow, 280) });
+                    }
                   }
                   if (!modelDropdownOpen && availableModels.length === 0) {
                     setModelLoading(true);
@@ -1072,7 +1080,7 @@ export function TiptapInput({
               {modelDropdownOpen && modelDropdownPos && (
                 <div
                   className="fixed w-72 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-[9999] flex flex-col"
-                  style={{ left: modelDropdownPos.left, bottom: modelDropdownPos.bottom, maxHeight: "320px" }}
+                  style={{ left: modelDropdownPos.left, bottom: modelDropdownPos.bottom, top: modelDropdownPos.top, maxHeight: `${modelDropdownPos.maxHeight}px` }}
                 >
                   {/* Search */}
                   <div className="p-2 border-b border-gray-100 dark:border-gray-800">
