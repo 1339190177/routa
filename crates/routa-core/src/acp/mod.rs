@@ -18,6 +18,7 @@
 
 pub mod binary_manager;
 pub mod claude_code_process;
+pub mod docker;
 pub mod installation_state;
 pub mod paths;
 pub mod process;

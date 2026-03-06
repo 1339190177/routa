@@ -2,7 +2,10 @@
 
 use std::sync::Arc;
 
-use crate::acp::{AcpBinaryManager, AcpInstallationState, AcpManager, AcpPaths, AcpRuntimeManager, AcpWarmupService};
+use crate::acp::{
+    docker::{DockerDetector, DockerProcessManager},
+    AcpBinaryManager, AcpInstallationState, AcpManager, AcpPaths, AcpRuntimeManager, AcpWarmupService,
+};
 use crate::db::Database;
 use crate::events::EventBus;
 use crate::skills::SkillRegistry;
@@ -10,6 +13,21 @@ use crate::store::{
     AcpSessionStore, AgentStore, CodebaseStore, ConversationStore, NoteStore, ScheduleStore, TaskStore,
     WorkspaceStore,
 };
+
+/// Docker state for managing Docker-based agent execution.
+pub struct DockerState {
+    pub detector: DockerDetector,
+    pub process_manager: DockerProcessManager,
+}
+
+impl Default for DockerState {
+    fn default() -> Self {
+        Self {
+            detector: DockerDetector::new(),
+            process_manager: DockerProcessManager::new(),
+        }
+    }
+}
 
 /// Shared state accessible by all API handlers.
 pub struct AppStateInner {
@@ -30,6 +48,7 @@ pub struct AppStateInner {
     pub acp_installation_state: AcpInstallationState,
     pub acp_runtime_manager: AcpRuntimeManager,
     pub acp_warmup_service: AcpWarmupService,
+    pub docker_state: DockerState,
 }
 
 pub type AppState = Arc<AppStateInner>;
@@ -59,6 +78,7 @@ impl AppStateInner {
             acp_installation_state,
             acp_runtime_manager,
             acp_warmup_service,
+            docker_state: DockerState::default(),
         }
     }
 }

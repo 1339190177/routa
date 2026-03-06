@@ -1,5 +1,6 @@
 pub mod a2a;
 pub mod a2ui;
+pub mod acp_docker;
 pub mod acp_registry;
 pub mod acp_routes;
 pub mod ag_ui;
@@ -56,6 +57,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/providers", provider_models::router())
         .nest("/api/acp", acp_routes::router())
         .nest("/api/acp", acp_registry::router())
+        .nest("/api/acp/docker", acp_docker::router())
         .nest("/api/mcp", mcp_routes::router())
         .nest("/api/mcp/tools", mcp_tools::router())
         .nest("/api/mcp-server", mcp_server_mgmt::router())
