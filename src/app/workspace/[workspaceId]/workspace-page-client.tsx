@@ -32,6 +32,7 @@ import {BackgroundTaskInfo, TaskInfo, TraceInfo, SessionInfo} from "@/app/worksp
 import {NoteTasksTab} from "@/app/workspace/[workspaceId]/note-tasks-tab";
 import {NotesTab} from "@/app/workspace/[workspaceId]/notes-tab";
 import {OverviewA2UITab} from "@/app/workspace/[workspaceId]/overview-a2ui-tab";
+import {BgTaskStatusIcon} from "@/app/workspace/[workspaceId]/ui-components";
 
 export function WorkspacePageClient() {
   const router = useRouter();
@@ -216,7 +217,6 @@ export function WorkspacePageClient() {
   // ─── Computed stats ──────────────────────────────────────────────
   const activeAgents = agentsHook.agents.filter((a) => a.status === "ACTIVE");
   const pendingTasks = tasks.filter((t) => t.status === "PENDING" || t.status === "IN_PROGRESS");
-  const specNotes = notesHook.notes.filter((n) => n.metadata?.type === "spec");
   const runningBgTasks = bgTasks.filter((t) => t.status === "RUNNING").length;
 
   const handleDispatchTask = async () => {
@@ -1254,36 +1254,6 @@ function bgTaskStatusClass(status: string): string {
     case "CANCELLED": return "bg-gray-100 dark:bg-gray-700/40 text-gray-400 dark:text-gray-500";
     default:          return "bg-gray-100 dark:bg-gray-700/40 text-gray-500 dark:text-gray-400";
   }
-}
-
-function BgTaskStatusIcon({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    PENDING: "text-gray-400",
-    RUNNING: "text-blue-500 animate-spin",
-    COMPLETED: "text-emerald-500",
-    FAILED: "text-red-500",
-    CANCELLED: "text-gray-400",
-  };
-  const cls = colorMap[status] ?? "text-gray-400";
-  if (status === "COMPLETED") {
-    return (
-      <svg className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    );
-  }
-  if (status === "FAILED" || status === "CANCELLED") {
-    return (
-      <svg className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    );
-  }
-  return (
-    <svg className={`w-4 h-4 ${cls} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
