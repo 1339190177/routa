@@ -1,5 +1,6 @@
 import { NotificationHandler, JsonRpcMessage } from "@/core/acp/processer";
 import { AcpAgentPreset, resolveCommand } from "@/core/acp/acp-presets";
+import { needsShell } from "@/core/acp/utils";
 import type { IProcessHandle } from "@/core/platform/interfaces";
 import { getServerBridge } from "@/core/platform";
 
@@ -256,6 +257,9 @@ export class ClaudeCodeProcess {
                 PWD: cwd,
             },
             detached: false,
+            // On Windows, batch files (.cmd/.bat) cannot be spawned directly —
+            // they must be run through the shell (cmd.exe /c ...).
+            shell: needsShell(cmd[0]),
         });
 
         if (!this.process || !this.process.pid) {
