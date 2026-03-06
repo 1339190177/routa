@@ -182,11 +182,16 @@ export function getStandardPresets(): AcpAgentPreset[] {
  * 1. Environment variable override (e.g., OPENCODE_BIN)
  * 2. node_modules/.bin (for locally installed packages)
  * 3. Default command (for globally installed or in PATH)
+ *
+ * On Windows, npm creates a bash wrapper (no extension) alongside a `.cmd`
+ * batch file in node_modules/.bin. The extensionless wrapper cannot be
+ * spawned directly by Node.js on Windows, so we prefer the `.cmd` version.
  */
 export function resolveCommand(preset: AcpAgentPreset): string {
   // Import bridge lazily to avoid circular dependencies at module load time
   const { getServerBridge } = require("@/core/platform");
   const bridge = getServerBridge();
+  const isWindows = bridge.env.osPlatform() === "win32";
 
   // 1. Check environment variable override
   if (preset.envBinOverride) {
@@ -196,10 +201,19 @@ export function resolveCommand(preset: AcpAgentPreset): string {
 
   // 2. Check node_modules/.bin (for locally installed packages)
   const path = require("path");
-  const localBinPath = path.join(bridge.env.currentDir(), "node_modules", ".bin", preset.command);
+  const localBinBase = path.join(bridge.env.currentDir(), "node_modules", ".bin", preset.command);
   try {
-    if (bridge.fs.existsSync(localBinPath)) {
-      return localBinPath;
+    if (isWindows) {
+      // On Windows prefer the .cmd batch file — the extensionless file is a
+      // bash wrapper that cannot be spawned directly by Node.js on Windows.
+      const cmdPath = localBinBase + ".cmd";
+      if (bridge.fs.existsSync(cmdPath)) {
+        return cmdPath;
+      }
+    } else {
+      if (bridge.fs.existsSync(localBinBase)) {
+        return localBinBase;
+      }
     }
   } catch {
     // Ignore errors, fall through to default
