@@ -123,7 +123,7 @@ export function WorkspacePageClient() {
       try {
         const res = await fetch(`/api/traces?limit=10`, { cache: "no-store" });
         const data = await res.json();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         setTraces(Array.isArray(data?.traces) ? data.traces.slice(0, 8).map((t: any) => ({
           id: t.id,
           agentName: t.contributor?.provider ?? t.agentName ?? undefined,

@@ -50,7 +50,7 @@ import type {
 // this is expected. The types resolve correctly in apps/desktop/ where
 // the Tauri packages are installed.
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 async function getTauriCore(): Promise<any> {
   return await import("@tauri-apps/api/core");
@@ -76,7 +76,7 @@ async function getTauriPath(): Promise<any> {
   return await import("@tauri-apps/api/path");
 }
 
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 
 
 // ─── Tauri Process ────────────────────────────────────────────────────────
 

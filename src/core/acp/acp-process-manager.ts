@@ -520,7 +520,7 @@ export class AcpProcessManager {
 
         // Check HTTP session store for session metadata
         const store = getHttpSessionStore();
-        let sessionRecord = store.getSession(sessionId);
+        const sessionRecord = store.getSession(sessionId);
         let cwd = sessionRecord?.cwd;
         let provider = sessionRecord?.provider;
 
@@ -719,7 +719,7 @@ export class AcpProcessManager {
 
         // Check HTTP session store for session metadata
         const store = getHttpSessionStore();
-        let sessionRecord = store.getSession(sessionId);
+        const sessionRecord = store.getSession(sessionId);
         let provider = sessionRecord?.provider;
 
         // If not in HTTP store (serverless cold start), try to recover from database

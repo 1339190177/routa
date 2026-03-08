@@ -76,7 +76,11 @@ export function SessionContextPanel({
       console.error("Failed to fetch session context", e);
       setContext(null);
     } finally {
-      if (tearingDownRef.current) return;
+      if (tearingDownRef.current) {
+        // Early return is safe here - cleanup is handled by teardown
+        // eslint-disable-next-line no-unsafe-finally
+        return;
+      }
       setLoading(false);
     }
   }, [sessionId]);

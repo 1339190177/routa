@@ -638,7 +638,7 @@ export function SessionPageClient() {
     lastChildUpdateIndexRef.current = updates.length;
 
     setCrafterAgents((prev) => {
-      let updated = [...prev];
+      const updated = [...prev];
       let changed = false;
 
       for (const notification of pending) {
@@ -1448,7 +1448,7 @@ export function SessionPageClient() {
         });
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [crafterAgents]);
 
   // ── Sync CRAFTER state to collaborative notes ────────────────────────

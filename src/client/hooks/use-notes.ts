@@ -136,7 +136,11 @@ export function useNotes(workspaceId: string, sessionId?: string): UseNotesRetur
       logRuntime("warn", "useNotes.fetchNotes", "Failed to fetch notes", err);
       setError(toErrorMessage(err) || "Failed to fetch notes");
     } finally {
-      if (tearingDownRef.current) return;
+      if (tearingDownRef.current) {
+        // Early return is safe here - cleanup is handled by teardown
+        // eslint-disable-next-line no-unsafe-finally
+        return;
+      }
       setLoading(false);
     }
   }, [workspaceId, sessionId]);
