@@ -152,8 +152,11 @@ User request: ${agentInput}`;
   // Initialize visible columns when board changes
   useEffect(() => {
     if (board) {
-      const allColumnIds = board.columns.map((col) => col.id);
-      setVisibleColumns(allColumnIds);
+      // Use persisted visibility if available, otherwise show all columns
+      const columnsWithVisibility = board.columns.filter((col) => 
+        col.visible !== undefined ? col.visible : true
+      );
+      setVisibleColumns(columnsWithVisibility.map((col) => col.id));
     }
   }, [board]);
 
@@ -199,6 +202,12 @@ User request: ${agentInput}`;
     setIframeLoaded(false); // Reset iframe loaded state
   }, []);
 
+  const openSession = useCallback((sessionId: string | null) => {
+    setActiveTaskId(null);
+    setActiveSessionId(sessionId);
+    setIframeLoaded(false);
+  }, []);
+
   const closeTaskDetail = useCallback(() => {
     setActiveTaskId(null);
     setActiveSessionId(null);
@@ -224,19 +233,22 @@ User request: ${agentInput}`;
 
   // Close modal on Escape key
   useEffect(() => {
-    if (!activeTaskId && !activeSessionId && !showSettings) return;
+    if (!activeTaskId && !activeSessionId && !showSettings && !selectedCodebase) return;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (activeTaskId || activeSessionId) {
           closeTaskDetail();
         } else if (showSettings) {
           setShowSettings(false);
+        } else if (selectedCodebase) {
+          setSelectedCodebase(null);
+          setCodebaseWorktrees([]);
         }
       }
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [activeTaskId, activeSessionId, showSettings, closeTaskDetail]);
+  }, [activeTaskId, activeSessionId, showSettings, selectedCodebase, closeTaskDetail]);
 
   // Fetch worktrees for tasks that have worktreeId
   useEffect(() => {
@@ -323,7 +335,7 @@ User request: ${agentInput}`;
   async function retryTaskTrigger(taskId: string) {
     const updated = await patchTask(taskId, { retryTrigger: true });
     if (updated.triggerSessionId) {
-      setActiveSessionId(updated.triggerSessionId);
+      openSession(updated.triggerSessionId);
     }
     onRefresh();
   }
@@ -374,7 +386,7 @@ User request: ${agentInput}`;
         });
       }
       if (updated.triggerSessionId && updated.triggerSessionId !== movingTask.triggerSessionId) {
-        setActiveSessionId(updated.triggerSessionId);
+        openSession(updated.triggerSessionId);
       }
       onRefresh();
     } catch (error) {
@@ -474,7 +486,7 @@ User request: ${agentInput}`;
                 </div>
                 {agentSessionId && (
                   <button
-                    onClick={() => setActiveSessionId(agentSessionId)}
+                    onClick={() => openSession(agentSessionId)}
                     className="shrink-0 text-xs text-amber-600 hover:underline dark:text-amber-400"
                     title="View last agent response"
                   >
@@ -790,10 +802,7 @@ User request: ${agentInput}`;
                               </button>
                               {task.triggerSessionId && (
                                 <button
-                                  onClick={() => {
-                                    setActiveTaskId(null);
-                                    setActiveSessionId(task.triggerSessionId ?? null);
-                                  }}
+                                  onClick={() => openSession(task.triggerSessionId ?? null)}
                                   onClickCapture={stopCardInteraction}
                                   className="rounded-md bg-violet-100 px-2 py-1 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/20 dark:text-violet-300"
                                 >
@@ -1332,9 +1341,10 @@ User request: ${agentInput}`;
                   if (!board) return;
                   setSettingsSaving(true);
                   try {
-                    // Merge automation config into columns
+                    // Merge automation config and visibility into columns
                     const updatedColumns = board.columns.map((col) => ({
                       ...col,
+                      visible: visibleColumns.includes(col.id),
                       automation: columnAutomation[col.id]?.enabled
                         ? columnAutomation[col.id]
                         : undefined,
