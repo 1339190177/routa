@@ -90,6 +90,11 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
   const [worktreeCache, setWorktreeCache] = useState<Record<string, WorktreeInfo>>({});
   const [detailUpdateError, setDetailUpdateError] = useState<string | null>(null);
 
+  // Inline edit state for task detail panel
+  const [detailEditTitle, setDetailEditTitle] = useState("");
+  const [detailEditObjective, setDetailEditObjective] = useState("");
+  const [detailEditPriority, setDetailEditPriority] = useState("medium");
+
   // Settings state - column automation rules (initialized from board columns)
   const [columnAutomation, setColumnAutomation] = useState<Record<string, {
     enabled: boolean;
@@ -214,6 +219,19 @@ User request: ${agentInput}`;
   const stopCardInteraction = useCallback((event: { stopPropagation: () => void }) => {
     event.stopPropagation();
   }, []);
+
+  // Reset detail edit state when the active task changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (activeTaskId) {
+      const activeTask = localTasks.find((t) => t.id === activeTaskId);
+      if (activeTask) {
+        setDetailEditTitle(activeTask.title);
+        setDetailEditObjective(activeTask.objective ?? "");
+        setDetailEditPriority(activeTask.priority ?? "medium");
+      }
+    }
+  }, [activeTaskId]);
 
   // Fetch worktrees for tasks that have worktreeId
   useEffect(() => {
@@ -422,45 +440,7 @@ User request: ${agentInput}`;
               )}
             </div>
 
-            <div className="flex min-w-0 flex-wrap items-center gap-2 xl:flex-nowrap">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Default Workspace Board</span>
-              {boards.length > 1 ? (
-                <select
-                  value={selectedBoardId ?? ""}
-                  onChange={(event) => setSelectedBoardId(event.target.value)}
-                  className="min-w-48 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
-                >
-                  {boards.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300">
-                  {board?.name ?? "Kanban board"}
-                </div>
-              )}
-              <button
-                onClick={createBoard}
-                className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
-              >
-                New board
-              </button>
-              <select
-                multiple
-                value={visibleColumns}
-                onChange={(event) => {
-                  const selected = Array.from(event.target.selectedOptions, (option) => option.value);
-                  setVisibleColumns(selected.length > 0 ? selected : board?.columns.map((col) => col.id) ?? []);
-                }}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
-                size={1}
-                title="Visible columns"
-              >
-                {board?.columns.map((col) => (
-                  <option key={col.id} value={col.id}>{col.name}</option>
-                ))}
-              </select>
-            </div>
+
 
             {onAgentPrompt && (
               <div className="flex min-w-[20rem] flex-1 items-center gap-2 xl:max-w-none">
@@ -501,6 +481,38 @@ User request: ${agentInput}`;
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {boards.length > 1 && (
+              <select
+                value={selectedBoardId ?? ""}
+                onChange={(event) => setSelectedBoardId(event.target.value)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
+              >
+                {boards.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            )}
+            <select
+              multiple
+              value={visibleColumns}
+              onChange={(event) => {
+                const selected = Array.from(event.target.selectedOptions, (option) => option.value);
+                setVisibleColumns(selected.length > 0 ? selected : board?.columns.map((col) => col.id) ?? []);
+              }}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
+              size={1}
+              title="Visible columns"
+            >
+              {board?.columns.map((col) => (
+                <option key={col.id} value={col.id}>{col.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={createBoard}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
+            >
+              New board
+            </button>
             <a
               href={pathname?.endsWith("/kanban") ? `/workspace/${workspaceId}` : `/workspace/${workspaceId}/kanban`}
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
@@ -559,6 +571,7 @@ User request: ${agentInput}`;
                       const canRetry = Boolean(task.assignedProvider) && (
                         sessionStatus === "error" || (!task.triggerSessionId && task.columnId === "dev")
                       );
+                      const canRun = Boolean(task.assignedProvider) && !task.triggerSessionId && task.columnId !== "done";
                       return (
                         <div
                           key={task.id}
@@ -774,6 +787,15 @@ User request: ${agentInput}`;
                               )}
                             </div>
                             <div className="flex items-center gap-2">
+                              {canRun && !canRetry && (
+                                <button
+                                  onClick={() => void retryTaskTrigger(task.id)}
+                                  onClickCapture={stopCardInteraction}
+                                  className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/50 dark:bg-emerald-900/10 dark:text-emerald-300"
+                                >
+                                  Run
+                                </button>
+                              )}
                               {canRetry && (
                                 <button
                                   onClick={() => void retryTaskTrigger(task.id)}
@@ -972,18 +994,50 @@ User request: ${agentInput}`;
                     <div className="space-y-4">
                       <div>
                         <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Title</div>
-                        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{task.title}</div>
+                        <input
+                          value={detailEditTitle}
+                          onChange={(e) => setDetailEditTitle(e.target.value)}
+                          onBlur={async () => {
+                            if (detailEditTitle !== task.title) {
+                              await patchTask(task.id, { title: detailEditTitle });
+                              onRefresh();
+                            }
+                          }}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm font-semibold text-gray-900 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-100"
+                        />
                       </div>
                       <div>
                         <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Objective</div>
-                        <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{task.objective}</div>
+                        <textarea
+                          value={detailEditObjective}
+                          onChange={(e) => setDetailEditObjective(e.target.value)}
+                          onBlur={async () => {
+                            if (detailEditObjective !== (task.objective ?? "")) {
+                              await patchTask(task.id, { objective: detailEditObjective });
+                              onRefresh();
+                            }
+                          }}
+                          rows={6}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300"
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Priority</div>
-                          <span className="inline-block rounded-full bg-gray-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-600 dark:bg-[#1c1f2e] dark:text-gray-300">
-                            {task.priority ?? "medium"}
-                          </span>
+                          <select
+                            value={detailEditPriority}
+                            onChange={async (e) => {
+                              setDetailEditPriority(e.target.value);
+                              await patchTask(task.id, { priority: e.target.value });
+                              onRefresh();
+                            }}
+                            className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300"
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                          </select>
                         </div>
                         <div>
                           <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Column</div>
@@ -1003,10 +1057,60 @@ User request: ${agentInput}`;
                         </div>
                       )}
                       <div>
-                        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Assignment</div>
-                        <div className="text-sm text-gray-700 dark:text-gray-300">
-                          {task.assignedProvider ? `${task.assignedProvider}${task.assignedSpecialistName ? ` · ${task.assignedSpecialistName}` : ""}` : "Unassigned"}
-                        </div>
+                        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Provider</div>
+                        <select
+                          value={task.assignedProvider ?? ""}
+                          onChange={async (e) => {
+                            if (e.target.value) {
+                              await patchTask(task.id, { assignedProvider: e.target.value, assignedRole: task.assignedRole ?? "DEVELOPER" });
+                            } else {
+                              await patchTask(task.id, { assignedProvider: undefined, assignedRole: undefined, assignedSpecialistId: undefined, assignedSpecialistName: undefined });
+                            }
+                            onRefresh();
+                          }}
+                          className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300"
+                        >
+                          <option value="">Unassigned</option>
+                          {availableProviders.map((p) => (
+                            <option key={`${p.id}-${p.name}`} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                        {task.assignedProvider && (
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <select
+                              value={task.assignedRole ?? "DEVELOPER"}
+                              onChange={async (e) => {
+                                await patchTask(task.id, { assignedRole: e.target.value });
+                                onRefresh();
+                              }}
+                              className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300"
+                            >
+                              {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            <select
+                              value={task.assignedSpecialistId ?? ""}
+                              onChange={async (e) => {
+                                const sp = specialists.find((s) => s.id === e.target.value);
+                                await patchTask(task.id, { assignedSpecialistId: e.target.value || undefined, assignedSpecialistName: sp?.name, assignedRole: sp?.role ?? task.assignedRole });
+                                onRefresh();
+                              }}
+                              className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-amber-400 focus:outline-none dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-300"
+                            >
+                              <option value="">No specialist</option>
+                              {specialists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                          </div>
+                        )}
+                        {task.assignedProvider && (
+                          <button
+                            onClick={async () => {
+                              await retryTaskTrigger(task.id);
+                            }}
+                            className="mt-2 w-full rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-600"
+                          >
+                            {task.triggerSessionId ? "Rerun" : "Run"}
+                          </button>
+                        )}
                       </div>
                       {task.githubNumber && (
                         <div>
