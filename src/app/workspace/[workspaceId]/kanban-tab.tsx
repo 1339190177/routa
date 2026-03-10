@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { usePathname } from "next/navigation";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { UseAcpState } from "@/client/hooks/use-acp";
 import type { KanbanBoardInfo, SessionInfo, TaskInfo, WorktreeInfo } from "./types";
+import { KanbanCreateModal, EMPTY_DRAFT, type DraftIssue } from "./kanban-create-modal";
 
 interface SpecialistOption {
   id: string;
@@ -28,28 +28,9 @@ interface KanbanTabProps {
   onAgentPrompt?: (prompt: string) => Promise<string | null>;
 }
 
-type DraftIssue = {
-  title: string;
-  objective: string;
-  priority: string;
-  labels: string;
-  createGitHubIssue: boolean;
-  codebaseIds: string[];
-};
-
-const EMPTY_DRAFT: DraftIssue = {
-  title: "",
-  objective: "",
-  priority: "medium",
-  labels: "",
-  createGitHubIssue: false,
-  codebaseIds: [],
-};
-
 const ROLE_OPTIONS = ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"];
 
 export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, specialists, codebases, onRefresh, acp, onAgentPrompt }: KanbanTabProps) {
-  const pathname = usePathname();
   const defaultBoardId = useMemo(
     () => boards.find((board) => board.isDefault)?.id ?? boards[0]?.id ?? null,
     [boards],
@@ -295,7 +276,7 @@ User request: ${agentInput}`;
         workspaceId,
         boardId: selectedBoardId ?? defaultBoardId,
         title: draft.title,
-        objective: draft.objective,
+        objective: draft.objectiveHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(),
         priority: draft.priority,
         labels: draft.labels.split(",").map((label) => label.trim()).filter(Boolean),
         createGitHubIssue: draft.createGitHubIssue,
@@ -310,7 +291,7 @@ User request: ${agentInput}`;
       throw new Error(data.error ?? "Failed to create issue");
     }
     setLocalTasks((current) => [...current, data.task as TaskInfo]);
-    setDraft({ ...EMPTY_DRAFT, createGitHubIssue: githubAvailable });
+    setDraft({ ...EMPTY_DRAFT, objectiveHtml: "", createGitHubIssue: githubAvailable });
     setShowCreateModal(false);
     onRefresh();
   }
@@ -508,18 +489,6 @@ User request: ${agentInput}`;
               ))}
             </select>
             <button
-              onClick={createBoard}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
-            >
-              New board
-            </button>
-            <a
-              href={pathname?.endsWith("/kanban") ? `/workspace/${workspaceId}` : `/workspace/${workspaceId}/kanban`}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
-            >
-              {pathname?.endsWith("/kanban") ? "Dashboard view" : "Board page"}
-            </a>
-            <button
               onClick={() => setShowSettings(true)}
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-[#191c28]"
               title="Board settings"
@@ -530,7 +499,7 @@ User request: ${agentInput}`;
               onClick={() => setShowCreateModal(true)}
               className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
             >
-              Create issue
+              Manual
             </button>
           </div>
         </div>
@@ -837,117 +806,15 @@ User request: ${agentInput}`;
       </div>
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-[#1c1f2e] dark:bg-[#12141c]">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Create issue</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
-            </div>
-
-            <div className="space-y-3">
-              <input
-                value={draft.title}
-                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                placeholder="Issue title"
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-[#0d1018]"
-              />
-              <textarea
-                value={draft.objective}
-                onChange={(event) => setDraft((current) => ({ ...current, objective: event.target.value }))}
-                placeholder="Describe the work"
-                rows={6}
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-[#0d1018]"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <select
-                  value={draft.priority}
-                  onChange={(event) => setDraft((current) => ({ ...current, priority: event.target.value }))}
-                  className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-[#0d1018]"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
-                </select>
-                <input
-                  value={draft.labels}
-                  onChange={(event) => setDraft((current) => ({ ...current, labels: event.target.value }))}
-                  placeholder="labels,comma,separated"
-                  className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-[#0d1018]"
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={draft.createGitHubIssue}
-                  disabled={!githubAvailable}
-                  onChange={(event) => setDraft((current) => ({ ...current, createGitHubIssue: event.target.checked }))}
-                />
-                Also create GitHub issue
-              </label>
-              {!githubAvailable && (
-                <div className="text-xs text-gray-400 dark:text-gray-500">
-                  Current default codebase is not linked to a GitHub repo. The issue will be local-only.
-                </div>
-              )}
-
-              {/* Requirement 2: Repository selector */}
-              {codebases.length > 0 && (
-                <div>
-                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Link Repositories</div>
-                  <div className="flex flex-wrap gap-2" data-testid="repo-selector">
-                    {codebases.map((cb) => {
-                      const selected = draft.codebaseIds.includes(cb.id);
-                      return (
-                        <button
-                          key={cb.id}
-                          type="button"
-                          onClick={() => setDraft((current) => ({
-                            ...current,
-                            codebaseIds: selected
-                              ? current.codebaseIds.filter((id) => id !== cb.id)
-                              : [...current.codebaseIds, cb.id],
-                          }))}
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
-                            selected
-                              ? "border-violet-400 bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300 dark:border-violet-600"
-                              : "border-gray-200 dark:border-gray-700 bg-white dark:bg-[#0d1018] text-gray-600 dark:text-gray-400 hover:border-violet-300"
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${cb.sourceType === "github" ? "bg-violet-500" : "bg-emerald-500"}`} />
-                          {cb.label ?? cb.repoPath.split("/").pop() ?? cb.repoPath}
-                          {cb.isDefault && !selected && <span className="text-[10px] text-gray-400">(default)</span>}
-                          {selected && <span className="text-violet-600 dark:text-violet-400">✓</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {draft.codebaseIds.length === 0 && codebases.length > 0 && (
-                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      No selection → all workspace repositories will be linked.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 dark:border-gray-700 dark:text-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => void createIssue()}
-                disabled={!draft.title.trim() || !draft.objective.trim()}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
-              >
-                Create
-              </button>
-            </div>
-          </div>
-        </div>
+        <KanbanCreateModal
+          draft={draft}
+          setDraft={setDraft}
+          onClose={() => setShowCreateModal(false)}
+          onCreate={() => void createIssue()}
+          githubAvailable={githubAvailable}
+          codebases={codebases}
+          allCodebaseIds={allCodebaseIds}
+        />
       )}
 
       {(activeSessionId || activeTaskId) && (
