@@ -1229,10 +1229,10 @@ export function ChatPanel({
   }, [setupModelDropdownOpen]);
 
   // Reset setup model when provider changes
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     setSetupModel("");
     setSetupModelModels([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acp.selectedProvider]);
 
   const handleStartSession = useCallback(async () => {
