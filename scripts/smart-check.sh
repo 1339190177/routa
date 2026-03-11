@@ -72,13 +72,19 @@ trap cleanup EXIT
 
 main() {
   local auto_fix=false
-  if [[ "$1" == "--fix" ]]; then
-    auto_fix=true
-  fi
+  local fail_fast=true  # Default to fail-fast mode
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --fix) auto_fix=true; shift ;;
+      --no-fail-fast) fail_fast=false; shift ;;
+      *) shift ;;
+    esac
+  done
 
   local lint_exit=0 typecheck_exit=0 test_exit=0
 
-  # ─── Run Lint (with real-time output) ─────────────────────────────────────
+  # ─── Run Lint ─────────────────────────────────────────────────────────────
   echo -e "${BLUE}[1/3] Running lint...${NC}"
   echo ""
   set +e
@@ -90,10 +96,14 @@ main() {
     echo -e "${GREEN}✓ Lint passed${NC}"
   else
     echo -e "${RED}✗ Lint failed (exit code: $lint_exit)${NC}"
+    if [[ "$fail_fast" == true ]]; then
+      handle_failure "$auto_fix" "lint" $lint_exit 0 0
+      exit 1
+    fi
   fi
   echo ""
 
-  # ─── Run Type Check (with real-time output) ───────────────────────────────
+  # ─── Run Type Check ───────────────────────────────────────────────────────
   echo -e "${BLUE}[2/3] Running type check...${NC}"
   echo ""
   set +e
@@ -117,10 +127,14 @@ main() {
     echo -e "${GREEN}✓ Type check passed${NC}"
   else
     echo -e "${RED}✗ Type check failed (exit code: $typecheck_exit)${NC}"
+    if [[ "$fail_fast" == true ]]; then
+      handle_failure "$auto_fix" "typecheck" $lint_exit $typecheck_exit 0
+      exit 1
+    fi
   fi
   echo ""
 
-  # ─── Run Tests (with real-time output) ────────────────────────────────────
+  # ─── Run Tests ────────────────────────────────────────────────────────────
   echo -e "${BLUE}[3/3] Running tests...${NC}"
   echo ""
   set +e
@@ -132,6 +146,10 @@ main() {
     echo -e "${GREEN}✓ Tests passed${NC}"
   else
     echo -e "${RED}✗ Tests failed (exit code: $test_exit)${NC}"
+    if [[ "$fail_fast" == true ]]; then
+      handle_failure "$auto_fix" "test" $lint_exit $typecheck_exit $test_exit
+      exit 1
+    fi
   fi
   echo ""
 
@@ -144,31 +162,28 @@ main() {
     exit 0
   fi
 
-  # ─── Failure Handling ─────────────────────────────────────────────────────
+  # ─── Failure Handling (only reached in --no-fail-fast mode) ───────────────
+  handle_failure "$auto_fix" "all" $lint_exit $typecheck_exit $test_exit
+  exit 1
+}
+
+# ─── Failure Handler ─────────────────────────────────────────────────────────
+handle_failure() {
+  local auto_fix="$1"
+  local failed_step="$2"
+  local lint_exit="$3"
+  local typecheck_exit="$4"
+  local test_exit="$5"
 
   echo ""
   echo -e "${RED}═══════════════════════════════════════════════════════════════${NC}"
-  echo -e "${RED}  Pre-push checks failed!${NC}"
+  case "$failed_step" in
+    lint)      echo -e "${RED}  ✗ LINT FAILED${NC}" ;;
+    typecheck) echo -e "${RED}  ✗ TYPE CHECK FAILED${NC}" ;;
+    test)      echo -e "${RED}  ✗ TESTS FAILED${NC}" ;;
+    *)         echo -e "${RED}  Pre-push checks failed!${NC}" ;;
+  esac
   echo -e "${RED}═══════════════════════════════════════════════════════════════${NC}"
-  echo ""
-
-  # Show summary of which checks failed
-  echo -e "${YELLOW}Summary:${NC}"
-  if [[ $lint_exit -ne 0 ]]; then
-    echo -e "  ${RED}✗${NC} Lint failed (exit code: $lint_exit)"
-  else
-    echo -e "  ${GREEN}✓${NC} Lint passed"
-  fi
-  if [[ $typecheck_exit -ne 0 ]]; then
-    echo -e "  ${RED}✗${NC} Type check failed (exit code: $typecheck_exit)"
-  else
-    echo -e "  ${GREEN}✓${NC} Type check passed"
-  fi
-  if [[ $test_exit -ne 0 ]]; then
-    echo -e "  ${RED}✗${NC} Tests failed (exit code: $test_exit)"
-  else
-    echo -e "  ${GREEN}✓${NC} Tests passed"
-  fi
   echo ""
 
   # Check if we're in an AI agent environment
