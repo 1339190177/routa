@@ -1229,10 +1229,9 @@ export function ChatPanel({
   }, [setupModelDropdownOpen]);
 
   // Reset setup model when provider changes
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSetupModel("");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSetupModelModels([]);
   }, [acp.selectedProvider]);
 

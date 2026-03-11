@@ -657,6 +657,12 @@ User request: ${agentInput}`;
                     onRetryTrigger={retryTaskTrigger}
                     onDelete={() => confirmDeleteTask(task)}
                     onRefresh={onRefresh}
+                    onProviderChange={(providerId) => {
+                      // Sync provider change to ACP state
+                      if (acp && providerId) {
+                        acp.setProvider(providerId);
+                      }
+                    }}
                   />
                 );
               })()}

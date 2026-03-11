@@ -22,6 +22,8 @@ export interface KanbanCardDetailProps {
   onRetryTrigger: (taskId: string) => Promise<void>;
   onDelete: () => void;
   onRefresh: () => void;
+  /** Called when provider is changed to sync with ACP state */
+  onProviderChange?: (providerId: string | null) => void;
 }
 
 const ROLE_OPTIONS = ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"];
@@ -37,6 +39,7 @@ export function KanbanCardDetail({
   onRetryTrigger,
   onDelete,
   onRefresh,
+  onProviderChange,
 }: KanbanCardDetailProps) {
   // Inline edit state - component is keyed by task.id so state resets on task change
   const [editTitle, setEditTitle] = useState(task.title);
@@ -116,6 +119,7 @@ export function KanbanCardDetail({
           onPatchTask={onPatchTask}
           onRetryTrigger={onRetryTrigger}
           onRefresh={onRefresh}
+          onProviderChange={onProviderChange}
         />
 
         {/* GitHub Link */}
@@ -174,6 +178,7 @@ function ProviderSection({
   onPatchTask,
   onRetryTrigger,
   onRefresh,
+  onProviderChange: _onProviderChange,
 }: {
   task: TaskInfo;
   availableProviders: AcpProviderInfo[];
@@ -181,6 +186,7 @@ function ProviderSection({
   onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
   onRetryTrigger: (taskId: string) => Promise<void>;
   onRefresh: () => void;
+  onProviderChange?: (providerId: string | null) => void;
 }) {
   return (
     <div>
@@ -188,34 +194,15 @@ function ProviderSection({
       <select
         value={task.assignedProvider ?? ""}
         onChange={async (e) => {
-          if (e.target.value) {
-            await onPatchTask(task.id, { assignedProvider: e.target.value, assignedRole: task.assignedRole ?? "DEVELOPER" });
-            // Also update the session provider if this task has a session
-            if (task.triggerSessionId) {
-              try {
-                await fetch(`/api/sessions/${encodeURIComponent(task.triggerSessionId)}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ provider: e.target.value }),
-                });
-              } catch (error) {
-                console.error("Failed to update session provider:", error);
-              }
-            }
+          const newProvider = e.target.value || null;
+          if (newProvider) {
+            await onPatchTask(task.id, { assignedProvider: newProvider, assignedRole: task.assignedRole ?? "DEVELOPER" });
+            // Notify parent to sync ACP provider
+            onProviderChange?.(newProvider);
           } else {
             await onPatchTask(task.id, { assignedProvider: undefined, assignedRole: undefined, assignedSpecialistId: undefined, assignedSpecialistName: undefined });
-            // Also clear the session provider if this task has a session
-            if (task.triggerSessionId) {
-              try {
-                await fetch(`/api/sessions/${encodeURIComponent(task.triggerSessionId)}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ provider: null }),
-                });
-              } catch (error) {
-                console.error("Failed to clear session provider:", error);
-              }
-            }
+            // Notify parent to clear ACP provider
+            onProviderChange?.(null);
           }
           onRefresh();
         }}
