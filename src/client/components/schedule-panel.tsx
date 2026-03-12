@@ -117,6 +117,16 @@ export function SchedulePanel({ workspaceId = "default" }: { workspaceId?: strin
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [cronDescription, setCronDescription] = useState<string>("");
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    const init = setTimeout(() => setNow(Date.now()), 0);
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => {
+      clearTimeout(init);
+      clearInterval(id);
+    };
+  }, []);
 
   // Update cron description whenever the expression changes
   useEffect(() => {
@@ -357,6 +367,7 @@ export function SchedulePanel({ workspaceId = "default" }: { workspaceId?: strin
                     onToggle={() => handleToggleEnabled(s)}
                     onRunNow={() => handleRunNow(s)}
                     isRunning={running === s.id}
+                    now={now}
                   />
                 ))}
               </div>
@@ -575,17 +586,19 @@ interface ScheduleCardProps {
   onToggle: () => void;
   onRunNow: () => void;
   isRunning: boolean;
+  now: number;
 }
 
-function ScheduleCard({ schedule, onEdit, onDelete, onToggle, onRunNow, isRunning }: ScheduleCardProps) {
+function ScheduleCard({ schedule, onEdit, onDelete, onToggle, onRunNow, isRunning, now }: ScheduleCardProps) {
   const description = (() => {
     try { return describeCronExpr(schedule.cronExpr); } catch { return schedule.cronExpr; }
   })();
 
   const formatRelTime = (dateStr?: string) => {
     if (!dateStr) return null;
+    if (!now) return null;
     const d = new Date(dateStr);
-    const diff = d.getTime() - Date.now();
+    const diff = d.getTime() - now;
     const abs = Math.abs(diff);
     const mins = Math.floor(abs / 60000);
     const hrs = Math.floor(abs / 3600000);

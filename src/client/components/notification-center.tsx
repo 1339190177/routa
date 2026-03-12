@@ -45,17 +45,16 @@ export function useNotifications() {
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-
-  // Load from localStorage on mount
-  useEffect(() => {
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    if (typeof window === "undefined") return [];
     const stored = localStorage.getItem("routa_notifications");
-    if (stored) {
-      try {
-        setNotifications(JSON.parse(stored));
-      } catch { /* ignore */ }
+    if (!stored) return [];
+    try {
+      return JSON.parse(stored) as AppNotification[];
+    } catch {
+      return [];
     }
-  }, []);
+  });
 
   // Save to localStorage on change
   useEffect(() => {
@@ -98,9 +97,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 export function NotificationBell() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [open, setOpen] = useState(false);
+  const [now, setNow] = useState(0);
+
+  useEffect(() => {
+    const init = setTimeout(() => setNow(Date.now()), 0);
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => {
+      clearTimeout(init);
+      clearInterval(id);
+    };
+  }, []);
 
   const formatTime = (ts: string) => {
-    const diff = Date.now() - new Date(ts).getTime();
+    if (!now) return "now";
+    const diff = now - new Date(ts).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "now";
     if (mins < 60) return `${mins}m ago`;
@@ -184,4 +194,3 @@ export function NotificationBell() {
     </div>
   );
 }
-

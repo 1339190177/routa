@@ -219,14 +219,12 @@ const BASE_URL_SUGGESTIONS = [
 const EMPTY_MODEL_FORM: ModelDefinition = { alias: "", modelName: "", baseUrl: "", apiKey: "" };
 
 function ModelsTab() {
-  const [defs, setDefs] = useState<ModelDefinition[]>([]);
+  const [defs, setDefs] = useState<ModelDefinition[]>(() => loadModelDefinitions());
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [form, setForm] = useState<ModelDefinition>(EMPTY_MODEL_FORM);
   const [aliasError, setAliasError] = useState("");
   const baseUrlListId = useId();
   const aliasInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { setDefs(loadModelDefinitions()); }, []);
 
   const persist = (next: ModelDefinition[]) => { setDefs(next); saveModelDefinitions(next); };
 
@@ -847,15 +845,11 @@ const EMPTY_CUSTOM_PROVIDER_FORM: CustomProviderForm = {
 };
 
 function CustomAcpProvidersSection() {
-  const [providers, setProviders] = useState<CustomAcpProvider[]>([]);
+  const [providers, setProviders] = useState<CustomAcpProvider[]>(() => loadCustomAcpProviders());
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<CustomProviderForm>(EMPTY_CUSTOM_PROVIDER_FORM);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setProviders(loadCustomAcpProviders());
-  }, []);
 
   const handleSave = () => {
     setError(null);
@@ -1487,12 +1481,8 @@ const EXAMPLE_AUTH_JSON = `{
 
 // ─── Docker OpenCode Config Section ───────────────────────────────────────────
 function DockerOpenCodeSection() {
-  const [authJson, setAuthJson] = useState("");
+  const [authJson, setAuthJson] = useState(() => loadDockerOpencodeAuthJson());
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setAuthJson(loadDockerOpencodeAuthJson());
-  }, []);
 
   const handleSave = useCallback((value: string) => {
     if (value.trim()) {
@@ -1549,15 +1539,14 @@ export interface DockerConfigModalProps {
   onSaved: (authJson: string) => void;
 }
 
-export function DockerConfigModal({ open, errorMessage, onClose, onSaved }: DockerConfigModalProps) {
-  const [authJson, setAuthJson] = useState("");
-  const [error, setError] = useState<string | null>(null);
+export function DockerConfigModal(props: DockerConfigModalProps) {
+  if (!props.open) return null;
+  return <DockerConfigModalContent {...props} />;
+}
 
-  useEffect(() => {
-    if (open) {
-      setAuthJson(loadDockerOpencodeAuthJson());
-    }
-  }, [open]);
+function DockerConfigModalContent({ open: _open, errorMessage, onClose, onSaved }: DockerConfigModalProps) {
+  const [authJson, setAuthJson] = useState(() => loadDockerOpencodeAuthJson());
+  const [error, setError] = useState<string | null>(null);
 
   const handleSave = useCallback(() => {
     if (authJson.trim()) {
@@ -1572,8 +1561,6 @@ export function DockerConfigModal({ open, errorMessage, onClose, onSaved }: Dock
     saveDockerOpencodeAuthJson(authJson);
     onSaved(authJson);
   }, [authJson, onSaved]);
-
-  if (!open) return null;
 
   // Simplify the error message for display
   const displayError = errorMessage
@@ -1642,25 +1629,15 @@ export function DockerConfigModal({ open, errorMessage, onClose, onSaved }: Dock
 
 // ─── Main Settings Panel ───────────────────────────────────────────────────
 export function SettingsPanel({ open, onClose, providers, initialTab }: SettingsPanelProps) {
-  const [settings, setSettings] = useState<DefaultProviderSettings>({});
-  const [modelDefs, setModelDefs] = useState<ModelDefinition[]>([]);
-  const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
+  if (!open) return null;
+  return <SettingsPanelContent onClose={onClose} providers={providers} initialTab={initialTab} />;
+}
+
+function SettingsPanelContent({ onClose, providers, initialTab }: Omit<SettingsPanelProps, "open">) {
+  const [settings, setSettings] = useState<DefaultProviderSettings>(() => loadDefaultProviders());
+  const [modelDefs, setModelDefs] = useState<ModelDefinition[]>(() => loadModelDefinitions());
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => initialTab ?? "providers");
   const datalistId = useId();
-
-  useEffect(() => {
-    if (open) {
-      setSettings(loadDefaultProviders());
-      setModelDefs(loadModelDefinitions());
-      if (initialTab) setActiveTab(initialTab);
-    }
-  }, [open, initialTab]);
-
-  // Re-sync model defs when Models tab is visited
-  useEffect(() => {
-    if (open && activeTab === "models") {
-      setModelDefs(loadModelDefinitions());
-    }
-  }, [open, activeTab]);
 
   const handleChange = useCallback(
     (role: AgentRoleKey, field: "provider" | "model", value: string) => {
@@ -1674,9 +1651,13 @@ export function SettingsPanel({ open, onClose, providers, initialTab }: Settings
     [settings],
   );
 
-  if (!open) return null;
-
   const availableProviders = providers.filter((p) => p.status === "available");
+  const handleTabChange = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    if (tab === "models") {
+      setModelDefs(loadModelDefinitions());
+    }
+  };
 
   const TAB_DEFS: { key: SettingsTab; label: string }[] = [
     { key: "agents", label: "Agents" },
@@ -1714,7 +1695,7 @@ export function SettingsPanel({ open, onClose, providers, initialTab }: Settings
         {/* Tabs */}
         <div className="flex border-b border-gray-200 dark:border-gray-700 shrink-0">
           {TAB_DEFS.map(({ key, label }) => (
-            <button key={key} onClick={() => setActiveTab(key)}
+            <button key={key} onClick={() => handleTabChange(key)}
               className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
                 activeTab === key
                   ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
@@ -1765,7 +1746,7 @@ export function SettingsPanel({ open, onClose, providers, initialTab }: Settings
               )}
               <p className="text-[10px] text-gray-400 dark:text-gray-500">
                 Leave model blank to use the provider default. Type a model alias from the{" "}
-                <button onClick={() => setActiveTab("models")} className="text-blue-500 hover:underline">Models tab</button>
+                <button onClick={() => handleTabChange("models")} className="text-blue-500 hover:underline">Models tab</button>
                 {" "}to use custom connection details.
               </p>
 
@@ -1806,5 +1787,3 @@ export function SettingsPanel({ open, onClose, providers, initialTab }: Settings
     </div>
   );
 }
-
-
