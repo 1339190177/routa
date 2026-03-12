@@ -11,25 +11,24 @@ import {
   RequestContext,
   ExecutionEventBus,
 } from "@a2a-js/sdk/server";
-import { getHttpSessionStore } from "../acp/http-session-store";
 import { RoutaSystem } from "../routa-system";
 
 /**
  * Creates a placeholder A2A executor
  * The main A2A functionality is implemented via JSON-RPC in /api/a2a/rpc
  */
-export function createA2aExecutor(system: RoutaSystem): AgentExecutor {
+export function createA2aExecutor(_system: RoutaSystem): AgentExecutor {
   return {
     async execute(
-      requestContext: RequestContext,
-      eventBus: ExecutionEventBus
+      _requestContext: RequestContext,
+      _eventBus: ExecutionEventBus
     ): Promise<void> {
       // Placeholder - actual A2A requests are handled via /api/a2a/rpc
       console.log("A2A: Execute called (handled via JSON-RPC)");
     },
 
-    async cancelTask(taskId: string): Promise<void> {
-      console.log(`A2A: Task cancellation requested for task ${taskId}`);
+    async cancelTask(_taskId: string): Promise<void> {
+      console.log("A2A: Task cancellation requested");
     },
   };
 }

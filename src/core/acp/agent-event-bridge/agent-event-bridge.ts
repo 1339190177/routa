@@ -14,7 +14,6 @@ import type { NormalizedSessionUpdate, NormalizedToolCall } from "../provider-ad
 import {
   type WorkspaceAgentEvent,
   type BlockStatus,
-  type FileChange,
   type PlanItem,
   type PlanItemStatus,
   classifyToolKind,
@@ -81,7 +80,7 @@ export class AgentEventBridge {
   /**
    * Emit an agent_started event. Call this when a session is first created.
    */
-  started(provider: string): AgentEventBridge {
+  started(_provider: string): AgentEventBridge {
     // Stored for consumers that call process() — not emitted here since
     // the bridge is passive. Callers can emit this manually via makeStartedEvent().
     return this;

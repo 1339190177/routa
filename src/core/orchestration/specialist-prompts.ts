@@ -15,7 +15,6 @@ import { AgentRole, ModelTier } from "../models/agent";
 import { loadAllSpecialists } from "../specialists/specialist-file-loader";
 import {
   loadSpecialistsFromAllSources,
-  reloadSpecialistsFromAllSources,
   invalidateSpecialistCache,
 } from "../specialists/specialist-db-loader";
 

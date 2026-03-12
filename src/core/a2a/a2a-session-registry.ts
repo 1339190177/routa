@@ -66,7 +66,7 @@ export class A2aSessionRegistry {
   /**
    * Determine capabilities based on session provider
    */
-  private getSessionCapabilities(session: RoutaSessionRecord): string[] {
+  private getSessionCapabilities(_session: RoutaSessionRecord): string[] {
     const baseCapabilities = [
       "initialize",
       "method_list",

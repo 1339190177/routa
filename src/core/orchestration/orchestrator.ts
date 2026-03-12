@@ -18,8 +18,8 @@
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
-import { AgentRole, AgentStatus, ModelTier } from "../models/agent";
-import { TaskStatus, VerificationVerdict } from "../models/task";
+import { AgentRole, AgentStatus } from "../models/agent";
+import { TaskStatus } from "../models/task";
 import { AgentEventType } from "../events/event-bus";
 import { ToolResult, successResult, errorResult } from "../tools/tool-result";
 import {
@@ -768,7 +768,7 @@ export class RoutaOrchestrator {
    */
   private async handleReportSubmitted(
     childAgentId: string,
-    data: Record<string, unknown>
+    _data: Record<string, unknown>
   ): Promise<void> {
     const record = this.childAgents.get(childAgentId);
     if (!record) {
