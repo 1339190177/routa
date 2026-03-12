@@ -16,9 +16,9 @@
  *   - GitHub clone button (bottom-left)
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
-import { useEditor, EditorContent, ReactRenderer } from "@tiptap/react";
+import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
@@ -535,68 +535,61 @@ export function TiptapInput({
     }
   }, [activeSessionMode, selectedProvider]);
 
-  // Ref for skills so the Mention extension always has latest
   // Merge local skills and repo-discovered skills, deduplicating by name
-  const skillsRef = useRef<SuggestionItem[]>([]);
-  const mergedSkillItems: SuggestionItem[] = [];
-  const seenSkillNames = new Set<string>();
-
-  for (const s of skills) {
-    if (!seenSkillNames.has(s.name)) {
-      seenSkillNames.add(s.name);
-      mergedSkillItems.push({
+  const mergedSkillItems = useMemo<SuggestionItem[]>(() => {
+    const items: SuggestionItem[] = [];
+    const seen = new Set<string>();
+    for (const s of skills) {
+      if (seen.has(s.name)) continue;
+      seen.add(s.name);
+      items.push({
         id: s.name,
         label: s.name,
         description: s.description,
         type: "skill",
       });
     }
-  }
-  for (const s of repoSkills) {
-    if (!seenSkillNames.has(s.name)) {
-      seenSkillNames.add(s.name);
-      mergedSkillItems.push({
+    for (const s of repoSkills) {
+      if (seen.has(s.name)) continue;
+      seen.add(s.name);
+      items.push({
         id: s.name,
         label: s.name,
         description: `[repo] ${s.description}`,
         type: "skill",
       });
     }
-  }
-  skillsRef.current = mergedSkillItems;
+    return items;
+  }, [skills, repoSkills]);
 
-  // Ref for # suggestions (providers + sessions) - agents
-  const agentItemsRef = useRef<SuggestionItem[]>([]);
-  const providerItems = providers.map((p) => ({
-    id: p.id,
-    label: p.name,
-    description: `${p.command}${p.status === "available" ? " ✓" : ""}`,
-    type: "provider",
-    disabled: p.status === "unavailable",
-  }));
-  const sessionItems = sessions.map((s) => ({
-    id: s.sessionId,
-    label: `session-${s.sessionId.slice(0, 8)}`,
-    description: `${s.provider ?? "unknown"}${s.modeId ? ` · ${s.modeId}` : ""}`,
-    type: "session",
-    disabled: false,
-  }));
-  agentItemsRef.current = [...providerItems, ...sessionItems];
+  const agentItems = useMemo<SuggestionItem[]>(() => {
+    const providerItems = providers.map((p) => ({
+      id: p.id,
+      label: p.name,
+      description: `${p.command}${p.status === "available" ? " ✓" : ""}`,
+      type: "provider",
+      disabled: p.status === "unavailable",
+    }));
+    const sessionItems = sessions.map((s) => ({
+      id: s.sessionId,
+      label: `session-${s.sessionId.slice(0, 8)}`,
+      description: `${s.provider ?? "unknown"}${s.modeId ? ` · ${s.modeId}` : ""}`,
+      type: "session",
+      disabled: false,
+    }));
+    return [...providerItems, ...sessionItems];
+  }, [providers, sessions]);
 
-  // Ref for @ suggestions (file search)
-  // File search context for async API calls
-  const fileSearchContextRef = useRef<FileSearchContext>({
+  const fileSearchContext = useMemo<FileSearchContext>(() => ({
     repoPath: repoSelection?.path ?? null,
     abortController: null,
-  });
-
-  // Update repo path when selection changes
-  useEffect(() => {
-    fileSearchContextRef.current.repoPath = repoSelection?.path ?? null;
-  }, [repoSelection?.path]);
+  }), [repoSelection?.path]);
 
   // Use a ref for the send handler so extensions always call the latest version
   const handleSendRef = useRef<() => void>(() => {});
+  const handleSendProxy = useCallback(() => {
+    handleSendRef.current();
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -648,11 +641,12 @@ export function TiptapInput({
         nested: true,
         HTMLAttributes: { class: "flex items-start gap-2" },
       }),
-      createAtMention(() => fileSearchContextRef.current),
-      createHashMention(() => agentItemsRef.current),
-      createSkillMention(() => skillsRef.current),
+      createAtMention(() => fileSearchContext),
+      createHashMention(() => agentItems),
+      createSkillMention(() => mergedSkillItems),
+      // eslint-disable-next-line react-hooks/refs -- EnterToSend needs a stable handler; ref avoids editor re-init
       EnterToSend.configure({
-        onSend: () => handleSendRef.current(),
+        onSend: handleSendProxy,
       }),
     ],
     editable: !disabled,
@@ -707,7 +701,7 @@ export function TiptapInput({
       .insertContent(" ")
       .run();
     onSkillInserted?.();
-  }, [pendingSkill, editor]);
+  }, [pendingSkill, editor, onSkillInserted]);
 
   // Restore prefill text (e.g. after a session error) into the editor
   useEffect(() => {
@@ -807,7 +801,9 @@ export function TiptapInput({
   }, [editor, onSend, disabled, loading, repoSelection, providers, selectedProvider, claudeMode, opencodeMode, sessions, agentRole, selectedModel]);
 
   // Keep ref updated so EnterToSend and external send button always call latest
-  handleSendRef.current = handleSend;
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
 
   // Close provider dropdown on click outside
   useEffect(() => {

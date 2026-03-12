@@ -502,14 +502,14 @@ export function AskUserQuestionBubble({
 }) {
     const rawInput = (message.toolRawInput ?? {}) as AskUserQuestionPayload;
     const questions = Array.isArray(rawInput.questions) ? rawInput.questions : [];
-    const existingAnswers = rawInput.answers ?? {};
+    const existingAnswers = useMemo(() => rawInput.answers ?? {}, [rawInput.answers]);
     const [answers, setAnswers] = useState<Record<string, string>>(existingAnswers);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
 
     useEffect(() => {
         setAnswers(existingAnswers);
-    }, [message.id, rawInput.answers]);
+    }, [message.id, existingAnswers]);
 
     const hasAnswers = hasAskUserQuestionAnswers(message);
     const isCompleted = hasAnswers;
@@ -537,7 +537,7 @@ export function AskUserQuestionBubble({
 
         for (const item of questions) {
             if (!answers[item.question]?.trim()) {
-                setSubmitError(`Please answer \"${item.header}\" before continuing.`);
+                setSubmitError(`Please answer "${item.header}" before continuing.`);
                 return;
             }
         }
