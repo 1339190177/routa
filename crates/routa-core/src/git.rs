@@ -662,3 +662,173 @@ pub fn copy_dir_recursive(src: &Path, dest: &Path) -> std::io::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn parse_github_url_supports_multiple_formats() {
+        let https = parse_github_url("https://github.com/phodal/routa-js.git").unwrap();
+        assert_eq!(https.owner, "phodal");
+        assert_eq!(https.repo, "routa-js");
+
+        let ssh = parse_github_url("git@github.com:owner/repo-name.git").unwrap();
+        assert_eq!(ssh.owner, "owner");
+        assert_eq!(ssh.repo, "repo-name");
+
+        let shorthand = parse_github_url("foo/bar.baz").unwrap();
+        assert_eq!(shorthand.owner, "foo");
+        assert_eq!(shorthand.repo, "bar.baz");
+
+        assert!(parse_github_url(r"C:\tmp\repo").is_none());
+    }
+
+    #[test]
+    fn repo_dir_name_conversions_are_stable() {
+        let dir = repo_to_dir_name("org", "project");
+        assert_eq!(dir, "org--project");
+        assert_eq!(dir_name_to_repo(&dir), "org/project");
+        assert_eq!(dir_name_to_repo("no-separator"), "no-separator");
+    }
+
+    #[test]
+    fn frontmatter_extraction_requires_both_delimiters() {
+        let content = "---\nname: demo\ndescription: hello\n---\nbody";
+        let (fm, body) = extract_frontmatter_str(content).unwrap();
+        assert!(fm.contains("name: demo"));
+        assert_eq!(body, "body");
+
+        assert!(extract_frontmatter_str("name: x\n---\nbody").is_none());
+        assert!(extract_frontmatter_str("---\nname: x\nbody").is_none());
+    }
+
+    #[test]
+    fn parse_discovered_skill_supports_frontmatter_and_fallback() {
+        let temp = tempdir().unwrap();
+        let skill_dir = temp.path().join("skills").join("demo");
+        fs::create_dir_all(&skill_dir).unwrap();
+
+        let fm_skill = skill_dir.join("SKILL.md");
+        fs::write(
+            &fm_skill,
+            "---\nname: Demo Skill\ndescription: Does demo things\nlicense: MIT\ncompatibility: rust\n---\n# Body\n",
+        )
+        .unwrap();
+
+        let parsed = parse_discovered_skill(&fm_skill).unwrap();
+        assert_eq!(parsed.name, "Demo Skill");
+        assert_eq!(parsed.description, "Does demo things");
+        assert_eq!(parsed.license.as_deref(), Some("MIT"));
+        assert_eq!(parsed.compatibility.as_deref(), Some("rust"));
+
+        let fallback_dir = temp.path().join("skills").join("fallback-skill");
+        fs::create_dir_all(&fallback_dir).unwrap();
+        let fallback_file = fallback_dir.join("SKILL.md");
+        fs::write(
+            &fallback_file,
+            "# Title\n\nFirst line of fallback description.\nSecond line.\n\n## Next section\n",
+        )
+        .unwrap();
+
+        let fallback = parse_discovered_skill(&fallback_file).unwrap();
+        assert_eq!(fallback.name, "fallback-skill");
+        assert_eq!(
+            fallback.description,
+            "First line of fallback description. Second line."
+        );
+        assert!(fallback.license.is_none());
+        assert!(fallback.compatibility.is_none());
+    }
+
+    #[test]
+    fn discover_skills_from_path_scans_known_locations_and_root() {
+        let temp = tempdir().unwrap();
+
+        let skill_paths = [
+            temp.path().join("skills").join("a").join("SKILL.md"),
+            temp.path().join(".agents/skills").join("b").join("SKILL.md"),
+            temp.path().join(".opencode/skills").join("c").join("SKILL.md"),
+            temp.path().join(".claude/skills").join("d").join("SKILL.md"),
+            temp.path().join("SKILL.md"),
+        ];
+
+        for path in &skill_paths {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+        }
+
+        fs::write(
+            &skill_paths[0],
+            "---\nname: skill-a\ndescription: from skills\n---\n",
+        )
+        .unwrap();
+        fs::write(
+            &skill_paths[1],
+            "---\nname: skill-b\ndescription: from agents\n---\n",
+        )
+        .unwrap();
+        fs::write(
+            &skill_paths[2],
+            "---\nname: skill-c\ndescription: from opencode\n---\n",
+        )
+        .unwrap();
+        fs::write(
+            &skill_paths[3],
+            "---\nname: skill-d\ndescription: from claude\n---\n",
+        )
+        .unwrap();
+        fs::write(
+            &skill_paths[4],
+            "---\nname: root-skill\ndescription: from root\n---\n",
+        )
+        .unwrap();
+
+        let discovered = discover_skills_from_path(temp.path());
+        let mut names = discovered.into_iter().map(|s| s.name).collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(
+            names,
+            vec![
+                "root-skill".to_string(),
+                "skill-a".to_string(),
+                "skill-b".to_string(),
+                "skill-c".to_string(),
+                "skill-d".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn branch_to_safe_dir_name_replaces_unsafe_chars() {
+        assert_eq!(
+            branch_to_safe_dir_name("feature/new ui@2026"),
+            "feature-new-ui-2026"
+        );
+        assert_eq!(branch_to_safe_dir_name("release-1.2.3"), "release-1.2.3");
+    }
+
+    #[test]
+    fn copy_dir_recursive_skips_git_and_node_modules() {
+        let temp = tempdir().unwrap();
+        let src = temp.path().join("src");
+        let dest = temp.path().join("dest");
+
+        fs::create_dir_all(src.join(".git")).unwrap();
+        fs::create_dir_all(src.join("node_modules/pkg")).unwrap();
+        fs::create_dir_all(src.join("nested")).unwrap();
+
+        fs::write(src.join(".git/config"), "ignored").unwrap();
+        fs::write(src.join("node_modules/pkg/index.js"), "ignored").unwrap();
+        fs::write(src.join("nested/kept.txt"), "hello").unwrap();
+        fs::write(src.join("root.txt"), "root").unwrap();
+
+        copy_dir_recursive(&src, &dest).unwrap();
+
+        assert!(dest.join("root.txt").is_file());
+        assert!(dest.join("nested/kept.txt").is_file());
+        assert!(!dest.join(".git").exists());
+        assert!(!dest.join("node_modules").exists());
+    }
+}

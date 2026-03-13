@@ -1,0 +1,39 @@
+# Rust Unit Test Fitness Plan
+
+## Baseline (2026-03-13)
+
+- Scope: `crates/routa-core/src` + `crates/routa-server/src`
+- Rust source files: 120
+- Files with test markers (`#[test]` / `#[tokio::test]`): 10
+- Gap: 110 files without direct test markers
+
+## Plan
+
+1. Phase 1: Add high-signal unit tests for pure logic in `routa-core` (no network, no external services).
+2. Phase 2: Add store-layer behavior tests using in-memory DB and deterministic fixtures.
+3. Phase 3: Add focused API handler tests in `routa-server` for request/response edge cases.
+4. Phase 4: Track module-level coverage trend and tighten regression gates.
+
+## Progress
+
+- [x] Phase 1 started
+- [x] Added `git.rs` unit tests for:
+  - GitHub URL parsing
+  - Repo dir-name conversion helpers
+  - YAML frontmatter extraction + fallback parsing
+  - Skill discovery directory scanning
+  - Branch name sanitization
+  - Recursive copy skip rules (`.git`, `node_modules`)
+- [ ] Phase 2 started
+- [ ] Phase 3 started
+- [ ] Phase 4 started
+
+## Validation Log
+
+- `cargo test -p routa-core --offline`:
+  - Result: failed due existing permission-sensitive tests in `storage::local_session_provider::*` (`Operation not permitted` in sandbox).
+  - Note: all newly added tests under `git::tests::*` passed.
+- `cargo test -p routa-core --offline git::tests`:
+  - Result: passed (7/7).
+- `cargo clippy -p routa-core --offline --all-targets -- -D warnings`:
+  - Result: passed.
