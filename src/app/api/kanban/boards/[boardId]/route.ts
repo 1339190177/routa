@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import type { KanbanColumn } from "@/core/models/kanban";
+import {
+  getKanbanSessionConcurrencyLimit,
+  setKanbanSessionConcurrencyLimit,
+} from "@/core/kanban/board-session-limits";
+import { getKanbanSessionQueue } from "@/core/kanban/workflow-orchestrator-singleton";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +13,7 @@ interface PatchBoardBody {
   name?: string;
   columns?: KanbanColumn[];
   isDefault?: boolean;
+  sessionConcurrencyLimit?: number;
 }
 
 export async function GET(
@@ -22,7 +28,15 @@ export async function GET(
     return NextResponse.json({ error: "Board not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ board });
+  const workspace = await system.workspaceStore.get(board.workspaceId);
+  const queue = getKanbanSessionQueue(system);
+  return NextResponse.json({
+    board: {
+      ...board,
+      sessionConcurrencyLimit: getKanbanSessionConcurrencyLimit(workspace?.metadata, board.id),
+      queue: queue.getBoardSnapshot(board.id),
+    },
+  });
 }
 
 export async function PATCH(
@@ -56,11 +70,30 @@ export async function PATCH(
 
   await system.kanbanBoardStore.save(updated);
 
+  if (body.sessionConcurrencyLimit !== undefined) {
+    const workspace = await system.workspaceStore.get(existing.workspaceId);
+    await system.workspaceStore.updateMetadata(
+      existing.workspaceId,
+      setKanbanSessionConcurrencyLimit(
+        workspace?.metadata,
+        boardId,
+        body.sessionConcurrencyLimit,
+      ),
+    );
+  }
+
   // If setting as default, update other boards
   if (body.isDefault && !existing.isDefault) {
     await system.kanbanBoardStore.setDefault(existing.workspaceId, boardId);
   }
 
-  return NextResponse.json({ board: updated });
+  const workspace = await system.workspaceStore.get(existing.workspaceId);
+  const queue = getKanbanSessionQueue(system);
+  return NextResponse.json({
+    board: {
+      ...updated,
+      sessionConcurrencyLimit: getKanbanSessionConcurrencyLimit(workspace?.metadata, boardId),
+      queue: queue.getBoardSnapshot(boardId),
+    },
+  });
 }
-

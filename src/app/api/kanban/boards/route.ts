@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { getRoutaSystem } from "@/core/routa-system";
 import { createKanbanBoard } from "@/core/models/kanban";
 import { ensureDefaultBoard } from "@/core/kanban/boards";
+import { getKanbanSessionConcurrencyLimit } from "@/core/kanban/board-session-limits";
+import { getKanbanSessionQueue } from "@/core/kanban/workflow-orchestrator-singleton";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +13,15 @@ export async function GET(request: NextRequest) {
   const system = getRoutaSystem();
   await ensureDefaultBoard(system, workspaceId);
   const boards = await system.kanbanBoardStore.listByWorkspace(workspaceId);
-  return NextResponse.json({ boards });
+  const workspace = await system.workspaceStore.get(workspaceId);
+  const queue = getKanbanSessionQueue(system);
+  return NextResponse.json({
+    boards: boards.map((board) => ({
+      ...board,
+      sessionConcurrencyLimit: getKanbanSessionConcurrencyLimit(workspace?.metadata, board.id),
+      queue: queue.getBoardSnapshot(board.id),
+    })),
+  });
 }
 
 export async function POST(request: NextRequest) {

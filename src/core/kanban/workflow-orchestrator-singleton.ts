@@ -15,10 +15,13 @@ import {
   getEffectiveWorkspaceMetadata,
 } from "../models/workspace";
 import { getInternalApiOrigin, triggerAssignedTaskAgent } from "./agent-trigger";
+import { KanbanSessionQueue } from "./kanban-session-queue";
+import { getKanbanSessionConcurrencyLimit as getBoardSessionConcurrencyLimit } from "./board-session-limits";
 
 // Use globalThis to survive HMR in Next.js dev mode
 const GLOBAL_KEY = "__routa_workflow_orchestrator__";
 const STARTED_KEY = "__routa_workflow_orchestrator_started__";
+const QUEUE_KEY = "__routa_kanban_session_queue__";
 
 async function createAutomationSession(
   system: RoutaSystem,
@@ -32,21 +35,73 @@ async function createAutomationSession(
   },
 ): Promise<string | null> {
   const task = await system.taskStore.get(params.cardId);
-  if (!task) return null;
-  if (task.triggerSessionId) return task.triggerSessionId;
+  if (!task?.boardId) return null;
+  const result = await enqueueKanbanTaskSession(system, {
+    task,
+    expectedColumnId: params.columnId,
+    mutateTask: (nextTask) => {
+      nextTask.assignedProvider =
+        params.automation.providerId ?? task.assignedProvider ?? "opencode";
+      nextTask.assignedRole =
+        params.automation.role ?? task.assignedRole ?? "DEVELOPER";
+      nextTask.assignedSpecialistId =
+        params.automation.specialistId ?? task.assignedSpecialistId;
+      nextTask.assignedSpecialistName =
+        params.automation.specialistName ?? task.assignedSpecialistName;
+    },
+  });
+  return result.sessionId ?? null;
+}
+
+export async function enqueueKanbanTaskSession(
+  system: RoutaSystem,
+  params: {
+    task: Awaited<ReturnType<RoutaSystem["taskStore"]["get"]>>;
+    expectedColumnId?: string;
+    mutateTask?: (task: NonNullable<Awaited<ReturnType<RoutaSystem["taskStore"]["get"]>>>) => void;
+  },
+): Promise<{ sessionId?: string; queued: boolean; error?: string }> {
+  const task = params.task;
+  if (!task?.boardId) {
+    return { queued: false, error: "Task is missing board context." };
+  }
+  if (task.triggerSessionId) {
+    return { sessionId: task.triggerSessionId, queued: false };
+  }
+
+  const queue = getKanbanSessionQueue(system);
+  return queue.enqueue({
+    cardId: task.id,
+    cardTitle: task.title,
+    boardId: task.boardId,
+    workspaceId: task.workspaceId,
+    columnId: params.expectedColumnId ?? task.columnId,
+    start: async () => startKanbanTaskSession(system, task.id, params),
+  });
+}
+
+async function startKanbanTaskSession(
+  system: RoutaSystem,
+  taskId: string,
+  params: {
+    expectedColumnId?: string;
+    mutateTask?: (task: NonNullable<Awaited<ReturnType<RoutaSystem["taskStore"]["get"]>>>) => void;
+  },
+): Promise<{ sessionId?: string | null; error?: string }> {
+  const task = await system.taskStore.get(taskId);
+  if (!task) return { error: "Task no longer exists." };
+  if (params.expectedColumnId && task.columnId !== params.expectedColumnId) {
+    return { error: `Task is no longer in column ${params.expectedColumnId}.` };
+  }
+  if (task.triggerSessionId) {
+    return { sessionId: task.triggerSessionId };
+  }
 
   const nextTask = {
     ...task,
-    assignedProvider:
-      params.automation.providerId ?? task.assignedProvider ?? "opencode",
-    assignedRole:
-      params.automation.role ?? task.assignedRole ?? "DEVELOPER",
-    assignedSpecialistId:
-      params.automation.specialistId ?? task.assignedSpecialistId,
-    assignedSpecialistName:
-      params.automation.specialistName ?? task.assignedSpecialistName,
     updatedAt: new Date(),
   };
+  params.mutateTask?.(nextTask);
 
   let preferredCodebase = (nextTask.codebaseIds?.length ?? 0) > 0
     ? await system.codebaseStore.get(nextTask.codebaseIds[0])
@@ -57,7 +112,7 @@ async function createAutomationSession(
 
   let worktreeCwd = preferredCodebase?.repoPath ?? process.cwd();
   let worktreeBranch = preferredCodebase?.branch;
-  if (params.columnId === "dev" && preferredCodebase && !nextTask.worktreeId) {
+  if (params.expectedColumnId === "dev" && preferredCodebase && !nextTask.worktreeId) {
     try {
       const worktreeService = new GitWorktreeService(
         system.worktreeStore,
@@ -89,7 +144,7 @@ async function createAutomationSession(
       nextTask.columnId = "blocked";
       nextTask.lastSyncError = `Worktree creation failed: ${message}`;
       await system.taskStore.save(nextTask);
-      return null;
+      return { error: nextTask.lastSyncError };
     }
   } else if (nextTask.worktreeId) {
     const existingWorktree = await system.worktreeStore.get(nextTask.worktreeId);
@@ -118,7 +173,31 @@ async function createAutomationSession(
   }
 
   await system.taskStore.save(nextTask);
-  return triggerResult.sessionId ?? null;
+  return {
+    sessionId: triggerResult.sessionId ?? null,
+    error: triggerResult.error,
+  };
+}
+
+async function getBoardConcurrencyLimit(system: RoutaSystem, workspaceId: string, boardId: string): Promise<number> {
+  const workspace = await system.workspaceStore.get(workspaceId);
+  return getBoardSessionConcurrencyLimit(workspace?.metadata, boardId);
+}
+
+export function getKanbanSessionQueue(system: RoutaSystem): KanbanSessionQueue {
+  const g = globalThis as Record<string, unknown>;
+  let queue = g[QUEUE_KEY] as KanbanSessionQueue | undefined;
+
+  if (!queue) {
+    queue = new KanbanSessionQueue(
+      system.eventBus,
+      system.taskStore,
+      (workspaceId, boardId) => getBoardConcurrencyLimit(system, workspaceId, boardId),
+    );
+    g[QUEUE_KEY] = queue;
+  }
+
+  return queue;
 }
 
 /**
@@ -145,14 +224,11 @@ export function getWorkflowOrchestrator(system: RoutaSystem): KanbanWorkflowOrch
  */
 export function startWorkflowOrchestrator(system: RoutaSystem): void {
   const g = globalThis as Record<string, unknown>;
-
-  if (g[STARTED_KEY]) {
-    return; // Already started
-  }
-
   const orchestrator = getWorkflowOrchestrator(system);
+  const queue = getKanbanSessionQueue(system);
   orchestrator.setCreateSession((params) => createAutomationSession(system, params));
   orchestrator.start();
+  queue.start();
   g[STARTED_KEY] = true;
 }
 
@@ -166,7 +242,13 @@ export function resetWorkflowOrchestrator(): void {
   if (orchestrator) {
     orchestrator.stop();
   }
+
+  const queue = g[QUEUE_KEY] as KanbanSessionQueue | undefined;
+  if (queue) {
+    queue.stop();
+  }
   
   delete g[GLOBAL_KEY];
+  delete g[QUEUE_KEY];
   delete g[STARTED_KEY];
 }

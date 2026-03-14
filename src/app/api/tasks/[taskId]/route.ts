@@ -3,11 +3,11 @@ import { getRoutaSystem } from "@/core/routa-system";
 import { TaskPriority, TaskStatus, type Task } from "@/core/models/task";
 import { columnIdToTaskStatus, taskStatusToColumnId } from "@/core/models/kanban";
 import { updateGitHubIssue } from "@/core/kanban/github-issues";
-import { getInternalApiOrigin, triggerAssignedTaskAgent } from "@/core/kanban/agent-trigger";
 import { GitWorktreeService } from "@/core/git/git-worktree-service";
 import { getDefaultWorkspaceWorktreeRoot, getEffectiveWorkspaceMetadata } from "@/core/models/workspace";
 import type { ArtifactType } from "@/core/models/artifact";
 import { emitColumnTransition } from "@/core/kanban/column-transition";
+import { enqueueKanbanTaskSession } from "@/core/kanban/workflow-orchestrator-singleton";
 
 export const dynamic = "force-dynamic";
 
@@ -244,7 +244,6 @@ export async function PATCH(
     }
 
     // Auto-create worktree when entering dev column (if no worktree yet and codebase exists)
-    let worktreeCwd = preferredCodebase?.repoPath ?? process.cwd();
     if (enteringDev && preferredCodebase && !nextTask.worktreeId) {
       try {
         const worktreeService = new GitWorktreeService(system.worktreeStore, system.codebaseStore);
@@ -267,7 +266,6 @@ export async function PATCH(
           worktreeRoot,
         });
         nextTask.worktreeId = worktree.id;
-        worktreeCwd = worktree.worktreePath;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[kanban] Failed to auto-create worktree:", msg);
@@ -278,28 +276,17 @@ export async function PATCH(
         await system.taskStore.save(nextTask);
         return NextResponse.json({ task: serializeTask(nextTask) });
       }
-    } else if (nextTask.worktreeId) {
-      // Use existing worktree path
-      const existingWorktree = await system.worktreeStore.get(nextTask.worktreeId);
-      if (existingWorktree?.worktreePath) {
-        worktreeCwd = existingWorktree.worktreePath;
-      }
     }
 
-    const triggerResult = await triggerAssignedTaskAgent({
-      origin: getInternalApiOrigin(),
-      workspaceId: nextTask.workspaceId,
-      cwd: worktreeCwd,
-      branch: preferredCodebase?.branch,
+    const triggerResult = await enqueueKanbanTaskSession(system, {
       task: nextTask,
+      expectedColumnId: nextTask.columnId,
     });
     if (triggerResult.sessionId) {
       nextTask.triggerSessionId = triggerResult.sessionId;
       nextTask.lastSyncError = undefined;
-      // Associate the session with the worktree
-      if (nextTask.worktreeId) {
-        await system.worktreeStore.assignSession(nextTask.worktreeId, triggerResult.sessionId);
-      }
+    } else if (triggerResult.queued) {
+      nextTask.lastSyncError = undefined;
     } else if (triggerResult.error) {
       nextTask.lastSyncError = triggerResult.error;
     }
@@ -339,4 +326,3 @@ export async function DELETE(
   await system.taskStore.delete(taskId);
   return NextResponse.json({ deleted: true });
 }
-

@@ -24,7 +24,7 @@ export interface ActiveAutomation {
   automation: KanbanColumnAutomation;
   sessionId?: string;
   startedAt: Date;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed";
 }
 
 /** Callback to create an agent session for a column automation */
@@ -56,7 +56,9 @@ export class KanbanWorkflowOrchestrator {
       }
       if (
         event.type === AgentEventType.AGENT_COMPLETED ||
-        event.type === AgentEventType.REPORT_SUBMITTED
+        event.type === AgentEventType.REPORT_SUBMITTED ||
+        event.type === AgentEventType.AGENT_FAILED ||
+        event.type === AgentEventType.AGENT_TIMEOUT
       ) {
         void this.handleAgentCompletion(event);
       }
@@ -107,7 +109,7 @@ export class KanbanWorkflowOrchestrator {
       columnName: targetColumn.name,
       automation,
       startedAt: new Date(),
-      status: "pending",
+      status: "queued",
     };
 
     this.activeAutomations.set(data.cardId, automationEntry);
@@ -115,7 +117,6 @@ export class KanbanWorkflowOrchestrator {
     // Trigger agent session if callback is available
     if (this.createSession) {
       try {
-        automationEntry.status = "running";
         const sessionId = await this.createSession({
           workspaceId: data.workspaceId,
           cardId: data.cardId,
@@ -124,7 +125,10 @@ export class KanbanWorkflowOrchestrator {
           columnName: targetColumn.name,
           automation,
         });
-        automationEntry.sessionId = sessionId ?? undefined;
+        if (sessionId) {
+          automationEntry.status = "running";
+          automationEntry.sessionId = sessionId ?? undefined;
+        }
       } catch (err) {
         automationEntry.status = "failed";
         console.error("[WorkflowOrchestrator] Failed to create session:", err);
@@ -135,16 +139,21 @@ export class KanbanWorkflowOrchestrator {
   private async handleAgentCompletion(event: AgentEvent): Promise<void> {
     // Find any active automation that matches this agent's session
     for (const [cardId, automation] of this.activeAutomations.entries()) {
-      if (automation.status !== "running") continue;
+      if (automation.status === "completed" || automation.status === "failed") continue;
 
-      // Check if the completed agent is related to this automation
-      const isRelated =
-        automation.sessionId &&
-        event.data?.sessionId === automation.sessionId;
+      const eventSessionId = typeof event.data?.sessionId === "string" ? event.data.sessionId : undefined;
+      const task = await this.taskStore.get(cardId);
+      const sessionId = automation.sessionId ?? task?.triggerSessionId;
+      if (!automation.sessionId && sessionId) {
+        automation.sessionId = sessionId;
+        automation.status = "running";
+      }
+
+      const isRelated = Boolean(sessionId && eventSessionId === sessionId);
 
       if (!isRelated) continue;
 
-      const success = event.data?.success !== false;
+      const success = event.type !== AgentEventType.AGENT_FAILED && event.type !== AgentEventType.AGENT_TIMEOUT && event.data?.success !== false;
       automation.status = success ? "completed" : "failed";
 
       // Auto-advance if configured and successful
