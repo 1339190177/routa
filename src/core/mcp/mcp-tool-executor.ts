@@ -387,11 +387,11 @@ export async function executeMcpTool(
       if (!kanbanTools) return formatResult({ success: false, error: "Kanban tools not available." });
       return formatResult(
         await kanbanTools.createCard({
-          boardId: args.boardId as string,
+          boardId: args.boardId as string | undefined,
           workspaceId: (args.workspaceId as string) ?? workspace,
           title: args.title as string,
           description: args.description as string | undefined,
-          columnId: (args.columnId as string) ?? "backlog",
+          columnId: (args.columnId as string | undefined) ?? (args.column as string | undefined) ?? "backlog",
           priority: args.priority as "low" | "medium" | "high" | "urgent" | undefined,
           labels: args.labels as string[] | undefined,
         })
@@ -431,16 +431,20 @@ export async function executeMcpTool(
     case "list_cards_by_column":
       if (!kanbanTools) return formatResult({ success: false, error: "Kanban tools not available." });
       return formatResult(
-        await kanbanTools.listCardsByColumn(args.columnId as string, args.boardId as string ?? "")
+        await kanbanTools.listCardsByColumn(
+          args.columnId as string,
+          args.boardId as string | undefined,
+          workspace,
+        )
       );
     case "decompose_tasks":
       if (!kanbanTools) return formatResult({ success: false, error: "Kanban tools not available." });
       return formatResult(
         await kanbanTools.decomposeTasks({
-          boardId: args.boardId as string,
+          boardId: args.boardId as string | undefined,
           workspaceId: (args.workspaceId as string) ?? workspace,
           tasks: args.tasks as { title: string; description?: string; priority?: "low" | "medium" | "high" | "urgent"; labels?: string[] }[],
-          columnId: args.columnId as string | undefined,
+          columnId: (args.columnId as string | undefined) ?? (args.column as string | undefined),
         })
       );
 

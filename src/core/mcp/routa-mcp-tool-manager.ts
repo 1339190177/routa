@@ -955,8 +955,9 @@ Note: taskId must be a UUID from create_task, not a task name.`,
       "create_card",
       "Create a new card in a column",
       {
-        boardId: z.string().describe("Board ID"),
-        columnId: z.string().describe("Column ID"),
+        boardId: z.string().optional().describe("Board ID (defaults to the workspace default board)"),
+        columnId: z.string().optional().describe("Column ID"),
+        column: z.string().optional().describe("Column ID alias"),
         title: z.string().describe("Card title"),
         description: z.string().optional().describe("Card description"),
         priority: z.enum(["low", "medium", "high", "urgent"]).optional().describe("Card priority"),
@@ -969,7 +970,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         }
         const result = await this.kanbanTools.createCard({
           boardId: params.boardId,
-          columnId: params.columnId,
+          columnId: params.columnId ?? params.column,
           title: params.title,
           description: params.description,
           priority: params.priority,
@@ -1123,13 +1124,13 @@ Note: taskId must be a UUID from create_task, not a task name.`,
       "List all cards in a specific column",
       {
         columnId: z.string().describe("Column ID"),
-        boardId: z.string().describe("Board ID"),
+        boardId: z.string().optional().describe("Board ID (defaults to the workspace default board)"),
       },
       async (params) => {
         if (!this.kanbanTools) {
           return this.toMcpResult({ success: false, error: "Kanban tools not available." });
         }
-        const result = await this.kanbanTools.listCardsByColumn(params.columnId, params.boardId);
+        const result = await this.kanbanTools.listCardsByColumn(params.columnId, params.boardId, this.workspaceId);
         return this.toMcpResult(result);
       }
     );
@@ -1139,8 +1140,8 @@ Note: taskId must be a UUID from create_task, not a task name.`,
       "decompose_tasks",
       "Create multiple Kanban cards from a list of decomposed tasks. Use this to bulk-create cards from a task breakdown.",
       {
-        boardId: z.string().describe("Board ID"),
-        workspaceId: z.string().describe("Workspace ID"),
+        boardId: z.string().optional().describe("Board ID (defaults to the workspace default board)"),
+        workspaceId: z.string().optional().describe("Workspace ID (uses default if omitted)"),
         tasks: z.array(z.object({
           title: z.string().describe("Task title"),
           description: z.string().optional().describe("Task description"),
@@ -1148,6 +1149,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
           labels: z.array(z.string()).optional().describe("Task labels"),
         })).describe("Array of tasks to create"),
         columnId: z.string().optional().default("backlog").describe("Target column ID (default: backlog)"),
+        column: z.string().optional().describe("Column ID alias"),
       },
       async (params) => {
         if (!this.kanbanTools) {
@@ -1155,9 +1157,9 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         }
         const result = await this.kanbanTools.decomposeTasks({
           boardId: params.boardId,
-          workspaceId: params.workspaceId,
+          workspaceId: params.workspaceId ?? this.workspaceId,
           tasks: params.tasks,
-          columnId: params.columnId,
+          columnId: params.columnId ?? params.column,
         });
         return this.toMcpResult(result);
       }

@@ -111,27 +111,32 @@ export class KanbanTools {
   // ─── Card Operations ────────────────────────────────────────────────────
 
   async createCard(params: {
-    boardId: string;
-    columnId: string;
+    boardId?: string;
+    columnId?: string;
     title: string;
     description?: string;
     priority?: "low" | "medium" | "high" | "urgent";
     labels?: string[];
     workspaceId: string;
   }): Promise<ToolResult> {
-    const board = await this.kanbanBoardStore.get(params.boardId);
+    const board = await this.resolveBoard(params.workspaceId, params.boardId);
     if (!board) {
-      return errorResult(`Board not found: ${params.boardId}`);
+      return errorResult(
+        params.boardId
+          ? `Board not found: ${params.boardId}`
+          : `No board found for workspace: ${params.workspaceId}`,
+      );
     }
 
-    const column = board.columns.find((c) => c.id === params.columnId);
+    const targetColumnId = params.columnId ?? "backlog";
+    const column = board.columns.find((c) => c.id === targetColumnId);
     if (!column) {
-      return errorResult(`Column not found: ${params.columnId}`);
+      return errorResult(`Column not found: ${targetColumnId}`);
     }
 
     const tasks = await this.taskStore.listByWorkspace(params.workspaceId);
     const columnTasks = tasks.filter(
-      (t) => t.boardId === params.boardId && (t.columnId ?? "backlog") === params.columnId,
+      (t) => t.boardId === board.id && (t.columnId ?? "backlog") === targetColumnId,
     );
     const position = columnTasks.length;
 
@@ -140,10 +145,10 @@ export class KanbanTools {
       title: params.title,
       objective: params.description ?? "",
       workspaceId: params.workspaceId,
-      boardId: params.boardId,
-      columnId: params.columnId,
+      boardId: board.id,
+      columnId: targetColumnId,
       position,
-      status: columnIdToTaskStatus(params.columnId),
+      status: columnIdToTaskStatus(targetColumnId),
       priority: params.priority as TaskPriority | undefined,
       labels: params.labels,
     });
@@ -371,10 +376,18 @@ export class KanbanTools {
     return successResult(matchingTasks.map((t) => this.taskToCard(t)));
   }
 
-  async listCardsByColumn(columnId: string, boardId: string): Promise<ToolResult> {
-    const board = await this.kanbanBoardStore.get(boardId);
+  async listCardsByColumn(columnId: string, boardId?: string, workspaceId?: string): Promise<ToolResult> {
+    const board = workspaceId
+      ? await this.resolveBoard(workspaceId, boardId)
+      : boardId
+        ? await this.kanbanBoardStore.get(boardId)
+        : null;
     if (!board) {
-      return errorResult(`Board not found: ${boardId}`);
+      return errorResult(
+        boardId
+          ? `Board not found: ${boardId}`
+          : `No board found for workspace: ${workspaceId ?? "unknown"}`,
+      );
     }
 
     const column = board.columns.find((c) => c.id === columnId);
@@ -384,7 +397,7 @@ export class KanbanTools {
 
     const tasks = await this.taskStore.listByWorkspace(board.workspaceId);
     const columnTasks = tasks
-      .filter((t) => t.boardId === boardId && (t.columnId ?? "backlog") === columnId)
+      .filter((t) => t.boardId === board.id && (t.columnId ?? "backlog") === columnId)
       .sort((a, b) => a.position - b.position);
 
     return successResult({
@@ -400,14 +413,18 @@ export class KanbanTools {
    * Returns the created tasks as card objects.
    */
   async decomposeTasks(params: {
-    boardId: string;
+    boardId?: string;
     workspaceId: string;
     tasks: { title: string; description?: string; priority?: "low" | "medium" | "high" | "urgent"; labels?: string[] }[];
     columnId?: string;
   }): Promise<ToolResult> {
-    const board = await this.kanbanBoardStore.get(params.boardId);
+    const board = await this.resolveBoard(params.workspaceId, params.boardId);
     if (!board) {
-      return errorResult(`Board not found: ${params.boardId}`);
+      return errorResult(
+        params.boardId
+          ? `Board not found: ${params.boardId}`
+          : `No board found for workspace: ${params.workspaceId}`,
+      );
     }
 
     const targetColumnId = params.columnId ?? "backlog";
@@ -418,7 +435,7 @@ export class KanbanTools {
 
     const existingTasks = await this.taskStore.listByWorkspace(params.workspaceId);
     const columnTasks = existingTasks.filter(
-      (t) => t.boardId === params.boardId && (t.columnId ?? "backlog") === targetColumnId,
+      (t) => t.boardId === board.id && (t.columnId ?? "backlog") === targetColumnId,
     );
     let position = columnTasks.length;
 
@@ -429,7 +446,7 @@ export class KanbanTools {
         title: item.title,
         objective: item.description ?? "",
         workspaceId: params.workspaceId,
-        boardId: params.boardId,
+        boardId: board.id,
         columnId: targetColumnId,
         position: position++,
         status: columnIdToTaskStatus(targetColumnId),
@@ -458,6 +475,14 @@ export class KanbanTools {
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     };
+  }
+
+  private async resolveBoard(workspaceId: string, boardId?: string) {
+    if (boardId) {
+      return await this.kanbanBoardStore.get(boardId);
+    }
+
+    return await this.kanbanBoardStore.getDefault(workspaceId);
   }
 
   private emitCreatedCardTransition(board: { id: string; workspaceId: string }, column: KanbanColumn, task: Task) {
