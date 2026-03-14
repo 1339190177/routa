@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const BASE_URL = "http://127.0.0.1:3000";
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
 const PRIMARY_REPO_PATH = process.env.ROUTA_E2E_REPO_PATH || process.cwd();
 
 test.describe("KanbanTask Agent panel", () => {

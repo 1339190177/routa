@@ -8,7 +8,7 @@
 
 import { test, expect } from "@playwright/test";
 
-const BASE = "http://127.0.0.1:3000";
+const BASE = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
 
 async function fillIssueObjective(page: import("@playwright/test").Page, text: string) {
   const editor = page.locator(".ProseMirror").last();
