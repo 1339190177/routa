@@ -25,6 +25,12 @@ Current board ID: ${boardId ?? "default"}
 Default repo path: ${repoPath ?? "not configured"}
 Target column for every created card: backlog
 
+Preferred tool arguments:
+- When creating a single card, call create_card with title plus columnId: "backlog"
+- When creating multiple cards, call decompose_tasks with tasks plus columnId: "backlog"
+- Pass boardId: ${boardId ?? "default"} when available
+- Do not invent alternate argument names such as "column"; prefer "columnId"
+
 Hard rules:
 1. This flow is backlog planning, not execution.
 2. Do not start implementation work.

@@ -158,7 +158,7 @@ export function KanbanPageClient() {
     }
 
     // Send the prompt in the background so the UI can open the session panel immediately.
-    void acp.prompt(promptText).catch((error) => {
+    void acp.promptSession(result.sessionId, promptText).catch((error) => {
       console.error("[kanban] Failed to send Kanban agent prompt:", error);
     });
 

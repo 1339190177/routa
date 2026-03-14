@@ -91,6 +91,11 @@ export interface UseAcpActions {
   setProvider: (provider: string) => void;
   setMode: (modeId: string) => Promise<void>;
   prompt: (text: string, skillContext?: { skillName: string; skillContent: string }) => Promise<void>;
+  promptSession: (
+    sessionId: string,
+    text: string,
+    skillContext?: { skillName: string; skillContent: string },
+  ) => Promise<void>;
   respondToUserInput: (toolCallId: string, response: Record<string, unknown>) => Promise<void>;
   cancel: () => Promise<void>;
   disconnect: () => void;
@@ -442,6 +447,34 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     }
   }, [shouldSuppressPromptError]);
 
+  const promptSession = useCallback(async (
+    sessionId: string,
+    text: string,
+    skillContext?: { skillName: string; skillContent: string },
+  ): Promise<void> => {
+    const client = clientRef.current;
+    if (!client || !sessionId) return;
+
+    try {
+      setState((s) => ({ ...s, loading: true, error: null }));
+      sessionIdRef.current = sessionId;
+      await client.prompt(sessionId, text, skillContext);
+      setState((s) => ({ ...s, sessionId, loading: false }));
+    } catch (err) {
+      if (shouldSuppressPromptError(err)) {
+        logRuntime("info", "useAcp.promptSession", "Ignoring prompt fetch interruption during page teardown", err);
+        setState((s) => ({ ...s, loading: false }));
+        return;
+      }
+      logRuntime("error", "useAcp.promptSession", "Failed to send prompt", err);
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: toErrorMessage(err) || "Prompt failed",
+      }));
+    }
+  }, [shouldSuppressPromptError]);
+
   const cancel = useCallback(async () => {
     const client = clientRef.current;
     const sessionId = sessionIdRef.current;
@@ -506,6 +539,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
     setProvider,
     setMode,
     prompt,
+    promptSession,
     respondToUserInput,
     cancel,
     disconnect,

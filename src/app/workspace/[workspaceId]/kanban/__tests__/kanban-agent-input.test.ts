@@ -23,6 +23,9 @@ describe("buildKanbanTaskAgentPrompt", () => {
     expect(prompt).toContain("Do not use GitHub CLI commands such as gh issue create.");
     expect(prompt).toContain("If the request is a single task, create exactly one backlog card and keep the title close to the user's wording.");
     expect(prompt).toContain("Only avoid creating a new card when an exact duplicate already exists");
+    expect(prompt).toContain("call create_card with title plus columnId: \"backlog\"");
+    expect(prompt).toContain("Pass boardId: board-1 when available");
+    expect(prompt).toContain("Do not invent alternate argument names such as \"column\"; prefer \"columnId\"");
     expect(prompt).toContain("User request: echo hello world");
   });
 });
