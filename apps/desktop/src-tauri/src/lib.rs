@@ -649,6 +649,15 @@ pub fn run() {
                 Some("CmdOrCtrl+Q"),
             )?;
 
+            // View menu items
+            let toggle_devtools = MenuItem::with_id(
+                app_handle,
+                "toggle_devtools",
+                "Toggle Developer Tools",
+                true,
+                Some("CmdOrCtrl+Option+I"),
+            )?;
+
             // Build Tools submenu
             let tools_submenu = Submenu::with_items(
                 app_handle,
@@ -665,8 +674,16 @@ pub fn run() {
                 &[&reload, &quit],
             )?;
 
+            // Build View submenu
+            let view_submenu = Submenu::with_items(
+                app_handle,
+                "View",
+                true,
+                &[&toggle_devtools],
+            )?;
+
             // Build main menu
-            let menu = Menu::with_items(app_handle, &[&file_submenu, &tools_submenu])?;
+            let menu = Menu::with_items(app_handle, &[&file_submenu, &view_submenu, &tools_submenu])?;
 
             // Set the menu on the main window
             if let Some(window) = app.get_webview_window("main") {
@@ -704,6 +721,15 @@ pub fn run() {
                     "quit" => {
                         std::process::exit(0);
                     }
+                    "toggle_devtools" => {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            if window.is_devtools_open() {
+                                window.close_devtools();
+                            } else {
+                                window.open_devtools();
+                            }
+                        }
+                    }
                     _ => {}
                 }
             });
@@ -714,7 +740,8 @@ pub fn run() {
                 eprintln!("[tray] Failed to set up system tray: {}", e);
             }
 
-            // Always open devtools (in both debug and release builds)
+            // Only auto-open devtools in debug builds; use View menu in release builds
+            #[cfg(debug_assertions)]
             if let Some(window) = app.get_webview_window("main") {
                 window.open_devtools();
             }
