@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { KanbanTab } from "../kanban-tab";
 import type { KanbanBoardInfo, TaskInfo } from "../../types";
+import type { UseAcpActions, UseAcpState } from "@/client/hooks/use-acp";
 
 const board: KanbanBoardInfo = {
   id: "board-1",
@@ -124,5 +125,84 @@ describe("KanbanTab lane automation labels", () => {
 
     const laneAutomation = screen.getByTestId("kanban-column-automation-backlog");
     expect(laneAutomation.textContent).toBe("Claude Code · GATE · Verifier ->");
+  });
+});
+
+describe("KanbanTab session terminal hint", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a read-only terminal hint when the Kanban agent panel opens", async () => {
+    vi.stubGlobal(
+      "scrollIntoView",
+      vi.fn(),
+    );
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+    const acp = {
+      connected: true,
+      sessionId: null,
+      updates: [],
+      providers: [{ id: "claude", name: "Claude Code" }],
+      selectedProvider: "claude",
+      loading: false,
+      error: null,
+      authError: null,
+      dockerConfigError: null,
+      connect: vi.fn(),
+      createSession: vi.fn(),
+      selectSession: vi.fn(),
+      setProvider: vi.fn(),
+      setMode: vi.fn(),
+      prompt: vi.fn(),
+      promptSession: vi.fn(),
+      respondToUserInput: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+      clearAuthError: vi.fn(),
+      clearDockerConfigError: vi.fn(),
+      listProviderModels: vi.fn(),
+    } satisfies Partial<UseAcpState & UseAcpActions> as UseAcpState & UseAcpActions;
+
+    const onAgentPrompt = vi.fn().mockResolvedValue("session-123");
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[createTask("task-1", "Story One")]}
+        sessions={[
+          {
+            sessionId: "session-123",
+            cwd: "/tmp/project",
+            workspaceId: "workspace-1",
+            provider: "claude",
+            createdAt: "2025-01-01T00:00:00.000Z",
+          },
+        ]}
+        providers={[{ id: "claude", name: "Claude Code" }]}
+        specialists={[]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+        acp={acp}
+        onAgentPrompt={onAgentPrompt}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Describe work to plan in Kanban..."), {
+      target: { value: "Investigate lane issue" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => {
+      expect(onAgentPrompt).toHaveBeenCalled();
+    });
+
+    const hint = await screen.findByTestId("kanban-read-only-terminal-hint");
+    expect(hint.textContent).toContain("Browser terminal output is read-only right now.");
+
+    const link = screen.getByRole("link", { name: "Open session" });
+    expect(link.getAttribute("href")).toBe("/workspace/workspace-1/sessions/session-123");
   });
 });
