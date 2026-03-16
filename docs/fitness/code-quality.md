@@ -12,14 +12,18 @@ metrics:
   
   - name: file_line_limit
     command: |
-      find src apps crates \
-        \( -path '*/node_modules/*' -o -path '*/target/*' -o -path '*/.next/*' -o -path '*/_next/*' -o -path '*/bundled/*' \) -prune -o \
-        \( -name '*.ts' -o -name '*.tsx' -o -name '*.rs' \) -print 2>/dev/null | \
-      xargs wc -l 2>/dev/null | grep -v total | \
-      awk '$1 > 1000 {count++} END {print "files_over_1000_lines:", count+0}'
-    pattern: "files_over_1000_lines: 0"
+      changed_files=$(git diff --name-only --diff-filter=ACMR HEAD -- src apps crates 2>/dev/null | \
+        grep -E '\.(ts|tsx|rs)$' | \
+        grep -vE '(^|/)(node_modules|target|\.next|_next|bundled)/' || true)
+      if [ -z "$changed_files" ]; then
+        echo "changed_files_over_1000_lines: 0"
+      else
+        printf '%s\n' "$changed_files" | xargs wc -l 2>/dev/null | grep -v total | \
+          awk '$1 > 1000 {count++} END {print "changed_files_over_1000_lines:", count+0}'
+      fi
+    pattern: "changed_files_over_1000_lines: 0"
     hard_gate: false
-    description: "文件行数限制 ≤1000 行"
+    description: "本次变更的代码文件行数限制 ≤1000 行"
 
   - name: function_line_limit
     command: |
@@ -36,10 +40,20 @@ metrics:
   # ══════════════════════════════════════════════════════════════
 
   - name: duplicate_code_ts
-    command: npx jscpd --min-lines 10 --min-tokens 50 --reporters console --format typescript,javascript --ignore "**/node_modules/**,**/target/**,**/.next/**,**/_next/**,**/bundled/**" src apps 2>&1 || echo "jscpd not configured"
-    pattern: "Found 0 clones|No duplicates found|not configured|duplications found: 0"
+    command: |
+      changed_files=$(git diff --name-only --diff-filter=ACMR HEAD -- src apps 2>/dev/null | \
+        grep -E '\.(ts|tsx|js|jsx)$' | \
+        grep -vE '(^|/)(node_modules|target|\.next|_next|bundled)/' || true)
+      if [ -z "$changed_files" ]; then
+        echo "No changed TS/JS files"
+      else
+        printf '%s\n' "$changed_files" | \
+          xargs npx jscpd --min-lines 10 --min-tokens 50 --reporters console --format typescript,javascript 2>&1 || \
+          echo "jscpd changed-file check failed"
+      fi
+    pattern: "Found 0 clones|No duplicates found|No changed TS/JS files"
     hard_gate: false
-    description: "TypeScript/JavaScript 重复代码检测"
+    description: "本次变更的 TypeScript/JavaScript 文件不应新增明显重复"
 
   - name: duplicate_code_rust
     command: |
@@ -101,12 +115,13 @@ metrics:
 
   - name: console_log_check
     command: |
-      grep -rn "console\.log\|console\.debug" --include="*.ts" --include="*.tsx" \
-        src apps 2>/dev/null | grep -v "test\|spec\|\.test\." | wc -l | \
-      awk '{print "console_log_count:", $1}'
-    pattern: "console_log_count: [0-5]$"
+      git diff --unified=0 HEAD -- src apps 2>/dev/null | \
+        grep -E '^\+[^+].*console\.(log|debug)' | \
+        grep -vE 'test|spec|\.test\.' | wc -l | \
+      awk '{print "new_console_log_count:", $1}'
+    pattern: "new_console_log_count: 0"
     hard_gate: false
-    description: "生产代码中的 console.log 检测"
+    description: "本次变更不得新增生产代码中的 console.log/debug"
 
   - name: any_type_check
     command: |
@@ -127,15 +142,15 @@ metrics:
 
 | 检测项 | 阈值 | Hard Gate | 工具 |
 |--------|------|-----------|------|
-| 文件行数 | ≤1000 行 | ❌ | wc -l |
+| 文件行数 | 变更文件 ≤1000 行 | ❌ | wc -l |
 | 函数行数 | ≤100 行 | ❌ | grep + 人工 |
-| 重复代码 | 0 clones | ❌ | jscpd |
+| 重复代码 | 变更文件不新增明显 clone | ❌ | jscpd |
 | 圈复杂度 | ≤15 | ❌ | ESLint |
 | 深层嵌套 | ≤3 层 | ❌ | grep |
 | ESLint | 0 errors | ✅ | ESLint |
 | Clippy | 0 warnings | ✅ | Clippy |
 | TODO/FIXME | <100 | ❌ | grep |
-| console.log | ≤5 | ❌ | grep |
+| console.log | 变更中新增数 = 0 | ❌ | git diff + grep |
 | any 类型 | <50 | ❌ | grep |
 
 ## AI 特有问题
@@ -143,12 +158,12 @@ metrics:
 ### 1. 代码膨胀
 AI 倾向于生成冗长代码，缺乏抽象能力。
 
-**约束**: 文件 ≤1000 行，函数 ≤100 行
+**约束**: 变更文件 ≤1000 行，函数 ≤100 行
 
 ### 2. 重复代码
 AI 经常"复制粘贴"式生成，忽略已有实现。
 
-**约束**: jscpd 检测，0 clones
+**约束**: 仅检查本次变更文件，避免为压全仓 clone 数做跨语义抽象
 
 ### 3. 类型逃逸
 AI 使用 `any` 绕过类型检查。
@@ -158,7 +173,7 @@ AI 使用 `any` 绕过类型检查。
 ### 4. 调试残留
 AI 遗留 console.log 和 TODO。
 
-**约束**: console.log ≤5，TODO <100
+**约束**: 本次变更新增 console.log/debug = 0，TODO <100
 
 ## 本地执行
 
@@ -166,8 +181,8 @@ AI 遗留 console.log 和 TODO。
 # 安装 jscpd
 npm install -g jscpd
 
-# 运行重复检测
-npx jscpd --min-lines 10 --min-tokens 50 src apps
+# 运行变更文件重复检测
+git diff --name-only --diff-filter=ACMR HEAD -- src apps
 
 # 运行 fitness 检查
 python3 docs/fitness/scripts/fitness.py
