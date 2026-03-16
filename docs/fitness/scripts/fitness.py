@@ -21,6 +21,8 @@ from pathlib import Path
 
 import yaml
 
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
 def parse_frontmatter(content: str) -> dict | None:
     """Extract YAML frontmatter from markdown content."""
     match = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
@@ -38,13 +40,14 @@ def run_metric(metric: dict, dry_run: bool = False, verbose: bool = False) -> tu
         return name, True, f"[DRY-RUN] Would run: {command}"
 
     try:
-        # Use shell=False with proper argument splitting for security
-        # For simple commands, split on spaces; for complex ones, use shlex
-        import shlex
-        cmd_args = shlex.split(command)
-        
         result = subprocess.run(
-            cmd_args, capture_output=True, text=True, timeout=300, shell=False
+            command,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            shell=True,
+            executable="/bin/bash",
+            cwd=PROJECT_ROOT,
         )
         output = result.stdout + result.stderr
 
@@ -154,4 +157,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
