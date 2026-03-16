@@ -107,28 +107,62 @@ fn get_git_repo_root(cwd: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    fn run_git(cwd: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .expect("git command should execute");
+        assert!(status.success(), "git {:?} failed in {}", args, cwd.display());
+    }
+
+    fn create_test_repo() -> (TempDir, PathBuf) {
+        let temp_dir = TempDir::new().expect("temp dir should be created");
+        let repo_path = temp_dir.path().join("repo");
+        std::fs::create_dir(&repo_path).expect("repo dir should be created");
+
+        run_git(&repo_path, &["init", "-b", "main"]);
+        run_git(&repo_path, &["config", "user.name", "Routa Test"]);
+        run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+        std::fs::write(repo_path.join("README.md"), "test repo\n").expect("fixture file should be written");
+        run_git(&repo_path, &["add", "README.md"]);
+        run_git(
+            &repo_path,
+            &["-c", "commit.gpgsign=false", "commit", "-m", "Initial commit"],
+        );
+
+        (temp_dir, repo_path)
+    }
 
     #[test]
     fn test_get_vcs_context_in_git_repo() {
-        // This test assumes we're running from within a git repo
-        let result = get_vcs_context(".");
-        if is_git_repo(Path::new(".")) {
-            assert!(result.is_some());
-            let vcs = result.unwrap();
-            // We should at least have a branch or revision
-            assert!(vcs.branch.is_some() || vcs.revision.is_some());
-        }
+        let (_temp_dir, repo_path) = create_test_repo();
+        let result = get_vcs_context(repo_path.to_str().expect("repo path should be valid UTF-8"));
+        let repo_root = repo_path
+            .canonicalize()
+            .expect("repo path should canonicalize");
+
+        assert!(result.is_some());
+        let vcs = result.unwrap();
+        assert_eq!(vcs.branch.as_deref(), Some("main"));
+        assert!(vcs.revision.is_some());
+        assert_eq!(vcs.repo_root.as_deref(), repo_root.to_str());
     }
 
     #[test]
     fn test_vcs_context_light() {
-        let result = get_vcs_context_light(".");
-        if is_git_repo(Path::new(".")) {
-            assert!(result.is_some());
-            let vcs = result.unwrap();
-            assert!(vcs.branch.is_some());
-            assert!(vcs.revision.is_none());
-            assert!(vcs.repo_root.is_none());
-        }
+        let (_temp_dir, repo_path) = create_test_repo();
+        let result =
+            get_vcs_context_light(repo_path.to_str().expect("repo path should be valid UTF-8"));
+
+        assert!(result.is_some());
+        let vcs = result.unwrap();
+        assert_eq!(vcs.branch.as_deref(), Some("main"));
+        assert!(vcs.revision.is_none());
+        assert!(vcs.repo_root.is_none());
     }
 }
