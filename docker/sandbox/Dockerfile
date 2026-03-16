@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir \
 
 WORKDIR /app
 COPY server.py /app/server.py
+USER ${NB_UID}
 
 EXPOSE 8000
 
