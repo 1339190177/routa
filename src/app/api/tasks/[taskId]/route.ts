@@ -204,6 +204,7 @@ export async function PATCH(
     archiveActiveTaskSession(nextTask);
     nextTask.triggerSessionId = undefined;
     nextTask.lastSyncError = undefined;
+    getKanbanSessionQueue(system).removeCardJob(taskId);
   }
 
   if (body.columnId && !body.status) {
@@ -303,6 +304,7 @@ export async function PATCH(
     const triggerResult = await enqueueKanbanTaskSession(system, {
       task: nextTask,
       expectedColumnId: nextTask.columnId,
+      ignoreExistingTrigger: retryingTrigger,
     });
     if (triggerResult.sessionId) {
       nextTask.triggerSessionId = triggerResult.sessionId;

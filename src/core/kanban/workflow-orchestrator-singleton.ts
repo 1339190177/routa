@@ -59,6 +59,7 @@ export async function enqueueKanbanTaskSession(
   params: {
     task: Awaited<ReturnType<RoutaSystem["taskStore"]["get"]>>;
     expectedColumnId?: string;
+    ignoreExistingTrigger?: boolean;
     mutateTask?: (task: NonNullable<Awaited<ReturnType<RoutaSystem["taskStore"]["get"]>>>) => void;
   },
 ): Promise<{ sessionId?: string; queued: boolean; error?: string }> {
@@ -66,7 +67,7 @@ export async function enqueueKanbanTaskSession(
   if (!task?.boardId) {
     return { queued: false, error: "Task is missing board context." };
   }
-  if (task.triggerSessionId) {
+  if (task.triggerSessionId && !params.ignoreExistingTrigger) {
     return { sessionId: task.triggerSessionId, queued: false };
   }
 
@@ -86,6 +87,7 @@ async function startKanbanTaskSession(
   taskId: string,
   params: {
     expectedColumnId?: string;
+    ignoreExistingTrigger?: boolean;
     mutateTask?: (task: NonNullable<Awaited<ReturnType<RoutaSystem["taskStore"]["get"]>>>) => void;
   },
 ): Promise<{ sessionId?: string | null; error?: string }> {
@@ -94,7 +96,7 @@ async function startKanbanTaskSession(
   if (params.expectedColumnId && task.columnId !== params.expectedColumnId) {
     return { error: `Task is no longer in column ${params.expectedColumnId}.` };
   }
-  if (task.triggerSessionId) {
+  if (task.triggerSessionId && !params.ignoreExistingTrigger) {
     return { sessionId: task.triggerSessionId };
   }
 
