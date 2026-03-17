@@ -1,0 +1,432 @@
+# page-id: session-detail
+# route: /workspace/default/sessions/1eed8a78-7673-4a1b-b6b9-cd68dc5b75c7
+# source-page: src/app/workspace/[workspaceId]/sessions/[sessionId]/page.tsx
+# url: http://127.0.0.1:3000/workspace/default/sessions/1eed8a78-7673-4a1b-b6b9-cd68dc5b75c7
+# title: Routa - Multi-Agent Coordinator
+# generated-at: 2026-03-17T13:01:15.979Z
+# generator: playwright
+# playwright-version: 1.58.2
+- complementary:
+  - navigation:
+    - link "Home":
+      - /url: /
+      - img
+    - link "Dashboard":
+      - /url: /workspace/default
+      - img
+    - link "Kanban":
+      - /url: /workspace/default/kanban
+      - img
+    - link "Traces":
+      - /url: /traces
+      - img
+  - link "Settings":
+    - /url: /settings
+    - img
+- banner:
+  - link "Routa Routa":
+    - /url: /workspace/default
+    - img "Routa"
+    - text: Routa
+  - button "Default Workspace":
+    - img
+    - text: Default Workspace
+    - img
+  - combobox:
+    - option "CRAFTER"
+    - option "ROUTA" [selected]
+    - option "GATE"
+    - option "DEVELOPER"
+  - img
+  - text: Docker unavailable
+  - button "Refresh"
+  - text: MCP /api/mcp ACP /api/acp Full
+  - checkbox "Full Essential" [checked]
+  - text: Essential
+  - link "MCP Tools":
+    - /url: /mcp-tools
+  - link "Traces":
+    - /url: /traces
+- complementary:
+  - button "Collapse sidebar":
+    - img
+  - img
+  - text: phodal/routa
+  - button "New":
+    - img
+    - text: New
+  - button "Sessions":
+    - img
+    - text: Sessions
+  - button "Spec":
+    - img
+    - text: Spec
+  - button "Tasks 5":
+    - img
+    - text: Tasks 5
+  - img
+  - text: Issue Analyzer
+  - button "Rename":
+    - img
+  - text: ROUTA opencode • 11d ago
+  - img
+  - text: Hierarchy
+  - img
+  - text: 4 Child Sessions
+  - img
+  - text: Update Task Panel UI with Provider Capabilities Child CRAFTER • 11d ago
+  - button "Rename":
+    - img
+  - button "Delete":
+    - img
+  - img
+  - text: Implement Master Agent Dynamic Provider Routing Child CRAFTER • 11d ago
+  - button "Rename":
+    - img
+  - button "Delete":
+    - img
+  - img
+  - text: Implement Provider Capability Query APIs Child CRAFTER • 11d ago
+  - button "Rename":
+    - img
+  - button "Delete":
+    - img
+  - img
+  - text: Add Capability Metadata to AcpAgentPreset Child CRAFTER • 11d ago
+  - button "Rename":
+    - img
+  - button "Delete":
+    - img
+  - paragraph: Quick Access
+  - paragraph: 5 tasks
+  - button "Open Tasks"
+  - text: Task Snapshot 5 total 4 done quick run Add Capability Metadata to AcpAgentPreset Done
+  - button "Open":
+    - img
+    - text: Open
+  - text: Implement Provider Capability Query APIs Done
+  - button "Open":
+    - img
+    - text: Open
+  - text: Implement Master Agent Dynamic Provider Routing Done
+  - button "Open":
+    - img
+    - text: Open
+  - text: Update Task Panel UI with Provider Capabilities Done
+  - button "Open":
+    - img
+    - text: Open
+  - text: Add Workspace Agent Capability Awareness Pending
+  - button "Run":
+    - img
+    - text: Run
+- main:
+  - text: "Session: 1eed8a78-767..."
+  - button "Chat"
+  - button "Trace"
+  - button "Thinking Let me start by understanding this task. The user wants me to analyze a GitHub issue. First, I need to fetch the issue content from GitHub to understand what the requirement is. Let me name myself first, then fetch the issue.":
+    - img
+    - text: Thinking Let me start by understanding this task. The user wants me to analyze a GitHub issue. First, I need to fetch the issue content from GitHub to understand what the requirement is. Let me name myself first, then fetch the issue.
+  - button "TO tool Issue Analyzer":
+    - text: TO tool Issue Analyzer
+    - img
+  - button "Thinking Now let me fetch the GitHub issue to understand the requirements.":
+    - img
+    - text: Thinking Now let me fetch the GitHub issue to understand the requirements.
+  - button "HT https://github.com/phodal/routa/issues/67 (text/html; charset=utf-8) markdown":
+    - text: HT https://github.com/phodal/routa/issues/67 (text/html; charset=utf-8) markdown
+    - img
+  - 'button "Thinking This is a feature request for dynamic provider selection based on agent capabilities. Let me analyze it: **Issue Summary:** - The user wants the master agent (Routa) and workspace agents to automatically select the most suitable ACP provider based on provider capabilities and model descriptions, rather than using static configuration. **Key Acceptance Criteria:** 1. **AC1**: Add capabilities metadata to `AcpAgentPreset` (capabilities, supportedRoles, preferredTier) 2. **AC2**: Provider capability query APIs 3. **AC3**: Master Agent dynamic provider routing 4. **AC4**: Task Panel UI enhancements 5. **AC5**: Workspace Agent capability awareness Let me explore the codebase to understand the current implementation and create a spec for this feature."':
+    - img
+    - text: "Thinking This is a feature request for dynamic provider selection based on agent capabilities. Let me analyze it: **Issue Summary:** - The user wants the master agent (Routa) and workspace agents to automatically select the most suitable ACP provider based on provider capabilities and model descriptions, rather than using static configuration. **Key Acceptance Criteria:** 1. **AC1**: Add capabilities metadata to `AcpAgentPreset` (capabilities, supportedRoles, preferredTier) 2. **AC2**: Provider capability query APIs 3. **AC3**: Master Agent dynamic provider routing 4. **AC4**: Task Panel UI enhancements 5. **AC5**: Workspace Agent capability awareness Let me explore the codebase to understand the current implementation and create a spec for this feature."
+  - button "CO codebase-retrieval AcpAgentPreset definition and provider registry implementati…":
+    - text: CO codebase-retrieval AcpAgentPreset definition and provider registry implementati…
+    - img
+  - button "Thinking Let me try searching the codebase manually with grep and glob.":
+    - img
+    - text: Thinking Let me try searching the codebase manually with grep and glob.
+  - button "SE search **/acp-presets.ts":
+    - text: SE search **/acp-presets.ts
+    - img
+  - button "SE search **/provider-registry.ts":
+    - text: SE search **/provider-registry.ts
+    - img
+  - button "SE search **/agent-instance-factory.ts":
+    - text: SE search **/agent-instance-factory.ts
+    - img
+  - button "Thinking Good, I found the relevant files. Let me read them to understand the current implementation.":
+    - img
+    - text: Thinking Good, I found the relevant files. Let me read them to understand the current implementation.
+  - button "RE read-file <repo-root>/src/core/acp/acp-presets.ts":
+    - text: RE read-file <repo-root>/src/core/acp/acp-presets.ts
+    - img
+  - button "Thinking Now let me read the provider-registry.ts file to understand how providers are registered and managed.":
+    - img
+    - text: Thinking Now let me read the provider-registry.ts file to understand how providers are registered and managed.
+  - button "RE read-file <repo-root>/src/core/acp/provider-registry.ts":
+    - text: RE read-file <repo-root>/src/core/acp/provider-registry.ts
+    - img
+  - button "Thinking Now let me read the agent-instance-factory.ts to understand how agents are created.":
+    - img
+    - text: Thinking Now let me read the agent-instance-factory.ts to understand how agents are created.
+  - button "RE read-file …rs/phodal/ai/routa-js/src/core/acp/agent-instance-factory.ts":
+    - text: RE read-file …rs/phodal/ai/routa-js/src/core/acp/agent-instance-factory.ts
+    - img
+  - button "Thinking Now let me also check the workspace agent config and the task panel UI to understand how they work.":
+    - img
+    - text: Thinking Now let me also check the workspace agent config and the task panel UI to understand how they work.
+  - button "SE search **/workspace-agent-config.ts":
+    - text: SE search **/workspace-agent-config.ts
+    - img
+  - button "SE search **/task-panel.tsx":
+    - text: SE search **/task-panel.tsx
+    - img
+  - button "Thinking Let me read both files.":
+    - img
+    - text: Thinking Let me read both files.
+  - button "RE read-file …ta-js/src/core/acp/workspace-agent/workspace-agent-config.ts":
+    - text: RE read-file …ta-js/src/core/acp/workspace-agent/workspace-agent-config.ts
+    - img
+  - button "Thinking Now let me read the agent.ts to understand the AgentRole and ModelTier types.":
+    - img
+    - text: Thinking Now let me read the agent.ts to understand the AgentRole and ModelTier types.
+  - button "AG AgentRole|ModelTier AgentRole|ModelTier":
+    - text: AG AgentRole|ModelTier AgentRole|ModelTier
+    - img
+  - button:
+    - img
+    - text: "Thinking Now I have enough context to understand the issue. Let me summarize: **Issue #67 Summary:** - Dynamic Provider Selection Based on Agent Capabilities **Key Requirements:** 1. **AC1**: Add capability metadata to `AcpAgentPreset`: - `capabilities` - supported abilities (mcp_tool, file_edit, web_search) - `supportedRoles` - suitable agent roles (ROUTA/CRAFTER/GATE/DEVELOPER) - `preferredTier` - default model tier (fast/balanced/smart) 2. **AC2**: Provider capability query APIs: - `getProviderCapabilities(providerId)` - `findProvidersByCapability(capability)` - `findBestProviderForRole(role, availableProviders)` 3. **AC3**: Master Agent dynamic provider routing: - Routa coordinator dynamically selects provider when creating child agents - Considers: capability match → role adaptation → model tier 4. **AC4**: Task Panel UI enhancements 5. **AC5**: Workspace Agent capability awareness This is a substantial feature. Let me write the spec and plan."
+  - 'button "TO tool # Issue #67: Dynamic Provider Selection Based on Agent Capab…"':
+    - text: "TO tool # Issue #67: Dynamic Provider Selection Based on Agent Capab…"
+    - img
+  - button "Thinking I've created the spec with 5 tasks. Now let me present the plan to the user for approval.":
+    - img
+    - text: Thinking I've created the spec with 5 tasks. Now let me present the plan to the user for approval.
+  - paragraph: Connect first...
+  - img
+  - button "phodal/routa"
+  - button "main":
+    - img
+    - text: main
+    - img
+  - button "Clear repo selection":
+    - img
+  - button "OpenCode":
+    - text: OpenCode
+    - img
+  - button "Default model":
+    - img
+    - text: Default model
+    - img
+  - text: "@ file·# agent·/ skill"
+  - button "Send":
+    - img
+  - text: Repo path <repo-root>/.routa/repos/phodal--routa
+- complementary:
+  - text: CRAFTERs 4 Concurrency
+  - button "1"
+  - button "2"
+  - button "Update Task Panel UI with Provider Capabilities"
+  - button "Implement Master Agent Dynamic Provider Routing"
+  - button "Implement Provider Capability Query APIs"
+  - button "Add Capability Metadata to AcpAgentPreset"
+  - text: Update Task Panel UI with Provider Capabilities completed
+  - button "Thinking The user wants me to update the Task Panel UI to show provider capabilities and enable auto-selection. Let me first look at the current implementation of the task panel component.":
+    - img
+    - text: Thinking The user wants me to update the Task Panel UI to show provider capabilities and enable auto-selection. Let me first look at the current implementation of the task panel component.
+  - button "read pending":
+    - text: read pending
+    - img
+  - button "Thinking Now I need to understand what \"provider capabilities\" means in this context. Let me search for provider-related types and configurations in the codebase to understand how providers work.":
+    - img
+    - text: Thinking Now I need to understand what "provider capabilities" means in this context. Let me search for provider-related types and configurations in the codebase to understand how providers work.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Let me search for provider-related things differently.":
+    - img
+    - text: Thinking Let me search for provider-related things differently.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Let me search for provider settings or configurations.":
+    - img
+    - text: Thinking Let me search for provider settings or configurations.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Let me look for provider configuration in the workspace or settings-related files.":
+    - img
+    - text: Thinking Let me look for provider configuration in the workspace or settings-related files.
+  - button "augment-context-engine_codebase-retrieval pending":
+    - text: augment-context-engine_codebase-retrieval pending
+    - img
+  - button "Thinking Let me look for provider or model settings in a more targeted way.":
+    - img
+    - text: Thinking Let me look for provider or model settings in a more targeted way.
+  - button "glob pending":
+    - text: glob pending
+    - img
+  - button "Thinking The workspace-agent-provider.ts looks relevant. Let me check that file.":
+    - img
+    - text: Thinking The workspace-agent-provider.ts looks relevant. Let me check that file.
+  - button "read pending":
+    - text: read pending
+    - img
+  - button "Thinking Let me search for provider configuration related to models and capabilities.":
+    - img
+    - text: Thinking Let me search for provider configuration related to models and capabilities.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Let me look at the workspace types to see what properties exist.":
+    - img
+    - text: Thinking Let me look at the workspace types to see what properties exist.
+  - button "read pending":
+    - text: read pending
+    - img
+  - button "Thinking Let me search for where providers are configured in settings or used in the UI.":
+    - img
+    - text: Thinking Let me search for where providers are configured in settings or used in the UI.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Let me look at the project structure to understand what providers might be available. Perhaps there is a settings or configuration file that defines provider capabilities.":
+    - img
+    - text: Thinking Let me look at the project structure to understand what providers might be available. Perhaps there is a settings or configuration file that defines provider capabilities.
+  - button "glob pending":
+    - text: glob pending
+    - img
+  - button "Thinking Let me look at the provider-registry and custom-acp-providers to understand what providers are available.":
+    - img
+    - text: Thinking Let me look at the provider-registry and custom-acp-providers to understand what providers are available.
+  - button "read pending":
+    - text: read pending
+    - img
+  - button "Thinking Now let me look at the provider-registry to understand how providers are managed and if there are any capabilities.":
+    - img
+    - text: Thinking Now let me look at the provider-registry to understand how providers are managed and if there are any capabilities.
+  - button "read pending":
+    - text: read pending
+    - img
+  - button "Thinking Now I understand the provider system better. Let me look at the ACP presets to see what capabilities are available.":
+    - img
+    - text: Thinking Now I understand the provider system better. Let me look at the ACP presets to see what capabilities are available.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Now I should look at the ACP presets to see the capabilities and how providers are defined.":
+    - img
+    - text: Thinking Now I should look at the ACP presets to see the capabilities and how providers are defined.
+  - button "read pending":
+    - text: read pending
+    - img
+  - button "Thinking Now I understand the system. The providers have capabilities like \"mcp_tool\", \"code_generation\", \"file_operations\", \"web_search\", \"codebase_search\". Let me see how the task panel is being used and how providers are selected. I need to check if there's already some provider selection UI in the app, or if I need to add it. Let me search for where the TaskPanel is used and see if there's a provider selection component.":
+    - img
+    - text: Thinking Now I understand the system. The providers have capabilities like "mcp_tool", "code_generation", "file_operations", "web_search", "codebase_search". Let me see how the task panel is being used and how providers are selected. I need to check if there's already some provider selection UI in the app, or if I need to add it. Let me search for where the TaskPanel is used and see if there's a provider selection component.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Now I need to understand where the provider selection happens and how to integrate capabilities display. Let me look at the session-page-client to see how providers are selected and passed to the TaskPanel.":
+    - img
+    - text: Thinking Now I need to understand where the provider selection happens and how to integrate capabilities display. Let me look at the session-page-client to see how providers are selected and passed to the TaskPanel.
+  - button "read pending":
+    - text: read pending
+    - img
+  - button "Thinking I need to look for how provider selection is done in the settings panel or similar, to understand how to add capability display. Let me look at the SettingsPanel to see how providers are loaded and displayed.":
+    - img
+    - text: Thinking I need to look for how provider selection is done in the settings panel or similar, to understand how to add capability display. Let me look at the SettingsPanel to see how providers are loaded and displayed.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Now let me look at the settings panel to see how providers are loaded and displayed. This will help me understand what data is available.":
+    - img
+    - text: Thinking Now let me look at the settings panel to see how providers are loaded and displayed. This will help me understand what data is available.
+  - button "read pending":
+    - text: read pending
+    - img
+  - button "Thinking Now I understand the system better. The providers have capabilities and the user can configure default providers per role. Let me look for how providers are selected in the settings panel UI and see what capability display is available. Let me also check if there's an existing way to display capabilities in the settings panel.":
+    - img
+    - text: Thinking Now I understand the system better. The providers have capabilities and the user can configure default providers per role. Let me look for how providers are selected in the settings panel UI and see what capability display is available. Let me also check if there's an existing way to display capabilities in the settings panel.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - 'button "Thinking There''s no capability display in the settings panel. Let me look at how the TaskPanel is rendered to see if there''s any provider prop or selection context. Based on the task, I need to add: 1. Provider list shows capability badges 2. Auto-select option available Let me search for how the TaskPanel is called to see if there''s already a provider context."':
+    - img
+    - text: "Thinking There's no capability display in the settings panel. Let me look at how the TaskPanel is rendered to see if there's any provider prop or selection context. Based on the task, I need to add: 1. Provider list shows capability badges 2. Auto-select option available Let me search for how the TaskPanel is called to see if there's already a provider context."
+  - button "read pending":
+    - text: read pending
+    - img
+  - 'button "Thinking Now I understand the context. The TaskPanel doesn''t receive any provider information. I need to: 1. Add provider capability display in the TaskPanel 2. Add auto-select option Let me look at how the capability badge should be displayed. I need to import the provider capabilities from the registry. Let me check what''s exported from the core/acp that I can use."':
+    - img
+    - text: "Thinking Now I understand the context. The TaskPanel doesn't receive any provider information. I need to: 1. Add provider capability display in the TaskPanel 2. Add auto-select option Let me look at how the capability badge should be displayed. I need to import the provider capabilities from the registry. Let me check what's exported from the core/acp that I can use."
+  - button "read pending":
+    - text: read pending
+    - img
+  - 'button "Thinking I see that the provider-registry.ts has exports for `getProviderCapabilities` and `findProvidersByCapability` which I need to use. Let me check what''s exported in the provider-registry index:"':
+    - img
+    - text: "Thinking I see that the provider-registry.ts has exports for `getProviderCapabilities` and `findProvidersByCapability` which I need to use. Let me check what's exported in the provider-registry index:"
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - 'button "Thinking The `getProviderCapabilities` and `findProvidersByCapability` functions are not exported from the index. I''ll need to add them to the exports. But first, let me understand the task better - the user wants to: 1. Show provider capability badges in the TaskPanel UI 2. Enable auto-select option Let me now understand what the expected UI should look like. I need to add: 1. A provider selector in the TaskPanel that shows capabilities 2. An auto-select toggle Let me check the current TaskPanel to understand where to add this. Let me also look at the settings-panel to see how the provider selector is implemented."':
+    - img
+    - text: "Thinking The `getProviderCapabilities` and `findProvidersByCapability` functions are not exported from the index. I'll need to add them to the exports. But first, let me understand the task better - the user wants to: 1. Show provider capability badges in the TaskPanel UI 2. Enable auto-select option Let me now understand what the expected UI should look like. I need to add: 1. A provider selector in the TaskPanel that shows capabilities 2. An auto-select toggle Let me check the current TaskPanel to understand where to add this. Let me also look at the settings-panel to see how the provider selector is implemented."
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Let me search for how providers are selected in the SettingsPanel. I need to find the provider selection dropdown.":
+    - img
+    - text: Thinking Let me search for how providers are selected in the SettingsPanel. I need to find the provider selection dropdown.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Let me search for how the provider list is displayed in the settings panel.":
+    - img
+    - text: Thinking Let me search for how the provider list is displayed in the settings panel.
+  - button "grep pending":
+    - text: grep pending
+    - img
+  - button "Thinking Now I need to understand where providers are coming from in the SettingsPanel. Let me see the full settings panel structure to understand how it gets the providers list.":
+    - img
+    - text: Thinking Now I need to understand where providers are coming from in the SettingsPanel. Let me see the full settings panel structure to understand how it gets the providers list.
+  - button "read pending":
+    - text: read pending
+    - img
+  - 'button "Thinking Now I understand better. The settings panel receives `providers: ProviderOption[]` as a prop. Let me look at the ProvidersTab in the settings panel to understand how providers are displayed."':
+    - img
+    - text: "Thinking Now I understand better. The settings panel receives `providers: ProviderOption[]` as a prop. Let me look at the ProvidersTab in the settings panel to understand how providers are displayed."
+  - button "read pending":
+    - text: read pending
+    - img
+  - 'button "Thinking Now I have a good understanding of the system. I need to: 1. Export the `getProviderCapabilities` and `findProvidersByCapability` functions from the provider-registry.ts index 2. Add a provider capability display in the TaskPanel with capability badges 3. Add an auto-select toggle in the TaskPanel Let me first add the exports to the index, then modify the TaskPanel component. First, let me add the exports to the index file."':
+    - img
+    - text: "Thinking Now I have a good understanding of the system. I need to: 1. Export the `getProviderCapabilities` and `findProvidersByCapability` functions from the provider-registry.ts index 2. Add a provider capability display in the TaskPanel with capability badges 3. Add an auto-select toggle in the TaskPanel Let me first add the exports to the index, then modify the TaskPanel component. First, let me add the exports to the index file."
+  - button "edit pending":
+    - text: edit pending
+    - img
+  - 'button "Thinking Now I need to modify the TaskPanel to add the provider capability display and auto-select option. Let me first understand what I need to add: 1. A prop for selected provider 2. A prop for auto-select 3. A function to get available providers with their capabilities 4. UI to show capability badges next to provider names 5. UI to toggle auto-select Let me check what the session-page-client passes to see how this could be integrated."':
+    - img
+    - text: "Thinking Now I need to modify the TaskPanel to add the provider capability display and auto-select option. Let me first understand what I need to add: 1. A prop for selected provider 2. A prop for auto-select 3. A function to get available providers with their capabilities 4. UI to show capability badges next to provider names 5. UI to toggle auto-select Let me check what the session-page-client passes to see how this could be integrated."
+  - button "read pending":
+    - text: read pending
+    - img
+  - 'button "Thinking Now I need to add: 1. Provider capabilities props 2. Auto-select toggle Let me update the TaskPanel component to include these new features. First I''ll add the necessary imports and types, then add the UI components. I need to: 1. Import the capability functions from the acp module 2. Add new props for provider configuration 3. Add a provider selector with capability badges 4. Add an auto-select toggle Let me make the changes."':
+    - img
+    - text: "Thinking Now I need to add: 1. Provider capabilities props 2. Auto-select toggle Let me update the TaskPanel component to include these new features. First I'll add the necessary imports and types, then add the UI components. I need to: 1. Import the capability functions from the acp module 2. Add new props for provider configuration 3. Add a provider selector with capability badges 4. Add an auto-select toggle Let me make the changes."
+  - button "edit pending":
+    - text: edit pending
+    - img
+  - button "Thinking Now let me add the new props to the TaskPanelProps interface and the component function.":
+    - img
+    - text: Thinking Now let me add the new props to the TaskPanelProps interface and the component function.
+  - button "edit pending":
+    - text: edit pending
+    - img
+  - button "Thinking Now I need to add the props to the function destructuring.":
+    - img
+    - text: Thinking Now I need to add the props to the function destructuring.
+  - button "edit pending":
+    - text: edit pending
+    - img
+- alert

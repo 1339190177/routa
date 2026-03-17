@@ -3,886 +3,1222 @@
 # source-page: src/app/traces/page.tsx
 # url: http://127.0.0.1:3000/traces
 # title: Routa - Multi-Agent Coordinator
-# generated-at: 2026-03-13T08:19:58.795Z
+# generated-at: 2026-03-17T13:02:40.447Z
 # generator: playwright
 # playwright-version: 1.58.2
 - banner:
-  - link "Back to Home":
-    - /url: /
+  - img "Routa"
+  - text: Routa
+  - button "Default Workspace":
     - img
+    - text: Default Workspace
+    - img
+  - link "Home":
+    - /url: /
+- complementary:
+  - navigation:
+    - link "Home":
+      - /url: /
+      - img
+    - link "Dashboard":
+      - /url: /workspace/default
+      - img
+    - link "Kanban":
+      - /url: /workspace/default/kanban
+      - img
+    - link "Traces":
+      - /url: /traces
+      - img
+  - link "Settings":
+    - /url: /settings
+    - img
+- main:
+  - img
   - heading "Agent Trace Viewer" [level=1]
   - paragraph: Browse and analyze agent execution traces
-  - 'button "Session: f6c15089..."':
-    - text: "Session:"
-    - code: f6c15089...
+  - text: "Session:"
+  - code: <id>…
+  - button "Copy link":
+    - text: Copy link
     - img
+  - button "Hide Sessions"
+  - button "Loading..." [disabled]
   - button "Chat"
   - button "Trace"
   - button "Trace(AG-UI)"
-  - button "Hide Sessions"
-  - button "Loading..." [disabled]
-- complementary:
-  - heading "Sessions" [level=2]
-  - paragraph: 401 sessions found
-  - button "<id>… 72 Mar 13, 10:04 AM CRAFTER codex":
-    - code: <id>…
-    - text: 72 Mar 13, 10:04 AM CRAFTER codex
-  - button "Kanban Automation 1773305695509 · codex 12 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305680745 · codex 19 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305674187 · codex 19 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305668434 · codex 37 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305668118 · codex 35 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305496841 · codex 105 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305624752 · codex 44 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305703969 · codex 3 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305703611 · codex 3 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305584698 · codex 84 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305625147 · codex 41 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305583887 · codex 71 Mar 12, 04:55 PM DEVELOPER codex"
-  - button "Kanban Automation 1773305537129 · codex 53 Mar 12, 04:53 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303183501 · codex 8 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303107447 · codex 82 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303166972 · codex 28 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303100207 · codex 62 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303091805 · codex 68 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303178017 · codex 14 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303170678 · codex 16 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303078787 · codex 66 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303171181 · codex 9 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303155135 · codex 24 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303072939 · codex 84 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303072572 · codex 64 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303195078 · codex 3 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303112938 · codex 68 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303161182 · codex 20 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303194674 · codex 3 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303100528 · codex 100 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303167348 · codex 29 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303160593 · codex 16 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303092273 · codex 64 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303112452 · codex 57 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303186580 · codex 3 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303002372 · codex 133 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303185976 · codex 3 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303183985 · codex 3 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303178387 · codex 3 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303074611 · codex 66 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773302999392 · codex 137 Mar 12, 04:13 PM DEVELOPER codex"
-  - button "Kanban Automation 1773302998930 · codex 102 Mar 12, 04:12 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303002905 · codex 127 Mar 12, 04:12 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303026066 · codex 103 Mar 12, 04:12 PM DEVELOPER codex"
-  - button "Kanban Automation 1773303026559 · codex 103 Mar 12, 04:12 PM DEVELOPER codex"
-  - button "Kanban Automation 1773302936759 · codex 111 Mar 12, 04:11 PM DEVELOPER codex"
-  - button "Kanban Automation 1773302937161 · codex 73 Mar 12, 04:11 PM DEVELOPER codex"
-  - button "Kanban Automation 1773302907893 · codex 97 Mar 12, 04:10 PM DEVELOPER codex"
-  - button "Kanban Automation 1773302840785 · codex 157 Mar 12, 04:10 PM DEVELOPER codex"
-  - button "Kanban Automation 1773302840931 · codex 126 Mar 12, 04:10 PM DEVELOPER codex"
-  - button "Kanban Automation 1773302698458 · codex 157 Mar 12, 04:08 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300544590 · codex 84 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300549082 · codex 53 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300466624 · codex 114 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300581163 · codex 51 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300581196 · codex 25 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300581533 · codex 53 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300518991 · codex 79 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300482032 · codex 89 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300495096 · codex 89 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300564074 · codex 43 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "<id>… 116 Mar 12, 03:31 PM DEVELOPER codex":
-    - code: <id>…
-    - text: 116 Mar 12, 03:31 PM DEVELOPER codex
-  - button "Kanban Automation 1773300581749 · codex 32 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300548697 · codex 62 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300580567 · codex 32 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300543692 · codex 60 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300530985 · codex 72 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300421678 · codex 92 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300422298 · codex 115 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300450176 · codex 114 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300542007 · codex 73 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300563568 · codex 85 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300427347 · codex 91 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300506267 · codex 63 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300465883 · codex 113 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300529767 · codex 85 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300541255 · codex 65 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "<id>… 1 Mar 12, 03:31 PM":
-    - code: <id>…
-    - text: 1 Mar 12, 03:31 PM
-  - button "Kanban Automation 1773300332641 · codex 172 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "<id>… 155 Mar 12, 03:31 PM DEVELOPER codex":
-    - code: <id>…
-    - text: 155 Mar 12, 03:31 PM DEVELOPER codex
-  - button "<id>… 1 Mar 12, 03:31 PM":
-    - code: <id>…
-    - text: 1 Mar 12, 03:31 PM
-  - button "Kanban Automation 1773300466809 · codex 92 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300438843 · codex 97 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300333273 · codex 209 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300582538 · codex 3 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300421628 · codex 115 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300505734 · codex 85 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300427028 · codex 173 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300422191 · codex 108 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300482437 · codex 94 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300228933 · codex 188 Mar 12, 03:31 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300382220 · codex 131 Mar 12, 03:30 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300229324 · codex 191 Mar 12, 03:30 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300438449 · codex 107 Mar 12, 03:30 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300465217 · codex 91 Mar 12, 03:30 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300356749 · codex 140 Mar 12, 03:30 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300344390 · codex 135 Mar 12, 03:30 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300356862 · codex 158 Mar 12, 03:30 PM DEVELOPER codex"
-  - button "<id>… 119 Mar 12, 03:29 PM DEVELOPER codex":
-    - code: <id>…
-    - text: 119 Mar 12, 03:29 PM DEVELOPER codex
-  - button "<id>… 136 Mar 12, 03:29 PM DEVELOPER codex":
-    - code: <id>…
-    - text: 136 Mar 12, 03:29 PM DEVELOPER codex
-  - button "Kanban Automation 1773300344949 · codex 148 Mar 12, 03:29 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300100384 · codex 242 Mar 12, 03:29 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300333041 · codex 123 Mar 12, 03:29 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300334610 · codex 110 Mar 12, 03:28 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300326561 · codex 118 Mar 12, 03:28 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300327660 · codex 106 Mar 12, 03:28 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300156722 · codex 142 Mar 12, 03:27 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300224639 · codex 143 Mar 12, 03:27 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300225352 · codex 140 Mar 12, 03:27 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300215964 · codex 139 Mar 12, 03:27 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300251767 · codex 128 Mar 12, 03:27 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300214848 · codex 114 Mar 12, 03:26 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300165914 · codex 184 Mar 12, 03:26 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300071222 · codex 142 Mar 12, 03:25 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300157009 · codex 107 Mar 12, 03:25 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300076348 · codex 142 Mar 12, 03:25 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299980594 · codex 103 Mar 12, 03:24 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300119310 · codex 152 Mar 12, 03:24 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300008964 · codex 198 Mar 12, 03:24 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299883800 · codex 215 Mar 12, 03:24 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300100384 · codex 130 Mar 12, 03:24 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299980014 · codex 153 Mar 12, 03:23 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300077601 · codex 103 Mar 12, 03:23 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300057472 · codex 126 Mar 12, 03:23 PM DEVELOPER codex"
-  - button "Kanban Automation 1773300008537 · codex 128 Mar 12, 03:23 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299996853 · codex 133 Mar 12, 03:22 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299997226 · codex 127 Mar 12, 03:22 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299957067 · codex 102 Mar 12, 03:22 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299886593 · codex 146 Mar 12, 03:22 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299978559 · codex 95 Mar 12, 03:22 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299957869 · codex 96 Mar 12, 03:22 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299888427 · codex 148 Mar 12, 03:21 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299882784 · codex 130 Mar 12, 03:21 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299871689 · codex 147 Mar 12, 03:20 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299822816 · codex 121 Mar 12, 03:20 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299723963 · codex 153 Mar 12, 03:20 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299873581 · codex 103 Mar 12, 03:20 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299791621 · codex 131 Mar 12, 03:19 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299791528 · codex 133 Mar 12, 03:19 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299767177 · codex 134 Mar 12, 03:18 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299723675 · codex 158 Mar 12, 03:18 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299651965 · codex 171 Mar 12, 03:17 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299653194 · codex 132 Mar 12, 03:17 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299581995 · codex 142 Mar 12, 03:16 PM DEVELOPER codex"
-  - button "Kanban Automation 1773299562018 · codex 128 Mar 12, 03:16 PM DEVELOPER codex"
-  - button "Debug automation · codex 125 Mar 12, 03:11 PM DEVELOPER codex"
-  - button "Assign task to ACP provider · claude 3 Mar 12, 01:11 PM DEVELOPER claude"
-  - button "<id>… 26 Mar 12, 12:03 PM ROUTA claude-code-sdk":
-    - code: <id>…
-    - text: 26 Mar 12, 12:03 PM ROUTA claude-code-sdk
-  - button "<id>… 4 Mar 12, 10:49 AM ROUTA claude-code-sdk":
-    - code: <id>…
-    - text: 4 Mar 12, 10:49 AM ROUTA claude-code-sdk
-  - button "<id>… 1 Mar 12, 09:53 AM ROUTA claude-code-sdk":
-    - code: <id>…
-    - text: 1 Mar 12, 09:53 AM ROUTA claude-code-sdk
-  - button "<id>… 1 Mar 12, 09:51 AM":
-    - code: <id>…
-    - text: 1 Mar 12, 09:51 AM
-  - button "Add login page · claude-code-sdk 6 Mar 12, 08:01 AM DEVELOPER claude-code-sdk"
-  - button "Implement Master Agent Dynamic Provider Routing · claude 10 Mar 11, 11:43 PM DEVELOPER claude"
-  - button "Implement Master Agent Dynamic Provider Routing · claude 142 Mar 11, 11:35 PM DEVELOPER claude"
-  - button "Add login page · claude-code-sdk 34 Mar 11, 09:34 PM DEVELOPER claude-code-sdk"
-  - button "Add login page · claude-code-sdk 22 Mar 11, 08:57 PM DEVELOPER claude-code-sdk"
-  - button "Desk Check 110 Mar 11, 08:45 PM GATE opencode"
-  - button "Assign task to ACP provider · claude 138 Mar 11, 08:41 PM DEVELOPER claude"
-  - button "Implement Provider Capability Query APIs · claude 35 Mar 11, 08:33 PM DEVELOPER claude"
-  - button "Capability Metadata Dev 43 Mar 11, 08:31 PM DEVELOPER claude"
-  - button "Capability Metadata 43 Mar 11, 08:27 PM DEVELOPER claude"
-  - button "Desk Check 163 Mar 11, 08:20 PM DEVELOPER claude"
-  - button "Add login page · claude 136 Mar 11, 08:10 PM DEVELOPER claude"
-  - button "Add login page · claude 7 Mar 11, 01:37 PM DEVELOPER claude"
-  - button "Add login page · claude 4 Mar 11, 01:14 PM DEVELOPER claude"
-  - button "Add login page · claude 4 Mar 11, 01:11 PM DEVELOPER claude"
-  - button "Add login page · claude 4 Mar 11, 01:10 PM DEVELOPER claude"
-  - button "Add login page · claude 226 Mar 10, 09:35 PM DEVELOPER claude"
-  - button "Add login page · claude 113 Mar 10, 09:22 PM DEVELOPER claude"
-  - button "Add login page · claude 109 Mar 10, 09:20 PM DEVELOPER claude"
-  - button "<id>… 1 Mar 10, 09:14 PM":
-    - code: <id>…
-    - text: 1 Mar 10, 09:14 PM
-  - button "Implement Provider Capability Query APIs · claude 80 Mar 10, 05:55 PM DEVELOPER claude"
-  - button "Add Capability Metadata to AcpAgentPreset · opencode 21 Mar 10, 01:38 PM CRAFTER opencode"
-  - button "<id>… 110 Mar 9, 09:57 AM":
-    - code: <id>…
-    - text: 110 Mar 9, 09:57 AM
-  - button "<id>… 95 Mar 9, 09:53 AM":
-    - code: <id>…
-    - text: 95 Mar 9, 09:53 AM
-  - button "<id>… 54 Mar 9, 08:20 AM":
-    - code: <id>…
-    - text: 54 Mar 9, 08:20 AM
-  - button "Kanban OpenCode smoke test · opencode 159 Mar 8, 11:13 PM CRAFTER opencode"
-  - button "<id>… 17 Mar 8, 10:13 PM CRAFTER opencode":
-    - code: <id>…
-    - text: 17 Mar 8, 10:13 PM CRAFTER opencode
-  - button "<id>… 22 Mar 8, 10:11 PM CRAFTER opencode":
-    - code: <id>…
-    - text: 22 Mar 8, 10:11 PM CRAFTER opencode
-  - button "<id>… 8 Mar 8, 10:11 PM CRAFTER opencode":
-    - code: <id>…
-    - text: 8 Mar 8, 10:11 PM CRAFTER opencode
-  - button "Kanban ACP smoke test 76 Mar 8, 09:34 PM DEVELOPER claude"
-  - button "<id>… 15 Mar 8, 09:34 PM CRAFTER opencode":
-    - code: <id>…
-    - text: 15 Mar 8, 09:34 PM CRAFTER opencode
-  - button "<id>… 24 Mar 8, 09:33 PM CRAFTER opencode":
-    - code: <id>…
-    - text: 24 Mar 8, 09:33 PM CRAFTER opencode
-  - button "<id>… 17 Mar 8, 09:32 PM CRAFTER opencode":
-    - code: <id>…
-    - text: 17 Mar 8, 09:32 PM CRAFTER opencode
-  - button "<id>… 1 Mar 8, 09:13 PM":
-    - code: <id>…
-    - text: 1 Mar 8, 09:13 PM
-  - button "<id>… 13 Mar 8, 09:11 PM CRAFTER opencode":
-    - code: <id>…
-    - text: 13 Mar 8, 09:11 PM CRAFTER opencode
-  - button "<id>… 36 Mar 8, 09:08 PM":
-    - code: <id>…
-    - text: 36 Mar 8, 09:08 PM
-  - button "<id>… 27 Mar 8, 09:05 PM CRAFTER opencode":
-    - code: <id>…
-    - text: 27 Mar 8, 09:05 PM CRAFTER opencode
-  - button "<id>… 10 Mar 8, 09:05 PM":
-    - code: <id>…
-    - text: 10 Mar 8, 09:05 PM
-  - button "Coordinator 10 Mar 8, 12:06 AM ROUTA docker-opencode"
-  - button "Greeting 22 Mar 8, 12:02 AM ROUTA docker-opencode"
-  - button "Coordinator 22 Mar 7, 11:49 PM ROUTA docker-opencode"
-  - button "<id>… 3 Mar 7, 11:27 PM":
-    - code: <id>…
-    - text: 3 Mar 7, 11:27 PM
-  - button "<id>… 3 Mar 7, 11:25 PM":
-    - code: <id>…
-    - text: 3 Mar 7, 11:25 PM
-  - button "<id>… 1 Mar 7, 11:54 AM":
-    - code: <id>…
-    - text: 1 Mar 7, 11:54 AM
-  - button "Routa Coordinator 16 Mar 6, 10:58 PM ROUTA opencode-sdk"
-  - button "<id>… 5 Mar 6, 10:37 PM":
-    - code: <id>…
-    - text: 5 Mar 6, 10:37 PM
-  - button "<id>… 5 Mar 6, 10:33 PM":
-    - code: <id>…
-    - text: 5 Mar 6, 10:33 PM
-  - button "<id>… 9 Mar 6, 10:32 PM":
-    - code: <id>…
-    - text: 9 Mar 6, 10:32 PM
-  - button "<id>… 7 Mar 6, 09:57 PM":
-    - code: <id>…
-    - text: 7 Mar 6, 09:57 PM
-  - button "<id>… 1 Mar 6, 09:55 PM":
-    - code: <id>…
-    - text: 1 Mar 6, 09:55 PM
-  - button "<id>… 19 Mar 6, 09:38 PM ROUTA docker-opencode":
-    - code: <id>…
-    - text: 19 Mar 6, 09:38 PM ROUTA docker-opencode
-  - button "<id>… 9 Mar 6, 09:37 PM":
-    - code: <id>…
-    - text: 9 Mar 6, 09:37 PM
-  - button "<id>… 16 Mar 6, 09:17 PM ROUTA docker-opencode":
-    - code: <id>…
-    - text: 16 Mar 6, 09:17 PM ROUTA docker-opencode
-  - button "<id>… 1 Mar 6, 09:07 PM":
-    - code: <id>…
-    - text: 1 Mar 6, 09:07 PM
-  - button "<id>… 3 Mar 6, 08:53 PM":
-    - code: <id>…
-    - text: 3 Mar 6, 08:53 PM
-  - button "<id>… 5 Mar 6, 07:24 PM ROUTA claude-code-sdk":
-    - code: <id>…
-    - text: 5 Mar 6, 07:24 PM ROUTA claude-code-sdk
-  - button "<id>… 11 Mar 6, 07:22 PM ROUTA claude-code-sdk":
-    - code: <id>…
-    - text: 11 Mar 6, 07:22 PM ROUTA claude-code-sdk
-  - button "<id>… 6 Mar 6, 06:01 PM ROUTA claude-code-sdk":
-    - code: <id>…
-    - text: 6 Mar 6, 06:01 PM ROUTA claude-code-sdk
-  - button "<id>… 7 Mar 6, 05:40 PM ROUTA claude-code-sdk":
-    - code: <id>…
-    - text: 7 Mar 6, 05:40 PM ROUTA claude-code-sdk
-  - button "<id>… 162 Mar 6, 03:30 PM":
-    - code: <id>…
-    - text: 162 Mar 6, 03:30 PM
-  - button "<id>… 110 Mar 6, 03:18 PM":
-    - code: <id>…
-    - text: 110 Mar 6, 03:18 PM
-  - button "<id>… 1 Mar 6, 03:02 PM":
-    - code: <id>…
-    - text: 1 Mar 6, 03:02 PM
-  - button "Issue Analyzer 55 Mar 6, 01:33 PM ROUTA opencode"
-  - button "Update Task Panel UI with Provider Capabilities 122 Mar 6, 04:23 PM CRAFTER opencode"
-  - button "Implement Master Agent Dynamic Provider Routing 28 Mar 6, 04:14 PM CRAFTER opencode"
-  - button "Implement Provider Capability Query APIs 31 Mar 6, 03:18 PM CRAFTER opencode"
-  - button "Add Capability Metadata to AcpAgentPreset 6 Mar 6, 03:16 PM CRAFTER opencode"
-  - button "Routa Coordinator 7 Mar 6, 01:15 PM ROUTA claude"
-  - button "<id>… 1 Mar 6, 01:13 PM ROUTA claude":
-    - code: <id>…
-    - text: 1 Mar 6, 01:13 PM ROUTA claude
-  - button "<id>… 1 Mar 6, 01:13 PM ROUTA claude":
-    - code: <id>…
-    - text: 1 Mar 6, 01:13 PM ROUTA claude
-  - button "<id>… 1 Mar 6, 01:12 PM ROUTA claude":
-    - code: <id>…
-    - text: 1 Mar 6, 01:12 PM ROUTA claude
-  - button "<id>… 1 Mar 6, 01:10 PM ROUTA claude":
-    - code: <id>…
-    - text: 1 Mar 6, 01:10 PM ROUTA claude
-  - button "SQLite Architecture Checker 45 Mar 6, 12:58 PM ROUTA claude"
-  - button "Math-Helper 8 Mar 6, 12:44 PM ROUTA claude"
-  - button "<id>… 5 Mar 6, 12:21 PM":
-    - code: <id>…
-    - text: 5 Mar 6, 12:21 PM
-  - button "<id>… 15 Mar 5, 09:47 PM":
-    - code: <id>…
-    - text: 15 Mar 5, 09:47 PM
-  - button "<id>… 1 Mar 5, 09:38 PM":
-    - code: <id>…
-    - text: 1 Mar 5, 09:38 PM
-  - button "<id>… 11 Mar 5, 09:38 PM":
-    - code: <id>…
-    - text: 11 Mar 5, 09:38 PM
-  - button "<id>… 1 Mar 5, 09:13 PM":
-    - code: <id>…
-    - text: 1 Mar 5, 09:13 PM
-  - button "<id>… 1 Mar 5, 09:11 PM":
-    - code: <id>…
-    - text: 1 Mar 5, 09:11 PM
-  - button "<id>… 9 Mar 5, 09:04 PM":
-    - code: <id>…
-    - text: 9 Mar 5, 09:04 PM
-  - button "<id>… 31 Mar 5, 08:13 PM":
-    - code: <id>…
-    - text: 31 Mar 5, 08:13 PM
-  - button "<id>… 11 Mar 5, 08:12 PM":
-    - code: <id>…
-    - text: 11 Mar 5, 08:12 PM
-  - button "<id>… 640 Mar 5, 07:56 PM":
-    - code: <id>…
-    - text: 640 Mar 5, 07:56 PM
-  - button "<id>… 6 Mar 5, 07:12 PM":
-    - code: <id>…
-    - text: 6 Mar 5, 07:12 PM
-  - button "<id>… 423 Mar 4, 10:58 PM":
-    - code: <id>…
-    - text: 423 Mar 4, 10:58 PM
-  - button "<id>… 9 Mar 4, 10:57 PM":
-    - code: <id>…
-    - text: 9 Mar 4, 10:57 PM
-  - button "<id>… 83 Mar 4, 09:28 PM":
-    - code: <id>…
-    - text: 83 Mar 4, 09:28 PM
-  - button "<id>… 3 Mar 4, 09:25 PM":
-    - code: <id>…
-    - text: 3 Mar 4, 09:25 PM
-  - button "<id>… 102 Mar 4, 09:16 PM":
-    - code: <id>…
-    - text: 102 Mar 4, 09:16 PM
-  - button "<id>… 1 Mar 4, 09:12 PM":
-    - code: <id>…
-    - text: 1 Mar 4, 09:12 PM
-  - button "<id>… 1 Mar 4, 08:45 PM":
-    - code: <id>…
-    - text: 1 Mar 4, 08:45 PM
-  - button "<id>… 1420 Mar 4, 08:23 PM":
-    - code: <id>…
-    - text: 1420 Mar 4, 08:23 PM
-  - button "<id>… 314 Mar 4, 08:17 PM":
-    - code: <id>…
-    - text: 314 Mar 4, 08:17 PM
-  - button "<id>… 3 Mar 4, 08:03 PM":
-    - code: <id>…
-    - text: 3 Mar 4, 08:03 PM
-  - button "<id>… 3 Mar 4, 08:03 PM":
-    - code: <id>…
-    - text: 3 Mar 4, 08:03 PM
-  - button "<id>… 2361 Mar 4, 12:27 PM":
-    - code: <id>…
-    - text: 2361 Mar 4, 12:27 PM
-  - button "<id>… 355 Mar 4, 11:54 AM":
-    - code: <id>…
-    - text: 355 Mar 4, 11:54 AM
-  - button "<id>… 220 Mar 4, 10:34 AM":
-    - code: <id>…
-    - text: 220 Mar 4, 10:34 AM
-  - button "<id>… 42 Mar 4, 10:24 AM":
-    - code: <id>…
-    - text: 42 Mar 4, 10:24 AM
-  - button "<id>… 1 Mar 4, 09:34 AM":
-    - code: <id>…
-    - text: 1 Mar 4, 09:34 AM
-  - button "<id>… 59 Mar 4, 09:15 AM":
-    - code: <id>…
-    - text: 59 Mar 4, 09:15 AM
-  - button "<id>… 6 Mar 4, 12:04 AM":
-    - code: <id>…
-    - text: 6 Mar 4, 12:04 AM
-  - button "<id>… 771 Mar 4, 12:04 AM":
-    - code: <id>…
-    - text: 771 Mar 4, 12:04 AM
-  - button "<id>… 4 Mar 4, 12:04 AM":
-    - code: <id>…
-    - text: 4 Mar 4, 12:04 AM
-  - button "<id>… 3 Mar 4, 12:04 AM":
-    - code: <id>…
-    - text: 3 Mar 4, 12:04 AM
-  - button "<id>… 68 Mar 3, 10:17 AM":
-    - code: <id>…
-    - text: 68 Mar 3, 10:17 AM
-  - button "<id>… 141 Mar 3, 10:04 AM":
-    - code: <id>…
-    - text: 141 Mar 3, 10:04 AM
-  - button "<id>… 21 Mar 3, 10:01 AM":
-    - code: <id>…
-    - text: 21 Mar 3, 10:01 AM
-  - button "<id>… 6 Mar 3, 09:49 AM":
-    - code: <id>…
-    - text: 6 Mar 3, 09:49 AM
-  - button "<id>… 2 Mar 3, 09:13 AM":
-    - code: <id>…
-    - text: 2 Mar 3, 09:13 AM
-  - button "<id>… 2 Mar 3, 09:11 AM":
-    - code: <id>…
-    - text: 2 Mar 3, 09:11 AM
-  - button "<id>… 2 Mar 3, 09:10 AM":
-    - code: <id>…
-    - text: 2 Mar 3, 09:10 AM
-  - button "<id>… 2 Mar 3, 09:10 AM":
-    - code: <id>…
-    - text: 2 Mar 3, 09:10 AM
-  - button "<id>… 16 Mar 3, 09:01 AM":
-    - code: <id>…
-    - text: 16 Mar 3, 09:01 AM
-  - button "<id>… 22 Mar 3, 08:01 AM":
-    - code: <id>…
-    - text: 22 Mar 3, 08:01 AM
-  - button "<id>… 16 Mar 3, 07:00 AM":
-    - code: <id>…
-    - text: 16 Mar 3, 07:00 AM
-  - button "<id>… 21 Mar 3, 06:01 AM":
-    - code: <id>…
-    - text: 21 Mar 3, 06:01 AM
-  - button "<id>… 19 Mar 3, 05:00 AM":
-    - code: <id>…
-    - text: 19 Mar 3, 05:00 AM
-  - button "<id>… 18 Mar 3, 04:00 AM":
-    - code: <id>…
-    - text: 18 Mar 3, 04:00 AM
-  - button "<id>… 16 Mar 3, 03:01 AM":
-    - code: <id>…
-    - text: 16 Mar 3, 03:01 AM
-  - button "<id>… 85 Mar 3, 02:07 AM":
-    - code: <id>…
-    - text: 85 Mar 3, 02:07 AM
-  - button "<id>… 19 Mar 3, 02:01 AM":
-    - code: <id>…
-    - text: 19 Mar 3, 02:01 AM
-  - button "<id>… 15 Mar 3, 02:00 AM":
-    - code: <id>…
-    - text: 15 Mar 3, 02:00 AM
-  - button "<id>… 15 Mar 3, 01:00 AM":
-    - code: <id>…
-    - text: 15 Mar 3, 01:00 AM
-  - button "<id>… 20 Mar 3, 12:00 AM":
-    - code: <id>…
-    - text: 20 Mar 3, 12:00 AM
-  - button "<id>… 6 Mar 2, 11:24 PM":
-    - code: <id>…
-    - text: 6 Mar 2, 11:24 PM
-  - button "<id>… 53 Mar 2, 11:15 PM":
-    - code: <id>…
-    - text: 53 Mar 2, 11:15 PM
-  - button "<id>… 17 Mar 2, 11:12 PM":
-    - code: <id>…
-    - text: 17 Mar 2, 11:12 PM
-  - button "<id>… 43 Mar 2, 09:28 AM":
-    - code: <id>…
-    - text: 43 Mar 2, 09:28 AM
-  - button "<id>… 34 Mar 2, 09:28 AM":
-    - code: <id>…
-    - text: 34 Mar 2, 09:28 AM
-  - button "<id>… 9 Mar 2, 09:18 AM":
-    - code: <id>…
-    - text: 9 Mar 2, 09:18 AM
-  - button "<id>… 73 Mar 2, 09:16 AM":
-    - code: <id>…
-    - text: 73 Mar 2, 09:16 AM
-  - button "<id>… 20 Mar 2, 09:15 AM":
-    - code: <id>…
-    - text: 20 Mar 2, 09:15 AM
-  - button "<id>… 51 Mar 2, 09:13 AM":
-    - code: <id>…
-    - text: 51 Mar 2, 09:13 AM
-  - button "<id>… 29 Mar 2, 09:13 AM":
-    - code: <id>…
-    - text: 29 Mar 2, 09:13 AM
-  - button "<id>… 64 Mar 1, 11:59 PM":
-    - code: <id>…
-    - text: 64 Mar 1, 11:59 PM
-  - button "<id>… 79 Mar 1, 11:59 PM":
-    - code: <id>…
-    - text: 79 Mar 1, 11:59 PM
-  - button "<id>… 53 Mar 1, 11:34 PM":
-    - code: <id>…
-    - text: 53 Mar 1, 11:34 PM
-  - button "<id>… 57 Mar 1, 11:34 PM":
-    - code: <id>…
-    - text: 57 Mar 1, 11:34 PM
-  - button "<id>… 21 Mar 1, 11:02 PM":
-    - code: <id>…
-    - text: 21 Mar 1, 11:02 PM
-  - button "<id>… 112 Mar 1, 10:59 PM":
-    - code: <id>…
-    - text: 112 Mar 1, 10:59 PM
-  - button "<id>… 96 Mar 1, 10:59 PM":
-    - code: <id>…
-    - text: 96 Mar 1, 10:59 PM
-  - button "<id>… 94 Mar 1, 10:59 PM":
-    - code: <id>…
-    - text: 94 Mar 1, 10:59 PM
-  - button "<id>… 125 Mar 1, 10:58 PM":
-    - code: <id>…
-    - text: 125 Mar 1, 10:58 PM
-  - button "<id>… 79 Mar 1, 10:58 PM":
-    - code: <id>…
-    - text: 79 Mar 1, 10:58 PM
-  - button "<id>… 95 Mar 1, 10:58 PM":
-    - code: <id>…
-    - text: 95 Mar 1, 10:58 PM
-  - button "<id>… 44 Mar 1, 10:58 PM":
-    - code: <id>…
-    - text: 44 Mar 1, 10:58 PM
-  - button "<id>… 64 Mar 1, 10:58 PM":
-    - code: <id>…
-    - text: 64 Mar 1, 10:58 PM
-  - button "<id>… 80 Mar 1, 10:57 PM":
-    - code: <id>…
-    - text: 80 Mar 1, 10:57 PM
-  - button "<id>… 64 Mar 1, 10:57 PM":
-    - code: <id>…
-    - text: 64 Mar 1, 10:57 PM
-  - button "<id>… 53 Mar 1, 10:57 PM":
-    - code: <id>…
-    - text: 53 Mar 1, 10:57 PM
-  - button "<id>… 75 Mar 1, 10:57 PM":
-    - code: <id>…
-    - text: 75 Mar 1, 10:57 PM
-  - button "<id>… 40 Mar 1, 10:56 PM":
-    - code: <id>…
-    - text: 40 Mar 1, 10:56 PM
-  - button "<id>… 67 Mar 1, 10:56 PM":
-    - code: <id>…
-    - text: 67 Mar 1, 10:56 PM
-  - button "<id>… 25 Mar 1, 10:56 PM":
-    - code: <id>…
-    - text: 25 Mar 1, 10:56 PM
-  - button "<id>… 58 Mar 1, 10:56 PM":
-    - code: <id>…
-    - text: 58 Mar 1, 10:56 PM
-  - button "<id>… 42 Mar 1, 10:56 PM":
-    - code: <id>…
-    - text: 42 Mar 1, 10:56 PM
-  - button "<id>… 62 Mar 1, 10:56 PM":
-    - code: <id>…
-    - text: 62 Mar 1, 10:56 PM
-  - button "<id>… 52 Mar 1, 10:55 PM":
-    - code: <id>…
-    - text: 52 Mar 1, 10:55 PM
-  - button "<id>… 49 Mar 1, 10:55 PM":
-    - code: <id>…
-    - text: 49 Mar 1, 10:55 PM
-  - button "<id>… 32 Mar 1, 10:55 PM":
-    - code: <id>…
-    - text: 32 Mar 1, 10:55 PM
-  - button "<id>… 31 Mar 1, 10:55 PM":
-    - code: <id>…
-    - text: 31 Mar 1, 10:55 PM
-  - button "<id>… 54 Mar 1, 10:55 PM":
-    - code: <id>…
-    - text: 54 Mar 1, 10:55 PM
-  - button "<id>… 36 Mar 1, 10:55 PM":
-    - code: <id>…
-    - text: 36 Mar 1, 10:55 PM
-  - button "<id>… 38 Mar 1, 10:55 PM":
-    - code: <id>…
-    - text: 38 Mar 1, 10:55 PM
-  - button "<id>… 45 Mar 1, 10:55 PM":
-    - code: <id>…
-    - text: 45 Mar 1, 10:55 PM
-  - button "<id>… 25 Mar 1, 10:54 PM":
-    - code: <id>…
-    - text: 25 Mar 1, 10:54 PM
-  - button "<id>… 58 Mar 1, 10:54 PM":
-    - code: <id>…
-    - text: 58 Mar 1, 10:54 PM
-  - button "<id>… 25 Mar 1, 10:54 PM":
-    - code: <id>…
-    - text: 25 Mar 1, 10:54 PM
-  - button "<id>… 30 Mar 1, 10:54 PM":
-    - code: <id>…
-    - text: 30 Mar 1, 10:54 PM
-  - button "<id>… 22 Mar 1, 10:54 PM":
-    - code: <id>…
-    - text: 22 Mar 1, 10:54 PM
-  - button "<id>… 41 Mar 1, 10:54 PM":
-    - code: <id>…
-    - text: 41 Mar 1, 10:54 PM
-  - button "<id>… 16 Mar 1, 10:54 PM":
-    - code: <id>…
-    - text: 16 Mar 1, 10:54 PM
-  - button "<id>… 19 Mar 1, 10:53 PM":
-    - code: <id>…
-    - text: 19 Mar 1, 10:53 PM
-  - button "<id>… 21 Mar 1, 08:27 PM":
-    - code: <id>…
-    - text: 21 Mar 1, 08:27 PM
-  - button "<id>… 16 Mar 1, 08:26 PM":
-    - code: <id>…
-    - text: 16 Mar 1, 08:26 PM
-  - button "<id>… 96 Mar 1, 05:14 PM":
-    - code: <id>…
-    - text: 96 Mar 1, 05:14 PM
-  - button "<id>… 109 Mar 1, 05:12 PM":
-    - code: <id>…
-    - text: 109 Mar 1, 05:12 PM
-  - button "<id>… 108 Mar 1, 05:11 PM":
-    - code: <id>…
-    - text: 108 Mar 1, 05:11 PM
-  - button "<id>… 91 Mar 1, 05:10 PM":
-    - code: <id>…
-    - text: 91 Mar 1, 05:10 PM
-  - button "<id>… 44 Mar 1, 05:10 PM":
-    - code: <id>…
-    - text: 44 Mar 1, 05:10 PM
-  - button "<id>… 43 Mar 1, 05:09 PM":
-    - code: <id>…
-    - text: 43 Mar 1, 05:09 PM
-  - button "<id>… 30 Mar 1, 05:09 PM":
-    - code: <id>…
-    - text: 30 Mar 1, 05:09 PM
-  - button "<id>… 61 Mar 1, 05:09 PM":
-    - code: <id>…
-    - text: 61 Mar 1, 05:09 PM
-  - button "<id>… 27 Mar 1, 05:09 PM":
-    - code: <id>…
-    - text: 27 Mar 1, 05:09 PM
-  - button "<id>… 24 Mar 1, 05:09 PM":
-    - code: <id>…
-    - text: 24 Mar 1, 05:09 PM
-  - button "<id>… 30 Mar 1, 05:09 PM":
-    - code: <id>…
-    - text: 30 Mar 1, 05:09 PM
-  - button "<id>… 22 Mar 1, 05:09 PM":
-    - code: <id>…
-    - text: 22 Mar 1, 05:09 PM
-  - button "<id>… 74 Mar 1, 05:09 PM":
-    - code: <id>…
-    - text: 74 Mar 1, 05:09 PM
-  - button "<id>… 49 Mar 1, 05:08 PM":
-    - code: <id>…
-    - text: 49 Mar 1, 05:08 PM
-  - button "<id>… 40 Mar 1, 05:08 PM":
-    - code: <id>…
-    - text: 40 Mar 1, 05:08 PM
-  - button "<id>… 40 Mar 1, 05:08 PM":
-    - code: <id>…
-    - text: 40 Mar 1, 05:08 PM
-  - button "<id>… 46 Mar 1, 05:08 PM":
-    - code: <id>…
-    - text: 46 Mar 1, 05:08 PM
-  - button "<id>… 30 Mar 1, 05:08 PM":
-    - code: <id>…
-    - text: 30 Mar 1, 05:08 PM
-  - button "<id>… 28 Mar 1, 05:02 PM":
-    - code: <id>…
-    - text: 28 Mar 1, 05:02 PM
-  - button "<id>… 32 Mar 1, 05:02 PM":
-    - code: <id>…
-    - text: 32 Mar 1, 05:02 PM
-  - button "<id>… 21 Mar 1, 05:01 PM":
-    - code: <id>…
-    - text: 21 Mar 1, 05:01 PM
-  - button "<id>… 59 Feb 28, 12:26 PM":
-    - code: <id>…
-    - text: 59 Feb 28, 12:26 PM
-  - button "<id>… 11 Feb 28, 12:22 PM":
-    - code: <id>…
-    - text: 11 Feb 28, 12:22 PM
-  - button "<id>… 235 Feb 27, 11:22 PM":
-    - code: <id>…
-    - text: 235 Feb 27, 11:22 PM
-  - button "<id>… 69 Feb 27, 11:16 PM":
-    - code: <id>…
-    - text: 69 Feb 27, 11:16 PM
-  - button "<id>… 64 Feb 27, 11:00 PM":
-    - code: <id>…
-    - text: 64 Feb 27, 11:00 PM
-  - button "<id>… 56 Feb 27, 10:28 PM":
-    - code: <id>…
-    - text: 56 Feb 27, 10:28 PM
-  - button "<id>… 29 Feb 27, 04:06 PM":
-    - code: <id>…
-    - text: 29 Feb 27, 04:06 PM
-  - button "<id>… 333 Feb 27, 11:30 AM":
-    - code: <id>…
-    - text: 333 Feb 27, 11:30 AM
-  - button "<id>… 3 Feb 27, 11:08 AM":
-    - code: <id>…
-    - text: 3 Feb 27, 11:08 AM
-  - button "<id>… 84 Feb 27, 10:57 AM":
-    - code: <id>…
-    - text: 84 Feb 27, 10:57 AM
-  - button "<id>… 121 Feb 27, 10:40 AM":
-    - code: <id>…
-    - text: 121 Feb 27, 10:40 AM
-  - button "<id>… 17 Feb 27, 10:22 AM":
-    - code: <id>…
-    - text: 17 Feb 27, 10:22 AM
-  - button "<id>… 3 Feb 27, 10:21 AM":
-    - code: <id>…
-    - text: 3 Feb 27, 10:21 AM
-  - button "<id>… 68 Feb 27, 10:16 AM":
-    - code: <id>…
-    - text: 68 Feb 27, 10:16 AM
-  - button "test-ski… 20 Feb 27, 09:33 AM":
-    - code: test-ski…
-    - text: 20 Feb 27, 09:33 AM
-  - button "test-ski… 19 Feb 27, 09:33 AM":
-    - code: test-ski…
-    - text: 19 Feb 27, 09:33 AM
-  - button "test-ski… 31 Feb 27, 09:30 AM":
-    - code: test-ski…
-    - text: 31 Feb 27, 09:30 AM
-  - button "test-ski… 42 Feb 27, 09:30 AM":
-    - code: test-ski…
-    - text: 42 Feb 27, 09:30 AM
-  - button "<id>… 114 Feb 26, 11:40 PM":
-    - code: <id>…
-    - text: 114 Feb 26, 11:40 PM
-  - button "<id>… 18 Feb 26, 11:36 PM":
-    - code: <id>…
-    - text: 18 Feb 26, 11:36 PM
-  - button "<id>… 161 Feb 26, 06:51 PM":
-    - code: <id>…
-    - text: 161 Feb 26, 06:51 PM
-  - button "<id>… 1 Feb 26, 06:36 PM":
-    - code: <id>…
-    - text: 1 Feb 26, 06:36 PM
-  - button "<id>… 62 Feb 26, 06:06 PM":
-    - code: <id>…
-    - text: 62 Feb 26, 06:06 PM
-  - button "<id>… 41 Feb 26, 05:56 PM":
-    - code: <id>…
-    - text: 41 Feb 26, 05:56 PM
-  - button "<id>… 121 Feb 26, 05:54 PM":
-    - code: <id>…
-    - text: 121 Feb 26, 05:54 PM
-  - button "<id>… 75 Feb 26, 05:41 PM":
-    - code: <id>…
-    - text: 75 Feb 26, 05:41 PM
-  - button "<id>… 64 Feb 26, 02:13 PM":
-    - code: <id>…
-    - text: 64 Feb 26, 02:13 PM
-  - button "<id>… 66 Feb 25, 11:22 PM":
-    - code: <id>…
-    - text: 66 Feb 25, 11:22 PM
-  - button "<id>… 68 Feb 25, 11:19 PM":
-    - code: <id>…
-    - text: 68 Feb 25, 11:19 PM
-  - button "<id>… 53 Feb 25, 11:19 PM":
-    - code: <id>…
-    - text: 53 Feb 25, 11:19 PM
-  - button "<id>… 49 Feb 25, 11:19 PM":
-    - code: <id>…
-    - text: 49 Feb 25, 11:19 PM
-  - button "<id>… 66 Feb 25, 11:19 PM":
-    - code: <id>…
-    - text: 66 Feb 25, 11:19 PM
-  - button "<id>… 53 Feb 25, 11:19 PM":
-    - code: <id>…
-    - text: 53 Feb 25, 11:19 PM
-  - button "<id>… 44 Feb 25, 11:19 PM":
-    - code: <id>…
-    - text: 44 Feb 25, 11:19 PM
-  - button "<id>… 49 Feb 25, 09:44 PM":
-    - code: <id>…
-    - text: 49 Feb 25, 09:44 PM
-  - button "<id>… 68 Feb 25, 09:29 PM":
-    - code: <id>…
-    - text: 68 Feb 25, 09:29 PM
-  - button "<id>… 95 Feb 25, 09:22 PM":
-    - code: <id>…
-    - text: 95 Feb 25, 09:22 PM
-  - button "<id>… 36 Feb 25, 02:49 PM":
-    - code: <id>…
-    - text: 36 Feb 25, 02:49 PM
-  - button "<id>… 1 Feb 25, 02:48 PM":
-    - code: <id>…
-    - text: 1 Feb 25, 02:48 PM
-  - button "<id>… 77 Feb 25, 02:48 PM":
-    - code: <id>…
-    - text: 77 Feb 25, 02:48 PM
-  - button "<id>… 42 Feb 25, 02:47 PM":
-    - code: <id>…
-    - text: 42 Feb 25, 02:47 PM
-  - button "<id>… 45 Feb 25, 02:36 PM":
-    - code: <id>…
-    - text: 45 Feb 25, 02:36 PM
-  - button "<id>… 88 Feb 25, 02:17 PM":
-    - code: <id>…
-    - text: 88 Feb 25, 02:17 PM
-  - button "<id>… 12 Feb 25, 11:25 AM":
-    - code: <id>…
-    - text: 12 Feb 25, 11:25 AM
-  - button "<id>… 1 Feb 25, 11:24 AM":
-    - code: <id>…
-    - text: 1 Feb 25, 11:24 AM
-  - button "<id>… 1 Feb 25, 11:24 AM":
-    - code: <id>…
-    - text: 1 Feb 25, 11:24 AM
-  - button "<id>… 1 Feb 25, 11:24 AM":
-    - code: <id>…
-    - text: 1 Feb 25, 11:24 AM
-  - button "<id>… 1 Feb 25, 11:24 AM":
-    - code: <id>…
-    - text: 1 Feb 25, 11:24 AM
-  - button "<id>… 46 Feb 25, 11:20 AM":
-    - code: <id>…
-    - text: 46 Feb 25, 11:20 AM
-  - button "<id>… 68 Feb 25, 10:44 AM":
-    - code: <id>…
-    - text: 68 Feb 25, 10:44 AM
-  - button "<id>… 39 Feb 25, 10:30 AM":
-    - code: <id>…
-    - text: 39 Feb 25, 10:30 AM
-- main:
-  - img
-  - text: Agent Trace
-  - button "..." [disabled]
-  - button "Export" [disabled]
-  - button "All"
-  - button "User"
-  - button "Agent"
-  - button "Tools"
-  - button "Thoughts"
+  - complementary:
+    - heading "Sessions" [level=2]
+    - paragraph: 411 sessions found
+    - button "GitHub Issues Sync + CI Status Integration for Kanban Board · codex 1 Mar 17, 08:54 PM CRAFTER codex"
+    - 'button "Dogfood: GitHub issues + CI 状态看板闭环 · claude-code-sdk 1 Mar 17, 08:53 PM CRAFTER claude-code-sdk"'
+    - button "<id>… 1 Mar 17, 05:38 PM":
+      - code: <id>…
+      - text: 1 Mar 17, 05:38 PM
+    - button "<id>… 1 Mar 17, 10:29 AM":
+      - code: <id>…
+      - text: 1 Mar 17, 10:29 AM
+    - button "<id>… 1 Mar 17, 10:28 AM":
+      - code: <id>…
+      - text: 1 Mar 17, 10:28 AM
+    - button "<id>… 1 Mar 17, 09:48 AM":
+      - code: <id>…
+      - text: 1 Mar 17, 09:48 AM
+    - button "<id>… 1 Mar 17, 09:48 AM":
+      - code: <id>…
+      - text: 1 Mar 17, 09:48 AM
+    - button "KanbanTask Agent 1 Mar 17, 09:46 AM ROUTA claude-code-sdk"
+    - button "<id>… 1 Mar 17, 07:51 AM":
+      - code: <id>…
+      - text: 1 Mar 17, 07:51 AM
+    - button "<id>… 1 Mar 17, 07:50 AM":
+      - code: <id>…
+      - text: 1 Mar 17, 07:50 AM
+    - button "<id>… 1 Mar 17, 07:50 AM":
+      - code: <id>…
+      - text: 1 Mar 17, 07:50 AM
+    - button "<id>… 1 Mar 16, 09:10 PM":
+      - code: <id>…
+      - text: 1 Mar 16, 09:10 PM
+    - button "<id>… 1 Mar 16, 08:59 PM":
+      - code: <id>…
+      - text: 1 Mar 16, 08:59 PM
+    - button "<id>… 1 Mar 16, 08:59 PM":
+      - code: <id>…
+      - text: 1 Mar 16, 08:59 PM
+    - button "<id>… 1 Mar 16, 08:58 PM":
+      - code: <id>…
+      - text: 1 Mar 16, 08:58 PM
+    - button "<id>… 1 Mar 16, 07:06 PM":
+      - code: <id>…
+      - text: 1 Mar 16, 07:06 PM
+    - button "<id>… 1 Mar 16, 07:05 PM":
+      - code: <id>…
+      - text: 1 Mar 16, 07:05 PM
+    - button "<id>… 1 Mar 16, 09:49 AM":
+      - code: <id>…
+      - text: 1 Mar 16, 09:49 AM
+    - button "<id>… 1 Mar 16, 09:49 AM":
+      - code: <id>…
+      - text: 1 Mar 16, 09:49 AM
+    - button "<id>… 1 Mar 16, 08:05 AM":
+      - code: <id>…
+      - text: 1 Mar 16, 08:05 AM
+    - button "<id>… 1 Mar 16, 08:05 AM":
+      - code: <id>…
+      - text: 1 Mar 16, 08:05 AM
+    - button "<id>… 1 Mar 16, 08:05 AM":
+      - code: <id>…
+      - text: 1 Mar 16, 08:05 AM
+    - button "<id>… 1 Mar 15, 05:34 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 05:34 PM
+    - button "<id>… 1 Mar 15, 05:34 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 05:34 PM
+    - button "<id>… 1 Mar 15, 05:29 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 05:29 PM
+    - button "<id>… 1 Mar 15, 05:29 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 05:29 PM
+    - button "<id>… 1 Mar 15, 05:29 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 05:29 PM
+    - button "<id>… 1 Mar 15, 05:29 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 05:29 PM
+    - button "<id>… 1 Mar 15, 03:02 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 03:02 PM
+    - button "<id>… 1 Mar 15, 03:02 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 03:02 PM
+    - button "<id>… 1 Mar 15, 03:02 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 03:02 PM
+    - button "KanbanTask Agent 1 Mar 15, 03:02 PM ROUTA claude"
+    - button "<id>… 1 Mar 15, 02:48 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:48 PM
+    - button "<id>… 1 Mar 15, 02:48 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:48 PM
+    - button "<id>… 1 Mar 15, 02:48 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:48 PM
+    - button "<id>… 1 Mar 15, 02:46 PM ROUTA codex":
+      - code: <id>…
+      - text: 1 Mar 15, 02:46 PM ROUTA codex
+    - button "<id>… 1 Mar 15, 02:43 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:43 PM
+    - button "<id>… 1 Mar 15, 02:43 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:43 PM
+    - button "<id>… 1 Mar 15, 02:43 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:43 PM
+    - button "<id>… 1 Mar 15, 02:38 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:38 PM
+    - button "<id>… 1 Mar 15, 02:38 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:38 PM
+    - button "<id>… 1 Mar 15, 02:34 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:34 PM
+    - button "<id>… 1 Mar 15, 02:34 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 02:34 PM
+    - button "<id>… 1 Mar 15, 02:32 PM ROUTA codex":
+      - code: <id>…
+      - text: 1 Mar 15, 02:32 PM ROUTA codex
+    - button "<id>… 1 Mar 15, 01:05 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 01:05 PM
+    - button "<id>… 1 Mar 15, 01:05 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 01:05 PM
+    - button "<id>… 1 Mar 15, 01:01 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 01:01 PM
+    - button "<id>… 1 Mar 15, 12:54 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:54 PM
+    - button "<id>… 1 Mar 15, 12:52 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:52 PM
+    - button "<id>… 1 Mar 15, 12:44 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:44 PM
+    - button "<id>… 1 Mar 15, 12:44 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:44 PM
+    - button "<id>… 1 Mar 15, 12:28 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:28 PM
+    - button "<id>… 1 Mar 15, 12:28 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:28 PM
+    - button "<id>… 1 Mar 15, 12:28 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:28 PM
+    - button "<id>… 1 Mar 15, 12:28 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:28 PM
+    - button "<id>… 1 Mar 15, 12:27 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:27 PM
+    - button "Generate verification report and regression log for OpenCode ACP popup flow · codex 1 Mar 15, 12:22 PM ROUTA codex"
+    - button "<id>… 1 Mar 15, 12:22 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:22 PM
+    - 'button "QA: Capture OpenCode ACP popup evidence with screenshots and network diagnostics · codex 1 Mar 15, 12:21 PM ROUTA codex"'
+    - button "<id>… 1 Mar 15, 12:21 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:21 PM
+    - button "Add E2E regression test for OpenCode provider selection in session creation dialog · codex 1 Mar 15, 12:21 PM ROUTA codex"
+    - button "<id>… 1 Mar 15, 12:20 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:20 PM
+    - button "Screenshot and document OpenCode provider state before session submission · codex 1 Mar 15, 12:20 PM ROUTA codex"
+    - button "Create local validation checklist for OpenCode ACP session smoke tests · codex 1 Mar 15, 12:20 PM ROUTA codex"
+    - button "<id>… 1 Mar 15, 12:20 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:20 PM
+    - button "<id>… 1 Mar 15, 12:19 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:19 PM
+    - button "Create reusable OpenCode ACP local session setup note · codex 1 Mar 15, 12:19 PM ROUTA codex"
+    - button "Document OpenCode ACP smoke-test evidence and defects · codex 1 Mar 15, 12:18 PM ROUTA codex"
+    - button "<id>… 1 Mar 15, 12:18 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:18 PM
+    - 'button "QA: Verify OpenCode session popup persistence and clean teardown · codex 1 Mar 15, 12:16 PM ROUTA codex"'
+    - button "<id>… 1 Mar 15, 12:16 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:16 PM
+    - button "<id>… 1 Mar 15, 12:15 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:15 PM
+    - 'button "QA: Verify OpenCode popup message round-trip and capture UI evidence · codex 1 Mar 15, 12:15 PM ROUTA codex"'
+    - button "Verify OpenCode ACP session trigger launches popup with shell UI · codex 1 Mar 15, 12:14 PM ROUTA codex"
+    - button "<id>… 1 Mar 15, 12:14 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:14 PM
+    - button "<id>… 1 Mar 15, 12:13 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:13 PM
+    - button "Verify OpenCode provider selection UI state management · codex 1 Mar 15, 12:13 PM ROUTA codex"
+    - button "Document and validate local testing environment for OpenCode ACP sessions · codex 1 Mar 15, 12:13 PM ROUTA codex"
+    - button "<id>… 1 Mar 15, 12:12 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:12 PM
+    - button "<id>… 1 Mar 15, 12:12 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:12 PM
+    - button "<id>… 1 Mar 15, 12:12 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:12 PM
+    - button "<id>… 1 Mar 15, 12:12 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:12 PM
+    - button "KanbanTask Agent 1 Mar 15, 12:11 PM ROUTA claude"
+    - button "Test OpenCode ACP session trigger and popup behavior · codex 1 Mar 15, 12:11 PM ROUTA codex"
+    - button "<id>… 1 Mar 15, 12:10 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:10 PM
+    - button "<id>… 1 Mar 15, 12:05 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:05 PM
+    - button "<id>… 1 Mar 15, 12:04 PM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:04 PM
+    - button "Auto chain verify 1773504200 · codex 1 Mar 15, 12:04 PM ROUTA codex"
+    - button "[DUPLICATE] Verify automation chain test card · codex 1 Mar 15, 11:38 AM ROUTA codex"
+    - button "<id>… 1 Mar 15, 11:38 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:38 AM
+    - button "<id>… 1 Mar 15, 11:37 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:37 AM
+    - button "<id>… 1 Mar 15, 11:32 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:32 AM
+    - button "<id>… 1 Mar 15, 11:32 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:32 AM
+    - button "<id>… 1 Mar 15, 11:31 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:31 AM
+    - button "<id>… 1 Mar 15, 11:30 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:30 AM
+    - button "<id>… 1 Mar 15, 11:27 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:27 AM
+    - button "<id>… 1 Mar 15, 11:27 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:27 AM
+    - button "<id>… 1 Mar 15, 11:19 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 11:19 AM
+    - button "<id>… 1 Mar 15, 09:59 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:59 AM
+    - button "Add Python Hello World agent example to Routa.js platform · codex 1 Mar 15, 09:42 AM ROUTA codex"
+    - button "<id>… 1 Mar 15, 09:41 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:41 AM
+    - button "<id>… 1 Mar 15, 09:41 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:41 AM
+    - button "[DUPLICATE] Browser verification chain verify - see card 76cbec55 · codex 1 Mar 15, 09:35 AM ROUTA codex"
+    - button "<id>… 1 Mar 15, 09:34 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:34 AM
+    - button "<id>… 1 Mar 15, 09:34 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:34 AM
+    - button "<id>… 1 Mar 15, 09:31 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:31 AM
+    - button "<id>… 1 Mar 15, 09:29 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:29 AM
+    - button "Verify card automation chain documentation · codex 1 Mar 15, 09:26 AM ROUTA codex"
+    - button "<id>… 1 Mar 15, 09:25 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:25 AM
+    - button "<id>… 1 Mar 15, 09:22 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 09:22 AM
+    - button "<id>… 1 Mar 15, 12:06 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:06 AM
+    - button "<id>… 1 Mar 15, 12:05 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:05 AM
+    - button "<id>… 1 Mar 15, 12:03 AM":
+      - code: <id>…
+      - text: 1 Mar 15, 12:03 AM
+    - button "<id>… 1 Mar 14, 11:59 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:59 PM
+    - button "<id>… 1 Mar 14, 11:57 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:57 PM
+    - button "<id>… 1 Mar 14, 11:55 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:55 PM
+    - button "<id>… 1 Mar 14, 11:55 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:55 PM
+    - button "<id>… 1 Mar 14, 11:53 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:53 PM
+    - button "<id>… 1 Mar 14, 11:52 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:52 PM
+    - button "<id>… 1 Mar 14, 11:43 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:43 PM
+    - button "<id>… 1 Mar 14, 11:42 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:42 PM
+    - button "<id>… 1 Mar 14, 11:42 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:42 PM
+    - button "<id>… 1 Mar 14, 11:41 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:41 PM
+    - button "<id>… 1 Mar 14, 11:36 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:36 PM
+    - button "<id>… 1 Mar 14, 11:36 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:36 PM
+    - button "<id>… 1 Mar 14, 11:34 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:34 PM
+    - button "<id>… 1 Mar 14, 11:32 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:32 PM
+    - button "<id>… 1 Mar 14, 11:29 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:29 PM
+    - button "<id>… 1 Mar 14, 11:26 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:26 PM
+    - button "<id>… 1 Mar 14, 11:23 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:23 PM
+    - button "<id>… 1 Mar 14, 11:21 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 11:21 PM
+    - button "<id>… 1 Mar 14, 10:32 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 10:32 PM
+    - button "<id>… 1 Mar 14, 10:23 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 10:23 PM
+    - button "<id>… 1 Mar 14, 10:23 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 10:23 PM
+    - button "KanbanTask Agent 1 Mar 14, 10:21 PM ROUTA claude"
+    - button "<id>… 1 Mar 14, 10:12 PM ROUTA claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 14, 10:12 PM ROUTA claude-code-sdk
+    - button "<id>… 1 Mar 14, 10:05 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 10:05 PM
+    - button "<id>… 1 Mar 14, 09:51 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 09:51 PM
+    - button "<id>… 1 Mar 14, 08:28 PM":
+      - code: <id>…
+      - text: 1 Mar 14, 08:28 PM
+    - button "<id>… 1 Mar 14, 09:02 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 09:02 AM
+    - button "<id>… 1 Mar 14, 09:00 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 09:00 AM
+    - button "<id>… 1 Mar 14, 09:00 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 09:00 AM
+    - button "<id>… 1 Mar 14, 08:58 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 08:58 AM
+    - button "<id>… 1 Mar 14, 08:58 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 08:58 AM
+    - button "<id>… 1 Mar 14, 12:16 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:16 AM
+    - button "<id>… 1 Mar 14, 12:14 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:14 AM
+    - button "<id>… 1 Mar 14, 12:09 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:09 AM
+    - button "<id>… 1 Mar 14, 12:08 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:08 AM
+    - button "<id>… 1 Mar 14, 12:07 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:07 AM
+    - button "<id>… 1 Mar 14, 12:03 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:03 AM
+    - button "<id>… 1 Mar 14, 12:00 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:00 AM
+    - button "<id>… 1 Mar 14, 12:00 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:00 AM
+    - button "<id>… 1 Mar 14, 12:00 AM":
+      - code: <id>…
+      - text: 1 Mar 14, 12:00 AM
+    - button "<id>… 1 Mar 13, 11:58 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:58 PM
+    - button "<id>… 1 Mar 13, 11:47 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:47 PM
+    - button "<id>… 1 Mar 13, 11:47 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:47 PM
+    - button "<id>… 1 Mar 13, 11:40 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:40 PM
+    - button "<id>… 1 Mar 13, 11:37 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:37 PM
+    - button "<id>… 1 Mar 13, 11:35 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:35 PM
+    - button "<id>… 1 Mar 13, 11:34 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:34 PM
+    - button "<id>… 1 Mar 13, 11:31 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:31 PM
+    - button "<id>… 1 Mar 13, 11:21 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:21 PM
+    - button "<id>… 1 Mar 13, 11:13 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:13 PM
+    - button "<id>… 1 Mar 13, 11:13 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:13 PM
+    - button "<id>… 1 Mar 13, 11:13 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:13 PM
+    - button "<id>… 1 Mar 13, 11:13 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:13 PM
+    - button "<id>… 1 Mar 13, 11:11 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:11 PM
+    - button "<id>… 1 Mar 13, 11:11 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:11 PM
+    - button "<id>… 1 Mar 13, 11:02 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:02 PM
+    - button "<id>… 1 Mar 13, 11:01 PM":
+      - code: <id>…
+      - text: 1 Mar 13, 11:01 PM
+    - button "<id>… 1 Mar 13, 10:03 AM":
+      - code: <id>…
+      - text: 1 Mar 13, 10:03 AM
+    - button "<id>… 1 Mar 12, 05:18 PM":
+      - code: <id>…
+      - text: 1 Mar 12, 05:18 PM
+    - button "<id>… 1 Mar 12, 01:11 PM":
+      - code: <id>…
+      - text: 1 Mar 12, 01:11 PM
+    - button "<id>… 1 Mar 12, 11:56 AM ROUTA claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 12, 11:56 AM ROUTA claude-code-sdk
+    - button "<id>… 1 Mar 12, 10:49 AM ROUTA claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 12, 10:49 AM ROUTA claude-code-sdk
+    - button "<id>… 1 Mar 12, 09:53 AM ROUTA claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 12, 09:53 AM ROUTA claude-code-sdk
+    - button "<id>… 1 Mar 12, 08:01 AM":
+      - code: <id>…
+      - text: 1 Mar 12, 08:01 AM
+    - button "<id>… 1 Mar 11, 11:43 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 11:43 PM
+    - button "<id>… 1 Mar 11, 11:30 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 11:30 PM
+    - button "<id>… 1 Mar 11, 09:31 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 09:31 PM
+    - button "<id>… 1 Mar 11, 08:55 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 08:55 PM
+    - button "<id>… 1 Mar 11, 08:42 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 08:42 PM
+    - button "<id>… 1 Mar 11, 08:38 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 08:38 PM
+    - button "<id>… 1 Mar 11, 08:32 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 08:32 PM
+    - button "<id>… 1 Mar 11, 08:29 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 08:29 PM
+    - button "<id>… 1 Mar 11, 08:27 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 08:27 PM
+    - button "<id>… 1 Mar 11, 08:14 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 08:14 PM
+    - button "<id>… 1 Mar 11, 08:06 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 08:06 PM
+    - button "<id>… 1 Mar 11, 01:31 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 01:31 PM
+    - button "<id>… 1 Mar 11, 01:11 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 01:11 PM
+    - button "<id>… 1 Mar 11, 01:08 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 01:08 PM
+    - button "<id>… 1 Mar 11, 01:07 PM":
+      - code: <id>…
+      - text: 1 Mar 11, 01:07 PM
+    - button "<id>… 1 Mar 10, 09:22 PM":
+      - code: <id>…
+      - text: 1 Mar 10, 09:22 PM
+    - button "<id>… 1 Mar 10, 09:14 PM":
+      - code: <id>…
+      - text: 1 Mar 10, 09:14 PM
+    - button "<id>… 1 Mar 10, 09:14 PM":
+      - code: <id>…
+      - text: 1 Mar 10, 09:14 PM
+    - button "<id>… 1 Mar 10, 09:14 PM":
+      - code: <id>…
+      - text: 1 Mar 10, 09:14 PM
+    - button "<id>… 1 Mar 10, 05:52 PM":
+      - code: <id>…
+      - text: 1 Mar 10, 05:52 PM
+    - button "<id>… 1 Mar 10, 01:37 PM":
+      - code: <id>…
+      - text: 1 Mar 10, 01:37 PM
+    - button "<id>… 1 Mar 9, 09:44 AM":
+      - code: <id>…
+      - text: 1 Mar 9, 09:44 AM
+    - button "<id>… 1 Mar 9, 09:40 AM":
+      - code: <id>…
+      - text: 1 Mar 9, 09:40 AM
+    - button "<id>… 1 Mar 9, 08:19 AM":
+      - code: <id>…
+      - text: 1 Mar 9, 08:19 AM
+    - button "<id>… 1 Mar 8, 10:13 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 10:13 PM
+    - button "<id>… 1 Mar 8, 10:11 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 10:11 PM
+    - button "<id>… 1 Mar 8, 10:11 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 10:11 PM
+    - button "<id>… 1 Mar 8, 09:34 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:34 PM
+    - button "<id>… 1 Mar 8, 09:32 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:32 PM
+    - button "<id>… 1 Mar 8, 09:32 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:32 PM
+    - button "<id>… 1 Mar 8, 09:30 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:30 PM
+    - button "<id>… 1 Mar 8, 09:15 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:15 PM
+    - button "<id>… 1 Mar 8, 09:13 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:13 PM
+    - button "<id>… 1 Mar 8, 09:11 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:11 PM
+    - button "<id>… 1 Mar 8, 09:07 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:07 PM
+    - button "<id>… 1 Mar 8, 09:05 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:05 PM
+    - button "<id>… 1 Mar 8, 09:05 PM":
+      - code: <id>…
+      - text: 1 Mar 8, 09:05 PM
+    - button "Coordinator 1 Mar 8, 12:05 AM ROUTA docker-opencode"
+    - button "Greeting 1 Mar 7, 11:55 PM ROUTA docker-opencode"
+    - button "Coordinator 1 Mar 7, 11:30 PM ROUTA docker-opencode"
+    - button "<id>… 1 Mar 7, 11:27 PM":
+      - code: <id>…
+      - text: 1 Mar 7, 11:27 PM
+    - button "<id>… 1 Mar 7, 11:24 PM":
+      - code: <id>…
+      - text: 1 Mar 7, 11:24 PM
+    - button "<id>… 1 Mar 7, 11:54 AM":
+      - code: <id>…
+      - text: 1 Mar 7, 11:54 AM
+    - button "Routa Coordinator 1 Mar 6, 10:58 PM ROUTA opencode-sdk"
+    - button "<id>… 1 Mar 6, 10:33 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 10:33 PM
+    - button "<id>… 1 Mar 6, 10:32 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 10:32 PM
+    - button "<id>… 1 Mar 6, 10:10 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 10:10 PM
+    - button "<id>… 1 Mar 6, 09:56 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 09:56 PM
+    - button "<id>… 1 Mar 6, 09:55 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 09:55 PM
+    - button "<id>… 1 Mar 6, 09:38 PM ROUTA docker-opencode":
+      - code: <id>…
+      - text: 1 Mar 6, 09:38 PM ROUTA docker-opencode
+    - button "<id>… 1 Mar 6, 09:16 PM ROUTA docker-opencode":
+      - code: <id>…
+      - text: 1 Mar 6, 09:16 PM ROUTA docker-opencode
+    - button "<id>… 1 Mar 6, 09:07 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 09:07 PM
+    - button "<id>… 1 Mar 6, 08:53 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 08:53 PM
+    - button "<id>… 1 Mar 6, 08:38 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 08:38 PM
+    - button "<id>… 1 Mar 6, 07:23 PM ROUTA claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 6, 07:23 PM ROUTA claude-code-sdk
+    - button "<id>… 1 Mar 6, 07:21 PM ROUTA claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 6, 07:21 PM ROUTA claude-code-sdk
+    - button "<id>… 1 Mar 6, 06:00 PM ROUTA claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 6, 06:00 PM ROUTA claude-code-sdk
+    - button "<id>… 1 Mar 6, 05:39 PM ROUTA claude-code-sdk":
+      - code: <id>…
+      - text: 1 Mar 6, 05:39 PM ROUTA claude-code-sdk
+    - button "<id>… 1 Mar 6, 03:24 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 03:24 PM
+    - button "<id>… 1 Mar 6, 03:11 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 03:11 PM
+    - button "<id>… 1 Mar 6, 03:02 PM":
+      - code: <id>…
+      - text: 1 Mar 6, 03:02 PM
+    - button "Issue Analyzer 1 Mar 6, 01:30 PM ROUTA opencode"
+    - button "Update Task Panel UI with Provider Capabilities 1 Mar 6, 04:16 PM CRAFTER opencode"
+    - button "Implement Master Agent Dynamic Provider Routing 1 Mar 6, 04:13 PM CRAFTER opencode"
+    - button "Implement Provider Capability Query APIs 1 Mar 6, 03:17 PM CRAFTER opencode"
+    - button "Add Capability Metadata to AcpAgentPreset 1 Mar 6, 03:16 PM CRAFTER opencode"
+    - button "Routa Coordinator 1 Mar 6, 01:15 PM ROUTA claude"
+    - button "<id>… 1 Mar 6, 01:13 PM ROUTA claude":
+      - code: <id>…
+      - text: 1 Mar 6, 01:13 PM ROUTA claude
+    - button "<id>… 1 Mar 6, 01:13 PM ROUTA claude":
+      - code: <id>…
+      - text: 1 Mar 6, 01:13 PM ROUTA claude
+    - button "<id>… 1 Mar 6, 01:12 PM ROUTA claude":
+      - code: <id>…
+      - text: 1 Mar 6, 01:12 PM ROUTA claude
+    - button "<id>… 1 Mar 6, 01:10 PM ROUTA claude":
+      - code: <id>…
+      - text: 1 Mar 6, 01:10 PM ROUTA claude
+    - button "SQLite Architecture Checker 1 Mar 6, 12:57 PM ROUTA claude"
+    - button "Math-Helper 1 Mar 6, 12:44 PM ROUTA claude"
+    - button "<id>… 1 Mar 5, 09:46 PM":
+      - code: <id>…
+      - text: 1 Mar 5, 09:46 PM
+    - button "<id>… 1 Mar 5, 07:11 PM":
+      - code: <id>…
+      - text: 1 Mar 5, 07:11 PM
+    - button "<id>… 1 Mar 4, 10:57 PM":
+      - code: <id>…
+      - text: 1 Mar 4, 10:57 PM
+    - button "<id>… 2 Mar 4, 09:34 PM":
+      - code: <id>…
+      - text: 2 Mar 4, 09:34 PM
+    - button "<id>… 2 Mar 4, 09:27 PM":
+      - code: <id>…
+      - text: 2 Mar 4, 09:27 PM
+    - button "<id>… 2 Mar 4, 09:25 PM":
+      - code: <id>…
+      - text: 2 Mar 4, 09:25 PM
+    - button "<id>… 1 Mar 4, 09:12 PM":
+      - code: <id>…
+      - text: 1 Mar 4, 09:12 PM
+    - button "<id>… 1 Mar 4, 08:45 PM":
+      - code: <id>…
+      - text: 1 Mar 4, 08:45 PM
+    - button "<id>… 2 Mar 4, 08:33 PM":
+      - code: <id>…
+      - text: 2 Mar 4, 08:33 PM
+    - button "<id>… 1 Mar 4, 08:05 PM":
+      - code: <id>…
+      - text: 1 Mar 4, 08:05 PM
+    - button "<id>… 1 Mar 4, 08:03 PM":
+      - code: <id>…
+      - text: 1 Mar 4, 08:03 PM
+    - button "<id>… 2 Mar 4, 08:03 PM":
+      - code: <id>…
+      - text: 2 Mar 4, 08:03 PM
+    - button "<id>… 1 Mar 4, 07:48 PM":
+      - code: <id>…
+      - text: 1 Mar 4, 07:48 PM
+    - button "<id>… 1 Mar 4, 12:09 PM":
+      - code: <id>…
+      - text: 1 Mar 4, 12:09 PM
+    - button "<id>… 1 Mar 4, 11:50 AM":
+      - code: <id>…
+      - text: 1 Mar 4, 11:50 AM
+    - button "<id>… 1 Mar 4, 10:22 AM":
+      - code: <id>…
+      - text: 1 Mar 4, 10:22 AM
+    - button "<id>… 1 Mar 4, 09:34 AM":
+      - code: <id>…
+      - text: 1 Mar 4, 09:34 AM
+    - button "<id>… 1 Mar 4, 09:34 AM":
+      - code: <id>…
+      - text: 1 Mar 4, 09:34 AM
+    - button "<id>… 1 Mar 4, 09:13 AM":
+      - code: <id>…
+      - text: 1 Mar 4, 09:13 AM
+    - button "<id>… 1 Mar 4, 12:04 AM":
+      - code: <id>…
+      - text: 1 Mar 4, 12:04 AM
+    - button "<id>… 1 Mar 4, 12:04 AM":
+      - code: <id>…
+      - text: 1 Mar 4, 12:04 AM
+    - button "<id>… 1 Mar 4, 12:04 AM":
+      - code: <id>…
+      - text: 1 Mar 4, 12:04 AM
+    - button "<id>… 1 Mar 3, 11:55 PM":
+      - code: <id>…
+      - text: 1 Mar 3, 11:55 PM
+    - button "<id>… 1 Mar 3, 10:15 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 10:15 AM
+    - button "<id>… 1 Mar 3, 10:02 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 10:02 AM
+    - button "<id>… 1 Mar 3, 10:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 10:00 AM
+    - button "<id>… 1 Mar 3, 09:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 09:00 AM
+    - button "<id>… 1 Mar 3, 08:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 08:00 AM
+    - button "<id>… 1 Mar 3, 07:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 07:00 AM
+    - button "<id>… 1 Mar 3, 06:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 06:00 AM
+    - button "<id>… 1 Mar 3, 05:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 05:00 AM
+    - button "<id>… 1 Mar 3, 04:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 04:00 AM
+    - button "<id>… 1 Mar 3, 03:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 03:00 AM
+    - button "<id>… 1 Mar 3, 02:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 02:00 AM
+    - button "<id>… 1 Mar 3, 02:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 02:00 AM
+    - button "<id>… 1 Mar 3, 02:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 02:00 AM
+    - button "<id>… 1 Mar 3, 01:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 01:00 AM
+    - button "<id>… 1 Mar 3, 12:00 AM":
+      - code: <id>…
+      - text: 1 Mar 3, 12:00 AM
+    - button "<id>… 1 Mar 2, 11:24 PM":
+      - code: <id>…
+      - text: 1 Mar 2, 11:24 PM
+    - button "<id>… 1 Mar 2, 11:12 PM":
+      - code: <id>…
+      - text: 1 Mar 2, 11:12 PM
+    - button "<id>… 1 Mar 2, 11:11 PM":
+      - code: <id>…
+      - text: 1 Mar 2, 11:11 PM
+    - button "<id>… 1 Mar 2, 09:27 AM":
+      - code: <id>…
+      - text: 1 Mar 2, 09:27 AM
+    - button "<id>… 1 Mar 2, 09:27 AM":
+      - code: <id>…
+      - text: 1 Mar 2, 09:27 AM
+    - button "<id>… 1 Mar 2, 09:18 AM":
+      - code: <id>…
+      - text: 1 Mar 2, 09:18 AM
+    - button "<id>… 1 Mar 2, 09:14 AM":
+      - code: <id>…
+      - text: 1 Mar 2, 09:14 AM
+    - button "<id>… 1 Mar 2, 09:14 AM":
+      - code: <id>…
+      - text: 1 Mar 2, 09:14 AM
+    - button "<id>… 1 Mar 2, 09:12 AM":
+      - code: <id>…
+      - text: 1 Mar 2, 09:12 AM
+    - button "<id>… 1 Mar 2, 09:12 AM":
+      - code: <id>…
+      - text: 1 Mar 2, 09:12 AM
+    - button "<id>… 1 Mar 1, 11:58 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 11:58 PM
+    - button "<id>… 1 Mar 1, 11:58 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 11:58 PM
+    - button "<id>… 1 Mar 1, 11:33 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 11:33 PM
+    - button "<id>… 1 Mar 1, 11:33 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 11:33 PM
+    - button "<id>… 1 Mar 1, 11:02 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 11:02 PM
+    - button "<id>… 1 Mar 1, 10:56 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:56 PM
+    - button "<id>… 1 Mar 1, 10:56 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:56 PM
+    - button "<id>… 1 Mar 1, 10:56 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:56 PM
+    - button "<id>… 1 Mar 1, 10:56 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:56 PM
+    - button "<id>… 1 Mar 1, 10:56 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:56 PM
+    - button "<id>… 1 Mar 1, 10:56 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:56 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:55 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:55 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:54 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:54 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 10:53 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 10:53 PM
+    - button "<id>… 1 Mar 1, 08:26 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 08:26 PM
+    - button "<id>… 1 Mar 1, 08:26 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 08:26 PM
+    - button "<id>… 1 Mar 1, 05:09 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:09 PM
+    - button "<id>… 1 Mar 1, 05:09 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:09 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:08 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:08 PM
+    - button "<id>… 1 Mar 1, 05:07 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:07 PM
+    - button "<id>… 1 Mar 1, 05:07 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:07 PM
+    - button "<id>… 1 Mar 1, 05:07 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:07 PM
+    - button "<id>… 1 Mar 1, 05:07 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:07 PM
+    - button "<id>… 1 Mar 1, 05:07 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:07 PM
+    - button "<id>… 1 Mar 1, 05:07 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:07 PM
+    - button "<id>… 1 Mar 1, 05:01 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:01 PM
+    - button "<id>… 1 Mar 1, 05:01 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:01 PM
+    - button "<id>… 1 Mar 1, 05:01 PM":
+      - code: <id>…
+      - text: 1 Mar 1, 05:01 PM
+    - button "<id>… 1 Feb 28, 12:25 PM":
+      - code: <id>…
+      - text: 1 Feb 28, 12:25 PM
+    - button "<id>… 1 Feb 28, 12:21 PM":
+      - code: <id>…
+      - text: 1 Feb 28, 12:21 PM
+    - button "<id>… 1 Feb 27, 11:16 PM":
+      - code: <id>…
+      - text: 1 Feb 27, 11:16 PM
+    - button "<id>… 1 Feb 27, 11:11 PM":
+      - code: <id>…
+      - text: 1 Feb 27, 11:11 PM
+    - button "<id>… 1 Feb 27, 10:57 PM":
+      - code: <id>…
+      - text: 1 Feb 27, 10:57 PM
+    - button "<id>… 1 Feb 27, 10:27 PM":
+      - code: <id>…
+      - text: 1 Feb 27, 10:27 PM
+    - button "<id>… 1 Feb 27, 04:04 PM":
+      - code: <id>…
+      - text: 1 Feb 27, 04:04 PM
+    - button "<id>… 2 Feb 27, 11:21 AM":
+      - code: <id>…
+      - text: 2 Feb 27, 11:21 AM
+    - button "<id>… 1 Feb 27, 11:08 AM":
+      - code: <id>…
+      - text: 1 Feb 27, 11:08 AM
+    - button "<id>… 1 Feb 27, 10:55 AM":
+      - code: <id>…
+      - text: 1 Feb 27, 10:55 AM
+    - button "<id>… 1 Feb 27, 10:34 AM":
+      - code: <id>…
+      - text: 1 Feb 27, 10:34 AM
+    - button "<id>… 1 Feb 27, 10:21 AM":
+      - code: <id>…
+      - text: 1 Feb 27, 10:21 AM
+    - button "<id>… 1 Feb 27, 10:21 AM":
+      - code: <id>…
+      - text: 1 Feb 27, 10:21 AM
+    - button "<id>… 1 Feb 27, 10:15 AM":
+      - code: <id>…
+      - text: 1 Feb 27, 10:15 AM
+    - button "test-ski… 1 Feb 27, 09:33 AM":
+      - code: test-ski…
+      - text: 1 Feb 27, 09:33 AM
+    - button "test-ski… 1 Feb 27, 09:33 AM":
+      - code: test-ski…
+      - text: 1 Feb 27, 09:33 AM
+    - button "test-ski… 1 Feb 27, 09:29 AM":
+      - code: test-ski…
+      - text: 1 Feb 27, 09:29 AM
+    - button "test-ski… 1 Feb 27, 09:28 AM":
+      - code: test-ski…
+      - text: 1 Feb 27, 09:28 AM
+    - button "<id>… 1 Feb 26, 11:37 PM":
+      - code: <id>…
+      - text: 1 Feb 26, 11:37 PM
+    - button "<id>… 1 Feb 26, 11:36 PM":
+      - code: <id>…
+      - text: 1 Feb 26, 11:36 PM
+    - button "<id>… 2 Feb 26, 06:48 PM":
+      - code: <id>…
+      - text: 2 Feb 26, 06:48 PM
+    - button "<id>… 1 Feb 26, 06:36 PM":
+      - code: <id>…
+      - text: 1 Feb 26, 06:36 PM
+    - button "<id>… 1 Feb 26, 06:04 PM":
+      - code: <id>…
+      - text: 1 Feb 26, 06:04 PM
+    - button "<id>… 1 Feb 26, 05:54 PM":
+      - code: <id>…
+      - text: 1 Feb 26, 05:54 PM
+    - button "<id>… 1 Feb 26, 05:49 PM":
+      - code: <id>…
+      - text: 1 Feb 26, 05:49 PM
+    - button "<id>… 1 Feb 26, 05:19 PM":
+      - code: <id>…
+      - text: 1 Feb 26, 05:19 PM
+    - button "<id>… 1 Feb 26, 02:08 PM":
+      - code: <id>…
+      - text: 1 Feb 26, 02:08 PM
+    - button "<id>… 1 Feb 25, 11:21 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:21 PM
+    - button "<id>… 1 Feb 25, 11:18 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:18 PM
+    - button "<id>… 1 Feb 25, 11:18 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:18 PM
+    - button "<id>… 1 Feb 25, 11:18 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:18 PM
+    - button "<id>… 1 Feb 25, 11:18 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:18 PM
+    - button "<id>… 1 Feb 25, 11:18 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:18 PM
+    - button "<id>… 1 Feb 25, 11:18 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:18 PM
+    - button "<id>… 1 Feb 25, 09:41 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 09:41 PM
+    - button "<id>… 1 Feb 25, 09:27 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 09:27 PM
+    - button "<id>… 1 Feb 25, 08:18 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 08:18 PM
+    - button "<id>… 1 Feb 25, 02:48 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 02:48 PM
+    - button "<id>… 1 Feb 25, 02:48 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 02:48 PM
+    - button "<id>… 1 Feb 25, 02:47 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 02:47 PM
+    - button "<id>… 1 Feb 25, 02:46 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 02:46 PM
+    - button "<id>… 1 Feb 25, 02:35 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 02:35 PM
+    - button "<id>… 1 Feb 25, 02:16 PM":
+      - code: <id>…
+      - text: 1 Feb 25, 02:16 PM
+    - button "<id>… 1 Feb 25, 11:25 AM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:25 AM
+    - button "<id>… 1 Feb 25, 11:24 AM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:24 AM
+    - button "<id>… 1 Feb 25, 11:24 AM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:24 AM
+    - button "<id>… 1 Feb 25, 11:24 AM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:24 AM
+    - button "<id>… 1 Feb 25, 11:24 AM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:24 AM
+    - button "<id>… 1 Feb 25, 11:18 AM":
+      - code: <id>…
+      - text: 1 Feb 25, 11:18 AM
+    - button "<id>… 1 Feb 25, 10:43 AM":
+      - code: <id>…
+      - text: 1 Feb 25, 10:43 AM
+    - button "<id>… 1 Feb 25, 10:29 AM":
+      - code: <id>…
+      - text: 1 Feb 25, 10:29 AM
+  - region "Trace content":
+    - img
+    - text: Agent Trace
+    - button "..." [disabled]
+    - button "Export" [disabled]
+    - button "All"
+    - button "User"
+    - button "Agent"
+    - button "Tools"
+    - button "Thoughts"
+    - text: "Kanban Story todo 930cf8fc GitHub Issues Sync + CI Status Integration for Kanban Board Current lane session: Todo • codex • CRAFTER · completed Previous lane session: Backlog • claude • CRAFTER"
 - alert

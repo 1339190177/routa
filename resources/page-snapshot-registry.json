@@ -20,7 +20,7 @@
     "name": "Workspace Detail",
     "group": "workspace",
     "priority": "P0",
-    "ci": false,
+    "ci": true,
     "route": "/workspace/default",
     "pageFile": "src/app/workspace/[workspaceId]/page.tsx",
     "snapshotFile": "src/app/workspace/[workspaceId]/page.snapshot.yaml",
@@ -36,7 +36,7 @@
     "name": "Workspace Kanban",
     "group": "workspace",
     "priority": "P0",
-    "ci": false,
+    "ci": true,
     "route": "/workspace/default/kanban",
     "pageFile": "src/app/workspace/[workspaceId]/kanban/page.tsx",
     "snapshotFile": "src/app/workspace/[workspaceId]/kanban/page.snapshot.yaml",
@@ -68,7 +68,7 @@
     "name": "Trace Viewer",
     "group": "observability",
     "priority": "P1",
-    "ci": false,
+    "ci": true,
     "route": "/traces",
     "pageFile": "src/app/traces/page.tsx",
     "snapshotFile": "src/app/traces/page.snapshot.yaml",
@@ -77,6 +77,22 @@
       "value": "Agent Trace Viewer",
       "timeoutMs": 20000,
       "settleMs": 1200
+    }
+  },
+  {
+    "id": "session-detail",
+    "name": "Workspace Session Detail",
+    "group": "workspace",
+    "priority": "P0",
+    "ci": true,
+    "route": "/workspace/default/sessions/1eed8a78-7673-4a1b-b6b9-cd68dc5b75c7",
+    "pageFile": "src/app/workspace/[workspaceId]/sessions/[sessionId]/page.tsx",
+    "snapshotFile": "src/app/workspace/[workspaceId]/sessions/[sessionId]/page.snapshot.yaml",
+    "waitFor": {
+      "strategy": "text",
+      "value": "Quick Access",
+      "timeoutMs": 20000,
+      "settleMs": 1500
     }
   },
   {

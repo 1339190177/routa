@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { URL } from "node:url";
 import { chromium } from "@playwright/test";
 
@@ -88,6 +88,10 @@ export function resolveWorkspacePath(relativePath) {
 }
 
 export async function isServerReachable(baseUrl) {
+  if (process.env.PAGE_SNAPSHOT_ASSUME_SERVER === "1") {
+    return true;
+  }
+
   const controller = new globalThis.AbortController();
   const timer = setTimeout(() => controller.abort(), 2000);
 
@@ -99,7 +103,12 @@ export async function isServerReachable(baseUrl) {
     });
     return response.status < 500;
   } catch {
-    return false;
+    try {
+      execFileSync("curl", ["-s", "-I", baseUrl], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
   } finally {
     clearTimeout(timer);
   }

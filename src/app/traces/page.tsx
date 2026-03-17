@@ -432,7 +432,7 @@ function TracePageContent() {
           )}
 
           {/* Trace Panel */}
-          <main className="flex-1 min-w-0 bg-desktop-bg-primary">
+          <section className="flex-1 min-w-0 bg-desktop-bg-primary" aria-label="Trace content">
             {selectedSessionId ? (
               <>
                 {activeTab === "chat" && (
@@ -470,7 +470,7 @@ function TracePageContent() {
                 </div>
               </div>
             )}
-          </main>
+          </section>
         </div>
       </div>
     </DesktopAppShell>
