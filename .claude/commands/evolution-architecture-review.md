@@ -16,11 +16,24 @@ Scope from user: `$ARGUMENTS`
 
 1. Create a todo list for discovery, parallel review, synthesis, and final recommendations.
 2. Read the core architecture and fitness documents identified by the skill.
-3. Launch 4 parallel agents with the `Task` tool. Each agent must return only:
+3. Define path exclusions up front. Ignore duplicate or generated trees unless the user explicitly asks for them:
+   - `.worktrees/`
+   - `.routa/repos/`
+   - `node_modules/`
+   - `.next/`
+   - `target/`
+   - `out/`
+   - `dist/`
+   - `coverage/`
+   - `tmp/`
+   - `test-results/`
+4. Launch 4 parallel agents with the `Task` tool. Each agent must return only:
    - concrete findings
    - supporting file paths
    - top risks
    - no speculation without evidence
+   - no more than 5 findings
+   - canonical paths from the main repository only
 
 ### Agent 1: Boundaries
 Review module boundaries, ownership seams, dependency direction, and semantic duplication.
@@ -34,8 +47,9 @@ Review tests, hard gates, parity checks, contracts, and other executable archite
 ### Agent 4: Evolution Path
 Review where the system can evolve incrementally, what to avoid, and what smallest safe next steps exist.
 
-4. Read any additional files needed to verify high-signal findings from the agents.
-5. Synthesize the result into one architecture review.
+5. Read any additional files needed to verify high-signal findings from the agents.
+6. Remove duplicate findings caused by mirrored paths or equivalent evidence.
+7. Synthesize the result into one architecture review.
 
 ## Output Requirements
 

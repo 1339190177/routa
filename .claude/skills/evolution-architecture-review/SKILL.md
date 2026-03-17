@@ -10,6 +10,8 @@ Assess how safely this codebase can evolve, using parallel analysis where possib
 
 Do not give generic architecture advice. Ground every conclusion in repository evidence.
 
+Default to read-only analysis. Do not edit code unless the user explicitly changes the task from review to implementation.
+
 ## Default Mode
 
 Prefer a 4-lens review in parallel. If subagents or `Task` are available, use them. If not, run the same lenses sequentially yourself.
@@ -48,13 +50,32 @@ Read these first unless the user narrows scope:
 
 Then expand only where evidence requires it.
 
+## Scope Hygiene
+
+Treat the main repository tree as authoritative. Unless the user explicitly asks otherwise, ignore duplicate or generated trees such as:
+
+- `.worktrees/`
+- `.routa/repos/`
+- `node_modules/`
+- `.next/`
+- `target/`
+- `out/`
+- `dist/`
+- `coverage/`
+- `tmp/`
+- `test-results/`
+
+When using `Glob`, `Grep`, or `Task`, state these exclusions explicitly so subagents do not waste time or cite mirrored files.
+
 ## Workflow
 
 1. Restate the requested architecture scope in one sentence.
 2. Gather repository evidence before judging.
-3. Run the 4 review lenses in parallel if possible.
-4. Merge overlapping findings and remove weak claims.
-5. Produce a final report with measurable evolution advice.
+3. Establish path exclusions before broad searches.
+4. Run the 4 review lenses in parallel if possible.
+5. Merge overlapping findings and remove weak claims.
+6. De-duplicate mirrored file references and prefer canonical paths.
+7. Produce a final report with measurable evolution advice.
 
 ## Required Output
 
@@ -100,6 +121,7 @@ Use this structure:
 4. Recommend phased evolution, not aesthetic rewrites.
 5. Call out where architecture already has strong fitness discipline.
 6. Suggest fitness functions in executable terms whenever possible.
+7. Prefer canonical file paths from the main working tree. Do not cite mirrored or generated paths unless necessary.
 
 ## Example Invocation
 
