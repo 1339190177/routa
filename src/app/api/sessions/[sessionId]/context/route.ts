@@ -11,6 +11,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getHttpSessionStore } from "@/core/acp/http-session-store";
+import { getRoutaSystem } from "@/core/routa-system";
+import { buildSessionKanbanContext, findTaskForSession } from "@/core/kanban/session-kanban-context";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +82,16 @@ export async function GET(
     })
     .slice(0, 5);
 
+  const system = getRoutaSystem();
+  const tasks = await system.taskStore.listByWorkspace(current.workspaceId);
+  const relatedTask = findTaskForSession(tasks, sessionId);
+  const relatedBoard = relatedTask?.boardId
+    ? await system.kanbanBoardStore.get(relatedTask.boardId)
+    : undefined;
+  const kanbanContext = relatedTask
+    ? buildSessionKanbanContext(relatedTask, sessionId, relatedBoard ?? undefined)
+    : null;
+
   return NextResponse.json(
     {
       current: {
@@ -140,6 +152,7 @@ export async function GET(
         createdAt: r.createdAt,
         parentSessionId: r.parentSessionId,
       })),
+      kanbanContext,
     },
     { headers: { "Cache-Control": "no-store" } }
   );

@@ -21,6 +21,46 @@ interface SessionContext {
   children: SessionInfo[];
   siblings: SessionInfo[];
   recentInWorkspace: SessionInfo[];
+  kanbanContext?: SessionKanbanContext | null;
+}
+
+interface LaneSessionInfo {
+  sessionId: string;
+  columnId?: string;
+  columnName?: string;
+  provider?: string;
+  role?: string;
+  status: "running" | "completed" | "failed" | "timed_out" | "transitioned";
+  startedAt: string;
+  completedAt?: string;
+}
+
+interface LaneHandoffInfo {
+  id: string;
+  direction: "incoming" | "outgoing";
+  fromSessionId: string;
+  toSessionId: string;
+  fromColumnId?: string;
+  fromColumnName?: string;
+  toColumnId?: string;
+  toColumnName?: string;
+  requestType: "environment_preparation" | "runtime_context" | "clarification" | "rerun_command";
+  request: string;
+  status: "requested" | "delivered" | "completed" | "blocked" | "failed";
+  requestedAt: string;
+  respondedAt?: string;
+  responseSummary?: string;
+}
+
+interface SessionKanbanContext {
+  taskId: string;
+  taskTitle: string;
+  boardId?: string;
+  columnId?: string;
+  triggerSessionId?: string;
+  currentLaneSession?: LaneSessionInfo;
+  previousLaneSession?: LaneSessionInfo;
+  relatedHandoffs: LaneHandoffInfo[];
 }
 
 interface SessionContextPanelProps {
@@ -162,6 +202,16 @@ export function SessionContextPanel({
     }
     return s.sessionId.slice(0, 8);
   };
+
+  const formatRequestType = (value: LaneHandoffInfo["requestType"]) =>
+    value.replace(/_/g, " ");
+
+  const formatLaneSessionLabel = (session: LaneSessionInfo) =>
+    [
+      session.columnName ?? session.columnId ?? "Unknown lane",
+      session.provider,
+      session.role,
+    ].filter(Boolean).join(" • ");
 
   if (!context) {
     return null;
@@ -347,6 +397,120 @@ export function SessionContextPanel({
           </div>
         </div>
       </div>
+
+      {context.kanbanContext && (
+        <div className="border-b border-gray-100 dark:border-gray-800">
+          <div className="px-3 py-2 flex items-center gap-1.5">
+            <svg
+              className="w-3.5 h-3.5 text-emerald-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h8m-8 5h5m-5 5h8M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" />
+            </svg>
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Kanban Story
+            </span>
+          </div>
+          <div className="px-3 pb-3 space-y-2">
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 dark:border-emerald-900/30 dark:bg-emerald-900/10">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
+                  {context.kanbanContext.taskTitle}
+                </span>
+                {context.kanbanContext.columnId && (
+                  <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-[#11161f] dark:text-emerald-300">
+                    {context.kanbanContext.columnId}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-[10px] text-emerald-700/80 dark:text-emerald-300/80">
+                Task {context.kanbanContext.taskId.slice(0, 8)}
+              </div>
+              {context.kanbanContext.currentLaneSession && (
+                <div className="mt-2 text-[10px] text-gray-600 dark:text-gray-300">
+                  Current lane session: {formatLaneSessionLabel(context.kanbanContext.currentLaneSession)}
+                  {" · "}
+                  <span className="font-semibold uppercase tracking-wide">
+                    {context.kanbanContext.currentLaneSession.status}
+                  </span>
+                </div>
+              )}
+              {context.kanbanContext.previousLaneSession && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-blue-100 bg-white/90 px-2.5 py-2 dark:border-blue-900/30 dark:bg-[#11161f]">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-500 dark:text-blue-300">
+                      Previous Lane
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] text-gray-700 dark:text-gray-200">
+                      {formatLaneSessionLabel(context.kanbanContext.previousLaneSession)}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onSelectSession(context.kanbanContext!.previousLaneSession!.sessionId)}
+                    className="shrink-0 rounded-md border border-blue-200 px-2 py-1 text-[10px] font-medium text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/20"
+                  >
+                    Open
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {context.kanbanContext.relatedHandoffs.length > 0 && (
+              <div className="space-y-2">
+                {context.kanbanContext.relatedHandoffs.map((handoff) => {
+                  const counterpartSessionId = handoff.direction === "incoming"
+                    ? handoff.fromSessionId
+                    : handoff.toSessionId;
+                  const counterpartLane = handoff.direction === "incoming"
+                    ? handoff.fromColumnName ?? handoff.fromColumnId ?? "previous lane"
+                    : handoff.toColumnName ?? handoff.toColumnId ?? "next lane";
+
+                  return (
+                    <div
+                      key={handoff.id}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-[#121722]"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                          {handoff.direction}
+                        </span>
+                        <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                          {formatRequestType(handoff.requestType)}
+                        </span>
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                          {handoff.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-gray-700 dark:text-gray-200">
+                        {handoff.request}
+                      </div>
+                      {handoff.responseSummary && (
+                        <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[10px] text-emerald-800 dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
+                          {handoff.responseSummary}
+                        </div>
+                      )}
+                      <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-gray-400 dark:text-gray-500">
+                        <span>
+                          {counterpartLane} • {formatTimeAgo(handoff.requestedAt)}
+                        </span>
+                        <button
+                          onClick={() => onSelectSession(counterpartSessionId)}
+                          className="rounded-md border border-gray-200 px-2 py-1 font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                        >
+                          Open Session
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Session Hierarchy — always expanded */}
       {hasHierarchy && (

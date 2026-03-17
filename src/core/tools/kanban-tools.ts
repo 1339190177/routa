@@ -346,9 +346,19 @@ export class KanbanTools {
         targetColumnId: previousLaneSession.columnId,
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to deliver handoff request";
       handoff.status = "failed";
+      handoff.respondedAt = new Date().toISOString();
+      handoff.responseSummary = `Unable to deliver handoff request to ${previousLaneSession.columnName ?? previousLaneSession.columnId ?? "the previous lane"} session ${previousLaneSession.sessionId.slice(0, 8)}: ${message}`;
       await this.taskStore.save(task);
-      return errorResult(error instanceof Error ? error.message : "Failed to deliver handoff request");
+      this.notifyWorkspaceChanged(task.workspaceId, "task", "updated", task.id);
+      return successResult({
+        handoffId: handoff.id,
+        status: handoff.status,
+        targetSessionId: previousLaneSession.sessionId,
+        targetColumnId: previousLaneSession.columnId,
+        deliveryError: message,
+      });
     }
   }
 

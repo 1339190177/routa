@@ -23,6 +23,45 @@ interface TracePanelProps {
   sessionId: string | null;
 }
 
+interface LaneSessionInfo {
+  sessionId: string;
+  columnId?: string;
+  columnName?: string;
+  provider?: string;
+  role?: string;
+  status: "running" | "completed" | "failed" | "timed_out" | "transitioned";
+  startedAt: string;
+  completedAt?: string;
+}
+
+interface LaneHandoffInfo {
+  id: string;
+  direction: "incoming" | "outgoing";
+  fromSessionId: string;
+  toSessionId: string;
+  fromColumnId?: string;
+  fromColumnName?: string;
+  toColumnId?: string;
+  toColumnName?: string;
+  requestType: "environment_preparation" | "runtime_context" | "clarification" | "rerun_command";
+  request: string;
+  status: "requested" | "delivered" | "completed" | "blocked" | "failed";
+  requestedAt: string;
+  respondedAt?: string;
+  responseSummary?: string;
+}
+
+interface SessionKanbanContext {
+  taskId: string;
+  taskTitle: string;
+  boardId?: string;
+  columnId?: string;
+  triggerSessionId?: string;
+  currentLaneSession?: LaneSessionInfo;
+  previousLaneSession?: LaneSessionInfo;
+  relatedHandoffs: LaneHandoffInfo[];
+}
+
 
 /** A merged tool call + result record */
 interface MergedToolRecord {
@@ -214,6 +253,18 @@ function inferToolName(name: string, input: unknown): string {
   }
 
   return name;
+}
+
+function formatLaneSessionSummary(session: LaneSessionInfo): string {
+  return [
+    session.columnName ?? session.columnId ?? "Unknown lane",
+    session.provider,
+    session.role,
+  ].filter(Boolean).join(" • ");
+}
+
+function formatHandoffRequestType(value: LaneHandoffInfo["requestType"]): string {
+  return value.replace(/_/g, " ");
 }
 
 /** Inline tool display for conversation flow - compact, non-intrusive */
@@ -543,6 +594,7 @@ function AgentResponseBlock({
 
 export function TracePanel({ sessionId }: TracePanelProps) {
   const [traces, setTraces] = useState<TraceRecord[]>([]);
+  const [kanbanContext, setKanbanContext] = useState<SessionKanbanContext | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
@@ -582,6 +634,25 @@ export function TracePanel({ sessionId }: TracePanelProps) {
     }
   }, [sessionId]);
 
+  const fetchSessionContext = useCallback(async () => {
+    if (!sessionId) {
+      setKanbanContext(null);
+      return;
+    }
+
+    try {
+      const res = await desktopAwareFetch(`/api/sessions/${sessionId}/context`, { cache: "no-store" });
+      if (!res.ok) {
+        setKanbanContext(null);
+        return;
+      }
+      const data = await res.json();
+      setKanbanContext(data.kanbanContext ?? null);
+    } catch {
+      setKanbanContext(null);
+    }
+  }, [sessionId]);
+
   const fetchStats = useCallback(async () => {
     try {
       const res = await desktopAwareFetch("/api/traces/stats", { cache: "no-store" });
@@ -597,7 +668,8 @@ export function TracePanel({ sessionId }: TracePanelProps) {
   useEffect(() => {
     fetchTraces();
     fetchStats();
-  }, [fetchTraces, fetchStats]);
+    fetchSessionContext();
+  }, [fetchSessionContext, fetchTraces, fetchStats]);
 
   const exportTraces = useCallback(async () => {
     if (!sessionId) return;
@@ -748,6 +820,71 @@ export function TracePanel({ sessionId }: TracePanelProps) {
           </button>
         ))}
       </div>
+
+      {kanbanContext && (
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-emerald-50/50 dark:bg-emerald-900/10">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">
+              Kanban Story
+            </span>
+            {kanbanContext.columnId && (
+              <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-[#13151d] dark:text-emerald-300">
+                {kanbanContext.columnId}
+              </span>
+            )}
+            <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-mono text-gray-600 dark:bg-[#13151d] dark:text-gray-300">
+              {kanbanContext.taskId.slice(0, 8)}
+            </span>
+          </div>
+          <div className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {kanbanContext.taskTitle}
+          </div>
+          {kanbanContext.currentLaneSession && (
+            <div className="mt-2 text-[11px] text-gray-600 dark:text-gray-300">
+              Current lane session: {formatLaneSessionSummary(kanbanContext.currentLaneSession)}
+              {" · "}
+              <span className="font-semibold uppercase tracking-wide">
+                {kanbanContext.currentLaneSession.status}
+              </span>
+            </div>
+          )}
+          {kanbanContext.previousLaneSession && (
+            <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-300">
+              Previous lane session: {formatLaneSessionSummary(kanbanContext.previousLaneSession)}
+            </div>
+          )}
+          {kanbanContext.relatedHandoffs.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {kanbanContext.relatedHandoffs.slice(0, 3).map((handoff) => (
+                <div
+                  key={handoff.id}
+                  className="rounded-lg border border-gray-200 bg-white/90 px-3 py-2 dark:border-gray-700 dark:bg-[#13151d]"
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                      {handoff.direction}
+                    </span>
+                    <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                      {formatHandoffRequestType(handoff.requestType)}
+                    </span>
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                      {handoff.status}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] text-gray-700 dark:text-gray-200">
+                    {handoff.request}
+                  </div>
+                  {handoff.responseSummary && (
+                    <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[10px] text-emerald-800 dark:border-emerald-900/30 dark:bg-emerald-900/10 dark:text-emerald-200">
+                      {handoff.responseSummary}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Error state */}
       {error && (

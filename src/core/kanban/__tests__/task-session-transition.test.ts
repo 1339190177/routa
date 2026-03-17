@@ -19,6 +19,8 @@ describe("task-session-transition", () => {
       columnId: "review",
       triggerSessionId: "session-dev-1",
       sessionIds: ["session-backlog-1"],
+      laneSessions: [],
+      laneHandoffs: [],
       lastSyncError: "stale error",
     };
 
@@ -35,6 +37,8 @@ describe("task-session-transition", () => {
       columnId: "dev",
       triggerSessionId: "session-dev-1",
       sessionIds: ["session-backlog-1"],
+      laneSessions: [],
+      laneHandoffs: [],
       lastSyncError: "keep me",
     };
 

@@ -190,4 +190,80 @@ describe("KanbanTools", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("records a deterministic failed handoff when the previous session is unavailable", async () => {
+    const boardStore = new InMemoryKanbanBoardStore();
+    const taskStore = new InMemoryTaskStore();
+    const tools = new KanbanTools(boardStore, taskStore);
+
+    const board = createKanbanBoard({
+      id: "board-1",
+      workspaceId: "default",
+      name: "Default Board",
+      isDefault: true,
+      columns: [
+        { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+        { id: "dev", name: "Dev", position: 1, stage: "dev" },
+        { id: "review", name: "Review", position: 2, stage: "review" },
+      ],
+    });
+    await boardStore.save(board);
+
+    const task = createTask({
+      id: "task-3",
+      title: "Review signup flow",
+      objective: "Review signup flow in review",
+      workspaceId: "default",
+      boardId: board.id,
+      columnId: "review",
+    });
+    task.laneSessions = [
+      {
+        sessionId: "session-dev-1",
+        columnId: "dev",
+        columnName: "Dev",
+        provider: "opencode",
+        role: "DEVELOPER",
+        status: "completed",
+        startedAt: "2026-03-17T00:00:00.000Z",
+      },
+      {
+        sessionId: "session-review-1",
+        columnId: "review",
+        columnName: "Review",
+        provider: "opencode",
+        role: "GATE",
+        status: "running",
+        startedAt: "2026-03-17T00:10:00.000Z",
+      },
+    ];
+    await taskStore.save(task);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      body: null,
+      arrayBuffer: async () => new ArrayBuffer(0),
+    } as unknown as Response) as typeof fetch;
+
+    const result = await tools.requestPreviousLaneHandoff({
+      taskId: task.id,
+      requestType: "runtime_context",
+      request: "Share the seeded test account and local URL.",
+      sessionId: "session-review-1",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      status: "failed",
+      targetSessionId: "session-dev-1",
+    });
+
+    const savedTask = await taskStore.get(task.id);
+    expect(savedTask?.laneHandoffs[0]).toMatchObject({
+      status: "failed",
+      respondedAt: expect.any(String),
+    });
+    expect(savedTask?.laneHandoffs[0].responseSummary).toContain("Unable to deliver handoff request");
+  });
 });
