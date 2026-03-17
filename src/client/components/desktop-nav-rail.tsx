@@ -20,7 +20,7 @@ interface DesktopNavRailProps {
 export function DesktopNavRail({
   workspaceId,
   sessionCount: _sessionCount = 0,
-  taskCount = 0,
+  taskCount: _taskCount = 0,
 }: DesktopNavRailProps) {
   const pathname = usePathname();
 
@@ -49,7 +49,6 @@ export function DesktopNavRail({
       id: "kanban",
       label: "Kanban",
       href: `/workspace/${workspaceId}/kanban`,
-      badge: taskCount > 0 ? taskCount : undefined,
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
@@ -70,7 +69,6 @@ export function DesktopNavRail({
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
-    if (href.includes("/sessions") && pathname.includes("/sessions/")) return true;
     return pathname === href || pathname.startsWith(href + "/");
   };
 
@@ -96,11 +94,6 @@ export function DesktopNavRail({
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-white rounded-r" />
               )}
               {item.icon}
-              {item.badge !== undefined && item.badge > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center text-[10px] font-medium bg-amber-500 text-white rounded-full">
-                  {item.badge > 99 ? "99+" : item.badge}
-                </span>
-              )}
             </Link>
           );
         })}
