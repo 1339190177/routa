@@ -107,6 +107,13 @@ export function KanbanCard({
     ? [assignedProvider.name, assignedRole, assignedSpecialist?.name].filter(Boolean)
     : ["Inherited from lane defaults"];
   const executionSummaryText = executionSummaryParts.join(" · ");
+  const visibleLabels = (task.labels ?? []).slice(0, 2);
+  const remainingLabelCount = Math.max((task.labels?.length ?? 0) - visibleLabels.length, 0);
+  const visibleCodebaseIds = (task.codebaseIds && task.codebaseIds.length > 0 ? task.codebaseIds : allCodebaseIds).slice(0, 1);
+  const remainingCodebaseCount = Math.max(
+    (task.codebaseIds && task.codebaseIds.length > 0 ? task.codebaseIds.length : allCodebaseIds.length) - visibleCodebaseIds.length,
+    0,
+  );
   const syncSummary = sessionStatus === "connecting"
     ? "Session starting..."
     : queuePosition
@@ -201,11 +208,7 @@ export function KanbanCard({
               >
                 Issue #{task.githubNumber}
               </a>
-            ) : (
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 ring-1 ring-inset ring-slate-200 dark:bg-[#181c28] dark:text-slate-300 dark:ring-white/5">
-                Local issue
-              </span>
-            )}
+            ) : null}
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${sessionTone}`}>
               {statusLabel}
             </span>
@@ -221,19 +224,24 @@ export function KanbanCard({
 
       <p className="line-clamp-3 text-[12px] leading-5 text-slate-600 dark:text-slate-400">{objectiveText}</p>
 
-      {task.labels && task.labels.length > 0 && (
+      {visibleLabels.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {task.labels.map((label) => (
+          {visibleLabels.map((label) => (
             <span key={label} className="rounded-full bg-amber-100/80 px-2 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:ring-amber-900/40">
               {label}
             </span>
           ))}
+          {remainingLabelCount > 0 && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-inset ring-slate-200 dark:bg-[#181c28] dark:text-slate-400 dark:ring-white/5">
+              +{remainingLabelCount}
+            </span>
+          )}
         </div>
       )}
 
       {(((task.codebaseIds && task.codebaseIds.length > 0) || allCodebaseIds.length > 0) || task.worktreeId) && (
         <div className="flex flex-wrap gap-1.5">
-          {(task.codebaseIds && task.codebaseIds.length > 0 ? task.codebaseIds : allCodebaseIds).map((cbId) => {
+          {visibleCodebaseIds.map((cbId) => {
             const cb = codebases.find((c) => c.id === cbId);
             return cb ? (
               <span
@@ -250,6 +258,11 @@ export function KanbanCard({
               </span>
             );
           })}
+          {remainingCodebaseCount > 0 && (
+            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-inset ring-slate-200 dark:bg-[#181c28] dark:text-slate-400 dark:ring-white/5">
+              +{remainingCodebaseCount} repo{remainingCodebaseCount > 1 ? "s" : ""}
+            </span>
+          )}
           <WorktreeBadge task={task} worktreeCache={worktreeCache} onOpenDetail={onOpenDetail} stopCardInteraction={stopCardInteraction} />
         </div>
       )}
@@ -265,7 +278,7 @@ export function KanbanCard({
                 {automationSourceLabel}
               </span>
             </div>
-            <div className="mt-1.5 text-[12px] font-medium text-slate-700 dark:text-slate-200">
+            <div className="mt-1.5 line-clamp-2 text-[12px] font-medium text-slate-700 dark:text-slate-200">
               {executionSummaryText}
             </div>
           </div>
@@ -281,8 +294,8 @@ export function KanbanCard({
           </button>
         </div>
         <div className="mt-2 flex items-center gap-2">
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm dark:border-gray-700 dark:bg-[#12141c]">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm dark:border-gray-700 dark:bg-[#12141c]">
+            <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
               Provider
             </span>
             <select
@@ -318,7 +331,7 @@ export function KanbanCard({
         )}
 
         <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200/80 pt-2 dark:border-[#262938]">
-          <div className="min-w-0 truncate text-[11px] text-slate-500 dark:text-slate-400">
+          <div className="min-w-0 truncate text-[10px] text-slate-500 dark:text-slate-400">
             {syncSummary}
           </div>
           {(canRun || canRetry) && (
@@ -353,30 +366,30 @@ function WorktreeBadge({ task, worktreeCache, onOpenDetail, stopCardInteraction 
   const wt = worktreeCache[task.worktreeId];
   if (!wt) {
     return (
-      <div className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-inset ring-slate-200 dark:bg-[#181c28] dark:text-slate-400 dark:ring-white/5">
-        Loading worktree...
+      <div className="inline-flex items-center text-[10px] text-slate-500 dark:text-slate-400">
+        worktree loading...
       </div>
     );
   }
 
-  const wtBadgeColor = wt.status === "active"
-    ? "bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:ring-emerald-900/40"
+  const wtDotColor = wt.status === "active"
+    ? "bg-emerald-500"
     : wt.status === "creating"
-      ? "bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:ring-amber-900/40"
-      : "bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-900/20 dark:text-rose-300 dark:ring-rose-900/40";
+      ? "bg-amber-500"
+      : "bg-rose-500";
 
   return (
     <button
       onClick={onOpenDetail}
       onClickCapture={stopCardInteraction}
-      className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 ring-1 ring-inset ring-slate-200 transition hover:bg-slate-50 dark:bg-[#151826] dark:ring-white/5 dark:hover:bg-[#1b1e2b]"
+      className="inline-flex max-w-full items-center gap-1 text-[10px] text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
       title="Click to view worktree details"
       data-testid="worktree-badge"
     >
-      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${wtBadgeColor}`}>
-        {wt.status}
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${wtDotColor}`} />
+      <span className="truncate">
+        worktree {wt.status} · {wt.branch}
       </span>
-      <span className="max-w-30 truncate text-[10px] text-slate-500 dark:text-slate-400">{wt.branch}</span>
     </button>
   );
 }
