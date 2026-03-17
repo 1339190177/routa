@@ -417,10 +417,10 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
 
   const kanbanHeader = (
     <div
-      className="shrink-0 border-b border-gray-200/70 px-4 py-2 dark:border-[#1c1f2e]"
+      className="shrink-0 rounded-2xl border border-gray-200/70 bg-white px-4 py-2 dark:border-[#1c1f2e] dark:bg-[#12141c]"
       data-testid="kanban-page-header"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
@@ -430,15 +430,97 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
             <span className="text-[11px] text-gray-500 dark:text-gray-400" data-testid="kanban-task-count">({tasks.length} tasks)</span>
           )}
         </div>
-        <button
-          onClick={onRefresh}
-          className="rounded p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1f232f] dark:hover:text-gray-200"
-          title="Refresh"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001m-11.01 9.296V14.52m0 0H4.995m4.992 0l-3.183 3.182a8.25 8.25 0 10-3.7 3.7M12.065 7.9A8.25 8.25 0 1019.868 11M12 9m0 3h.01" />
-          </svg>
-        </button>
+
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          {board && (
+            <>
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] dark:bg-[#191c28]">
+                Limit {board.sessionConcurrencyLimit ?? 1}
+              </span>
+              <QueueStatusBadge
+                label="Running"
+                count={boardQueue?.runningCount ?? 0}
+                cards={boardQueue?.runningCards ?? []}
+                className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+              />
+              <QueueStatusBadge
+                label="Queued"
+                count={boardQueue?.queuedCount ?? 0}
+                cards={boardQueue?.queuedCards ?? []}
+                className="bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+              />
+            </>
+          )}
+
+          {(repoHealth.missingRepoTasks > 0 || repoHealth.cwdMismatchTasks > 0) && (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
+              <span className="font-medium">Kanban Health</span>
+              {repoHealth.missingRepoTasks > 0 && (
+                <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                  {repoHealth.missingRepoTasks} missing
+                </span>
+              )}
+              {repoHealth.cwdMismatchTasks > 0 && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                  {repoHealth.cwdMismatchTasks} session mismatch
+                </span>
+              )}
+            </div>
+          )}
+
+          {boards.length > 1 && (
+            <select
+              value={selectedBoardId ?? ""}
+              onChange={(event) => setSelectedBoardId(event.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
+            >
+              {boards.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          )}
+          <div ref={bgAgentPanelRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setBgAgentPanelOpen((current) => !current)}
+              data-testid="kanban-bg-agent-toggle"
+              aria-expanded={bgAgentPanelOpen}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
+            >
+              <svg
+                className={`h-3.5 w-3.5 text-gray-400 transition-transform ${bgAgentPanelOpen ? "rotate-90" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              Backend Agents
+            </button>
+            {bgAgentPanelOpen && (
+              <div className="absolute right-0 top-full z-30 mt-2 w-[min(72rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-2xl shadow-2xl">
+                <KanbanBgAgentPanel workspaceId={workspaceId} />
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
+            title="Board settings"
+          >
+            Settings
+          </button>
+          <button
+            onClick={onRefresh}
+            className="rounded p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-[#1f232f] dark:hover:text-gray-200"
+            title="Refresh"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001m-11.01 9.296V14.52m0 0H4.995m4.992 0l-3.183 3.182a8.25 8.25 0 10-3.7 3.7M12.065 7.9A8.25 8.25 0 1019.868 11M12 9m0 3h.01" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -927,35 +1009,6 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
   if (!board) {
     return (
       <div className="flex h-full flex-col space-y-2">
-        <div className="shrink-0 rounded-2xl border border-gray-200/70 bg-white px-4 py-2 dark:border-[#1c1f2e] dark:bg-[#12141c]">
-          <div className="flex justify-end">
-            <div ref={bgAgentPanelRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setBgAgentPanelOpen((current) => !current)}
-                data-testid="kanban-bg-agent-toggle"
-                aria-expanded={bgAgentPanelOpen}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
-              >
-                <svg
-                  className={`h-3.5 w-3.5 text-gray-400 transition-transform ${bgAgentPanelOpen ? "rotate-90" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-                Background Agents
-              </button>
-              {bgAgentPanelOpen && (
-                <div className="absolute right-0 top-full z-30 mt-2 w-[min(72rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-2xl shadow-2xl">
-                  <KanbanBgAgentPanel workspaceId={workspaceId} />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
         {kanbanHeader}
         <div className="rounded-2xl border border-gray-200/60 bg-white p-6 text-sm text-gray-500 dark:border-[#1c1f2e] dark:bg-[#12141c] dark:text-gray-400">
           No board available yet.
@@ -966,6 +1019,7 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
 
   return (
     <div className="flex flex-col h-full space-y-2">
+      {kanbanHeader}
       <div className="shrink-0 rounded-2xl border border-gray-200/70 bg-white px-4 py-2 dark:border-[#1c1f2e] dark:bg-[#12141c]">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between lg:gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-2 lg:flex-row lg:items-center lg:gap-3">
@@ -1040,180 +1094,93 @@ export function KanbanTab({ workspaceId, boards, tasks, sessions, providers, spe
                 </div>
               )}
             </div>
-
-
-
-            {onAgentPrompt && (
-              <div className="flex min-w-[20rem] flex-1 items-center gap-2 lg:max-w-none">
-                <div className="group relative flex min-w-0 flex-1 items-center rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/15 dark:border-gray-700 dark:bg-[#12141c]">
-                  <div className="relative shrink-0">
-                    <select
-                      value={acp?.selectedProvider ?? ""}
-                      onChange={(event) => acp?.setProvider(event.target.value)}
-                      disabled={!acp?.connected || availableProviders.length === 0}
-                      className="h-10 appearance-none rounded-l-2xl border-r border-gray-200 bg-transparent pl-3 pr-8 text-sm font-medium text-gray-700 outline-none transition-colors disabled:opacity-50 dark:border-gray-700 dark:text-gray-200"
-                      aria-label="KanbanTask Agent provider"
-                      data-testid="kanban-agent-provider"
-                    >
-                      {availableProviders.map((provider) => (
-                        <option key={provider.id} value={provider.id}>
-                          {provider.name}
-                        </option>
-                      ))}
-                    </select>
-                    <svg
-                      className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    value={agentInput}
-                    onChange={(e) => setAgentInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void handleAgentSubmit();
-                      }
-                    }}
-                    placeholder={acp?.connected ? "Describe work to plan in Kanban..." : "Connecting..."}
-                    disabled={agentLoading || !acp?.connected}
-                    className="h-10 w-full bg-transparent px-3 pr-2 text-sm text-gray-800 placeholder-gray-400 outline-none disabled:opacity-50 dark:text-gray-200 dark:placeholder-gray-500"
-                  />
-                  <button
-                    onClick={() => void handleAgentSubmit()}
-                    disabled={!agentInput.trim() || agentLoading || !acp?.connected}
-                    className="mr-1.5 inline-flex h-8 shrink-0 items-center gap-1 rounded-xl bg-gray-900 px-3 text-xs font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:bg-amber-500 dark:hover:bg-amber-400 dark:disabled:bg-[#1a1d29] dark:disabled:text-gray-500"
-                  >
-                    {agentLoading ? (
-                      "..."
-                    ) : (
-                      <>
-                        <span>Send</span>
-                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
-                        </svg>
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="inline-flex h-8 shrink-0 items-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-0 text-xs font-semibold leading-none text-white shadow-sm transition-all hover:from-amber-600 hover:to-orange-500"
-                  >
-                    Manual
-                  </button>
-                </div>
-                {agentSessionId && (
-                  <button
-                    onClick={() => openAgentPanel(agentSessionId)}
-                    className="shrink-0 text-xs text-amber-600 hover:underline dark:text-amber-400"
-                    title="Open the KanbanTask Agent panel"
-                  >
-                    View
-                  </button>
-                )}
-              </div>
-            )}
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-            {(repoHealth.missingRepoTasks > 0 || repoHealth.cwdMismatchTasks > 0) && (
-              <div className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-amber-300">
-                <span className="font-medium">Repo health</span>
-                {repoHealth.missingRepoTasks > 0 && (
-                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-                    {repoHealth.missingRepoTasks} missing
-                  </span>
-                )}
-                {repoHealth.cwdMismatchTasks > 0 && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                    {repoHealth.cwdMismatchTasks} session mismatch
-                  </span>
-                )}
-              </div>
-            )}
-            {boards.length > 1 && (
-              <select
-                value={selectedBoardId ?? ""}
-                onChange={(event) => setSelectedBoardId(event.target.value)}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-200"
-              >
-                {boards.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
-                ))}
-              </select>
-            )}
-            <div ref={bgAgentPanelRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setBgAgentPanelOpen((current) => !current)}
-                data-testid="kanban-bg-agent-toggle"
-                aria-expanded={bgAgentPanelOpen}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-[#12141c] dark:text-gray-300 dark:hover:bg-[#191c28]"
-              >
-                <svg
-                  className={`h-3.5 w-3.5 text-gray-400 transition-transform ${bgAgentPanelOpen ? "rotate-90" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-                Background Agents
-              </button>
-              {bgAgentPanelOpen && (
-                <div className="absolute right-0 top-full z-30 mt-2 w-[min(72rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-2xl shadow-2xl">
-                  <KanbanBgAgentPanel workspaceId={workspaceId} />
+          {onAgentPrompt ? (
+            <div className="flex min-w-[20rem] flex-1 items-center gap-2 lg:max-w-none">
+              <div className="group relative flex min-w-0 flex-1 items-center rounded-2xl border border-gray-200 bg-white shadow-sm transition-colors focus-within:border-amber-400/80 focus-within:ring-2 focus-within:ring-amber-400/15 dark:border-gray-700 dark:bg-[#12141c]">
+                <div className="relative shrink-0">
+                  <select
+                    value={acp?.selectedProvider ?? ""}
+                    onChange={(event) => acp?.setProvider(event.target.value)}
+                    disabled={!acp?.connected || availableProviders.length === 0}
+                    className="h-10 appearance-none rounded-l-2xl border-r border-gray-200 bg-transparent pl-3 pr-8 text-sm font-medium text-gray-700 outline-none transition-colors disabled:opacity-50 dark:border-gray-700 dark:text-gray-200"
+                    aria-label="KanbanTask Agent provider"
+                    data-testid="kanban-agent-provider"
+                  >
+                    {availableProviders.map((provider) => (
+                      <option key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+                  </svg>
                 </div>
-              )}
-            </div>
-            <div className="inline-flex items-center rounded-xl border border-gray-200 bg-white p-0.5 shadow-sm dark:border-gray-700 dark:bg-[#12141c]">
-              <button
-                onClick={() => setShowSettings(true)}
-                className="rounded-[10px] px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#191c28]"
-                title="Board settings"
-              >
-                Settings
-              </button>
-              {!onAgentPrompt && (
+                <input
+                  type="text"
+                  value={agentInput}
+                  onChange={(e) => setAgentInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleAgentSubmit();
+                    }
+                  }}
+                  placeholder={acp?.connected ? "Describe work to plan in Kanban..." : "Connecting..."}
+                  disabled={agentLoading || !acp?.connected}
+                  className="h-10 w-full bg-transparent px-3 pr-2 text-sm text-gray-800 placeholder-gray-400 outline-none disabled:opacity-50 dark:text-gray-200 dark:placeholder-gray-500"
+                />
+                <button
+                  onClick={() => void handleAgentSubmit()}
+                  disabled={!agentInput.trim() || agentLoading || !acp?.connected}
+                  className="mr-1.5 inline-flex h-8 shrink-0 items-center gap-1 rounded-xl bg-gray-900 px-3 text-xs font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400 dark:bg-amber-500 dark:hover:bg-amber-400 dark:disabled:bg-[#1a1d29] dark:disabled:text-gray-500"
+                >
+                  {agentLoading ? (
+                    "..."
+                  ) : (
+                    <>
+                      <span>Send</span>
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m-6-6 6 6-6 6" />
+                      </svg>
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="rounded-[10px] bg-gradient-to-r from-amber-500 to-orange-500 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:from-amber-600 hover:to-orange-500"
+                  className="inline-flex h-8 shrink-0 items-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-0 text-xs font-semibold leading-none text-white shadow-sm transition-all hover:from-amber-600 hover:to-orange-500"
                 >
                   Manual
                 </button>
+              </div>
+              {agentSessionId && (
+                <button
+                  onClick={() => openAgentPanel(agentSessionId)}
+                  className="shrink-0 text-xs text-amber-600 hover:underline dark:text-amber-400"
+                  title="Open the KanbanTask Agent panel"
+                >
+                  View
+                </button>
               )}
             </div>
-          </div>
+          ) : (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex h-10 items-center rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:from-amber-600 hover:to-orange-500"
+            >
+              Manual
+            </button>
+          )}
         </div>
       </div>
-
-      {kanbanHeader}
-      {board && (
-        <div className="mb-3 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
-          <span className="rounded-full bg-gray-100 px-2.5 py-1 dark:bg-[#191c28]">
-            Limit {board.sessionConcurrencyLimit ?? 1}
-          </span>
-          <QueueStatusBadge
-            label="Running"
-            count={boardQueue?.runningCount ?? 0}
-            cards={boardQueue?.runningCards ?? []}
-            className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-          />
-          <QueueStatusBadge
-            label="Queued"
-            count={boardQueue?.queuedCount ?? 0}
-            cards={boardQueue?.queuedCards ?? []}
-            className="bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-          />
-        </div>
-      )}
       <div className="flex-1 min-h-0 flex gap-4">
         <div className={`${agentPanelOpen && agentSessionId ? "min-w-0 flex-1" : "w-full"} flex min-h-0 flex-col`}>
           <div className="flex-1 min-h-0 overflow-auto pb-2">
