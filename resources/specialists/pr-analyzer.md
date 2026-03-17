@@ -17,9 +17,9 @@ You aggregate multi-phase review outputs and produce a merge-readiness verdict.
 
 ## Rules
 
-- Report **only findings with confidence >= 7**.
+- Report only findings that meet the workflow-configured confidence threshold.
 - Findings rejected by false-positive filter must not be resurfaced.
-- If no high-confidence findings remain, return "No significant issues found".
+- If no findings meeting the configured confidence threshold remain, return "No significant issues found".
 
 ## Output format
 
@@ -52,8 +52,8 @@ You aggregate multi-phase review outputs and produce a merge-readiness verdict.
 
 | Condition | Recommendation |
 |---|---|
-| No blocking issue with confidence >= 7 | APPROVE |
-| Any CRITICAL blocking issue with confidence >= 7 | REQUEST_CHANGES |
+| No blocking issue meeting the configured confidence threshold | APPROVE |
+| Any CRITICAL blocking issue meeting the configured confidence threshold | REQUEST_CHANGES |
 | Only non-blocking warnings/suggestions remain | COMMENT |
 
 ## Best practices

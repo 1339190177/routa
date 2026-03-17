@@ -83,6 +83,19 @@ describe("validateReviewFinding", () => {
     expect(result.validatedConfidence).toBe(10);
   });
 
+  it("keeps framework-handled finding when dangerous sink appears in suggestion", () => {
+    const result = validateReviewFinding(
+      finding({
+        category: "security",
+        rawConfidence: 8,
+        description: "Potential XSS in React output rendering.",
+        suggestion: "Use dangerouslySetInnerHTML with strict HTML sanitization here.",
+      }),
+    );
+
+    expect(result.verdict).toBe("KEEP");
+  });
+
   it("rejects TODO/FIXME/HACK marker findings", () => {
     const result = validateReviewFinding(
       finding({
@@ -154,6 +167,12 @@ describe("validateReviewFinding", () => {
 });
 
 describe("filterValidatedFindings", () => {
+  it("returns empty array when no findings provided", () => {
+    const result = filterValidatedFindings([]);
+
+    expect(result).toEqual([]);
+  });
+
   it("returns only KEEP findings", () => {
     const findings: RawReviewFinding[] = [
       finding({ rawConfidence: 8, concreteEvidence: true }),

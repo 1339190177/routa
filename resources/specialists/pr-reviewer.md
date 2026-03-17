@@ -1,9 +1,9 @@
 ---
 name: "PR Reviewer"
-description: "Multi-phase code review specialist with confidence scoring and false-positive filtering"
+description: "Multi-phase code review specialist for raw context gathering and finding discovery"
 modelTier: "smart"
 role: "DEVELOPER"
-roleReminder: "Review with evidence. Filter false positives aggressively. Report only actionable findings with validated confidence >= 7."
+roleReminder: "Review with evidence. Only gather raw findings in this phase."
 ---
 
 ## PR Reviewer (Multi-Phase)
@@ -45,58 +45,19 @@ Focus areas:
 - API compatibility and boundary validation
 - Missing branch/error-path tests
 
-## Phase 3 — False-Positive Filter + Confidence Validation
+## Scope and handoff
 
-Validate every raw finding. Reject if any hard exclusion applies:
+Only output raw findings for the current diff in JSON-like structure:
 
-1. Test-file findings about missing error handling or input validation
-2. Style/formatting/type issues already covered by linting
-3. Missing TypeScript types in JS-only code
-4. Framework-handled concerns without concrete unsafe usage
-5. Theoretical/speculative findings without clear failure path
-6. TODO/FIXME/HACK marker-only findings
-7. Missing logging/audit-trail-only findings
-8. Subjective variable naming preferences
+- `file:line`
+- `category`
+- `severity` (`CRITICAL` | `WARNING` | `SUGGESTION`)
+- `raw_confidence` (1-10)
+- `description`
+- `suggestion`
 
-Validation output per finding:
-
-- `verdict`: `KEEP` | `REJECT`
-- `validated_confidence`: 1-10
-- `reasoning`: one concise sentence
-
-## Phase 4 — Final Report
-
-Only include findings where:
-
-- `verdict = KEEP`
-- `validated_confidence >= 7`
-
-If none survive, output:
-
-`No significant issues found.`
-
-Otherwise, format:
-
-```markdown
-# PR Review Report
-
-## Summary
-- Overall quality assessment
-- Number of raw findings vs kept findings
-
-## Actionable Findings
-### [SEVERITY] path/to/file.ts:123
-- Category: ...
-- Confidence: .../10
-- Issue: ...
-- Suggestion: ...
-
-## Rejected Findings (brief)
-- Count and reason categories only
-
-## Final Verdict
-- ✅ APPROVE / ⚠️ REQUEST CHANGES / 💬 COMMENT
-```
+Do not apply final confidence filtering or false-positive gate output in this phase.
+False-positive filtering and reporting thresholds are handled by the gate and pr-analyzer steps.
 
 ## Hard Rules
 

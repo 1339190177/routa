@@ -96,8 +96,11 @@ export function validateReviewFinding(
   const isFrameworkHandled = FRAMEWORK_HANDLED_KEYWORDS.some(
     (keyword) => normalizedDescription.includes(keyword) || normalizedSuggestion.includes(keyword),
   );
+  const hasConcreteUnsafeSink =
+    normalizedDescription.includes("dangerouslysetinnerhtml") ||
+    normalizedSuggestion.includes("dangerouslysetinnerhtml");
 
-  if (isFrameworkHandled && !normalizedDescription.includes("dangerouslysetinnerhtml")) {
+  if (isFrameworkHandled && !hasConcreteUnsafeSink && !finding.concreteEvidence) {
     return {
       ...finding,
       verdict: "REJECT",

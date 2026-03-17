@@ -55,11 +55,14 @@ steps:
     input: |
       You are running phase 3 only.
 
+      ## Phase 1 Context
+      ${steps.Phase 1 - Context Gathering.output}
+
       ## Phase 2 Raw Findings
       ${steps.Phase 2 - Diff Analysis.output}
 
       Validate findings and apply false-positive suppression.
-      Keep only findings with validated_confidence >= ${confidence_threshold}.
+      Keep only findings with confidence >= ${confidence_threshold}.
       Reject low-confidence or rule-based false positives.
     output_key: "validated_findings"
 
@@ -81,5 +84,6 @@ steps:
       ${steps.Phase 3 - False Positive Filter.output}
 
       Generate final concise report and final verdict.
+      Use the workflow confidence threshold from ${confidence_threshold}.
       If no high-confidence findings remain, output "No significant issues found".
     output_key: "verdict"
