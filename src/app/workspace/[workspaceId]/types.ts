@@ -120,6 +120,7 @@ export interface BackgroundTaskInfo {
   prompt: string;
   agentId: string;
   status: string;
+  triggeredBy?: string;
   triggerSource?: string;
   priority?: string;
   resultSessionId?: string;

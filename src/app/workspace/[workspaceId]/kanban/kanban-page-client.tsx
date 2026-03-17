@@ -5,11 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useKanbanEvents } from "@/client/hooks/use-kanban-events";
 import { useWorkspaces, useCodebases } from "@/client/hooks/use-workspaces";
+import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { KanbanTab } from "./kanban-tab";
 import { scheduleKanbanRefreshBurst } from "./kanban-agent-input";
 import type { KanbanBoardInfo, TaskInfo, SessionInfo } from "../types";
+import type { CodebaseData } from "@/client/hooks/use-workspaces";
 
 interface SpecialistOption {
   id: string;
@@ -22,6 +24,15 @@ interface KanbanAgentPromptOptions {
   role?: string;
   toolMode?: "essential" | "full";
   allowedNativeTools?: string[];
+}
+
+interface RepoSyncState {
+  status: "idle" | "syncing" | "done" | "error";
+  total: number;
+  completed: number;
+  currentRepoLabel: string | null;
+  message: string | null;
+  error: string | null;
 }
 
 export function KanbanPageClient() {
@@ -41,8 +52,17 @@ export function KanbanPageClient() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [specialists, setSpecialists] = useState<SpecialistOption[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [repoSync, setRepoSync] = useState<RepoSyncState>({
+    status: "idle",
+    total: 0,
+    completed: 0,
+    currentRepoLabel: null,
+    message: null,
+    error: null,
+  });
   const refreshBurstCleanupRef = useRef<(() => void) | null>(null);
   const warmedupProvidersRef = useRef<Set<string>>(new Set());
+  const autoSyncedWorkspaceRef = useRef<string | null>(null);
 
   // Auto-connect ACP
   useEffect(() => {
@@ -160,6 +180,112 @@ export function KanbanPageClient() {
     void fetchCodebases();
   }, [fetchCodebases]);
 
+  const syncCodebaseToLatest = useCallback(async (codebase: CodebaseData): Promise<void> => {
+    let targetBranch = codebase.branch?.trim();
+    if (!targetBranch) {
+      const branchRes = await desktopAwareFetch(
+        `/api/clone/branches?repoPath=${encodeURIComponent(codebase.repoPath)}`,
+        { cache: "no-store" },
+      );
+      const branchData = await branchRes.json().catch(() => ({}));
+      if (!branchRes.ok) {
+        throw new Error(branchData.error ?? `Failed to load branch info for ${codebase.label ?? codebase.repoPath}`);
+      }
+      targetBranch = typeof branchData.current === "string" && branchData.current.trim().length > 0
+        ? branchData.current.trim()
+        : "main";
+    }
+
+    const syncRes = await desktopAwareFetch("/api/clone/branches", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repoPath: codebase.repoPath,
+        branch: targetBranch,
+        pull: true,
+      }),
+    });
+    const syncData = await syncRes.json().catch(() => ({}));
+    if (!syncRes.ok) {
+      throw new Error(syncData.error ?? `Failed to sync ${codebase.label ?? codebase.repoPath}`);
+    }
+
+    if (typeof syncData.branch === "string" && syncData.branch !== codebase.branch) {
+      await desktopAwareFetch(`/api/codebases/${encodeURIComponent(codebase.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch: syncData.branch }),
+      }).catch(() => {
+        // Best-effort metadata sync; repo content is already up to date.
+      });
+    }
+  }, []);
+
+  const syncWorkspaceRepos = useCallback(async (nextCodebases: CodebaseData[]) => {
+    if (nextCodebases.length === 0) return;
+
+    setRepoSync({
+      status: "syncing",
+      total: nextCodebases.length,
+      completed: 0,
+      currentRepoLabel: nextCodebases[0]?.label ?? nextCodebases[0]?.sourceUrl ?? nextCodebases[0]?.repoPath ?? null,
+      message: "Syncing repositories to latest code...",
+      error: null,
+    });
+
+    const failures: string[] = [];
+
+    for (const [index, codebase] of nextCodebases.entries()) {
+      const repoLabel = codebase.label ?? codebase.sourceUrl ?? codebase.repoPath;
+      setRepoSync({
+        status: "syncing",
+        total: nextCodebases.length,
+        completed: index,
+        currentRepoLabel: repoLabel,
+        message: `Syncing ${repoLabel}...`,
+        error: null,
+      });
+
+      try {
+        await syncCodebaseToLatest(codebase);
+      } catch (error) {
+        failures.push(`${repoLabel}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      setRepoSync({
+        status: "syncing",
+        total: nextCodebases.length,
+        completed: index + 1,
+        currentRepoLabel: repoLabel,
+        message: `Synced ${index + 1}/${nextCodebases.length} repositories`,
+        error: null,
+      });
+    }
+
+    handleRefresh();
+
+    if (failures.length > 0) {
+      setRepoSync({
+        status: "error",
+        total: nextCodebases.length,
+        completed: nextCodebases.length,
+        currentRepoLabel: null,
+        message: `Repository sync finished with ${failures.length} error${failures.length > 1 ? "s" : ""}.`,
+        error: failures.join(" | "),
+      });
+      return;
+    }
+
+    setRepoSync({
+      status: "done",
+      total: nextCodebases.length,
+      completed: nextCodebases.length,
+      currentRepoLabel: null,
+      message: `Repository sync complete. ${nextCodebases.length} repo${nextCodebases.length > 1 ? "s" : ""} updated.`,
+      error: null,
+    });
+  }, [handleRefresh, syncCodebaseToLatest]);
+
   const handleKanbanInvalidate = useCallback(() => {
     handleRefresh();
     refreshBurstCleanupRef.current?.();
@@ -170,6 +296,27 @@ export function KanbanPageClient() {
     workspaceId,
     onInvalidate: handleKanbanInvalidate,
   });
+
+  useEffect(() => {
+    if (!workspaceId || workspaceId === "__placeholder__") return;
+    if (codebases.length === 0) return;
+    if (autoSyncedWorkspaceRef.current === workspaceId) return;
+
+    autoSyncedWorkspaceRef.current = workspaceId;
+    void syncWorkspaceRepos(codebases);
+  }, [workspaceId, codebases, syncWorkspaceRepos]);
+
+  useEffect(() => {
+    if (repoSync.status !== "done") return;
+
+    const timeoutId = window.setTimeout(() => {
+      setRepoSync((current) => current.status === "done"
+        ? { ...current, status: "idle", message: null }
+        : current);
+    }, 2500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [repoSync.status]);
 
   useEffect(() => {
     return () => {
@@ -219,6 +366,10 @@ export function KanbanPageClient() {
   }, [acp, codebases, workspaceId]);
 
   const workspace = workspacesHook.workspaces.find((w) => w.id === workspaceId);
+  const repoSyncPercent = repoSync.total > 0
+    ? Math.round((repoSync.completed / repoSync.total) * 100)
+    : 0;
+  const showRepoSyncBanner = repoSync.status !== "idle";
 
   return (
     <DesktopAppShell
@@ -237,6 +388,39 @@ export function KanbanPageClient() {
     >
       <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary" data-testid="kanban-page-shell">
         <div className="flex-1 min-h-0 overflow-hidden p-4">
+          {showRepoSyncBanner && (
+            <div
+              className={`mb-4 rounded-xl border px-4 py-3 ${
+                repoSync.status === "error"
+                  ? "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-100"
+                  : "border-sky-200 bg-sky-50 text-slate-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-slate-100"
+              }`}
+              data-testid="kanban-repo-sync-progress"
+            >
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <div className="min-w-0">
+                  <div className="font-medium">{repoSync.message}</div>
+                  {repoSync.currentRepoLabel && (
+                    <div className="mt-1 truncate opacity-80">{repoSync.currentRepoLabel}</div>
+                  )}
+                  {repoSync.error && (
+                    <div className="mt-1 break-words text-[11px] opacity-90">{repoSync.error}</div>
+                  )}
+                </div>
+                <div className="shrink-0 font-mono text-[11px]">
+                  {repoSync.completed}/{repoSync.total}
+                </div>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    repoSync.status === "error" ? "bg-rose-500" : "bg-sky-500"
+                  }`}
+                  style={{ width: `${Math.max(repoSyncPercent, repoSync.status === "syncing" ? 6 : 0)}%` }}
+                />
+              </div>
+            </div>
+          )}
           <KanbanTab
             workspaceId={workspaceId}
             boards={boards}
