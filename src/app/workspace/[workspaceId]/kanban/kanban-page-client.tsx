@@ -200,7 +200,7 @@ export function KanbanPageClient() {
         />
       }
     >
-      <div className="h-full flex flex-col bg-[#252526] overflow-hidden">
+      <div className="h-full flex flex-col bg-[#252526] overflow-hidden dark">
         {/* Page Header */}
         <div className="shrink-0 px-4 py-3 border-b border-[#3c3c3c] flex items-center justify-between">
           <div className="flex items-center gap-2">
