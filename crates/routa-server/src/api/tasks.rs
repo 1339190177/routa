@@ -5,8 +5,10 @@ use axum::{
 };
 use chrono::Utc;
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
-use serde::Deserialize;
 use routa_core::kanban::set_task_column;
+use routa_core::models::artifact::{Artifact, ArtifactType};
+use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::process::Command;
 
 use crate::application::tasks::{CreateTaskCommand, TaskApplicationService, UpdateTaskCommand};
@@ -24,8 +26,112 @@ pub fn router() -> Router<AppState> {
             "/{id}",
             get(get_task).patch(update_task).delete(delete_task),
         )
+        .route(
+            "/{id}/artifacts",
+            get(list_task_artifacts).post(create_task_artifact),
+        )
         .route("/{id}/status", axum::routing::post(update_task_status))
         .route("/ready", get(find_ready_tasks))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateTaskArtifactRequest {
+    agent_id: Option<String>,
+    #[serde(rename = "type")]
+    artifact_type: Option<String>,
+    content: Option<String>,
+    context: Option<String>,
+    request_id: Option<String>,
+    metadata: Option<BTreeMap<String, String>>,
+}
+
+async fn list_task_artifacts(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let task = state
+        .task_store
+        .get(&id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound(format!("Task {} not found", id)))?;
+
+    let artifacts = state.artifact_store.list_by_task(&task.id).await?;
+
+    Ok(Json(serde_json::json!({
+        "artifacts": artifacts,
+    })))
+}
+
+async fn create_task_artifact(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(body): Json<CreateTaskArtifactRequest>,
+) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ServerError> {
+    let task = state
+        .task_store
+        .get(&id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound(format!("Task {} not found", id)))?;
+
+    let artifact_type = body
+        .artifact_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ServerError::BadRequest("A valid artifact type is required".to_string()))?;
+    let artifact_type = ArtifactType::from_str(artifact_type)
+        .ok_or_else(|| ServerError::BadRequest("A valid artifact type is required".to_string()))?;
+
+    let agent_id = body
+        .agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ServerError::BadRequest("agentId is required for agent artifact submission".to_string())
+        })?;
+
+    let content = body
+        .content
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ServerError::BadRequest("Artifact content is required".to_string()))?;
+
+    let now = Utc::now();
+    let artifact = Artifact {
+        id: uuid::Uuid::new_v4().to_string(),
+        artifact_type,
+        task_id: task.id.clone(),
+        workspace_id: task.workspace_id.clone(),
+        provided_by_agent_id: Some(agent_id.to_string()),
+        requested_by_agent_id: None,
+        request_id: body
+            .request_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+        content: Some(content.to_string()),
+        context: body
+            .context
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+        status: routa_core::models::artifact::ArtifactStatus::Provided,
+        expires_at: None,
+        metadata: body.metadata,
+        created_at: now,
+        updated_at: now,
+    };
+    state.artifact_store.save(&artifact).await?;
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({ "artifact": artifact })),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,7 +222,10 @@ async fn create_task(
             Some(repo) => match create_github_issue(
                 &repo,
                 &task.title,
-                Some(&build_task_issue_body(&task.objective, task.test_cases.as_ref())),
+                Some(&build_task_issue_body(
+                    &task.objective,
+                    task.test_cases.as_ref(),
+                )),
                 &task.labels,
                 task.assignee.as_deref(),
             )
@@ -259,6 +368,7 @@ async fn update_task(
     axum::extract::Path(id): axum::extract::Path<String>,
     Json(body): Json<UpdateTaskRequest>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
+    ensure_transition_artifacts(&state, &id, &body).await?;
     let service = TaskApplicationService::new(state.clone());
     let plan = service.update_task(&id, update_task_command(body)).await?;
     let mut task = plan.task;
@@ -269,7 +379,10 @@ async fn update_task(
                 &repo,
                 issue_number,
                 &task.title,
-                Some(&build_task_issue_body(&task.objective, task.test_cases.as_ref())),
+                Some(&build_task_issue_body(
+                    &task.objective,
+                    task.test_cases.as_ref(),
+                )),
                 &task.labels,
                 if task.status == TaskStatus::Completed {
                     "closed"
@@ -343,6 +456,68 @@ async fn update_task(
 
     state.task_store.save(&task).await?;
     Ok(Json(serde_json::json!({ "task": task })))
+}
+
+async fn ensure_transition_artifacts(
+    state: &AppState,
+    task_id: &str,
+    body: &UpdateTaskRequest,
+) -> Result<(), ServerError> {
+    let Some(target_column_id) = body.column_id.as_deref() else {
+        return Ok(());
+    };
+    let existing = state
+        .task_store
+        .get(task_id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound(format!("Task {} not found", task_id)))?;
+    if existing.column_id.as_deref() == Some(target_column_id) {
+        return Ok(());
+    }
+
+    let Some(board_id) = body.board_id.as_deref().or(existing.board_id.as_deref()) else {
+        return Ok(());
+    };
+    let Some(board) = state.kanban_store.get(board_id).await? else {
+        return Ok(());
+    };
+    let Some(target_column) = board.columns.iter().find(|column| column.id == target_column_id) else {
+        return Ok(());
+    };
+    let Some(required_artifacts) = target_column
+        .automation
+        .as_ref()
+        .and_then(|automation| automation.required_artifacts.as_ref())
+    else {
+        return Ok(());
+    };
+
+    let mut missing_artifacts = Vec::new();
+    for artifact_name in required_artifacts {
+        let artifact_type = ArtifactType::from_str(artifact_name).ok_or_else(|| {
+            ServerError::BadRequest(format!(
+                "Invalid required artifact type configured on column {}: {}",
+                target_column.id, artifact_name
+            ))
+        })?;
+        let artifacts = state
+            .artifact_store
+            .list_by_task_and_type(task_id, &artifact_type)
+            .await?;
+        if artifacts.is_empty() {
+            missing_artifacts.push(artifact_name.clone());
+        }
+    }
+
+    if missing_artifacts.is_empty() {
+        return Ok(());
+    }
+
+    Err(ServerError::BadRequest(format!(
+        "Cannot move task to \"{}\": missing required artifacts: {}. Please provide these artifacts before moving the task.",
+        target_column.name,
+        missing_artifacts.join(", ")
+    )))
 }
 
 async fn delete_task(
