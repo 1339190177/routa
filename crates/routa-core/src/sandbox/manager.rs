@@ -6,7 +6,8 @@
 //! Architecture mirrors the Python sandbox manager described in:
 //! https://amirmalik.net/2025/03/07/code-sandboxes-for-llm-ai-agents
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -18,6 +19,7 @@ use tokio::sync::RwLock;
 
 use crate::acp::docker::find_available_port;
 
+use super::env::parse_env_file;
 use super::policy::{ResolvedSandboxPolicy, SandboxEnvMode, SandboxNetworkMode};
 use super::types::{
     ExecuteRequest, ResolvedCreateSandboxRequest, SandboxInfo, SANDBOX_CHECK_INTERVAL_SECS,
@@ -156,7 +158,7 @@ impl SandboxManager {
 
         // Build `docker run` command.
         let docker_args =
-            build_docker_run_args(&container_name, host_port, &lang, req.policy.as_ref());
+            build_docker_run_args(&container_name, host_port, &lang, req.policy.as_ref())?;
         let output = Command::new("docker")
             .args(&docker_args)
             .stdout(Stdio::piped())
@@ -305,7 +307,7 @@ fn build_docker_run_args(
     host_port: u16,
     lang: &str,
     policy: Option<&ResolvedSandboxPolicy>,
-) -> Vec<String> {
+) -> Result<Vec<String>, String> {
     let mut args = vec![
         "run".to_string(),
         "-d".to_string(),
@@ -354,7 +356,7 @@ fn build_docker_run_args(
         args.push("-w".to_string());
         args.push(policy.container_workdir.clone());
 
-        for (key, value) in collect_policy_env(policy) {
+        for (key, value) in collect_policy_env(policy)? {
             args.push("-e".to_string());
             args.push(format!("{}={}", key, value));
         }
@@ -372,11 +374,19 @@ fn build_docker_run_args(
     }
 
     args.push(SANDBOX_IMAGE.to_string());
-    args
+    Ok(args)
 }
 
-fn collect_policy_env(policy: &ResolvedSandboxPolicy) -> Vec<(String, String)> {
-    let mut env_pairs = match policy.env_mode {
+fn collect_policy_env(policy: &ResolvedSandboxPolicy) -> Result<Vec<(String, String)>, String> {
+    let mut env_pairs = BTreeMap::new();
+
+    for env_file in &policy.env_files {
+        for (key, value) in parse_env_file(Path::new(&env_file.path))? {
+            env_pairs.insert(key, value);
+        }
+    }
+
+    let passthrough = match policy.env_mode {
         SandboxEnvMode::Sanitized => policy
             .env_allowlist
             .iter()
@@ -385,9 +395,11 @@ fn collect_policy_env(policy: &ResolvedSandboxPolicy) -> Vec<(String, String)> {
         SandboxEnvMode::Inherit => std::env::vars().collect::<Vec<_>>(),
     };
 
-    env_pairs.sort_by(|left, right| left.0.cmp(&right.0));
-    env_pairs.dedup_by(|left, right| left.0 == right.0);
-    env_pairs
+    for (key, value) in passthrough {
+        env_pairs.insert(key, value);
+    }
+
+    Ok(env_pairs.into_iter().collect())
 }
 
 /// Parse container port from `docker inspect` JSON output.
@@ -422,7 +434,8 @@ async fn get_container_port(container_id: &str, container_port: u16) -> Option<u
 mod tests {
     use super::*;
     use crate::sandbox::{
-        ResolvedSandboxPolicy, SandboxEnvMode, SandboxMount, SandboxMountAccess, SandboxNetworkMode,
+        ResolvedSandboxEnvFile, ResolvedSandboxPolicy, SandboxEnvFileSource, SandboxEnvMode,
+        SandboxMount, SandboxMountAccess, SandboxNetworkMode,
     };
 
     #[test]
@@ -512,6 +525,7 @@ mod tests {
             read_write_paths: vec!["/repo/src".to_string()],
             network_mode: SandboxNetworkMode::None,
             env_mode: SandboxEnvMode::Sanitized,
+            env_files: vec![],
             env_allowlist: vec![],
             mounts: vec![
                 SandboxMount {
@@ -533,12 +547,65 @@ mod tests {
             notes: vec![],
         };
 
-        let args = build_docker_run_args("sandbox-name", 12345, "python", Some(&policy));
+        let args = build_docker_run_args("sandbox-name", 12345, "python", Some(&policy))
+            .expect("docker args should build");
         assert!(args.iter().any(|arg| arg == "--network"));
         assert!(args.iter().any(|arg| arg == "none"));
         assert!(args.iter().any(|arg| arg == "/workspace/src"));
         assert!(args
             .iter()
             .any(|arg| arg == "/repo:/workspace:ro" || arg == "/repo/src:/workspace/src:rw"));
+    }
+
+    #[test]
+    fn collect_policy_env_layers_env_files_before_host_env() {
+        let dir = tempfile::tempdir().expect("tempdir should exist");
+        let base_env = dir.path().join(".env.base");
+        let request_env = dir.path().join(".env.request");
+        std::fs::write(&base_env, "SHARED=base\nBASE_ONLY=1\n").expect("base env should exist");
+        std::fs::write(&request_env, "SHARED=request\nREQUEST_ONLY=1\n")
+            .expect("request env should exist");
+        std::env::set_var("SHARED", "host");
+        std::env::set_var("HOST_ONLY", "1");
+
+        let policy = ResolvedSandboxPolicy {
+            workspace_id: None,
+            codebase_id: None,
+            scope_root: dir.path().to_string_lossy().to_string(),
+            host_workdir: dir.path().to_string_lossy().to_string(),
+            container_workdir: "/workspace".to_string(),
+            read_only_paths: vec![],
+            read_write_paths: vec![],
+            network_mode: SandboxNetworkMode::None,
+            env_mode: SandboxEnvMode::Sanitized,
+            env_files: vec![
+                ResolvedSandboxEnvFile {
+                    path: base_env.to_string_lossy().to_string(),
+                    source: SandboxEnvFileSource::WorkspaceConfig,
+                    keys: vec!["BASE_ONLY".to_string(), "SHARED".to_string()],
+                },
+                ResolvedSandboxEnvFile {
+                    path: request_env.to_string_lossy().to_string(),
+                    source: SandboxEnvFileSource::Request,
+                    keys: vec!["REQUEST_ONLY".to_string(), "SHARED".to_string()],
+                },
+            ],
+            env_allowlist: vec!["HOST_ONLY".to_string(), "SHARED".to_string()],
+            mounts: vec![],
+            capabilities: vec![],
+            linked_worktrees: vec![],
+            workspace_config: None,
+            notes: vec![],
+        };
+
+        let env_pairs = collect_policy_env(&policy).expect("env layering should succeed");
+        let env_map = env_pairs.into_iter().collect::<BTreeMap<_, _>>();
+        assert_eq!(env_map.get("BASE_ONLY").map(String::as_str), Some("1"));
+        assert_eq!(env_map.get("REQUEST_ONLY").map(String::as_str), Some("1"));
+        assert_eq!(env_map.get("HOST_ONLY").map(String::as_str), Some("1"));
+        assert_eq!(env_map.get("SHARED").map(String::as_str), Some("host"));
+
+        std::env::remove_var("SHARED");
+        std::env::remove_var("HOST_ONLY");
     }
 }

@@ -20,16 +20,18 @@
 //!
 //! Reference: <https://amirmalik.net/2025/03/07/code-sandboxes-for-llm-ai-agents>
 
+mod env;
 pub mod manager;
 pub mod policy;
 pub mod types;
 
 pub use manager::SandboxManager;
 pub use policy::{
-    ResolvedSandboxCapability, ResolvedSandboxLinkedWorktree, ResolvedSandboxPolicy,
-    ResolvedSandboxWorkspaceConfig, SandboxCapability, SandboxCapabilityTier, SandboxEnvMode,
-    SandboxLinkedWorktreeMode, SandboxMount, SandboxMountAccess, SandboxNetworkMode,
-    SandboxPolicyContext, SandboxPolicyInput, SandboxPolicyWorktree, SANDBOX_SCOPE_CONTAINER_ROOT,
+    ResolvedSandboxCapability, ResolvedSandboxEnvFile, ResolvedSandboxLinkedWorktree,
+    ResolvedSandboxPolicy, ResolvedSandboxWorkspaceConfig, SandboxCapability,
+    SandboxCapabilityTier, SandboxEnvFileSource, SandboxEnvMode, SandboxLinkedWorktreeMode,
+    SandboxMount, SandboxMountAccess, SandboxNetworkMode, SandboxPolicyContext, SandboxPolicyInput,
+    SandboxPolicyWorktree, SANDBOX_SCOPE_CONTAINER_ROOT,
 };
 pub use types::{
     CreateSandboxRequest, ExecuteRequest, ResolvedCreateSandboxRequest, SandboxInfo,

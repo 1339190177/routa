@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::env::parse_env_file_keys;
+
 pub const SANDBOX_SCOPE_CONTAINER_ROOT: &str = "/workspace";
 const SANDBOX_EXTRA_READONLY_ROOT: &str = "/workspace-extra/ro";
 const SANDBOX_EXTRA_READWRITE_ROOT: &str = "/workspace-extra/rw";
@@ -100,6 +102,8 @@ pub struct SandboxPolicyInput {
     pub network_mode: Option<SandboxNetworkMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env_mode: Option<SandboxEnvMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env_file: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub env_allowlist: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -121,6 +125,7 @@ impl SandboxPolicyInput {
             && self.read_write_paths.is_empty()
             && self.network_mode.is_none()
             && self.env_mode.is_none()
+            && self.env_file.is_none()
             && self.env_allowlist.is_empty()
             && self.capabilities.is_empty()
             && self.linked_worktree_mode.is_none()
@@ -254,6 +259,8 @@ impl SandboxPolicyInput {
             });
         }
 
+        let env_files =
+            resolve_env_file_layers(self, workspace_config.as_ref(), &scope_root, &mut notes)?;
         let env_allowlist = effective_input
             .env_allowlist
             .iter()
@@ -280,6 +287,7 @@ impl SandboxPolicyInput {
                 .collect(),
             network_mode,
             env_mode: effective_input.env_mode.unwrap_or_default(),
+            env_files,
             env_allowlist,
             mounts,
             capabilities: resolve_capability_view(
@@ -320,6 +328,8 @@ pub struct ResolvedSandboxPolicy {
     pub network_mode: SandboxNetworkMode,
     pub env_mode: SandboxEnvMode,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env_files: Vec<ResolvedSandboxEnvFile>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub env_allowlist: Vec<String>,
     pub mounts: Vec<SandboxMount>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -351,6 +361,22 @@ pub struct ResolvedSandboxLinkedWorktree {
     pub container_path: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SandboxEnvFileSource {
+    WorkspaceConfig,
+    Request,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedSandboxEnvFile {
+    pub path: String,
+    pub source: SandboxEnvFileSource,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keys: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedSandboxWorkspaceConfig {
@@ -373,6 +399,8 @@ struct WorkspaceSandboxConfigFile {
     network_mode: Option<SandboxNetworkMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     env_mode: Option<SandboxEnvMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    env_file: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     env_allowlist: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -564,6 +592,57 @@ fn resolve_user_path(raw_path: &str, base_dir: Option<&Path>) -> Result<PathBuf,
             raw_path
         ))
     }
+}
+
+fn resolve_env_file_layers(
+    policy: &SandboxPolicyInput,
+    workspace_config: Option<&WorkspaceConfigResolution>,
+    scope_root: &Path,
+    notes: &mut Vec<String>,
+) -> Result<Vec<ResolvedSandboxEnvFile>, String> {
+    let mut env_files = Vec::new();
+
+    if let Some(raw) = workspace_config
+        .and_then(|entry| entry.config.as_ref())
+        .and_then(|config| config.env_file.as_deref())
+    {
+        env_files.push(resolve_env_file(
+            raw,
+            scope_root,
+            SandboxEnvFileSource::WorkspaceConfig,
+        )?);
+    }
+    if let Some(raw) = policy.env_file.as_deref() {
+        env_files.push(resolve_env_file(
+            raw,
+            scope_root,
+            SandboxEnvFileSource::Request,
+        )?);
+    }
+
+    if !env_files.is_empty() {
+        notes.push(format!(
+            "Resolved {} env file layer(s) for sandbox environment injection.",
+            env_files.len()
+        ));
+    }
+
+    Ok(env_files)
+}
+
+fn resolve_env_file(
+    raw_path: &str,
+    scope_root: &Path,
+    source: SandboxEnvFileSource,
+) -> Result<ResolvedSandboxEnvFile, String> {
+    let path = resolve_user_path(raw_path, Some(scope_root))?;
+    let keys = parse_env_file_keys(&path)?;
+
+    Ok(ResolvedSandboxEnvFile {
+        path: path.to_string_lossy().to_string(),
+        source,
+        keys,
+    })
 }
 
 fn resolve_network_mode(

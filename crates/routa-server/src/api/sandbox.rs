@@ -275,11 +275,13 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir should exist");
         let repo = temp.path().join("repo");
         let output = repo.join("output");
+        let base_env = repo.join(".env.base");
         std::fs::create_dir_all(&output).expect("output directory should exist");
         std::fs::create_dir_all(repo.join(".routa")).expect("config directory should exist");
+        std::fs::write(&base_env, "BASE_TOKEN=base\n").expect("base env file should exist");
         std::fs::write(
             repo.join(".routa").join("sandbox.json"),
-            r#"{"networkMode":"none","readWritePaths":["output"],"capabilities":["workspaceWrite","linkedWorktreeRead"]}"#,
+            r#"{"networkMode":"none","readWritePaths":["output"],"envFile":".env.base","capabilities":["workspaceWrite","linkedWorktreeRead"]}"#,
         )
         .expect("workspace config should exist");
         let review_wt = temp.path().join("wt-review");
@@ -351,6 +353,14 @@ mod tests {
                 .to_string_lossy()
                 .to_string()
         ));
+        assert_eq!(policy.env_files.len(), 1);
+        assert_eq!(
+            policy.env_files[0].path,
+            std::fs::canonicalize(&base_env)
+                .expect("env file should canonicalize")
+                .to_string_lossy()
+                .to_string()
+        );
         assert_eq!(policy.linked_worktrees.len(), 1);
         assert_eq!(policy.linked_worktrees[0].id, "wt-1");
         assert_eq!(

@@ -125,15 +125,20 @@ fn trusted_workspace_config_is_loaded_and_merged() {
     let scripts = repo.join("scripts");
     let cache = repo.join("cache");
     let output = repo.join("output");
+    let base_env = repo.join(".env.base");
+    let request_env = repo.join(".env.request");
     write_dir(&scripts);
     write_dir(&cache);
     write_dir(&output);
+    write_file(&base_env, "BASE_TOKEN=base\nSHARED=base\n");
+    write_file(&request_env, "REQUEST_TOKEN=request\nSHARED=request\n");
     write_file(
         &repo.join(".routa").join("sandbox.json"),
         r#"{
             "workdir": "scripts",
             "readOnlyPaths": ["cache"],
             "networkMode": "none",
+            "envFile": ".env.base",
             "envAllowlist": ["OPENAI_API_KEY"],
             "capabilities": ["workspaceWrite"]
         }"#,
@@ -141,6 +146,7 @@ fn trusted_workspace_config_is_loaded_and_merged() {
 
     let policy = SandboxPolicyInput {
         trust_workspace_config: true,
+        env_file: Some(".env.request".to_string()),
         read_write_paths: vec!["output".to_string()],
         env_allowlist: vec!["LANG".to_string()],
         ..Default::default()
@@ -171,6 +177,14 @@ fn trusted_workspace_config_is_loaded_and_merged() {
     );
     assert!(resolved.read_only_paths.contains(&canonical(&cache)));
     assert!(resolved.read_write_paths.contains(&canonical(&output)));
+    assert_eq!(resolved.env_files.len(), 2);
+    assert_eq!(
+        resolved.env_files[0].source,
+        SandboxEnvFileSource::WorkspaceConfig
+    );
+    assert_eq!(resolved.env_files[0].path, canonical(&base_env));
+    assert_eq!(resolved.env_files[1].source, SandboxEnvFileSource::Request);
+    assert_eq!(resolved.env_files[1].path, canonical(&request_env));
     assert!(resolved
         .notes
         .iter()
@@ -306,4 +320,29 @@ fn network_defaults_to_none_without_network_access_capability() {
         .notes
         .iter()
         .any(|note| note.contains("Defaulted network mode to none")));
+}
+
+#[test]
+fn explicit_env_file_is_resolved_and_explained() {
+    let temp = tempfile::tempdir().expect("tempdir should exist");
+    let repo = temp.path().join("repo");
+    let env_file = repo.join(".env.runtime");
+    write_dir(&repo);
+    write_file(&env_file, "OPENAI_API_KEY=sk-test\nFOO=bar\n");
+
+    let resolved = SandboxPolicyInput {
+        workdir: Some(repo.to_string_lossy().to_string()),
+        env_file: Some(".env.runtime".to_string()),
+        ..Default::default()
+    }
+    .resolve(None)
+    .expect("policy should resolve");
+
+    assert_eq!(resolved.env_files.len(), 1);
+    assert_eq!(resolved.env_files[0].path, canonical(&env_file));
+    assert_eq!(resolved.env_files[0].source, SandboxEnvFileSource::Request);
+    assert_eq!(
+        resolved.env_files[0].keys,
+        vec!["FOO".to_string(), "OPENAI_API_KEY".to_string()]
+    );
 }
