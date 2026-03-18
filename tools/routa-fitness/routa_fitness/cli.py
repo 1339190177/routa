@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from routa_fitness.evidence import load_dimensions, validate_weights
-from routa_fitness.governance import GovernancePolicy, filter_dimensions, enforce
+from routa_fitness.governance import GovernancePolicy, enforce, filter_dimensions
 from routa_fitness.model import Tier
 from routa_fitness.reporters.terminal import TerminalReporter
+from routa_fitness.runners.graph import GraphRunner
 from routa_fitness.runners.shell import ShellRunner
 from routa_fitness.scoring import score_dimension, score_report
 
@@ -30,6 +32,55 @@ def _find_fitness_dir(project_root: Path) -> Path:
         print(f"Error: fitness directory not found at {fitness_dir}")
         sys.exit(1)
     return fitness_dir
+
+
+def _print_json(data: dict) -> None:
+    print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _print_graph_impact(result: dict) -> None:
+    print(result.get("summary", "No summary available."))
+    print(f"Changed files: {len(result.get('changed_files', []))}")
+    print(f"Impacted files: {len(result.get('impacted_files', []))}")
+    print(f"Impacted test files: {len(result.get('impacted_test_files', []))}")
+    print(f"Wide blast radius: {'yes' if result.get('wide_blast_radius') else 'no'}")
+    if result.get("skipped_files"):
+        print(f"Skipped files: {', '.join(result['skipped_files'][:10])}")
+
+
+def _print_graph_test_radius(result: dict) -> None:
+    print(result.get("summary", "No summary available."))
+    print(f"Changed files: {len(result.get('changed_files', []))}")
+    print(f"Queryable targets: {len(result.get('target_nodes', []))}")
+    print(f"Unique test files: {len(result.get('test_files', []))}")
+    print(f"Untested targets: {len(result.get('untested_targets', []))}")
+    if result.get("test_files"):
+        print("Test files:")
+        for file_path in result["test_files"][:20]:
+            print(f"  - {file_path}")
+    if result.get("untested_targets"):
+        print("Untested targets:")
+        for target in result["untested_targets"][:20]:
+            print(f"  - {target['qualified_name']}")
+
+
+def _print_graph_query(result: dict) -> None:
+    print(result.get("summary", "No summary available."))
+    for item in result.get("results", [])[:20]:
+        label = item.get("qualified_name") or item.get("name") or item.get("file_path") or str(item)
+        print(f"  - {label}")
+
+
+def _print_graph_history(result: dict) -> None:
+    print(result.get("summary", "No summary available."))
+    for commit in result.get("commits", []):
+        print(
+            f"{commit['short_commit']} {commit['subject']} | "
+            f"files={commit['changed_file_count']} "
+            f"targets={commit['target_count']} "
+            f"tests={commit['test_file_count']} "
+            f"untested={commit['untested_target_count']}"
+        )
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -106,9 +157,112 @@ def cmd_validate(args: argparse.Namespace) -> int:
     if valid:
         print("\u2705 Weights sum to 100%")
         return 0
+
+    print(f"\u274c Weights sum to {total}%, expected 100%")
+    return 1
+
+
+def cmd_graph_build(args: argparse.Namespace) -> int:
+    """Build or update the backing code graph."""
+    runner = GraphRunner(_find_project_root())
+    result = runner.build_graph(base=args.base, build_mode=args.build_mode)
+    if args.json:
+        _print_json(result)
     else:
-        print(f"\u274c Weights sum to {total}%, expected 100%")
-        return 1
+        print(result.get("summary", result.get("reason", "No summary available.")))
+    return 0 if result.get("status") not in {"unavailable"} else 1
+
+
+def cmd_graph_stats(args: argparse.Namespace) -> int:
+    """Show graph statistics."""
+    runner = GraphRunner(_find_project_root())
+    result = runner.stats()
+    if args.json:
+        _print_json(result)
+    else:
+        if result.get("status") == "unavailable":
+            print(result.get("reason", "Graph unavailable"))
+            return 1
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0 if result.get("status") != "unavailable" else 1
+
+
+def cmd_graph_impact(args: argparse.Namespace) -> int:
+    """Show blast radius for changed files or an explicit file list."""
+    runner = GraphRunner(_find_project_root())
+    result = runner.analyze_impact(
+        args.files or None,
+        base=args.base,
+        max_depth=args.depth,
+        build_mode=args.build_mode,
+    )
+    if args.json:
+        _print_json(result)
+    else:
+        if result.get("status") == "unavailable":
+            print(result.get("reason", "Graph unavailable"))
+            return 1
+        _print_graph_impact(result)
+    return 0 if result.get("status") != "unavailable" else 1
+
+
+def cmd_graph_test_radius(args: argparse.Namespace) -> int:
+    """Show tests in the radius of the current diff or explicit files."""
+    runner = GraphRunner(_find_project_root())
+    result = runner.analyze_test_radius(
+        args.files or None,
+        base=args.base,
+        max_depth=args.depth,
+        build_mode=args.build_mode,
+        max_targets=args.max_targets,
+    )
+    if args.json:
+        _print_json(result)
+    else:
+        if result.get("status") == "unavailable":
+            print(result.get("reason", "Graph unavailable"))
+            return 1
+        _print_graph_test_radius(result)
+    return 0 if result.get("status") != "unavailable" else 1
+
+
+def cmd_graph_query(args: argparse.Namespace) -> int:
+    """Run a graph query such as callers_of or tests_for."""
+    runner = GraphRunner(_find_project_root())
+    result = runner.query(
+        args.pattern,
+        args.target,
+        base=args.base,
+        build_mode=args.build_mode,
+    )
+    if args.json:
+        _print_json(result)
+    else:
+        if result.get("status") == "unavailable":
+            print(result.get("reason", "Graph unavailable"))
+            return 1
+        _print_graph_query(result)
+    return 0 if result.get("status") != "unavailable" else 1
+
+
+def cmd_graph_history(args: argparse.Namespace) -> int:
+    """Estimate test radius for recent commits using the current graph."""
+    runner = GraphRunner(_find_project_root())
+    result = runner.analyze_history(
+        count=args.count,
+        ref=args.ref,
+        max_depth=args.depth,
+        build_mode=args.build_mode,
+        max_targets=args.max_targets,
+    )
+    if args.json:
+        _print_json(result)
+    else:
+        if result.get("status") == "unavailable":
+            print(result.get("reason", "Graph unavailable"))
+            return 1
+        _print_graph_history(result)
+    return 0 if result.get("status") != "unavailable" else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -118,7 +272,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    # run
     run_parser = subparsers.add_parser("run", help="Run fitness checks")
     run_parser.add_argument(
         "--tier", choices=["fast", "normal", "deep"], help="Run only metrics up to this tier"
@@ -128,9 +281,99 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--verbose", action="store_true", help="Show output on failure")
     run_parser.set_defaults(func=cmd_run)
 
-    # validate
     validate_parser = subparsers.add_parser("validate", help="Check dimension weights sum to 100%")
     validate_parser.set_defaults(func=cmd_validate)
+
+    graph_parser = subparsers.add_parser("graph", help="Graph-backed impact and test-radius analysis")
+    graph_subparsers = graph_parser.add_subparsers(dest="graph_command")
+
+    graph_build = graph_subparsers.add_parser("build", help="Build or update the code graph")
+    graph_build.add_argument("--base", default="HEAD", help="Git diff base for incremental update")
+    graph_build.add_argument(
+        "--build-mode",
+        choices=["auto", "full", "skip"],
+        default="auto",
+        help="Graph build mode",
+    )
+    graph_build.add_argument("--json", action="store_true", help="Emit JSON output")
+    graph_build.set_defaults(func=cmd_graph_build)
+
+    graph_stats = graph_subparsers.add_parser("stats", help="Show graph statistics")
+    graph_stats.add_argument("--json", action="store_true", help="Emit JSON output")
+    graph_stats.set_defaults(func=cmd_graph_stats)
+
+    graph_impact = graph_subparsers.add_parser("impact", help="Analyze blast radius")
+    graph_impact.add_argument("files", nargs="*", help="Optional explicit changed files")
+    graph_impact.add_argument("--base", default="HEAD", help="Git diff base")
+    graph_impact.add_argument("--depth", type=int, default=2, help="Traversal depth")
+    graph_impact.add_argument(
+        "--build-mode",
+        choices=["auto", "full", "skip"],
+        default="auto",
+        help="Graph build mode",
+    )
+    graph_impact.add_argument("--json", action="store_true", help="Emit JSON output")
+    graph_impact.set_defaults(func=cmd_graph_impact)
+
+    graph_test_radius = graph_subparsers.add_parser(
+        "test-radius",
+        help="Estimate tests affected by changed files or commits",
+    )
+    graph_test_radius.add_argument("files", nargs="*", help="Optional explicit changed files")
+    graph_test_radius.add_argument("--base", default="HEAD", help="Git diff base")
+    graph_test_radius.add_argument("--depth", type=int, default=2, help="Traversal depth")
+    graph_test_radius.add_argument("--max-targets", type=int, default=25, help="Max nodes to query")
+    graph_test_radius.add_argument(
+        "--build-mode",
+        choices=["auto", "full", "skip"],
+        default="auto",
+        help="Graph build mode",
+    )
+    graph_test_radius.add_argument("--json", action="store_true", help="Emit JSON output")
+    graph_test_radius.set_defaults(func=cmd_graph_test_radius)
+
+    graph_query = graph_subparsers.add_parser("query", help="Run a graph query")
+    graph_query.add_argument(
+        "pattern",
+        choices=[
+            "callers_of",
+            "callees_of",
+            "imports_of",
+            "importers_of",
+            "children_of",
+            "tests_for",
+            "inheritors_of",
+            "file_summary",
+        ],
+        help="Query pattern",
+    )
+    graph_query.add_argument("target", help="Qualified name or file path")
+    graph_query.add_argument("--base", default="HEAD", help="Git diff base")
+    graph_query.add_argument(
+        "--build-mode",
+        choices=["auto", "full", "skip"],
+        default="auto",
+        help="Graph build mode",
+    )
+    graph_query.add_argument("--json", action="store_true", help="Emit JSON output")
+    graph_query.set_defaults(func=cmd_graph_query)
+
+    graph_history = graph_subparsers.add_parser(
+        "history",
+        help="Estimate test radius for recent commits using the current graph",
+    )
+    graph_history.add_argument("--count", type=int, default=10, help="Number of commits to inspect")
+    graph_history.add_argument("--ref", default="HEAD", help="Revision to walk from")
+    graph_history.add_argument("--depth", type=int, default=2, help="Traversal depth")
+    graph_history.add_argument("--max-targets", type=int, default=25, help="Max nodes to query")
+    graph_history.add_argument(
+        "--build-mode",
+        choices=["auto", "full", "skip"],
+        default="auto",
+        help="Graph build mode",
+    )
+    graph_history.add_argument("--json", action="store_true", help="Emit JSON output")
+    graph_history.set_defaults(func=cmd_graph_history)
 
     return parser
 
@@ -142,6 +385,10 @@ def main() -> None:
     if not args.command:
         parser.print_help()
         sys.exit(0)
+
+    if args.command == "graph" and not getattr(args, "graph_command", None):
+        parser.parse_args(["graph", "--help"])
+        return
 
     exit_code = args.func(args)
     sys.exit(exit_code)

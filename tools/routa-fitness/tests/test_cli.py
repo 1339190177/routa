@@ -28,6 +28,48 @@ def test_parser_validate():
     assert args.command == "validate"
 
 
+def test_parser_graph_impact_defaults():
+    parser = build_parser()
+    args = parser.parse_args(["graph", "impact"])
+    assert args.command == "graph"
+    assert args.graph_command == "impact"
+    assert args.base == "HEAD"
+    assert args.depth == 2
+    assert args.files == []
+
+
+def test_parser_graph_test_radius_flags():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["graph", "test-radius", "--base", "HEAD~3", "--depth", "4", "--max-targets", "12", "src/a.ts"]
+    )
+    assert args.command == "graph"
+    assert args.graph_command == "test-radius"
+    assert args.base == "HEAD~3"
+    assert args.depth == 4
+    assert args.max_targets == 12
+    assert args.files == ["src/a.ts"]
+
+
+def test_parser_graph_query():
+    parser = build_parser()
+    args = parser.parse_args(["graph", "query", "tests_for", "MyService.run", "--json"])
+    assert args.command == "graph"
+    assert args.graph_command == "query"
+    assert args.pattern == "tests_for"
+    assert args.target == "MyService.run"
+    assert args.json is True
+
+
+def test_parser_graph_history():
+    parser = build_parser()
+    args = parser.parse_args(["graph", "history", "--count", "5", "--ref", "main"])
+    assert args.command == "graph"
+    assert args.graph_command == "history"
+    assert args.count == 5
+    assert args.ref == "main"
+
+
 def test_parser_no_command():
     parser = build_parser()
     args = parser.parse_args([])

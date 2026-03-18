@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from routa_fitness.model import Metric, Tier
+from routa_fitness.model import Metric
 from routa_fitness.runners.shell import ShellRunner
 
 
