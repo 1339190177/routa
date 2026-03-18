@@ -495,4 +495,15 @@ async fn test_kanban_export_roundtrip() {
     kanban_cmd::validate_config(export_path.to_str().unwrap())
         .await
         .expect("exported YAML must be valid");
+
+    let exported = std::fs::read_to_string(&export_path).expect("exported yaml should be readable");
+    let config = KanbanConfig::from_yaml(&exported).expect("exported yaml should parse");
+    let automation = config.boards[0].columns[1]
+        .automation
+        .as_ref()
+        .expect("export should preserve automation");
+    assert!(automation.enabled);
+    assert_eq!(automation.provider_id.as_deref(), Some("routa-native"));
+    assert_eq!(automation.role.as_deref(), Some("CRAFTER"));
+    assert_eq!(automation.transition_type.as_deref(), Some("entry"));
 }

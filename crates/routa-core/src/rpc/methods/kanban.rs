@@ -39,6 +39,8 @@ pub struct KanbanColumnWithCards {
     pub color: Option<String>,
     pub position: i64,
     pub stage: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub automation: Option<crate::models::kanban::KanbanColumnAutomation>,
     pub cards: Vec<KanbanCard>,
 }
 
@@ -247,6 +249,11 @@ pub async fn create_card(
     let board = resolve_board(state, &params.workspace_id, params.board_id.as_deref()).await?;
     let target_column_id = params.column_id.unwrap_or_else(|| "backlog".to_string());
     ensure_column_exists(&board, &target_column_id)?;
+    let target_column = board
+        .columns
+        .iter()
+        .find(|column| column.id == target_column_id)
+        .cloned();
 
     let title = params.title.trim();
     if title.is_empty() {
@@ -274,8 +281,11 @@ pub async fn create_card(
     set_task_column(&mut task, target_column_id);
     task.priority = parse_priority(params.priority.as_deref())?;
     task.labels = params.labels.unwrap_or_default();
+    maybe_apply_lane_automation_defaults(&mut task, target_column.as_ref());
     task.updated_at = Utc::now();
 
+    state.task_store.save(&task).await?;
+    maybe_trigger_lane_automation(state, &mut task, target_column.as_ref()).await;
     state.task_store.save(&task).await?;
     Ok(CreateCardResult {
         card: task_to_card(&task),
@@ -311,6 +321,13 @@ pub async fn move_card(state: &AppState, params: MoveCardParams) -> Result<MoveC
         .await?
         .ok_or_else(|| RpcError::NotFound(format!("Board {} not found", board_id)))?;
     ensure_column_exists(&board, &params.target_column_id)?;
+    let target_column = board
+        .columns
+        .iter()
+        .find(|column| column.id == params.target_column_id)
+        .cloned()
+        .ok_or_else(|| RpcError::NotFound(format!("Column {} not found", params.target_column_id)))?;
+    let previous_column_id = task.column_id.clone();
 
     task.column_id = Some(params.target_column_id.clone());
     task.position = match params.position {
@@ -329,12 +346,208 @@ pub async fn move_card(state: &AppState, params: MoveCardParams) -> Result<MoveC
         .await?,
     };
     sync_task_status_from_column(&mut task);
+    if previous_column_id.as_deref() != Some(params.target_column_id.as_str()) {
+        maybe_apply_lane_automation_defaults(&mut task, Some(&target_column));
+        task.trigger_session_id = None;
+    }
     task.updated_at = Utc::now();
 
     state.task_store.save(&task).await?;
+    if previous_column_id.as_deref() != Some(params.target_column_id.as_str()) {
+        maybe_trigger_lane_automation(state, &mut task, Some(&target_column)).await;
+        state.task_store.save(&task).await?;
+    }
     Ok(MoveCardResult {
         card: task_to_card(&task),
     })
+}
+
+fn maybe_apply_lane_automation_defaults(task: &mut Task, target_column: Option<&KanbanColumn>) {
+    let Some(automation) = target_column.and_then(|column| column.automation.as_ref()) else {
+        return;
+    };
+    if !automation.enabled {
+        return;
+    }
+
+    let primary_step = automation.primary_step();
+    if task.assigned_provider.is_none() {
+        task.assigned_provider = primary_step
+            .as_ref()
+            .and_then(|step| step.provider_id.clone())
+            .or_else(|| automation.provider_id.clone());
+    }
+    if task.assigned_role.is_none() {
+        task.assigned_role = primary_step
+            .as_ref()
+            .and_then(|step| step.role.clone())
+            .or_else(|| automation.role.clone());
+    }
+    if task.assigned_specialist_id.is_none() {
+        task.assigned_specialist_id = primary_step
+            .as_ref()
+            .and_then(|step| step.specialist_id.clone())
+            .or_else(|| automation.specialist_id.clone());
+    }
+    if task.assigned_specialist_name.is_none() {
+        task.assigned_specialist_name = primary_step
+            .as_ref()
+            .and_then(|step| step.specialist_name.clone())
+            .or_else(|| automation.specialist_name.clone());
+    }
+}
+
+async fn maybe_trigger_lane_automation(
+    state: &AppState,
+    task: &mut Task,
+    target_column: Option<&KanbanColumn>,
+) {
+    let Some(column) = target_column else {
+        return;
+    };
+    let Some(automation) = column.automation.as_ref() else {
+        return;
+    };
+    if !automation.enabled || task.trigger_session_id.is_some() {
+        return;
+    }
+
+    let transition_type = automation.transition_type.as_deref().unwrap_or("entry");
+    if transition_type != "entry" && transition_type != "both" {
+        return;
+    }
+
+    match trigger_assigned_task_agent(state, task).await {
+        Ok(session_id) => {
+            task.trigger_session_id = Some(session_id);
+            task.last_sync_error = None;
+        }
+        Err(error) => {
+            task.last_sync_error = Some(error);
+        }
+    }
+}
+
+fn build_task_prompt(task: &Task) -> String {
+    let labels = if task.labels.is_empty() {
+        "Labels: none".to_string()
+    } else {
+        format!("Labels: {}", task.labels.join(", "))
+    };
+
+    [
+        format!("You are assigned to Kanban task: {}", task.title),
+        String::new(),
+        "## Context".to_string(),
+        String::new(),
+        "**IMPORTANT**: You are working in Kanban context. Use MCP tools (update_card, move_card, etc.) to manage this card.".to_string(),
+        "Do NOT use `gh issue create` or other GitHub CLI commands.".to_string(),
+        String::new(),
+        "## Task Details".to_string(),
+        String::new(),
+        format!("**Card ID:** {}", task.id),
+        format!(
+            "**Priority:** {}",
+            task.priority
+                .as_ref()
+                .map(|value| value.as_str())
+                .unwrap_or("medium")
+        ),
+        labels,
+        String::new(),
+        "## Objective".to_string(),
+        String::new(),
+        task.objective.clone(),
+        String::new(),
+        "## Instructions".to_string(),
+        String::new(),
+        "1. Start work for this lane immediately.".to_string(),
+        "2. Use `update_card` to record progress.".to_string(),
+        "3. Use `move_card` when this lane is complete.".to_string(),
+        "4. Keep work scoped to this card.".to_string(),
+    ]
+    .join("\n")
+}
+
+async fn trigger_assigned_task_agent(state: &AppState, task: &Task) -> Result<String, String> {
+    let provider = task
+        .assigned_provider
+        .clone()
+        .unwrap_or_else(|| "opencode".to_string());
+    let role = task
+        .assigned_role
+        .clone()
+        .unwrap_or_else(|| "CRAFTER".to_string())
+        .to_uppercase();
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let cwd = state
+        .codebase_store
+        .get_default(&task.workspace_id)
+        .await
+        .map_err(|error| format!("Failed to resolve default codebase: {}", error))?
+        .map(|codebase| codebase.repo_path)
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|path| path.to_string_lossy().to_string())
+        })
+        .unwrap_or_else(|| ".".to_string());
+
+    state
+        .acp_manager
+        .create_session(
+            session_id.clone(),
+            cwd.clone(),
+            task.workspace_id.clone(),
+            Some(provider.clone()),
+            Some(role.clone()),
+            None,
+            None,
+        )
+        .await
+        .map_err(|error| format!("Failed to create ACP session: {}", error))?;
+
+    state
+        .acp_session_store
+        .create(
+            &session_id,
+            &cwd,
+            &task.workspace_id,
+            Some(provider.as_str()),
+            Some(role.as_str()),
+            None,
+        )
+        .await
+        .map_err(|error| format!("Failed to persist ACP session: {}", error))?;
+
+    let prompt = build_task_prompt(task);
+    let state_clone = state.clone();
+    let session_id_clone = session_id.clone();
+    tokio::spawn(async move {
+        if state_clone
+            .acp_manager
+            .prompt(&session_id_clone, &prompt)
+            .await
+            .is_ok()
+        {
+            let _ = state_clone
+                .acp_session_store
+                .set_first_prompt_sent(&session_id_clone)
+                .await;
+            if let Some(history) = state_clone
+                .acp_manager
+                .get_session_history(&session_id_clone)
+                .await
+            {
+                let _ = state_clone
+                    .acp_session_store
+                    .save_history(&session_id_clone, &history)
+                    .await;
+            }
+        }
+    });
+
+    Ok(session_id)
 }
 
 #[derive(Debug, Deserialize)]
@@ -793,6 +1006,7 @@ async fn build_board_result(state: &AppState, board: KanbanBoard) -> Result<GetB
                 color: column.color.clone(),
                 position: column.position,
                 stage: column.stage.clone(),
+                automation: column.automation.clone(),
                 cards,
             }
         })
@@ -1023,6 +1237,93 @@ mod tests {
         .await
         .expect_err("negative position should fail");
         assert!(matches!(err, RpcError::BadRequest(_)));
+    }
+
+    #[tokio::test]
+    async fn move_card_applies_lane_automation_defaults_to_task() {
+        let state = setup_state().await;
+        let boards = list_boards(
+            &state,
+            ListBoardsParams {
+                workspace_id: "default".to_string(),
+            },
+        )
+        .await
+        .expect("list boards should succeed");
+        let board_id = boards.boards[0].id.clone();
+
+        let mut board = state
+            .kanban_store
+            .get(&board_id)
+            .await
+            .expect("board load should succeed")
+            .expect("default board should exist");
+        let todo = board
+            .columns
+            .iter_mut()
+            .find(|column| column.id == "todo")
+            .expect("todo column should exist");
+        todo.automation = Some(crate::models::kanban::KanbanColumnAutomation {
+            enabled: true,
+            provider_id: Some("opencode".to_string()),
+            role: Some("CRAFTER".to_string()),
+            specialist_id: Some("kanban-todo-worker".to_string()),
+            specialist_name: Some("Todo Worker".to_string()),
+            transition_type: Some("entry".to_string()),
+            ..Default::default()
+        });
+        state
+            .kanban_store
+            .update(&board)
+            .await
+            .expect("board update should succeed");
+
+        let created = create_card(
+            &state,
+            CreateCardParams {
+                workspace_id: "default".to_string(),
+                board_id: Some(board_id.clone()),
+                column_id: Some("backlog".to_string()),
+                title: "Automate me".to_string(),
+                description: None,
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect("create card should succeed");
+
+        move_card(
+            &state,
+            MoveCardParams {
+                card_id: created.card.id.clone(),
+                target_column_id: "todo".to_string(),
+                position: None,
+            },
+        )
+        .await
+        .expect("move card should succeed");
+
+        let task = state
+            .task_store
+            .get(&created.card.id)
+            .await
+            .expect("task lookup should succeed")
+            .expect("task should exist");
+        assert_eq!(task.assigned_provider.as_deref(), Some("opencode"));
+        assert_eq!(task.assigned_role.as_deref(), Some("CRAFTER"));
+        assert_eq!(
+            task.assigned_specialist_id.as_deref(),
+            Some("kanban-todo-worker")
+        );
+        assert_eq!(
+            task.assigned_specialist_name.as_deref(),
+            Some("Todo Worker")
+        );
+        assert!(
+            task.trigger_session_id.is_some() || task.last_sync_error.is_some(),
+            "lane automation should either start a session or record why it could not"
+        );
     }
 
     #[tokio::test]

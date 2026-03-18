@@ -386,6 +386,7 @@ struct ExportColumn {
     name: String,
     color: Option<String>,
     stage: String,
+    automation: Option<routa_core::models::kanban::KanbanColumnAutomation>,
 }
 
 fn to_rpc_error_text(response: &serde_json::Value) -> String {
@@ -520,31 +521,35 @@ pub async fn apply_config(
             })
             .collect();
 
-        let method;
-        let params;
-        if board_ids.contains(&board.id) {
-            method = "kanban.updateBoard";
-            params = serde_json::json!({
+        let result = if board_ids.contains(&board.id) {
+            call_rpc(
+                state,
+                "kanban.updateBoard",
+                serde_json::json!({
                 "boardId": board.id,
                 "name": board.name,
                 "isDefault": board.is_default,
                 "columns": columns,
-            });
+                }),
+            )
+            .await
         } else {
-            method = "kanban.createBoard";
-            params = serde_json::json!({
-                "workspaceId": config.workspace_id,
-                "id": board.id,
-                "name": board.name,
-                "isDefault": board.is_default,
-                "columns": board.columns.iter().map(|col| col.name.clone()).collect::<Vec<_>>(),
-            });
-        }
+            let create_result = call_rpc(
+                state,
+                "kanban.createBoard",
+                serde_json::json!({
+                    "workspaceId": config.workspace_id,
+                    "id": board.id,
+                    "name": board.name,
+                    "isDefault": board.is_default,
+                    "columns": board.columns.iter().map(|col| col.name.clone()).collect::<Vec<_>>(),
+                }),
+            )
+            .await;
 
-        match call_rpc(state, method, params).await {
-            Ok(result) => {
-                if !board_ids.contains(&board.id) {
-                    let _ = call_rpc(
+            match create_result {
+                Ok(result) => {
+                    let update_result = call_rpc(
                         state,
                         "kanban.updateBoard",
                         serde_json::json!({
@@ -552,8 +557,21 @@ pub async fn apply_config(
                             "columns": columns,
                         }),
                     )
-                    .await?;
+                    .await;
+
+                    match update_result {
+                        Ok(_) => Ok(result),
+                        Err(error) => Err(format!(
+                            "Created board but failed to apply column details: {error}"
+                        )),
+                    }
                 }
+                Err(error) => Err(error),
+            }
+        };
+
+        match result {
+            Ok(result) => {
                 applied.push(serde_json::json!({
                     "boardId": board.id,
                     "result": result
@@ -620,7 +638,7 @@ pub async fn export_config(
                     name: col.name,
                     color: col.color,
                     stage: col.stage,
-                    automation: None,
+                    automation: col.automation,
                 })
                 .collect(),
         });
