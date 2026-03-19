@@ -3,6 +3,12 @@ import { test, expect } from "@playwright/test";
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
 const TINY_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9pQhNfQAAAAASUVORK5CYII=";
+const TEST_RESULTS_TEXT = [
+  "PASS e2e/review-visual.spec.ts",
+  "  ✓ review lane visual gate captures screenshots (842ms)",
+  "",
+  "1 passed (1.2s)",
+].join("\n");
 
 function parseToolPayload(result: { content?: Array<{ text?: string }> | undefined }) {
   return JSON.parse(result.content?.[0]?.text ?? "{}") as Record<string, unknown>;
@@ -44,7 +50,7 @@ test.describe("Kanban artifact gates", () => {
                     enabled: false,
                     providerId: "codex",
                     role: "GATE",
-                    requiredArtifacts: ["screenshot"],
+                    requiredArtifacts: ["screenshot", "test_results"],
                   },
                 }
               : {
@@ -80,12 +86,13 @@ test.describe("Kanban artifact gates", () => {
 
       await expect(devCard).toBeVisible({ timeout: 20_000 });
       await expect(reviewCard).toHaveCount(0);
-      await expect(devCard.getByTestId("kanban-card-artifact-gate")).toHaveText("Needs Screenshot");
+      await expect(devCard.getByTestId("kanban-card-artifact-gate")).toContainText("Needs Screenshot");
+      await expect(devCard.getByTestId("kanban-card-artifact-gate")).toContainText("+1");
 
       await devCard.click();
       await expect(page.getByText("Artifacts", { exact: true })).toBeVisible();
       await expect(page.getByText("No artifacts attached yet.")).toBeVisible();
-      await expect(page.getByText("Missing for next move: Screenshot.")).toBeVisible();
+      await expect(page.getByText("Missing for next move: Screenshot, Test Results.")).toBeVisible();
 
       const provideArtifactResponse = await request.post("/api/mcp/tools", {
         data: {
@@ -114,6 +121,39 @@ test.describe("Kanban artifact gates", () => {
         status: "provided",
       });
 
+      await expect(page.getByText("review-proof.png")).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText("by agent-artifact-e2e")).toBeVisible();
+      await expect(page.getByText("Missing for next move: Test Results.")).toBeVisible();
+      await expect(devCard.getByTestId("kanban-card-artifact-gate")).toContainText("Needs Test Results");
+      await expect(devCard.getByTestId("kanban-card-artifact-count")).toHaveText("1 artifact");
+
+      const provideTestResultsResponse = await request.post("/api/mcp/tools", {
+        data: {
+          workspaceId,
+          mode: "essential",
+          name: "provide_artifact",
+          args: {
+            workspaceId,
+            agentId: "agent-artifact-e2e",
+            type: "test_results",
+            taskId,
+            content: TEST_RESULTS_TEXT,
+            context: "Playwright review lane verification",
+            metadata: {
+              filename: "review-test-results.txt",
+              mediaType: "text/plain",
+            },
+          },
+        },
+      });
+      expect(provideTestResultsResponse.ok()).toBeTruthy();
+      const provideTestResultsResult = await provideTestResultsResponse.json();
+      expect(provideTestResultsResult.isError).toBe(false);
+      expect(parseToolPayload(provideTestResultsResult)).toMatchObject({
+        artifactId: expect.any(String),
+        status: "provided",
+      });
+
       const listArtifactsResponse = await request.post("/api/mcp/tools", {
         data: {
           workspaceId,
@@ -135,14 +175,19 @@ test.describe("Kanban artifact gates", () => {
             type: "screenshot",
             providedByAgentId: "agent-artifact-e2e",
           }),
+          expect.objectContaining({
+            taskId,
+            type: "test_results",
+            providedByAgentId: "agent-artifact-e2e",
+          }),
         ]),
       });
 
-      await expect(page.getByText("review-proof.png")).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByText("by agent-artifact-e2e")).toBeVisible();
-      await expect(page.getByText("Next-lane requirements are satisfied: Screenshot.")).toBeVisible();
+      await expect(page.getByText("review-test-results.txt")).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(TEST_RESULTS_TEXT)).toBeVisible();
+      await expect(page.getByText("Next-lane requirements satisfied: Screenshot, Test Results.")).toBeVisible();
       await expect(devCard.getByTestId("kanban-card-artifact-gate")).toHaveText("Review ready");
-      await expect(devCard.getByTestId("kanban-card-artifact-count")).toHaveText("1 artifact");
+      await expect(devCard.getByTestId("kanban-card-artifact-count")).toHaveText("2 artifacts");
 
       const moveTaskResponse = await request.patch(`/api/tasks/${taskId}`, {
         data: { columnId: "review", position: 0 },

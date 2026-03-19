@@ -50,14 +50,22 @@ const RECOMMENDED_AUTOMATION_BY_STAGE: Partial<Record<KanbanColumnStage, KanbanC
   },
   review: {
     enabled: true,
-    steps: [{
-      id: "review-guard",
-      role: "GATE",
-      specialistId: "kanban-review-guard",
-      specialistName: "Review Guard",
-    }],
+    steps: [
+      {
+        id: "qa-frontend",
+        role: "GATE",
+        specialistId: "kanban-qa-frontend",
+        specialistName: "QA Frontend",
+      },
+      {
+        id: "review-guard",
+        role: "GATE",
+        specialistId: "kanban-review-guard",
+        specialistName: "Review Guard",
+      },
+    ],
     transitionType: "entry",
-    requiredArtifacts: ["screenshot"],
+    requiredArtifacts: ["screenshot", "test_results"],
     autoAdvanceOnSuccess: false,
   },
   blocked: {
@@ -88,7 +96,7 @@ const LEGACY_SPECIALIST_IDS_BY_STAGE: Partial<Record<KanbanColumnStage, string[]
   backlog: ["issue-enricher", "kanban-workflow", "kanban-agent"],
   todo: ["routa", "developer", "kanban-workflow"],
   dev: ["pr-reviewer", "developer", "claude-code", "kanban-workflow"],
-  review: ["desk-check", "gate", "pr-reviewer", "kanban-workflow"],
+  review: ["desk-check", "gate", "pr-reviewer", "kanban-workflow", "kanban-review-guard"],
   blocked: ["claude-code", "developer", "routa", "kanban-workflow"],
   done: ["gate", "verifier", "claude-code", "kanban-workflow"],
 };
@@ -138,6 +146,10 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
         && currentAutomation.specialistName
         && currentAutomation.specialistName === recommendedPrimaryStep?.specialistName),
     );
+    const shouldRefreshArtifactPolicy = (
+      (shouldMigrateLegacySpecialist || shouldMigrateRecommendedSpecialist)
+      && JSON.stringify(currentAutomation.requiredArtifacts ?? []) === JSON.stringify(["screenshot"])
+    );
 
     if (
       hasCustomSteps
@@ -180,7 +192,9 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
           ?? currentSteps[0]?.specialistLocale
           ?? recommendedPrimaryStep?.specialistLocale,
         transitionType: currentAutomation.transitionType ?? recommended.transitionType,
-        requiredArtifacts: currentAutomation.requiredArtifacts ?? recommended.requiredArtifacts,
+        requiredArtifacts: shouldRefreshArtifactPolicy
+          ? recommended.requiredArtifacts
+          : (currentAutomation.requiredArtifacts ?? recommended.requiredArtifacts),
         autoAdvanceOnSuccess: recommended.autoAdvanceOnSuccess,
       }),
     };

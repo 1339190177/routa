@@ -1,8 +1,5 @@
 //! Specialist definition — load specialist prompts from YAML files.
 //!
-//! Specialists can be defined in YAML format (like the existing `.md` files
-//! with frontmatter, but fully in YAML for the Rust workflow engine).
-//!
 //! ```yaml
 //! name: "Implementor"
 //! id: "crafter"
@@ -149,74 +146,6 @@ impl SpecialistDef {
         Self::from_yaml(&content)
     }
 
-    /// Parse a specialist from an existing Markdown file with YAML frontmatter.
-    /// (Compatibility with the `resources/specialists/*.md` format)
-    pub fn from_markdown(path: &str) -> Result<Self, String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read specialist markdown '{}': {}", path, e))?;
-
-        // Parse YAML frontmatter between --- delimiters
-        let parts: Vec<&str> = content.splitn(3, "---").collect();
-        if parts.len() < 3 {
-            return Err(format!(
-                "Invalid specialist markdown '{}': missing YAML frontmatter",
-                path
-            ));
-        }
-
-        let frontmatter = parts[1].trim();
-        let body = parts[2].trim();
-
-        // Parse the frontmatter
-        #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct FrontMatter {
-            id: Option<String>,
-            name: String,
-            description: Option<String>,
-            model_tier: Option<String>,
-            role: Option<String>,
-            role_reminder: Option<String>,
-            default_provider: Option<String>,
-            default_adapter: Option<String>,
-            default_model: Option<String>,
-            execution: Option<SpecialistExecutionDef>,
-        }
-
-        let fm: FrontMatter = serde_yaml::from_str(frontmatter)
-            .map_err(|e| format!("Failed to parse frontmatter in '{}': {}", path, e))?;
-
-        let execution = fm.execution.unwrap_or_default();
-
-        Ok(Self {
-            id: fm.id.unwrap_or_else(|| {
-                Path::new(path)
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "unknown".to_string())
-            }),
-            name: fm.name,
-            description: fm.description,
-            role: execution
-                .role
-                .clone()
-                .or(fm.role)
-                .unwrap_or_else(|| "DEVELOPER".to_string()),
-            model_tier: execution
-                .model_tier
-                .clone()
-                .or(fm.model_tier)
-                .unwrap_or_else(|| "smart".to_string()),
-            system_prompt: body.to_string(),
-            role_reminder: fm.role_reminder,
-            execution: execution.clone(),
-            default_provider: execution.provider.clone().or(fm.default_provider),
-            default_adapter: execution.adapter.clone().or(fm.default_adapter),
-            default_model: execution.model.clone().or(fm.default_model),
-            metadata: HashMap::new(),
-        })
-    }
-
     /// Load a specialist definition from a path, inferring format by extension.
     pub fn from_path(path: &str) -> Result<Self, String> {
         match Path::new(path)
@@ -225,9 +154,8 @@ impl SpecialistDef {
             .unwrap_or_default()
         {
             "yaml" | "yml" => Self::from_file(path),
-            "md" => Self::from_markdown(path),
             _ => Err(format!(
-                "Unsupported specialist file '{}'. Expected .md, .yaml, or .yml",
+                "Unsupported specialist file '{}'. Expected .yaml or .yml",
                 path
             )),
         }
@@ -278,7 +206,7 @@ impl SpecialistLoader {
             }
 
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if matches!(ext, "yaml" | "yml" | "md") {
+            if matches!(ext, "yaml" | "yml") {
                 files.push(path);
             }
         }
@@ -287,9 +215,7 @@ impl SpecialistLoader {
     }
 
     /// Load all specialists from a directory.
-    /// Supports both `.yaml`/`.yml` and `.md` (markdown with frontmatter) files.
-    /// YAML is loaded after Markdown so migrated runtime definitions can
-    /// override legacy Markdown compatibility files deterministically.
+    /// Runtime definitions and locale overlays are authored in YAML.
     pub fn load_dir(&mut self, dir: &str) -> Result<usize, String> {
         let dir_path = Path::new(dir);
         if !dir_path.is_dir() {
@@ -298,30 +224,12 @@ impl SpecialistLoader {
 
         let mut paths = Vec::new();
         Self::collect_specialist_paths(dir_path, false, &mut paths)?;
-        paths.sort_by(|a, b| {
-            let a_ext = a.extension().and_then(|e| e.to_str()).unwrap_or("");
-            let b_ext = b.extension().and_then(|e| e.to_str()).unwrap_or("");
-            let ext_rank = |ext: &str| match ext {
-                "md" => 0,
-                "yaml" | "yml" => 1,
-                _ => 2,
-            };
-
-            ext_rank(a_ext)
-                .cmp(&ext_rank(b_ext))
-                .then_with(|| a.cmp(b))
-        });
+        paths.sort();
 
         let mut count = 0;
         let mut source_paths: HashMap<String, PathBuf> = HashMap::new();
         for path in paths {
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-
-            let specialist = match ext {
-                "yaml" | "yml" => SpecialistDef::from_file(path.to_str().unwrap_or(""))?,
-                "md" => SpecialistDef::from_markdown(path.to_str().unwrap_or(""))?,
-                _ => continue,
-            };
+            let specialist = SpecialistDef::from_file(path.to_str().unwrap_or(""))?;
 
             tracing::info!(
                 "[SpecialistLoader] Loaded specialist: {} ({})",
@@ -329,13 +237,13 @@ impl SpecialistLoader {
                 specialist.name
             );
             if let Some(previous_path) = source_paths.get(&specialist.id) {
-                tracing::warn!(
-                    "[SpecialistLoader] Duplicate specialist id '{}' in '{}'; overriding '{}' with '{}'",
+                return Err(format!(
+                    "[SpecialistLoader] Duplicate specialist id '{}' in '{}'; conflicts: '{}' and '{}'",
                     specialist.id,
                     dir,
                     previous_path.display(),
                     path.display()
-                );
+                ));
             }
             source_paths.insert(specialist.id.clone(), path.clone());
             self.specialists.insert(specialist.id.clone(), specialist);
@@ -534,63 +442,6 @@ system_prompt: |
     }
 
     #[test]
-    fn test_parse_specialist_markdown_execution() {
-        let temp_path = std::env::temp_dir().join(format!(
-            "routa-specialist-{}.md",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::write(
-            &temp_path,
-            r#"---
-name: "Markdown Specialist"
-description: "Markdown execution test"
-modelTier: "balanced"
-role: "DEVELOPER"
-execution:
-  provider: "claude"
-  role: "CRAFTER"
----
-
-You are a markdown specialist.
-"#,
-        )
-        .unwrap();
-
-        let spec = SpecialistDef::from_markdown(temp_path.to_str().unwrap()).unwrap();
-        assert_eq!(spec.role, "CRAFTER");
-        assert_eq!(spec.default_provider.as_deref(), Some("claude"));
-        assert!(spec.system_prompt.contains("markdown specialist"));
-
-        let _ = std::fs::remove_file(temp_path);
-    }
-
-    #[test]
-    fn test_markdown_frontmatter_id_overrides_filename() {
-        let temp_path = std::env::temp_dir().join(format!(
-            "routa-specialist-{}.md",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::write(
-            &temp_path,
-            r#"---
-id: "team-agent-lead"
-name: "Agent Lead"
-role: "ROUTA"
----
-
-Lead prompt
-"#,
-        )
-        .unwrap();
-
-        let spec = SpecialistDef::from_markdown(temp_path.to_str().unwrap()).unwrap();
-        assert_eq!(spec.id, "team-agent-lead");
-        assert_eq!(spec.name, "Agent Lead");
-
-        let _ = std::fs::remove_file(temp_path);
-    }
-
-    #[test]
     fn test_builtin_specialists() {
         let builtins = SpecialistLoader::builtin_specialists();
         assert!(builtins.len() >= 4);
@@ -622,12 +473,10 @@ Lead prompt
         std::fs::create_dir_all(root.join("locales").join("zh-CN")).unwrap();
 
         std::fs::write(
-            root.join("core").join("developer.md"),
-            r#"---
+            root.join("core").join("developer.yaml"),
+            r#"id: "developer"
 name: "Developer"
----
-
-Developer prompt
+system_prompt: "Developer prompt"
 "#,
         )
         .unwrap();
@@ -640,22 +489,18 @@ system_prompt: "Gate prompt"
         )
         .unwrap();
         std::fs::write(
-            root.join("zh-CN").join("developer.md"),
-            r#"---
+            root.join("zh-CN").join("developer.yaml"),
+            r#"id: "developer"
 name: "开发者"
----
-
-中文 prompt
+system_prompt: "中文 prompt"
 "#,
         )
         .unwrap();
         std::fs::write(
-            root.join("locales").join("zh-CN").join("gate.md"),
-            r#"---
+            root.join("locales").join("zh-CN").join("gate.yaml"),
+            r#"id: "gate"
 name: "验证者"
----
-
-中文 gate
+system_prompt: "中文 gate"
 "#,
         )
         .unwrap();
@@ -669,7 +514,7 @@ name: "验证者"
     }
 
     #[test]
-    fn test_load_dir_prefers_yaml_over_markdown_for_same_id() {
+    fn test_load_dir_ignores_markdown_runtime_files() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root = temp_dir.path();
 
@@ -699,6 +544,37 @@ markdown prompt
         let developer = loader.get("developer").unwrap();
         assert_eq!(developer.name, "Developer YAML");
         assert!(developer.system_prompt.contains("yaml prompt"));
+    }
+
+    #[test]
+    fn test_load_dir_fails_on_duplicate_specialist_ids() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path();
+
+        std::fs::create_dir_all(root.join("core")).unwrap();
+        std::fs::create_dir_all(root.join("review")).unwrap();
+        std::fs::write(
+            root.join("core").join("developer.yaml"),
+            r#"id: "developer"
+name: "Developer"
+system_prompt: "first prompt"
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("review").join("duplicate.yaml"),
+            r#"id: "developer"
+name: "Developer Duplicate"
+system_prompt: "second prompt"
+"#,
+        )
+        .unwrap();
+
+        let mut loader = SpecialistLoader::new();
+        let err = loader.load_dir(root.to_str().unwrap()).unwrap_err();
+
+        assert!(err.contains("Duplicate specialist id 'developer'"));
+        assert!(err.contains("conflicts"));
     }
 
     #[test]

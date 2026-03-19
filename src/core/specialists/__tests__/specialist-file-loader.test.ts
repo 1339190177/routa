@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   mergeSpecialistDefinitions,
@@ -16,22 +16,6 @@ function createTempDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "specialist-loader-"));
   tempDirs.push(dir);
   return dir;
-}
-
-function writeSpecialist(filePath: string, name: string, extraFrontmatter = ""): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(
-    filePath,
-    `---
-${extraFrontmatter ? `${extraFrontmatter}\n` : ""}name: "${name}"
-description: "${name} description"
-role: "DEVELOPER"
----
-
-${name} body
-`,
-    "utf8"
-  );
 }
 
 function writeYamlSpecialist(filePath: string, id: string, name: string, prompt: string): void {
@@ -50,6 +34,10 @@ system_prompt: |
   );
 }
 
+function writeYamlOverlay(filePath: string, id: string, name: string, prompt: string): void {
+  writeYamlSpecialist(filePath, id, name, prompt);
+}
+
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -57,12 +45,12 @@ afterEach(() => {
 });
 
 describe("specialist-file-loader", () => {
-  it("loads markdown specialists recursively while skipping locale directories in the base scan", () => {
+  it("loads yaml specialists recursively while skipping locale directories in the base scan", () => {
     const rootDir = createTempDir();
-    writeSpecialist(path.join(rootDir, "core", "developer.md"), "Developer");
-    writeSpecialist(path.join(rootDir, "team", "qa.md"), "QA");
-    writeSpecialist(path.join(rootDir, "zh-CN", "developer.md"), "开发者");
-    writeSpecialist(path.join(rootDir, "locales", "zh-CN", "qa.md"), "测试");
+    writeYamlSpecialist(path.join(rootDir, "core", "developer.yaml"), "developer", "Developer", "Developer body");
+    writeYamlSpecialist(path.join(rootDir, "team", "qa.yaml"), "qa", "QA", "QA body");
+    writeYamlOverlay(path.join(rootDir, "zh-CN", "developer.yaml"), "developer", "开发者", "开发者 body");
+    writeYamlOverlay(path.join(rootDir, "locales", "zh-CN", "qa.yaml"), "qa", "测试", "测试 body");
 
     const loaded = loadSpecialistsFromDirectory(rootDir, "bundled");
 
@@ -74,8 +62,8 @@ describe("specialist-file-loader", () => {
     const rootDir = createTempDir();
     const newLocaleDir = path.join(rootDir, "locales", "zh-CN");
     const legacyLocaleDir = path.join(rootDir, "zh-CN");
-    writeSpecialist(path.join(newLocaleDir, "core", "developer.md"), "开发者");
-    writeSpecialist(path.join(legacyLocaleDir, "review", "gate.md"), "验证者");
+    writeYamlOverlay(path.join(newLocaleDir, "core", "developer.yaml"), "developer", "开发者", "开发者 body");
+    writeYamlOverlay(path.join(legacyLocaleDir, "review", "gate.yaml"), "gate", "验证者", "验证者 body");
 
     expect(getLocaleOverlayDirs(rootDir, "zh-CN").sort()).toEqual(
       [legacyLocaleDir, newLocaleDir].sort()
@@ -94,10 +82,11 @@ describe("specialist-file-loader", () => {
   it("uses frontmatter ids for taxonomy locale overlays after filename renames", () => {
     const rootDir = createTempDir();
     const localeDir = path.join(rootDir, "locales", "en", "team");
-    writeSpecialist(
-      path.join(localeDir, "agent-lead.md"),
+    writeYamlOverlay(
+      path.join(localeDir, "agent-lead.yaml"),
+      "team-agent-lead",
       "Agent Lead",
-      'id: "team-agent-lead"'
+      "Agent Lead body"
     );
 
     const loaded = loadSpecialistsFromDirectory(localeDir, "bundled", "en");
@@ -112,9 +101,11 @@ describe("specialist-file-loader", () => {
 
     try {
       process.chdir(repoRoot);
-      writeSpecialist(
-        path.join(repoRoot, "resources", "specialists", "locales", "zh-CN", "developer.md"),
-        "开发者"
+      writeYamlOverlay(
+        path.join(repoRoot, "resources", "specialists", "locales", "zh-CN", "developer.yaml"),
+        "developer",
+        "开发者",
+        "开发者 body"
       );
 
       const loaded = loadBundledSpecialists("zh-CN");
@@ -125,9 +116,20 @@ describe("specialist-file-loader", () => {
     }
   });
 
-  it("prefers yaml runtime definitions over legacy markdown files for the same id", () => {
+  it("ignores markdown files in runtime specialist directories", () => {
     const rootDir = createTempDir();
-    writeSpecialist(path.join(rootDir, "developer.md"), "Developer Markdown");
+    fs.writeFileSync(
+      path.join(rootDir, "developer.md"),
+      `---
+name: "Developer Markdown"
+description: "Legacy runtime definition"
+role: "DEVELOPER"
+---
+
+markdown prompt
+`,
+      "utf8"
+    );
     writeYamlSpecialist(path.join(rootDir, "developer.yaml"), "developer", "Developer YAML", "yaml prompt");
 
     const loaded = loadSpecialistsFromDirectory(rootDir, "bundled");
@@ -137,45 +139,55 @@ describe("specialist-file-loader", () => {
     expect(loaded[0]?.behaviorPrompt).toBe("yaml prompt");
   });
 
-  it("warns and keeps the last specialist when duplicate ids are merged", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("fails when duplicate ids are merged", () => {
     const rootDir = createTempDir();
-    const first = path.join(rootDir, "legacy", "developer.md");
-    const second = path.join(rootDir, "locales", "zh-CN", "developer.md");
+    const first = path.join(rootDir, "core", "developer.yaml");
+    const second = path.join(rootDir, "review", "developer.yaml");
 
-    writeSpecialist(first, "Developer Old");
-    writeSpecialist(second, "Developer New");
+    writeYamlSpecialist(first, "developer", "Developer Old", "old");
+    writeYamlSpecialist(second, "developer", "Developer New", "new");
 
-    const merged = mergeSpecialistDefinitions(
-      [
-        {
-          id: "developer",
-          filePath: first,
-          frontmatter: { name: "Developer Old", description: "old" },
-          behaviorPrompt: "old",
-          rawContent: "old",
-          source: "bundled",
-          locale: "zh-CN",
-        },
-        {
-          id: "developer",
-          filePath: second,
-          frontmatter: { name: "Developer New", description: "new" },
-          behaviorPrompt: "new",
-          rawContent: "new",
-          source: "bundled",
-          locale: "zh-CN",
-        },
-      ],
-      "test merge"
+    expect(() =>
+      mergeSpecialistDefinitions(
+        [
+          {
+            id: "developer",
+            filePath: first,
+            frontmatter: { name: "Developer Old", description: "old" },
+            behaviorPrompt: "old",
+            rawContent: "old",
+            source: "bundled",
+            locale: "zh-CN",
+          },
+          {
+            id: "developer",
+            filePath: second,
+            frontmatter: { name: "Developer New", description: "new" },
+            behaviorPrompt: "new",
+            rawContent: "new",
+            source: "bundled",
+            locale: "zh-CN",
+          },
+        ],
+        "test merge"
+      )
+    ).toThrowError(
+      expect.objectContaining({
+        message: expect.stringContaining('Duplicate specialist id "developer" in test merge'),
+      })
     );
+  });
 
-    expect(merged).toHaveLength(1);
-    expect(merged[0]?.frontmatter.name).toBe("Developer New");
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('Duplicate specialist id "developer" in test merge')
+  it("fails when a runtime directory contains duplicate ids", () => {
+    const rootDir = createTempDir();
+    writeYamlSpecialist(path.join(rootDir, "core", "developer.yaml"), "developer", "Developer", "first");
+    writeYamlSpecialist(path.join(rootDir, "team", "developer.yaml"), "developer", "Developer Duplicate", "second");
+
+    expect(() => loadSpecialistsFromDirectory(rootDir, "bundled")).toThrowError(
+      expect.objectContaining({
+        message: expect.stringContaining(`directory ${rootDir}`),
+      })
     );
-    warn.mockRestore();
   });
 
   it("keeps bundled locale overlays in taxonomy paths and aligned with runtime specialists", () => {

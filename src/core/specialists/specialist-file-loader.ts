@@ -1,8 +1,7 @@
 /**
  * Specialist File Loader
  *
- * Loads specialist prompt content from Markdown files with YAML frontmatter
- * and YAML specialist definitions.
+ * Loads YAML specialist definitions and locale overlays.
  * Supports a loading priority hierarchy:
  *   1. User-defined specialists (~/.routa/specialists/) — highest priority
  *   2. Bundled specialists (resources/specialists/) — default
@@ -12,21 +11,10 @@
  *   - Runtime specialist definitions may live in nested taxonomy directories
  *     (for example `team/`, `review/`, `workflows/kanban/`)
  *   - Locale overlays are loaded only from `locales/<locale>/` or the legacy
- *     `<locale>/` directory and do not participate in the base scan
+ *     `<locale>/` directory, are authored in YAML, and do not participate in
+ *     the base scan
  *
- * Markdown frontmatter format:
- *   ---
- *   name: "Coordinator"
- *   description: "Plans work, breaks down tasks, coordinates sub-agents"
- *   modelTier: "smart"
- *   role: "ROUTA"
- *   roleReminder: "You NEVER edit files directly..."
- *   ---
- *
- *   ## Coordinator
- *   You plan, delegate, and verify...
- *
- * YAML runtime format:
+ * YAML runtime/locale overlay format:
  *   id: "coordinator"
  *   name: "Coordinator"
  *   description: "Plans work, breaks down tasks, coordinates sub-agents"
@@ -39,7 +27,6 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import matter from "gray-matter";
 import * as yaml from "js-yaml";
 import { AgentRole, ModelTier } from "../models/agent";
 import type { SpecialistConfig } from "../orchestration/specialist-prompts";
@@ -88,7 +75,11 @@ function isLocaleDirectoryName(name: string): boolean {
   return name === SPECIALIST_LOCALES_DIRNAME || /^[a-z]{2}(?:-[A-Z]{2})?$/.test(name);
 }
 
-function collectSpecialistFiles(dirPath: string, includeLocaleDirectories: boolean): string[] {
+function collectSpecialistFiles(
+  dirPath: string,
+  includeLocaleDirectories: boolean,
+  allowedExtensions: string[] = [".yaml", ".yml"],
+): string[] {
   if (!fs.existsSync(dirPath)) {
     return [];
   }
@@ -103,40 +94,20 @@ function collectSpecialistFiles(dirPath: string, includeLocaleDirectories: boole
       if (!includeLocaleDirectories && isLocaleDirectoryName(entry.name)) {
         continue;
       }
-      files.push(...collectSpecialistFiles(entryPath, includeLocaleDirectories));
+      files.push(...collectSpecialistFiles(entryPath, includeLocaleDirectories, allowedExtensions));
       continue;
     }
 
-    if (entry.isFile() && (entry.name.endsWith(".md") || entry.name.endsWith(".yaml") || entry.name.endsWith(".yml"))) {
+    if (entry.isFile() && allowedExtensions.some((extension) => entry.name.endsWith(extension))) {
       files.push(entryPath);
     }
   }
 
-  const extRank = (filePath: string): number => {
-    const ext = path.extname(filePath).toLowerCase();
-    switch (ext) {
-      case ".md":
-        return 0;
-      case ".yaml":
-      case ".yml":
-        return 1;
-      default:
-        return 2;
-    }
-  };
-
-  return files.sort((a, b) => extRank(a) - extRank(b) || a.localeCompare(b));
+  return files.sort((a, b) => a.localeCompare(b));
 }
 
 function uniqueExistingDirs(dirPaths: string[]): string[] {
   return Array.from(new Set(dirPaths)).filter((dirPath) => fs.existsSync(dirPath));
-}
-
-function warnDuplicateSpecialist(prev: ParsedSpecialist, next: ParsedSpecialist, context: string): void {
-  console.warn(
-    `[SpecialistLoader] Duplicate specialist id "${next.id}" in ${context}; ` +
-    `overriding ${prev.filePath} with ${next.filePath}`
-  );
 }
 
 export function mergeSpecialistDefinitions(
@@ -148,7 +119,10 @@ export function mergeSpecialistDefinitions(
   for (const specialist of specialists) {
     const previous = merged.get(specialist.id);
     if (previous) {
-      warnDuplicateSpecialist(previous, specialist, context);
+      throw new Error(
+        `[SpecialistLoader] Duplicate specialist id "${specialist.id}" in ${context}; ` +
+        `conflicts: ${previous.filePath} and ${specialist.filePath}`
+      );
     }
     merged.set(specialist.id, specialist);
   }
@@ -206,7 +180,6 @@ function resolveRole(role?: string): AgentRole | undefined {
 
 /**
  * Derive a specialist ID from its filename.
- * e.g., "spec-writer.md" → "spec-writer", "routa.md" → "routa"
  */
 export function filenameToSpecialistId(filename: string): string {
   return path.basename(filename, path.extname(filename));
@@ -255,43 +228,6 @@ function normalizeSpecialistMeta(raw: Record<string, unknown>): SpecialistFileMe
       model: typeof execution.model === "string" ? execution.model : undefined,
     } : undefined,
     system_prompt: typeof raw.system_prompt === "string" ? raw.system_prompt : undefined,
-  };
-}
-
-function parseMarkdownSpecialistFile(
-  filePath: string,
-  source: "user" | "bundled",
-  locale?: string,
-): ParsedSpecialist | null {
-  const rawContent = fs.readFileSync(filePath, "utf-8");
-  const { data, content } = matter(rawContent);
-  const frontmatter = normalizeSpecialistMeta(data as Record<string, unknown>);
-
-  if (!frontmatter.name) {
-    console.warn(
-      `[SpecialistLoader] Skipping ${filePath}: missing 'name' in frontmatter`
-    );
-    return null;
-  }
-
-  if (
-    frontmatter.modelTier &&
-    !VALID_MODEL_TIERS.includes(frontmatter.modelTier.toLowerCase())
-  ) {
-    console.warn(
-      `[SpecialistLoader] Invalid modelTier "${frontmatter.modelTier}" in ${filePath}, defaulting to "smart"`
-    );
-    frontmatter.modelTier = "smart";
-  }
-
-  return {
-    id: frontmatter.id ?? filenameToSpecialistId(filePath),
-    filePath,
-    frontmatter,
-    behaviorPrompt: content.trim(),
-    rawContent,
-    source,
-    locale,
   };
 }
 
@@ -345,8 +281,6 @@ export function parseSpecialistFile(
   try {
     const extension = path.extname(filePath).toLowerCase();
     switch (extension) {
-      case ".md":
-        return parseMarkdownSpecialistFile(filePath, source, locale);
       case ".yaml":
       case ".yml":
         return parseYamlSpecialistFile(filePath, source, locale);
@@ -369,7 +303,11 @@ export function loadSpecialistsFromDirectory(
   locale?: string,
 ): ParsedSpecialist[] {
   const specialists: ParsedSpecialist[] = [];
-  const files = collectSpecialistFiles(dirPath, locale !== undefined);
+  const files = collectSpecialistFiles(
+    dirPath,
+    locale !== undefined,
+    [".yaml", ".yml"],
+  );
 
   for (const file of files) {
     const parsed = parseSpecialistFile(file, source, locale);

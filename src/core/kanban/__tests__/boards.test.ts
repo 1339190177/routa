@@ -13,7 +13,7 @@ describe("applyRecommendedAutomationToColumns", () => {
       "kanban-backlog-refiner",
       "kanban-todo-orchestrator",
       "kanban-dev-executor",
-      "kanban-review-guard",
+      "kanban-qa-frontend",
       "kanban-done-reporter",
       "kanban-blocked-resolver",
     ]);
@@ -27,7 +27,11 @@ describe("applyRecommendedAutomationToColumns", () => {
     ]);
     expect(columns[0].automation?.autoAdvanceOnSuccess).toBe(true);
     expect(columns.slice(1).every((column) => column.automation?.autoAdvanceOnSuccess === false)).toBe(true);
-    expect(columns[3]?.automation?.requiredArtifacts).toEqual(["screenshot"]);
+    expect(columns[3]?.automation?.requiredArtifacts).toEqual(["screenshot", "test_results"]);
+    expect(columns[3]?.automation?.steps?.map((step) => step.specialistId)).toEqual([
+      "kanban-qa-frontend",
+      "kanban-review-guard",
+    ]);
   });
 
   it("normalizes the default board layout to keep blocked after done", () => {
@@ -139,6 +143,33 @@ describe("applyRecommendedAutomationToColumns", () => {
       DEFAULT_KANBAN_COLUMNS[3],
     ]);
 
-    expect(columns[0].automation?.requiredArtifacts).toEqual(["screenshot"]);
+    expect(columns[0].automation?.requiredArtifacts).toEqual(["screenshot", "test_results"]);
+  });
+
+  it("refreshes the review lane to the system-owned qa and approval steps", () => {
+    const columns = applyRecommendedAutomationToColumns([
+      {
+        ...DEFAULT_KANBAN_COLUMNS[3],
+        automation: {
+          enabled: true,
+          steps: [{
+            id: "review-guard",
+            role: "GATE",
+            specialistId: "kanban-review-guard",
+            specialistName: "Review Guard",
+          }],
+          specialistId: "kanban-review-guard",
+          specialistName: "Review Guard",
+          requiredArtifacts: ["screenshot"],
+          autoAdvanceOnSuccess: false,
+        },
+      },
+    ]);
+
+    expect(columns[0].automation?.steps?.map((step) => step.specialistId)).toEqual([
+      "kanban-qa-frontend",
+      "kanban-review-guard",
+    ]);
+    expect(columns[0].automation?.requiredArtifacts).toEqual(["screenshot", "test_results"]);
   });
 });
