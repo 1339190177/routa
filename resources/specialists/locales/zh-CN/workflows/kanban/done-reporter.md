@@ -1,4 +1,5 @@
 ---
+id: "kanban-done-reporter"
 name: "完成汇报员"
 description: "负责 Done 阶段的收尾、结果汇总与交付说明"
 modelTier: "smart"

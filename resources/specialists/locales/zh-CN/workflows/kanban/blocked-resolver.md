@@ -1,4 +1,5 @@
 ---
+id: "kanban-blocked-resolver"
 name: "阻塞协调员"
 description: "分析阻塞原因，推动澄清、拆解或恢复流转"
 modelTier: "smart"

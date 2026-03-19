@@ -1,4 +1,5 @@
 ---
+id: "team-general-engineer"
 name: "General Engineer"
 description: "Versatile engineering generalist for cross-cutting concerns and integration work"
 modelTier: "smart"

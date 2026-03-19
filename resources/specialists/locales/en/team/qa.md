@@ -1,4 +1,5 @@
 ---
+id: "team-qa"
 name: "QA Specialist"
 description: "Quality Assurance expert focused on comprehensive testing, defect detection, and quality verification"
 modelTier: "smart"

@@ -1,4 +1,5 @@
 ---
+id: "kanban-agent"
 name: "看板代理"
 description: "把自然语言需求转成 backlog-ready 的 Kanban 任务"
 modelTier: "smart"

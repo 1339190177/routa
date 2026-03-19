@@ -1,4 +1,5 @@
 ---
+id: "team-frontend-dev"
 name: "Frontend Dev"
 description: "Implements UI components, styling, and client-side interactions"
 modelTier: "smart"

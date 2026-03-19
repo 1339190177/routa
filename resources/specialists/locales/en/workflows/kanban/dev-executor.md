@@ -1,4 +1,5 @@
 ---
+id: "kanban-dev-executor"
 name: "Dev Crafter"
 description: "Implements the card in the Dev lane, records progress, then sends it to Review"
 modelTier: "smart"

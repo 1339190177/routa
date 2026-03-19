@@ -1,4 +1,5 @@
 ---
+id: "kanban-dev-executor"
 name: "开发执行员"
 description: "负责 Dev 阶段的实现、验证与交付记录"
 modelTier: "smart"

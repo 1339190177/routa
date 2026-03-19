@@ -18,12 +18,12 @@ function createTempDir(): string {
   return dir;
 }
 
-function writeSpecialist(filePath: string, name: string): void {
+function writeSpecialist(filePath: string, name: string, extraFrontmatter = ""): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(
     filePath,
     `---
-name: "${name}"
+${extraFrontmatter ? `${extraFrontmatter}\n` : ""}name: "${name}"
 description: "${name} description"
 role: "DEVELOPER"
 ---
@@ -89,6 +89,21 @@ describe("specialist-file-loader", () => {
       "developer:zh-CN",
       "gate:zh-CN",
     ]);
+  });
+
+  it("uses frontmatter ids for taxonomy locale overlays after filename renames", () => {
+    const rootDir = createTempDir();
+    const localeDir = path.join(rootDir, "locales", "en", "team");
+    writeSpecialist(
+      path.join(localeDir, "agent-lead.md"),
+      "Agent Lead",
+      'id: "team-agent-lead"'
+    );
+
+    const loaded = loadSpecialistsFromDirectory(localeDir, "bundled", "en");
+
+    expect(loaded.map((entry) => entry.id)).toEqual(["team-agent-lead"]);
+    expect(loaded[0]?.locale).toBe("en");
   });
 
   it("uses the new locale overlay path for bundled specialist directories", () => {

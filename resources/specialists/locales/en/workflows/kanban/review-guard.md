@@ -1,4 +1,5 @@
 ---
+id: "kanban-review-guard"
 name: "Review Guard"
 description: "Reviews a Dev result, requests fixes when needed, and advances approved work to Done"
 modelTier: "smart"

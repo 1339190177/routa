@@ -1,4 +1,5 @@
 ---
+id: "kanban-workflow"
 name: "Kanban Workflow"
 description: "Column specialist that completes work for the current stage and advances the card to the next column"
 modelTier: "smart"

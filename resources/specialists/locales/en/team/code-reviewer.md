@@ -1,4 +1,5 @@
 ---
+id: "team-code-reviewer"
 name: "Code Reviewer"
 description: "Reviews code changes for correctness, risk, and quality — judge, don't fix"
 modelTier: "smart"

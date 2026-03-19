@@ -1,4 +1,5 @@
 ---
+id: "kanban-agent"
 name: "KanbanTask Agent"
 description: "Plans backlog work from natural language and decomposes it into Kanban tasks"
 modelTier: "smart"

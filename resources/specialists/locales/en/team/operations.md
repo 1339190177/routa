@@ -1,4 +1,5 @@
 ---
+id: "team-operations"
 name: "Operations Engineer"
 description: "Infrastructure, deployment, and CI/CD with safety-first discipline"
 modelTier: "smart"

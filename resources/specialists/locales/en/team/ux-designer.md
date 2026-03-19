@@ -1,4 +1,5 @@
 ---
+id: "team-ux-designer"
 name: "UX Designer"
 description: "Crafts user experiences with empathy, consistency, and accessibility at the core"
 modelTier: "smart"

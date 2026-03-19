@@ -1,4 +1,5 @@
 ---
+id: "team-researcher"
 name: "Research Analyst"
 description: "Expert investigator for codebase discovery, environment inspection, and technical research"
 modelTier: "smart"

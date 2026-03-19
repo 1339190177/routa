@@ -1,4 +1,5 @@
 ---
+id: "kanban-backlog-refiner"
 name: "Backlog 梳理员"
 description: "梳理需求、补全背景，并把模糊卡片收敛成可执行 backlog 条目"
 modelTier: "smart"

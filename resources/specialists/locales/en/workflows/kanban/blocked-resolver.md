@@ -1,4 +1,5 @@
 ---
+id: "kanban-blocked-resolver"
 name: "Blocked Resolver"
 description: "Triages blocked cards, clarifies blockers, and routes them back into the active flow when possible"
 modelTier: "smart"

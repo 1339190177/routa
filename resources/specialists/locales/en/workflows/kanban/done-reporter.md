@@ -1,4 +1,5 @@
 ---
+id: "kanban-done-reporter"
 name: "Done Reporter"
 description: "Closes the loop in Done by writing a concise completion summary"
 modelTier: "balanced"

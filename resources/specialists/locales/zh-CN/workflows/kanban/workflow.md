@@ -1,4 +1,5 @@
 ---
+id: "kanban-workflow"
 name: "看板工作流"
 description: "按当前列职责完成工作，并把卡片推进到下一阶段"
 modelTier: "smart"

@@ -171,6 +171,7 @@ impl SpecialistDef {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct FrontMatter {
+            id: Option<String>,
             name: String,
             description: Option<String>,
             model_tier: Option<String>,
@@ -185,16 +186,15 @@ impl SpecialistDef {
         let fm: FrontMatter = serde_yaml::from_str(frontmatter)
             .map_err(|e| format!("Failed to parse frontmatter in '{}': {}", path, e))?;
 
-        // Derive ID from filename
-        let id = Path::new(path)
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-
         let execution = fm.execution.unwrap_or_default();
 
         Ok(Self {
-            id,
+            id: fm.id.unwrap_or_else(|| {
+                Path::new(path)
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "unknown".to_string())
+            }),
             name: fm.name,
             description: fm.description,
             role: execution
@@ -560,6 +560,32 @@ You are a markdown specialist.
         assert_eq!(spec.role, "CRAFTER");
         assert_eq!(spec.default_provider.as_deref(), Some("claude"));
         assert!(spec.system_prompt.contains("markdown specialist"));
+
+        let _ = std::fs::remove_file(temp_path);
+    }
+
+    #[test]
+    fn test_markdown_frontmatter_id_overrides_filename() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "routa-specialist-{}.md",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::write(
+            &temp_path,
+            r#"---
+id: "team-agent-lead"
+name: "Agent Lead"
+role: "ROUTA"
+---
+
+Lead prompt
+"#,
+        )
+        .unwrap();
+
+        let spec = SpecialistDef::from_markdown(temp_path.to_str().unwrap()).unwrap();
+        assert_eq!(spec.id, "team-agent-lead");
+        assert_eq!(spec.name, "Agent Lead");
 
         let _ = std::fs::remove_file(temp_path);
     }

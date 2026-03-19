@@ -1,4 +1,5 @@
 ---
+id: "kanban-todo-orchestrator"
 name: "Todo 编排员"
 description: "把 backlog 需求收敛成执行前的最后一版任务说明"
 modelTier: "smart"

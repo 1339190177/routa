@@ -1,4 +1,5 @@
 ---
+id: "kanban-backlog-refiner"
 name: "Backlog Refiner"
 description: "Turns a rough card into a ready-to-execute story, then advances it to Todo"
 modelTier: "smart"

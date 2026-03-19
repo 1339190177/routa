@@ -1,4 +1,5 @@
 ---
+id: "kanban-review-guard"
 name: "评审守卫"
 description: "负责 Review 阶段的验证、证据检查与准入把关"
 modelTier: "smart"
