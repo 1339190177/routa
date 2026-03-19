@@ -4,7 +4,7 @@
 //! Agent flow for OpenCode. It mirrors the Next.js behavior closely enough to
 //! expose the Routa MCP server with workspace/session/tool profile context.
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use serde_json::{Map, Value};
 
@@ -82,7 +82,7 @@ async fn ensure_mcp_for_opencode(
     ))
 }
 
-fn display_path(path: &PathBuf) -> String {
+fn display_path(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }
 

@@ -147,6 +147,8 @@ pub async fn run(
             Some("ROUTA".to_string()),
             None,
             None, // branch
+            None, // tool_mode
+            None, // mcp_profile
         )
         .await;
 

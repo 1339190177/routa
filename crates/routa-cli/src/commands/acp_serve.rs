@@ -212,6 +212,8 @@ async fn handle_session_new(
             Some(role.to_string()),
             None,
             None, // branch
+            None, // tool_mode
+            None, // mcp_profile
         )
         .await;
 

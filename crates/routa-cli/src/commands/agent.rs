@@ -217,6 +217,8 @@ async fn run_selected_specialist(
             Some(agent_role.to_string()),
             selected_specialist.default_model.clone(),
             None,
+            None, // tool_mode
+            None, // mcp_profile
         )
         .await
         .map_err(|e| format!("Failed to create ACP session: {}", e))?;

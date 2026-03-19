@@ -121,6 +121,8 @@ pub async fn run(
                 resumed_session
                     .as_ref()
                     .and_then(|session| session.parent_session_id.clone()),
+                None, // tool_mode
+                None, // mcp_profile
             )
             .await;
 

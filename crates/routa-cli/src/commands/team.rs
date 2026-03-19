@@ -108,6 +108,8 @@ pub async fn run(
             Some(specialist.role.as_str().to_string()),
             None,
             None,
+            None, // tool_mode
+            None, // mcp_profile
         )
         .await;
 
