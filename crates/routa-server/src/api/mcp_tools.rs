@@ -44,6 +44,7 @@ async fn execute_tool(
     let tool_names: Vec<&str> = vec![
         "list_agents",
         "create_agent",
+        "delegate_task_to_agent",
         "list_tasks",
         "create_task",
         "update_task_status",
