@@ -76,6 +76,15 @@ describe("/api/tasks GET", () => {
     });
   });
 
+  it("rejects task listing without workspaceId", async () => {
+    const response = await GET(new NextRequest("http://localhost/api/tasks"));
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ error: "workspaceId is required" });
+    expect(taskStore.listByWorkspace).not.toHaveBeenCalled();
+  });
+
   it("rejects task creation without workspaceId", async () => {
     const response = await POST(new NextRequest("http://localhost/api/tasks", {
       method: "POST",

@@ -53,10 +53,14 @@ function parsePriority(value: unknown): TaskPriority | undefined {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const workspaceId = searchParams.get("workspaceId") ?? "default";
+  const workspaceId = requireWorkspaceId(searchParams.get("workspaceId"));
   const sessionId = searchParams.get("sessionId");
   const status = searchParams.get("status");
   const assignedTo = searchParams.get("assignedTo");
+
+  if (!workspaceId) {
+    return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+  }
 
   const system = getRoutaSystem();
 
