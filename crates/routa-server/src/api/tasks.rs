@@ -287,6 +287,41 @@ async fn create_task(
         }
     }
 
+    if plan.should_trigger_agent {
+        if plan.entering_dev {
+            if let (Some(ref cb), None) = (&codebase, &task.worktree_id) {
+                match auto_create_worktree(&state, &task, cb).await {
+                    Ok(worktree_id) => {
+                        task.worktree_id = Some(worktree_id);
+                    }
+                    Err(err) => {
+                        set_task_column(&mut task, "blocked");
+                        task.last_sync_error =
+                            Some(format!("Worktree creation failed: {}", err));
+                    }
+                }
+            }
+        }
+
+        let trigger_result = trigger_assigned_task_agent(
+            &state,
+            &task,
+            codebase.as_ref().map(|item| item.repo_path.as_str()),
+            codebase.as_ref().and_then(|item| item.branch.as_deref()),
+        )
+        .await;
+
+        match trigger_result {
+            Ok(session_id) => {
+                task.trigger_session_id = Some(session_id);
+                task.last_sync_error = None;
+            }
+            Err(error) => {
+                task.last_sync_error = Some(error);
+            }
+        }
+    }
+
     state.task_store.save(&task).await?;
     emit_kanban_workspace_event(
         &state,

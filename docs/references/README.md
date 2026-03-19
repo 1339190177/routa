@@ -16,3 +16,6 @@ Suggested first additions:
 - `acp-llms.txt`
 - `tauri-llms.txt`
 - `drizzle-llms.txt`
+
+Project-specific references:
+- `../specialists/README.md`: 从 `resources/specialists/**/*.yaml` 自动生成的 specialist 总览与独立页面入口

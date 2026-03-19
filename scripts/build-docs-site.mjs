@@ -9,6 +9,15 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.join(__dirname, "..");
 const outputDir = path.join(rootDir, "docs-site");
 
+const generatorResult = spawnSync("python3", ["scripts/generate-specialist-docs.py", "--save"], {
+  cwd: rootDir,
+  stdio: "inherit",
+});
+
+if (generatorResult.status !== 0) {
+  process.exit(generatorResult.status ?? 1);
+}
+
 const localDocusaurus = path.join(
   rootDir,
   "node_modules",

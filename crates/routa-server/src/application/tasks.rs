@@ -77,10 +77,61 @@ impl TaskApplicationService {
         task.assigned_role = assigned_role;
         task.assigned_specialist_id = assigned_specialist_id;
         task.assigned_specialist_name = assigned_specialist_name;
+        let entering_dev = task.column_id.as_deref() == Some("dev");
+
+        let column_automation = if let (Some(board_id), Some(col_id)) = (&task.board_id, &task.column_id)
+        {
+            self.state
+                .kanban_store
+                .get(board_id)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|board| {
+                    board
+                        .columns
+                        .into_iter()
+                        .find(|c| &c.id == col_id)
+                        .and_then(|col| col.automation)
+                        .filter(|automation| automation.enabled)
+                })
+        } else {
+            None
+        };
+
+        if let Some(ref automation) = column_automation {
+            let primary_step = automation.primary_step();
+            if task.assigned_provider.is_none() {
+                task.assigned_provider = primary_step
+                    .as_ref()
+                    .and_then(|step| step.provider_id.clone())
+                    .or_else(|| automation.provider_id.clone());
+            }
+            if task.assigned_role.is_none() {
+                task.assigned_role = primary_step
+                    .as_ref()
+                    .and_then(|step| step.role.clone())
+                    .or_else(|| automation.role.clone());
+            }
+            if task.assigned_specialist_id.is_none() {
+                task.assigned_specialist_id = primary_step
+                    .as_ref()
+                    .and_then(|step| step.specialist_id.clone())
+                    .or_else(|| automation.specialist_id.clone());
+            }
+            if task.assigned_specialist_name.is_none() {
+                task.assigned_specialist_name = primary_step
+                    .as_ref()
+                    .and_then(|step| step.specialist_name.clone())
+                    .or_else(|| automation.specialist_name.clone());
+            }
+        }
 
         Ok(CreateTaskPlan {
             task,
             create_github_issue: create_github_issue.unwrap_or(false),
+            should_trigger_agent: entering_dev || column_automation.is_some(),
+            entering_dev,
             repo_path,
         })
     }
@@ -373,6 +424,8 @@ pub struct UpdateTaskCommand {
 pub struct CreateTaskPlan {
     pub task: Task,
     pub create_github_issue: bool,
+    pub should_trigger_agent: bool,
+    pub entering_dev: bool,
     pub repo_path: Option<String>,
 }
 

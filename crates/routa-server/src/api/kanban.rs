@@ -511,25 +511,13 @@ async fn existing_board_ids(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<HashSet<String>, ServerError> {
-    let result = rpc_result(
-        state,
-        "kanban.listBoards",
-        serde_json::json!({ "workspaceId": workspace_id }),
-    )
-    .await?;
-    let board_ids = result
-        .get("boards")
-        .and_then(|value| value.as_array())
+    Ok(state
+        .kanban_store
+        .list_by_workspace(workspace_id)
+        .await?
         .into_iter()
-        .flatten()
-        .filter_map(|board| {
-            board
-                .get("id")
-                .and_then(|value| value.as_str())
-                .map(ToString::to_string)
-        })
-        .collect();
-    Ok(board_ids)
+        .map(|board| board.id)
+        .collect())
 }
 
 fn strip_board_cards(board: &serde_json::Value) -> serde_json::Value {

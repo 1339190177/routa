@@ -144,4 +144,5 @@ Raw Notification (各 Provider 格式不同)
 
 - API Contract: `api-contract.yaml`
 - Coding Standards: `AGENTS.md`
+- Specialist YAML Reference: `docs/specialists/README.md` (auto-generated from bundled YAML)
 - [MCP Spec](https://modelcontextprotocol.io/) · [ACP Spec](https://github.com/agentclientprotocol/sdk) · [A2A Spec](https://a2a-js.github.io/sdk/)

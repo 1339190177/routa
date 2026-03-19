@@ -19,6 +19,7 @@ out
 /dist
 docs-site/
 .docusaurus/
+docs/specialists/
 
 # Tauri
 apps/desktop/src-tauri/target/
@@ -37,6 +38,7 @@ target/
 # Misc
 .DS_Store
 *.pem
+scripts/__pycache__/
 
 # Debug
 npm-debug.log*
