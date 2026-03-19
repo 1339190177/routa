@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import type { AcpProviderInfo } from "@/client/acp-client";
+import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
+import type { KanbanColumnInfo } from "../types";
 import type { SessionInfo, TaskInfo } from "../types";
 import {
   buildSessionDisplayLabel,
@@ -10,6 +13,8 @@ import {
   getSpecialistName,
   type KanbanSpecialistOption,
 } from "./kanban-card-session-utils";
+import type { KanbanSpecialistLanguage } from "./kanban-specialist-language";
+import { getKanbanSessionCopy } from "./i18n/kanban-session-copy";
 
 type ActivityTabId = "runs" | "handoffs" | "github";
 
@@ -41,6 +46,7 @@ export function KanbanCardActivityPanel({
   task,
   sessions,
   specialists,
+  specialistLanguage = "en",
   currentSessionId,
   onSelectSession,
   compact = false,
@@ -48,13 +54,15 @@ export function KanbanCardActivityPanel({
   task: TaskInfo;
   sessions: SessionInfo[];
   specialists: KanbanSpecialistOption[];
+  specialistLanguage?: KanbanSpecialistLanguage;
   currentSessionId?: string;
   onSelectSession?: (sessionId: string) => void;
   compact?: boolean;
 }) {
+  const copy = getKanbanSessionCopy(specialistLanguage);
   const tabs: Array<{ id: ActivityTabId; label: string; count?: number }> = [
-    { id: "runs", label: "Runs", count: getOrderedSessionIds(task).length },
-    ...((task.laneHandoffs?.length ?? 0) > 0 ? [{ id: "handoffs" as const, label: "Handoffs", count: task.laneHandoffs?.length }] : []),
+    { id: "runs", label: copy.runs, count: getOrderedSessionIds(task).length },
+    ...((task.laneHandoffs?.length ?? 0) > 0 ? [{ id: "handoffs" as const, label: copy.handoffs, count: task.laneHandoffs?.length }] : []),
     ...(task.githubNumber ? [{ id: "github" as const, label: "GitHub" }] : []),
   ];
   const [activeTab, setActiveTab] = useState<ActivityTabId>(tabs[0]?.id ?? "runs");
@@ -62,8 +70,8 @@ export function KanbanCardActivityPanel({
 
   return (
     <ActivitySection
-      title="Activity"
-      description={compact ? undefined : "Run history, lane handoffs, and issue linkage collected on the right for faster switching."}
+      title={copy.activityTitle}
+      description={compact ? undefined : copy.activityDescription}
       compact={compact}
     >
       <div>
@@ -97,6 +105,7 @@ export function KanbanCardActivityPanel({
               task={task}
               specialists={specialists}
               sessions={sessions}
+              specialistLanguage={specialistLanguage}
               currentSessionId={currentSessionId}
               onSelectSession={onSelectSession}
               compact={compact}
@@ -120,16 +129,19 @@ export function KanbanCardActivityPanel({
 export function KanbanCardActivityBar({
   task,
   sessions = [],
+  specialistLanguage = "en",
   currentSessionId,
   onSelectSession,
   onCloseSession,
 }: {
   task: TaskInfo;
   sessions?: SessionInfo[];
+  specialistLanguage?: KanbanSpecialistLanguage;
   currentSessionId?: string;
   onSelectSession?: (sessionId: string) => void;
   onCloseSession?: () => void;
 }) {
+  const copy = getKanbanSessionCopy(specialistLanguage);
   const orderedSessionIds = getOrderedSessionIds(task);
   const laneSessions = task.laneSessions ?? [];
   const laneSessionMap = new Map(laneSessions.map((entry) => [entry.sessionId, entry]));
@@ -142,8 +154,19 @@ export function KanbanCardActivityBar({
 
   if (orderedSessionIds.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-300 bg-white/90 px-3 py-2 text-[11px] text-gray-500 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-400">
-        No ACP runs yet
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-gray-300 bg-white/90 px-3 py-2 text-[11px] text-gray-500 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-400">
+        <span>{copy.noRunsInline}</span>
+        {onCloseSession && (
+          <button
+            type="button"
+            onClick={onCloseSession}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-500 transition-colors hover:border-gray-300 hover:bg-white hover:text-gray-800 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-[#131826] dark:hover:text-gray-200"
+            aria-label={copy.closeSessionPane}
+            title={copy.closeSessionPane}
+          >
+            ×
+          </button>
+        )}
       </div>
     );
   }
@@ -188,8 +211,8 @@ export function KanbanCardActivityBar({
             type="button"
             onClick={onCloseSession}
             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-500 transition-colors hover:border-gray-300 hover:bg-white hover:text-gray-800 dark:border-gray-700 dark:bg-[#0d1018] dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-[#131826] dark:hover:text-gray-200"
-            aria-label="Close session pane"
-            title="Close session pane"
+            aria-label={copy.closeSessionPane}
+            title={copy.closeSessionPane}
           >
             ×
           </button>
@@ -222,6 +245,7 @@ function SessionHistoryPanel({
   task,
   specialists,
   sessions,
+  specialistLanguage = "en",
   currentSessionId,
   onSelectSession,
   compact = false,
@@ -229,18 +253,20 @@ function SessionHistoryPanel({
   task: TaskInfo;
   specialists: KanbanSpecialistOption[];
   sessions: SessionInfo[];
+  specialistLanguage?: KanbanSpecialistLanguage;
   currentSessionId?: string;
   onSelectSession?: (sessionId: string) => void;
   compact?: boolean;
 }) {
+  const copy = getKanbanSessionCopy(specialistLanguage);
   const laneSessions = task.laneSessions ?? [];
   const orderedSessionIds = getOrderedSessionIds(task);
 
   if (orderedSessionIds.length === 0) {
     return (
       <div className={`rounded-2xl border border-dashed border-gray-300 bg-white text-sm text-gray-500 dark:border-gray-700 dark:bg-[#121620] dark:text-gray-400 ${compact ? "px-3 py-4" : "px-4 py-5"}`}>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Run History</div>
-        <div className="mt-2">No ACP runs yet. Once this card enters an automated lane, each run will show up here.</div>
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">{copy.runHistoryTitle}</div>
+        <div className="mt-2">{copy.noRunsHistory} {copy.noRunsHistoryHint}</div>
       </div>
     );
   }
@@ -252,9 +278,9 @@ function SessionHistoryPanel({
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Run History</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">{copy.runHistoryTitle}</div>
           <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {orderedSessionIds.length} recorded automation runs for this card.
+            {copy.runHistoryCount(orderedSessionIds.length)}
           </div>
         </div>
         <div className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-600 shadow-sm dark:bg-[#0d1018] dark:text-gray-300">
@@ -333,6 +359,57 @@ function SessionHistoryPanel({
         })}
       </div>
     </>
+  );
+}
+
+export function KanbanEmptySessionPane({
+  task,
+  boardColumns,
+  availableProviders,
+  specialists,
+  specialistLanguage = "en",
+  onCloseSession,
+}: {
+  task: TaskInfo;
+  boardColumns: KanbanColumnInfo[];
+  availableProviders: AcpProviderInfo[];
+  specialists: KanbanSpecialistOption[];
+  specialistLanguage?: KanbanSpecialistLanguage;
+  onCloseSession?: () => void;
+}) {
+  const copy = getKanbanSessionCopy(specialistLanguage);
+  const effectiveAutomation = resolveEffectiveTaskAutomation(task, boardColumns);
+  const providerName = effectiveAutomation.providerId
+    ? availableProviders.find((provider) => provider.id === effectiveAutomation.providerId)?.name ?? effectiveAutomation.providerId
+    : "Workspace default";
+  const specialistName = getSpecialistName(
+    effectiveAutomation.specialistId,
+    effectiveAutomation.specialistName,
+    specialists,
+  );
+  const target = `${providerName} · ${effectiveAutomation.role ?? "DEVELOPER"} · ${specialistName}`;
+
+  return (
+    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-gray-200/80 bg-gray-50/80 p-2 dark:border-[#202433] dark:bg-[#10131a]">
+        <KanbanCardActivityBar
+          task={task}
+          specialistLanguage={specialistLanguage}
+          onCloseSession={onCloseSession}
+        />
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center bg-gradient-to-br from-white via-sky-50/40 to-amber-50/40 p-6 dark:from-[#12141c] dark:via-[#101824] dark:to-[#17131c]">
+        <div className="w-full max-w-lg rounded-3xl border border-sky-200/70 bg-white/95 p-6 shadow-sm dark:border-sky-900/40 dark:bg-[#121620]">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-300">{copy.emptyPaneEyebrow}</div>
+          <div className="mt-2 text-xl font-semibold text-gray-950 dark:text-gray-50">{copy.emptyPaneTitle}</div>
+          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{copy.emptyPaneDescription}</p>
+          <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{copy.emptyPaneHint}</p>
+          <div className="mt-4 rounded-2xl border border-dashed border-sky-300 bg-sky-50 px-4 py-3 text-sm font-medium text-sky-900 dark:border-sky-800/60 dark:bg-sky-900/20 dark:text-sky-100">
+            {copy.expectedTarget(target)}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

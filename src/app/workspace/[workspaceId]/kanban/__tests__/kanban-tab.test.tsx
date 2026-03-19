@@ -245,6 +245,50 @@ describe("KanbanTab card detail manual runs", () => {
     });
   });
 
+  it("shows a localized empty session pane before the first automated run starts", async () => {
+    const automatedBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [
+        {
+          id: "backlog",
+          name: "Backlog",
+          position: 0,
+          stage: "backlog",
+          automation: {
+            enabled: true,
+            providerId: "claude",
+            role: "ROUTA",
+            specialistId: "backlog-refiner",
+            specialistName: "Backlog Refiner",
+            transitionType: "exit",
+          },
+        },
+      ],
+    };
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[automatedBoard]}
+        tasks={[createTask("task-1", "Story One")]}
+        sessions={[]}
+        providers={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[{ id: "backlog-refiner", name: "Backlog Refiner", role: "ROUTA" }]}
+        specialistLanguage="zh-CN"
+        onSpecialistLanguageChange={vi.fn()}
+        codebases={[]}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+
+    expect(await screen.findByText("当前还没有启动 session")).toBeTruthy();
+    expect(screen.getByText("还没有 ACP 运行记录")).toBeTruthy();
+    expect(screen.getAllByText(/右侧 session pane 会先显示等待中的空态/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "关闭 session 面板" })).toBeTruthy();
+  });
+
   it("shows the next transition artifact gate in card detail", async () => {
     const gatedBoard: KanbanBoardInfo = {
       ...board,

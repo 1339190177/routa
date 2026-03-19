@@ -12,6 +12,7 @@ import { KanbanDescriptionEditor } from "./kanban-description-editor";
 import { getOrderedSessionIds, getSpecialistName, type KanbanSpecialistOption as SpecialistOption } from "./kanban-card-session-utils";
 export { KanbanCardActivityBar } from "./kanban-card-activity";
 import { KanbanCardArtifacts } from "./kanban-card-artifacts";
+import { getKanbanSessionCopy } from "./i18n/kanban-session-copy";
 import {
   findSpecialistById,
   getSpecialistDisplayName,
@@ -236,6 +237,7 @@ export function KanbanCardDetail({
               task={task}
               sessions={sessions ?? []}
               specialists={specialists}
+              specialistLanguage={specialistLanguage}
               currentSessionId={task.triggerSessionId}
               onSelectSession={onSelectSession}
               compact={compactMode}
@@ -372,6 +374,7 @@ function ExecutionSection({
   onProviderChange?: (providerId: string | null) => void;
   compact?: boolean;
 }) {
+  const sessionCopy = getKanbanSessionCopy(specialistLanguage);
   const effectiveAutomation = resolveEffectiveTaskAutomation(task, boardColumns);
   const canRunTask = effectiveAutomation.canRun && task.columnId !== "done";
   const hasCardOverride = Boolean(task.assignedProvider || task.assignedRole || task.assignedSpecialistId || task.assignedSpecialistName);
@@ -387,6 +390,7 @@ function ExecutionSection({
   const lanePipeline = laneSteps.length > 0
     ? laneSteps.map((step) => formatAutomationStepSummary(step, availableProviders, specialists)).join(" -> ")
     : "No lane automation configured";
+  const hasRecordedRuns = getOrderedSessionIds(task).length > 0;
   const transitionArtifacts = resolveKanbanTransitionArtifacts(boardColumns, task.columnId);
   const overrideKey = `${task.id}:${task.assignedProvider ?? ""}:${task.assignedRole ?? ""}:${task.assignedSpecialistId ?? ""}:${task.assignedSpecialistName ?? ""}`;
 
@@ -419,6 +423,15 @@ function ExecutionSection({
           compact={compact}
         />
       </div>
+      {canRunTask && !hasRecordedRuns && (
+        <div className={`mt-2 rounded-2xl border border-dashed border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-800/50 dark:bg-sky-900/10 dark:text-sky-200 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
+          {sessionCopy.emptyPaneDescription}
+          {" "}
+          {sessionCopy.emptyPaneHint}
+          {" "}
+          {sessionCopy.expectedTarget(`${effectiveProvider} · ${effectiveAutomation.role ?? "DEVELOPER"} · ${effectiveSpecialist}`)}
+        </div>
+      )}
       {transitionArtifacts.currentRequiredArtifacts.length > 0 && (
         <div className="mt-1.5">
           <InlineSummary

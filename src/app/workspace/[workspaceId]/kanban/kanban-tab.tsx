@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { UseAcpState, UseAcpActions } from "@/client/hooks/use-acp";
+import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
 import type { KanbanBoardInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import { KanbanCreateModal, EMPTY_DRAFT, type DraftIssue } from "../kanban-create-modal";
 import { KanbanCard } from "./kanban-card";
 import { KanbanSettingsModal, type ColumnAutomationConfig } from "./kanban-settings-modal";
 import { KanbanCardActivityBar, KanbanCardDetail } from "./kanban-card-detail";
+import { KanbanEmptySessionPane } from "./kanban-card-activity";
 import { scheduleKanbanRefreshBurst } from "./kanban-agent-input";
 import { KanbanBgAgentPanel } from "./kanban-bg-agent-panel";
 import {
@@ -1622,14 +1624,21 @@ export function KanbanTab({
       )}
 
       {(activeSessionId || activeTaskId) && (() => {
-        const hasSessionPane = Boolean(activeSessionId && acp);
+        const activeTask = activeTaskId ? localTasks.find((task) => task.id === activeTaskId) ?? null : null;
+        const showEmptySessionPane = Boolean(
+          activeTask &&
+          !activeSessionId &&
+          resolveEffectiveTaskAutomation(activeTask, board?.columns ?? []).canRun &&
+          activeTask.columnId !== "done",
+        );
+        const hasSessionPane = Boolean((activeSessionId && acp) || showEmptySessionPane);
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 animate-in fade-in duration-150">
             <div className="relative h-[88vh] w-full max-w-7xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-[#1c1f2e] dark:bg-[#12141c] animate-in zoom-in-95 duration-150">
             <div ref={detailSplitContainerRef} className="flex h-full">
               {/* Left: Card Detail (if activeTaskId exists) */}
               {activeTaskId && (() => {
-                const task = localTasks.find((t) => t.id === activeTaskId);
+                const task = activeTask;
                 if (!task) return null;
                 const sessionInfo = task.triggerSessionId ? sessions.find((s) => s.sessionId === task.triggerSessionId) : null;
                 return (
@@ -1683,7 +1692,6 @@ export function KanbanTab({
               {/* Right: Session (if activeSessionId exists) */}
               {hasSessionPane ? (() => {
                 // Build repoSelection and agentRole from active task
-                const activeTask = activeTaskId ? localTasks.find((t) => t.id === activeTaskId) : null;
                 const taskCodebaseIds = activeTask?.codebaseIds && activeTask.codebaseIds.length > 0
                   ? activeTask.codebaseIds
                   : allCodebaseIds;
@@ -1705,6 +1713,24 @@ export function KanbanTab({
                   : null;
                 const taskAgentRole = activeTask?.assignedRole ?? undefined;
 
+                if (showEmptySessionPane && activeTask) {
+                  return (
+                    <div
+                      className="flex h-full min-w-0 flex-1 flex-col overflow-hidden"
+                      style={activeTaskId ? { width: `${(1 - detailSplitRatio) * 100}%` } : undefined}
+                    >
+                      <KanbanEmptySessionPane
+                        task={activeTask}
+                        boardColumns={board?.columns ?? []}
+                        availableProviders={availableProviders}
+                        specialists={specialists}
+                        specialistLanguage={specialistLanguage}
+                        onCloseSession={closeTaskDetail}
+                      />
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     className="flex h-full min-w-0 flex-1 flex-col overflow-hidden"
@@ -1715,6 +1741,7 @@ export function KanbanTab({
                         <KanbanCardActivityBar
                           task={activeTask}
                           sessions={sessions}
+                          specialistLanguage={specialistLanguage}
                           currentSessionId={activeSessionId ?? undefined}
                           onSelectSession={(sessionId) => {
                             setActiveSessionId(sessionId);
