@@ -981,11 +981,32 @@ fn build_task_issue_body(objective: &str, test_cases: Option<&Vec<String>>) -> S
     sections.join("\n\n")
 }
 
-fn build_task_prompt(task: &Task) -> String {
+fn build_task_prompt(
+    task: &Task,
+    board_id: Option<&str>,
+    next_column_id: Option<&str>,
+    available_columns: &str,
+) -> String {
     let labels = if task.labels.is_empty() {
         "Labels: none".to_string()
     } else {
         format!("Labels: {}", task.labels.join(", "))
+    };
+    let lane_id = task.column_id.as_deref().unwrap_or("backlog");
+    let lane_guidance = match lane_id {
+        "dev" => vec![
+            "You are in the `dev` lane. This lane may implement the requested change, but you must keep work scoped to the current card.".to_string(),
+            "Use `routa-coordination_update_card` to record concrete progress on this card before or after meaningful implementation steps.".to_string(),
+            "When implementation for this lane is complete, use `routa-coordination_move_card` to advance the same card.".to_string(),
+        ],
+        "todo" => vec![
+            "You are in the `todo` lane. This lane does not perform full implementation work.".to_string(),
+            "Only clarify the card, update its progress or status, and move the same card forward when the lane is complete.".to_string(),
+            "Do not edit files, do not inspect the whole repository, and do not run browser tests or environment diagnostics in this lane.".to_string(),
+        ],
+        _ => vec![
+            format!("You are in the `{lane_id}` lane. Keep work scoped to the current card and this lane only."),
+        ],
     };
     let mut sections = vec![
         format!("You are assigned to Kanban task: {}", task.title),
@@ -1004,6 +1025,13 @@ fn build_task_prompt(task: &Task) -> String {
             "**Priority:** {}",
             task.priority.as_ref().map(|value| value.as_str()).unwrap_or("medium")
         ),
+        board_id
+            .map(|value| format!("**Board ID:** {}", value))
+            .unwrap_or_else(|| "**Board ID:** unavailable".to_string()),
+        format!("**Current Lane:** {}", lane_id),
+        next_column_id
+            .map(|value| format!("**Next Column ID:** {}", value))
+            .unwrap_or_else(|| "**Next Column ID:** unavailable".to_string()),
         labels,
         task.github_url
             .as_ref()
@@ -1013,6 +1041,14 @@ fn build_task_prompt(task: &Task) -> String {
         "## Objective".to_string(),
         String::new(),
         task.objective.clone(),
+        String::new(),
+        "## Board Columns".to_string(),
+        String::new(),
+        available_columns.to_string(),
+        String::new(),
+        "## Lane Guidance".to_string(),
+        String::new(),
+        lane_guidance.join("\n"),
         String::new(),
     ];
 
@@ -1038,16 +1074,24 @@ fn build_task_prompt(task: &Task) -> String {
             "- **routa-coordination_update_card**: Update this card's title, description, priority, or labels. Use cardId: \"{}\"",
             task.id
         ),
-        "- **routa-coordination_move_card**: Move this same card to the next column when the current lane is complete.".to_string(),
+        format!(
+            "- **routa-coordination_move_card**: Move this same card to targetColumnId \"{}\" when the current lane is complete.",
+            next_column_id.unwrap_or("the exact next column id listed above")
+        ),
         String::new(),
         "## Instructions".to_string(),
         String::new(),
         "1. Start work for the current lane immediately.".to_string(),
         "2. Keep changes focused on this card only.".to_string(),
         "3. Use the exact tool name `routa-coordination_update_card` to record progress on this card.".to_string(),
-        "4. Use the exact tool name `routa-coordination_move_card` only when the current lane is complete.".to_string(),
-        "5. If blocked, update this same card with the blocking reason instead of exploring side quests.".to_string(),
-        "6. Do not run browser tests or environment diagnostics unless the card explicitly asks for them.".to_string(),
+        format!(
+            "4. Use the exact tool name `routa-coordination_move_card` with targetColumnId `{}` only when the current lane is complete.",
+            next_column_id.unwrap_or("the exact next column id listed above")
+        ),
+        "5. Do not guess board ids or column ids. Use the Board ID and Board Columns listed above.".to_string(),
+        "6. If blocked, update this same card with the blocking reason instead of exploring side quests.".to_string(),
+        "7. Treat lane guidance as stricter than the general card objective when they conflict.".to_string(),
+        "8. Do not run browser tests or environment diagnostics unless the card explicitly asks for them.".to_string(),
     ]);
 
     sections.join("\n")
@@ -1107,7 +1151,47 @@ async fn trigger_assigned_task_agent(
         .await
         .map_err(|error| format!("Failed to persist ACP session: {}", error))?;
 
-    let prompt = build_task_prompt(task);
+    let board = if let Some(board_id) = task.board_id.as_deref() {
+        state
+            .kanban_store
+            .get(board_id)
+            .await
+            .map_err(|error| format!("Failed to load Kanban board for prompt: {}", error))?
+    } else {
+        None
+    };
+    let mut ordered_columns = board
+        .as_ref()
+        .map(|value| value.columns.clone())
+        .unwrap_or_default();
+    ordered_columns.sort_by_key(|column| column.position);
+    let next_column_id = ordered_columns
+        .iter()
+        .position(|column| Some(column.id.as_str()) == task.column_id.as_deref())
+        .and_then(|index| ordered_columns.get(index + 1))
+        .map(|column| column.id.clone());
+    let available_columns = if ordered_columns.is_empty() {
+        "- unavailable".to_string()
+    } else {
+        ordered_columns
+            .iter()
+            .map(|column| {
+                format!(
+                    "- {} ({}) stage={} position={}",
+                    column.id, column.name, column.stage, column.position
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let prompt = build_task_prompt(
+        task,
+        board.as_ref()
+            .map(|value| value.id.as_str())
+            .or(task.board_id.as_deref()),
+        next_column_id.as_deref(),
+        &available_columns,
+    );
     let state_clone = state.clone();
     let session_id_clone = session_id.clone();
     let task_workspace = task.workspace_id.clone();
