@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use routa_core::workflow::specialist::{SpecialistDef, SpecialistLoader};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -338,4 +339,55 @@ fn truncate_like_review(content: &str, max_chars: usize) -> String {
         let truncated: String = content.chars().take(max_chars).collect();
         format!("{}\n\n[truncated]", truncated)
     }
+}
+
+pub(crate) fn build_review_input_payload(
+    repo_root: &Path,
+    base: &str,
+    head: &str,
+    rules_file: Option<&str>,
+) -> Result<ReviewInputPayload, String> {
+    let diff_range = format!("{}..{}", base, head);
+    let changed_files = git_lines(repo_root, &["diff", "--name-only", &diff_range])?;
+    let diff_stat = git_output(repo_root, &["diff", "--stat", &diff_range])?;
+    let diff = truncate_like_review(
+        &git_output(repo_root, &["diff", "--unified=3", &diff_range])?,
+        40_000,
+    );
+    let review_rules = load_review_rules(repo_root, rules_file)?;
+    let config_snippets = load_config_snippets(repo_root);
+
+    Ok(ReviewInputPayload {
+        repo_path: repo_root.display().to_string(),
+        repo_root: repo_root.display().to_string(),
+        base: base.to_string(),
+        head: head.to_string(),
+        changed_files,
+        diff_stat,
+        diff,
+        config_snippets,
+        review_rules,
+    })
+}
+
+pub(crate) fn load_specialist_by_id(
+    specialist_id: &str,
+    specialist_dir: Option<&str>,
+) -> Result<SpecialistDef, String> {
+    let mut loader = SpecialistLoader::new();
+    if let Some(dir) = specialist_dir {
+        loader.load_dir(dir)?;
+    } else {
+        loader.load_default_dirs();
+    }
+
+    loader
+        .get(specialist_id)
+        .cloned()
+        .or_else(|| {
+            SpecialistLoader::builtin_specialists()
+                .into_iter()
+                .find(|specialist| specialist.id == specialist_id)
+        })
+        .ok_or_else(|| format!("Missing specialist definition: {}", specialist_id))
 }

@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use routa_core::state::AppState;
-use routa_core::workflow::agent_caller::{AcpAgentCaller, AgentCallConfig};
 use routa_core::workflow::specialist::{SpecialistDef, SpecialistLoader};
 use serde_json::Value;
 
@@ -16,9 +15,8 @@ use super::output::{
     print_pretty_json, print_review_result, print_security_acp_runtime_diagnostics, truncate,
 };
 use super::shared::{
-    find_command_in_path, git_lines, git_output, load_config_snippets, load_dotenv,
-    load_review_rules, provider_runtime_binary, resolve_repo_root, ReviewAnalyzeOptions,
-    ReviewInputPayload, ReviewWorkerType, SecurityCandidate,
+    build_review_input_payload, find_command_in_path, load_dotenv, load_specialist_by_id,
+    provider_runtime_binary, resolve_repo_root, ReviewAnalyzeOptions, SecurityCandidate,
     SecurityCandidateBucket, SecurityCandidateWorkload, SecurityDispatchInput, SecurityEvidencePack,
     SecurityReviewPayload, SecurityRootFinding, SecuritySpecialistDispatch,
     SecuritySpecialistOutput, SecuritySpecialistReport, ToolTrace,
@@ -29,64 +27,6 @@ use super::stream_parser::{
     extract_agent_output_from_history, extract_agent_output_from_process_output,
     extract_text_from_prompt_result,
 };
-
-pub async fn analyze(_state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Result<(), String> {
-    load_dotenv();
-
-    let repo_root = resolve_repo_root(options.repo_path)?;
-    let payload =
-        build_review_input_payload(&repo_root, options.base, options.head, options.rules_file)?;
-    let specialist = load_pr_reviewer(options.specialist_dir)?;
-    let caller = AcpAgentCaller::new();
-
-    let context_prompt = build_worker_prompt(ReviewWorkerType::Context, &payload, None, None)?;
-    let context_output = call_review_worker(
-        &caller,
-        &specialist,
-        ReviewWorkerType::Context,
-        &context_prompt,
-        options.verbose,
-    )
-    .await?;
-
-    let candidates_prompt = build_worker_prompt(
-        ReviewWorkerType::Candidates,
-        &payload,
-        Some(&context_output),
-        None,
-    )?;
-    let candidates_output = call_review_worker(
-        &caller,
-        &specialist,
-        ReviewWorkerType::Candidates,
-        &candidates_prompt,
-        options.verbose,
-    )
-    .await?;
-
-    let validator_prompt = build_worker_prompt(
-        ReviewWorkerType::Validator,
-        &payload,
-        Some(&context_output),
-        Some(&candidates_output),
-    )?;
-    let final_output = call_review_worker(
-        &caller,
-        &specialist,
-        ReviewWorkerType::Validator,
-        &validator_prompt,
-        options.verbose,
-    )
-    .await?;
-
-    if final_output.is_empty() {
-        return Err("Review workflow completed without producing an output.".to_string());
-    }
-
-    print_review_result("Review Result", &final_output, options.as_json, "review output")?;
-
-    Ok(())
-}
 
 pub async fn security(state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Result<(), String> {
     // Resolve PATH for provider commands (opencode/claude/codex, etc.).
@@ -369,34 +309,6 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-async fn call_review_worker(
-    caller: &AcpAgentCaller,
-    specialist: &SpecialistDef,
-    worker_type: ReviewWorkerType,
-    user_request: &str,
-    verbose: bool,
-) -> Result<String, String> {
-    let config = build_agent_call_config(specialist)?;
-    let prompt = build_specialist_prompt(specialist, worker_type, user_request);
-
-    if verbose {
-        println!(
-            "── Internal Review Worker: {} (model: {}) ──",
-            worker_type.as_str(),
-            config.model
-        );
-    }
-
-    let response = caller.call(&config, &prompt).await?;
-    if !response.success {
-        return Err(response
-            .error
-            .unwrap_or_else(|| format!("Review worker {} failed", worker_type.as_str())));
-    }
-
-    Ok(response.content.trim().to_string())
-}
-
 async fn call_security_specialist_via_acp(
     state: &AppState,
     specialist: &SpecialistDef,
@@ -513,136 +425,6 @@ fn resolve_security_provider(specialist: &SpecialistDef) -> String {
         .ok()
         .or_else(|| specialist.default_provider.clone())
         .unwrap_or_else(|| "opencode".to_string())
-}
-
-fn load_pr_reviewer(specialist_dir: Option<&str>) -> Result<SpecialistDef, String> {
-    load_specialist_by_id("pr-reviewer", specialist_dir)
-}
-
-fn load_specialist_by_id(
-    specialist_id: &str,
-    specialist_dir: Option<&str>,
-) -> Result<SpecialistDef, String> {
-    let mut loader = SpecialistLoader::new();
-    if let Some(dir) = specialist_dir {
-        loader.load_dir(dir)?;
-    } else {
-        loader.load_default_dirs();
-    }
-
-    loader
-        .get(specialist_id)
-        .cloned()
-        .or_else(|| {
-            SpecialistLoader::builtin_specialists()
-                .into_iter()
-                .find(|specialist| specialist.id == specialist_id)
-        })
-        .ok_or_else(|| format!("Missing specialist definition: {}", specialist_id))
-}
-
-fn build_agent_call_config(specialist: &SpecialistDef) -> Result<AgentCallConfig, String> {
-    let use_mock_adapter = std::env::var("ROUTA_REVIEW_MOCK")
-        .ok()
-        .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"));
-
-    let api_key = if use_mock_adapter {
-        "mock-key".to_string()
-    } else {
-        std::env::var("ANTHROPIC_AUTH_TOKEN")
-            .or_else(|_| std::env::var("ANTHROPIC_API_KEY"))
-            .map_err(|_| {
-                "No API key found. Set ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY.".to_string()
-            })?
-    };
-
-    let adapter = if use_mock_adapter {
-        "mock".to_string()
-    } else {
-        specialist
-            .default_adapter
-            .clone()
-            .unwrap_or_else(|| "claude-code-sdk".to_string())
-    };
-
-    Ok(AgentCallConfig {
-        adapter,
-        base_url: std::env::var("ANTHROPIC_BASE_URL")
-            .unwrap_or_else(|_| "https://api.anthropic.com".to_string()),
-        api_key,
-        model: specialist.default_model.clone().unwrap_or_else(|| {
-            std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_| "GLM-4.7".to_string())
-        }),
-        max_turns: 1,
-        max_tokens: 8192,
-        temperature: None,
-        system_prompt: specialist.system_prompt.clone(),
-        env: std::collections::HashMap::new(),
-        timeout_secs: 300,
-    })
-}
-
-fn build_specialist_prompt(
-    specialist: &SpecialistDef,
-    worker_type: ReviewWorkerType,
-    user_request: &str,
-) -> String {
-    let mut prompt = specialist.system_prompt.clone();
-    if let Some(reminder) = &specialist.role_reminder {
-        if !reminder.trim().is_empty() {
-            prompt.push_str(&format!("\n\n---\n**Reminder:** {}", reminder));
-        }
-    }
-    prompt.push_str(&format!(
-        "\n\n---\n\nInternal Review Worker: {}\nYou are an internal sub-agent invocation under the single public PR Reviewer specialist.\n\n{}",
-        worker_type.as_str(),
-        user_request
-    ));
-    prompt
-}
-
-fn build_worker_prompt(
-    worker_type: ReviewWorkerType,
-    payload: &ReviewInputPayload,
-    context_output: Option<&str>,
-    candidates_output: Option<&str>,
-) -> Result<String, String> {
-    let payload_json = serde_json::to_string_pretty(payload)
-        .map_err(|err| format!("Failed to serialize review payload: {}", err))?;
-
-    let prompt = match worker_type {
-        ReviewWorkerType::Context => [
-            "You are acting as the Context Gathering sub-agent for PR review.",
-            "Build project review context from this git review payload.",
-            "Return strict JSON only.",
-            &payload_json,
-        ]
-        .join("\n\n"),
-        ReviewWorkerType::Candidates => [
-            "You are acting as the Diff Analysis sub-agent for PR review.",
-            "Review this change set against the project context below.",
-            "Return strict JSON only.",
-            "## Project Context",
-            context_output.unwrap_or("{}"),
-            "## Review Payload",
-            &payload_json,
-        ]
-        .join("\n\n"),
-        ReviewWorkerType::Validator => [
-            "You are acting as the Finding Validation sub-agent for PR review.",
-            "Filter review candidates using confidence scoring and exclusion rules.",
-            "Return strict JSON only.",
-            "## Project Context",
-            context_output.unwrap_or("{}"),
-            "## Raw Candidates",
-            candidates_output.unwrap_or("{}"),
-            "## Review Payload",
-            &payload_json,
-        ]
-        .join("\n\n"),
-    };
-
-    Ok(prompt)
 }
 
 fn build_security_specialist_prompt(payload: &SecurityReviewPayload) -> Result<String, String> {
@@ -1065,35 +847,6 @@ fn group_candidates_by_category(
 
     grouped.sort_by_key(|bucket| std::cmp::Reverse(bucket.candidate_count));
     grouped
-}
-
-fn build_review_input_payload(
-    repo_root: &Path,
-    base: &str,
-    head: &str,
-    rules_file: Option<&str>,
-) -> Result<ReviewInputPayload, String> {
-    let diff_range = format!("{}..{}", base, head);
-    let changed_files = git_lines(repo_root, &["diff", "--name-only", &diff_range])?;
-    let diff_stat = git_output(repo_root, &["diff", "--stat", &diff_range])?;
-    let diff = truncate(
-        &git_output(repo_root, &["diff", "--unified=3", &diff_range])?,
-        40_000,
-    );
-    let review_rules = load_review_rules(repo_root, rules_file)?;
-    let config_snippets = load_config_snippets(repo_root);
-
-    Ok(ReviewInputPayload {
-        repo_path: repo_root.display().to_string(),
-        repo_root: repo_root.display().to_string(),
-        base: base.to_string(),
-        head: head.to_string(),
-        changed_files,
-        diff_stat,
-        diff,
-        config_snippets,
-        review_rules,
-    })
 }
 
 fn build_security_review_payload(
