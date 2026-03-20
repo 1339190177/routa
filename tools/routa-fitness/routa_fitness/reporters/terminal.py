@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from routa_fitness.model import DimensionScore, FitnessReport, MetricResult
+from routa_fitness.model import DimensionScore, FitnessReport, MetricResult, ResultState
 
 
 class TerminalReporter:
@@ -32,13 +32,20 @@ class TerminalReporter:
             print(f"   Score: {ds.score:.0f}%")
 
     def _print_result(self, result: MetricResult, *, show_tier: bool = False) -> None:
-        status = "\u2705 PASS" if result.passed else "\u274c FAIL"
+        status_labels = {
+            ResultState.PASS: "\u2705 PASS",
+            ResultState.FAIL: "\u274c FAIL",
+            ResultState.UNKNOWN: "\u2753 UNKNOWN",
+            ResultState.SKIPPED: "\u23ed\ufe0f SKIPPED",
+            ResultState.WAIVED: "\u26a0\ufe0f WAIVED",
+        }
+        status = status_labels.get(result.state, "\u2753 UNKNOWN")
         hard = " [HARD GATE]" if result.hard_gate else ""
         tier_label = f" [{result.tier.value}]" if show_tier else ""
 
         print(f"   - {result.metric_name}: {status}{hard}{tier_label}")
 
-        if not result.passed and (self.verbose or result.hard_gate):
+        if result.state == ResultState.FAIL and (self.verbose or result.hard_gate):
             if result.output and result.output != f"TIMEOUT ({result.duration_ms:.0f}s)":
                 lines = result.output.strip().split("\n")
                 for line in lines[:10]:

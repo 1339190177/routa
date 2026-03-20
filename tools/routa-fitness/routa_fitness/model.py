@@ -103,6 +103,11 @@ class Waiver:
     tracking_issue: int | None = None
     expires_at: date | None = None
 
+    def is_active(self, today: date | None = None) -> bool:
+        """Return True when the waiver is still active."""
+        reference = today or date.today()
+        return self.expires_at is None or self.expires_at >= reference
+
 
 @dataclass
 class Metric:

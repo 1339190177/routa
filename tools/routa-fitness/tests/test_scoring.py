@@ -1,6 +1,6 @@
 """Tests for routa_fitness.scoring."""
 
-from routa_fitness.model import MetricResult, Tier
+from routa_fitness.model import MetricResult, ResultState, Tier
 from routa_fitness.scoring import score_dimension, score_report
 
 
@@ -74,3 +74,44 @@ def test_score_report_score_blocked():
     report = score_report([ds], min_score=80.0)
     # 33.3% < 80%
     assert report.score_blocked is True
+
+
+def test_score_dimension_ignores_unknown_and_skipped():
+    results = [
+        MetricResult(metric_name="pass", passed=True, output="", tier=Tier.FAST),
+        MetricResult(
+            metric_name="unknown",
+            passed=False,
+            output="unknown",
+            tier=Tier.FAST,
+            state=ResultState.UNKNOWN,
+        ),
+        MetricResult(
+            metric_name="skipped",
+            passed=False,
+            output="skipped",
+            tier=Tier.FAST,
+            state=ResultState.SKIPPED,
+        ),
+    ]
+    ds = score_dimension(results, "quality", 100)
+    assert ds.passed == 1
+    assert ds.total == 1
+    assert ds.score == 100.0
+
+
+def test_score_dimension_counts_waived_as_pass():
+    results = [
+        MetricResult(
+            metric_name="waived",
+            passed=True,
+            output="waived",
+            tier=Tier.FAST,
+            state=ResultState.WAIVED,
+        ),
+        MetricResult(metric_name="fail", passed=False, output="", tier=Tier.FAST),
+    ]
+    ds = score_dimension(results, "quality", 100)
+    assert ds.passed == 1
+    assert ds.total == 2
+    assert ds.score == 50.0

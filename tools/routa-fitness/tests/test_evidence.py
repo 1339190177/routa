@@ -198,6 +198,40 @@ def test_load_dimensions_skips_no_frontmatter(tmp_path: Path):
     assert len(dims) == 0
 
 
+def test_load_dimensions_uses_manifest_when_present(tmp_path: Path):
+    fitness_dir = tmp_path / "docs" / "fitness"
+    runtime_dir = fitness_dir / "runtime"
+    runtime_dir.mkdir(parents=True)
+    (fitness_dir / "manifest.yaml").write_text(textwrap.dedent("""\
+        schema: fitness-manifest-v1
+        evidence_files:
+          - docs/fitness/runtime/observability.md
+    """))
+    (fitness_dir / "ignored.md").write_text(textwrap.dedent("""\
+        ---
+        dimension: ignored
+        weight: 100
+        metrics:
+          - name: ignored
+            command: echo ignored
+        ---
+    """))
+    (runtime_dir / "observability.md").write_text(textwrap.dedent("""\
+        ---
+        dimension: observability
+        weight: 0
+        metrics:
+          - name: tracing_signal_available
+            command: echo signal_ok
+        ---
+    """))
+
+    dims = load_dimensions(fitness_dir)
+    assert len(dims) == 1
+    assert dims[0].name == "observability"
+    assert dims[0].source_file == "runtime/observability.md"
+
+
 def test_validate_weights():
     from routa_fitness.model import Dimension
 

@@ -1,4 +1,4 @@
-"""Evidence loader — parse YAML frontmatter from docs/fitness/*.md into Dimension objects."""
+"""Evidence loader — parse YAML frontmatter into Dimension objects."""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ from routa_fitness.model import (
 
 # Files to skip when scanning the fitness directory
 _SKIP_FILES = {"README.md", "REVIEW.md"}
+_MANIFEST_FILE = "manifest.yaml"
 _EnumT = TypeVar("_EnumT")
 
 
@@ -111,8 +112,38 @@ def _build_metric(raw: dict) -> Metric:
     )
 
 
+def _load_manifest_paths(fitness_dir: Path) -> list[Path] | None:
+    """Return manifest-listed evidence files when a manifest exists."""
+    manifest_path = fitness_dir / _MANIFEST_FILE
+    if not manifest_path.is_file():
+        return None
+
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    evidence_files = manifest.get("evidence_files")
+    if not isinstance(evidence_files, list):
+        return []
+
+    paths: list[Path] = []
+    for entry in evidence_files:
+        if not isinstance(entry, str):
+            continue
+        candidate = Path(entry)
+        if not candidate.is_absolute():
+            candidate = (fitness_dir.parent.parent / candidate).resolve()
+        paths.append(candidate)
+    return paths
+
+
+def _discover_evidence_files(fitness_dir: Path) -> list[Path]:
+    """Find evidence files from manifest or the legacy top-level glob."""
+    manifest_paths = _load_manifest_paths(fitness_dir)
+    if manifest_paths is not None:
+        return sorted(manifest_paths)
+    return sorted(fitness_dir.glob("*.md"))
+
+
 def load_dimensions(fitness_dir: Path) -> list[Dimension]:
-    """Scan *.md files in fitness_dir for YAML frontmatter, return Dimension objects.
+    """Scan evidence files in fitness_dir for YAML frontmatter, return Dimension objects.
 
     Args:
         fitness_dir: Path to the docs/fitness/ directory.
@@ -122,7 +153,9 @@ def load_dimensions(fitness_dir: Path) -> list[Dimension]:
     """
     dimensions: list[Dimension] = []
 
-    for md_file in sorted(fitness_dir.glob("*.md")):
+    for md_file in _discover_evidence_files(fitness_dir):
+        if not md_file.is_file():
+            continue
         if md_file.name in _SKIP_FILES:
             continue
 
@@ -141,7 +174,7 @@ def load_dimensions(fitness_dir: Path) -> list[Dimension]:
             threshold_pass=threshold.get("pass", 90),
             threshold_warn=threshold.get("warn", 80),
             metrics=metrics,
-            source_file=md_file.name,
+            source_file=md_file.relative_to(fitness_dir).as_posix() if md_file.is_relative_to(fitness_dir) else md_file.name,
         )
         dimensions.append(dim)
 

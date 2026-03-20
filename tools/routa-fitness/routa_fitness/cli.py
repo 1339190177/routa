@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import fnmatch
 import subprocess
 import sys
 from pathlib import Path
 
 from routa_fitness.evidence import load_dimensions, validate_weights
 from routa_fitness.governance import GovernancePolicy, enforce, filter_dimensions
-from routa_fitness.model import Dimension, Metric, Tier
+from routa_fitness.model import Dimension, ExecutionScope, FitnessReport, Metric, ResultState, Tier
 from routa_fitness.review_trigger import (
     collect_changed_files as collect_review_changed_files,
     collect_diff_stats,
@@ -52,6 +53,49 @@ def _find_review_trigger_config(project_root: Path) -> Path:
 
 def _print_json(data: dict) -> None:
     print(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _report_to_dict(report: FitnessReport) -> dict:
+    """Serialize a fitness report into a stable JSON-friendly structure."""
+    return {
+        "final_score": report.final_score,
+        "hard_gate_blocked": report.hard_gate_blocked,
+        "score_blocked": report.score_blocked,
+        "dimensions": [
+            {
+                "name": ds.dimension,
+                "weight": ds.weight,
+                "score": ds.score,
+                "passed": ds.passed,
+                "total": ds.total,
+                "hard_gate_failures": ds.hard_gate_failures,
+                "results": [
+                    {
+                        "name": result.metric_name,
+                        "passed": result.passed,
+                        "state": result.state.value if result.state else None,
+                        "tier": result.tier.value,
+                        "hard_gate": result.hard_gate,
+                        "duration_ms": result.duration_ms,
+                        "output": result.output,
+                    }
+                    for result in ds.results
+                ],
+            }
+            for ds in report.dimensions
+        ],
+    }
+
+
+def _write_output(path: str | None, payload: dict) -> None:
+    """Write JSON payload to a file or stdout when requested."""
+    if not path:
+        return
+    serialized = json.dumps(payload, indent=2, ensure_ascii=False)
+    if path == "-":
+        print(serialized)
+        return
+    Path(path).write_text(serialized + "\n", encoding="utf-8")
 
 
 def _print_graph_impact(result: dict) -> None:
@@ -207,6 +251,9 @@ def _domains_from_files(files: list[str]) -> set[str]:
 
 
 def _metric_domains(metric: Metric) -> set[str]:
+    if metric.scope:
+        return set(metric.scope)
+
     command = metric.command.lower()
     domains: set[str] = set()
 
@@ -238,8 +285,27 @@ def _metric_domains(metric: Metric) -> set[str]:
     return domains
 
 
-def _filter_dimensions_for_incremental(dimensions: list[Dimension], domains: set[str]) -> list[Dimension]:
+def _matches_changed_files(metric: Metric, changed_files: list[str], domains: set[str]) -> bool:
+    if metric.run_when_changed:
+        return any(
+            fnmatch.fnmatch(changed_file, pattern)
+            for changed_file in changed_files
+            for pattern in metric.run_when_changed
+        )
     if not domains:
+        return False
+    if "config" in domains:
+        return True
+    metric_domains = _metric_domains(metric)
+    return "global" in metric_domains or bool(metric_domains.intersection(domains))
+
+
+def _filter_dimensions_for_incremental(
+    dimensions: list[Dimension],
+    changed_files: list[str],
+    domains: set[str],
+) -> list[Dimension]:
+    if not changed_files:
         return []
     if "config" in domains:
         return dimensions
@@ -248,8 +314,7 @@ def _filter_dimensions_for_incremental(dimensions: list[Dimension], domains: set
     for dimension in dimensions:
         filtered_metrics = []
         for metric in dimension.metrics:
-            metric_domains = _metric_domains(metric)
-            if "global" in metric_domains or metric_domains.intersection(domains):
+            if _matches_changed_files(metric, changed_files, domains):
                 filtered_metrics.append(metric)
         if filtered_metrics:
             filtered_dimensions.append(
@@ -265,17 +330,28 @@ def _filter_dimensions_for_incremental(dimensions: list[Dimension], domains: set
     return filtered_dimensions
 
 
+def _collect_run_files(args: argparse.Namespace, project_root: Path) -> list[str]:
+    explicit_files = args.files or []
+    if explicit_files:
+        return explicit_files
+    if args.changed_only:
+        return _collect_changed_files(project_root, args.base)
+    return []
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """Run fitness checks (main command)."""
     project_root = _find_project_root()
     fitness_dir = _find_fitness_dir(project_root)
 
     tier_filter = Tier(args.tier) if args.tier else None
+    execution_scope = ExecutionScope(args.scope) if args.scope else None
     policy = GovernancePolicy(
         tier_filter=tier_filter,
         parallel=args.parallel,
         dry_run=args.dry_run,
         verbose=args.verbose,
+        execution_scope=execution_scope,
     )
 
     reporter = TerminalReporter(verbose=policy.verbose)
@@ -288,21 +364,39 @@ def cmd_run(args: argparse.Namespace) -> int:
     dimensions = load_dimensions(fitness_dir)
     dimensions = filter_dimensions(dimensions, policy)
 
+    changed_files = _collect_run_files(args, project_root)
     runner_env: dict[str, str] = {}
-    if args.changed_only:
-        changed_files = _collect_changed_files(project_root, args.base)
+    if args.changed_only or changed_files:
+        if args.changed_only and not changed_files:
+            print("No changed files detected; skipping fitness run.")
+            _write_output(
+                args.output,
+                {
+                    "final_score": 0.0,
+                    "hard_gate_blocked": False,
+                    "score_blocked": False,
+                    "dimensions": [],
+                },
+            )
+            return 0
+
         changed_domains = _domains_from_files(changed_files)
         print(
             f"\nIncremental mode: base={args.base}, changed_files={len(changed_files)}, domains={','.join(sorted(changed_domains)) or 'none'}"
         )
 
-        if not changed_files:
-            print("No changed files detected; skipping fitness run.")
-            return 0
-
-        dimensions = _filter_dimensions_for_incremental(dimensions, changed_domains)
+        dimensions = _filter_dimensions_for_incremental(dimensions, changed_files, changed_domains)
         if not dimensions:
             print("No metrics matched changed domains; skipping fitness run.")
+            _write_output(
+                args.output,
+                {
+                    "final_score": 0.0,
+                    "hard_gate_blocked": False,
+                    "score_blocked": False,
+                    "dimensions": [],
+                },
+            )
             return 0
 
         runner_env = {
@@ -325,12 +419,19 @@ def cmd_run(args: argparse.Namespace) -> int:
         dimension_scores.append(ds)
 
         for result in ds.results:
-            status = "\u2705 PASS" if result.passed else "\u274c FAIL"
+            state_labels = {
+                ResultState.PASS: "\u2705 PASS",
+                ResultState.FAIL: "\u274c FAIL",
+                ResultState.UNKNOWN: "\u2753 UNKNOWN",
+                ResultState.SKIPPED: "\u23ed\ufe0f SKIPPED",
+                ResultState.WAIVED: "\u26a0\ufe0f WAIVED",
+            }
+            status = state_labels.get(result.state, "\u2753 UNKNOWN")
             hard = " [HARD GATE]" if result.hard_gate else ""
             tier_label = f" [{result.tier.value}]" if tier_filter else ""
             print(f"   - {result.metric_name}: {status}{hard}{tier_label}")
 
-            if not result.passed and (policy.verbose or result.hard_gate):
+            if result.state == ResultState.FAIL and (policy.verbose or result.hard_gate):
                 if result.output:
                     lines = result.output.strip().split("\n")
                     for line in lines[:10]:
@@ -343,6 +444,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     report = score_report(dimension_scores, min_score=policy.min_score)
     reporter.print_footer(report)
+    _write_output(args.output, _report_to_dict(report))
 
     return enforce(report, policy)
 
@@ -493,8 +595,9 @@ def cmd_graph_history(args: argparse.Namespace) -> int:
 def cmd_graph_review_context(args: argparse.Namespace) -> int:
     """Build an AI-friendly review context for the current diff or files."""
     runner = GraphRunner(_find_project_root())
+    file_args = (args.files_positional or []) + (args.files or [])
     result = runner.review_context(
-        args.files or None,
+        file_args or None,
         base=args.base,
         max_depth=args.depth,
         build_mode=args.build_mode,
@@ -504,7 +607,10 @@ def cmd_graph_review_context(args: argparse.Namespace) -> int:
         max_lines_per_file=args.max_lines_per_file,
     )
     if args.json:
-        _print_json(result)
+        if args.output and args.output != "-":
+            Path(args.output).write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        else:
+            _print_json(result)
     else:
         if result.get("status") == "unavailable":
             print(result.get("reason", "Graph unavailable"))
@@ -528,9 +634,24 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--dry-run", action="store_true", help="Show what would run")
     run_parser.add_argument("--verbose", action="store_true", help="Show output on failure")
     run_parser.add_argument(
+        "--scope",
+        choices=["local", "ci", "staging", "prod_observation"],
+        help="Run only metrics for the given execution scope",
+    )
+    run_parser.add_argument(
+        "--output",
+        help="Write JSON report to a file path, or '-' for stdout",
+    )
+    run_parser.add_argument(
         "--changed-only",
         action="store_true",
         help="Run only metrics relevant to changed files",
+    )
+    run_parser.add_argument(
+        "--files",
+        nargs="*",
+        default=[],
+        help="Explicit changed files used for incremental metric selection",
     )
     run_parser.add_argument(
         "--base",
@@ -652,8 +773,10 @@ def build_parser() -> argparse.ArgumentParser:
         "review-context",
         help="Build an AI-friendly review context from the current graph",
     )
-    graph_review_context.add_argument("files", nargs="*", help="Optional explicit changed files")
+    graph_review_context.add_argument("files_positional", nargs="*", help="Optional explicit changed files")
+    graph_review_context.add_argument("--files", nargs="*", default=[], help="Explicit changed files")
     graph_review_context.add_argument("--base", default="HEAD", help="Git diff base")
+    graph_review_context.add_argument("--head", default="HEAD", help="Compatibility flag; currently unused")
     graph_review_context.add_argument("--depth", type=int, default=2, help="Traversal depth")
     graph_review_context.add_argument("--max-targets", type=int, default=25, help="Max nodes to query")
     graph_review_context.add_argument("--max-files", type=int, default=12, help="Max source files to include")
@@ -675,6 +798,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Graph build mode",
     )
     graph_review_context.add_argument("--json", action="store_true", help="Emit JSON output")
+    graph_review_context.add_argument("--output", help="Write JSON output to a file path or '-' for stdout")
     graph_review_context.set_defaults(func=cmd_graph_review_context)
 
     return parser

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from routa_fitness.model import DimensionScore, FitnessReport, MetricResult
+from routa_fitness.model import DimensionScore, FitnessReport, MetricResult, ResultState
+
+
+_SCORABLE_PASS_STATES = {ResultState.PASS, ResultState.WAIVED}
+_SCORABLE_TOTAL_STATES = {ResultState.PASS, ResultState.FAIL, ResultState.WAIVED}
 
 
 def score_dimension(results: list[MetricResult], dimension_name: str, weight: int) -> DimensionScore:
@@ -12,10 +16,14 @@ def score_dimension(results: list[MetricResult], dimension_name: str, weight: in
             dimension=dimension_name, weight=weight, passed=0, total=0, score=0.0
         )
 
-    passed = sum(1 for r in results if r.passed)
-    total = len(results)
+    passed = sum(1 for r in results if r.state in _SCORABLE_PASS_STATES)
+    total = sum(1 for r in results if r.state in _SCORABLE_TOTAL_STATES)
     score = (passed / total) * 100 if total > 0 else 0.0
-    hard_gate_failures = [r.metric_name for r in results if not r.passed and r.hard_gate]
+    hard_gate_failures = [
+        r.metric_name
+        for r in results
+        if r.state == ResultState.FAIL and r.hard_gate
+    ]
 
     return DimensionScore(
         dimension=dimension_name,

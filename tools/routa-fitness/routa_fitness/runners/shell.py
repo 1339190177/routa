@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import environ
 from pathlib import Path
 
-from routa_fitness.model import Metric, MetricResult
+from routa_fitness.model import Gate, Metric, MetricResult, ResultState
 
 
 class ShellRunner:
@@ -31,13 +31,23 @@ class ShellRunner:
         Returns a MetricResult with pass/fail status based on either
         regex pattern matching or process exit code.
         """
+        if metric.waiver and metric.waiver.is_active():
+            return MetricResult(
+                metric_name=metric.name,
+                passed=True,
+                output=f"[WAIVED] {metric.waiver.reason}",
+                tier=metric.tier,
+                hard_gate=metric.gate == Gate.HARD,
+                state=ResultState.WAIVED,
+            )
+
         if dry_run:
             return MetricResult(
                 metric_name=metric.name,
                 passed=True,
                 output=f"[DRY-RUN] Would run: {metric.command}",
                 tier=metric.tier,
-                hard_gate=metric.hard_gate,
+                hard_gate=metric.gate == Gate.HARD,
             )
 
         start = time.monotonic()
@@ -63,7 +73,7 @@ class ShellRunner:
                 passed=passed,
                 output=output[:2000],
                 tier=metric.tier,
-                hard_gate=metric.hard_gate,
+                hard_gate=metric.gate == Gate.HARD,
                 duration_ms=elapsed,
             )
         except subprocess.TimeoutExpired:
@@ -73,7 +83,7 @@ class ShellRunner:
                 passed=False,
                 output=f"TIMEOUT ({self.timeout}s)",
                 tier=metric.tier,
-                hard_gate=metric.hard_gate,
+                hard_gate=metric.gate == Gate.HARD,
                 duration_ms=elapsed,
             )
         except Exception as e:
@@ -83,7 +93,7 @@ class ShellRunner:
                 passed=False,
                 output=str(e),
                 tier=metric.tier,
-                hard_gate=metric.hard_gate,
+                hard_gate=metric.gate == Gate.HARD,
                 duration_ms=elapsed,
             )
 

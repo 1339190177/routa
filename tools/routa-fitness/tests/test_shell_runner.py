@@ -1,8 +1,9 @@
 """Tests for routa_fitness.runners.shell."""
 
+from datetime import date, timedelta
 from pathlib import Path
 
-from routa_fitness.model import Metric
+from routa_fitness.model import Metric, ResultState, Waiver
 from routa_fitness.runners.shell import ShellRunner
 
 
@@ -90,3 +91,16 @@ def test_run_batch_dry_run():
     results = runner.run_batch(metrics, dry_run=True)
     assert results[0].passed is True
     assert "[DRY-RUN]" in results[0].output
+
+
+def test_run_waived_metric():
+    runner = ShellRunner(Path("/tmp"))
+    metric = Metric(
+        name="waived",
+        command="exit 1",
+        waiver=Waiver(reason="temporary waiver", expires_at=date.today() + timedelta(days=1)),
+    )
+    result = runner.run(metric)
+    assert result.passed is True
+    assert result.state == ResultState.WAIVED
+    assert "temporary waiver" in result.output

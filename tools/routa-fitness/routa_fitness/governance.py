@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from routa_fitness.model import Dimension, FitnessReport, Metric, Tier
+from routa_fitness.model import Dimension, ExecutionScope, FitnessReport, Metric, Tier
 
 
 @dataclass
@@ -17,6 +17,7 @@ class GovernancePolicy:
     verbose: bool = False
     min_score: float = 80.0
     fail_on_hard_gate: bool = True
+    execution_scope: ExecutionScope | None = None
 
 
 def _tier_passes_filter(metric_tier: Tier, filter_tier: Tier) -> bool:
@@ -30,9 +31,12 @@ def _tier_passes_filter(metric_tier: Tier, filter_tier: Tier) -> bool:
 
 def filter_metrics(metrics: list[Metric], policy: GovernancePolicy) -> list[Metric]:
     """Apply tier filtering to a list of metrics."""
-    if policy.tier_filter is None:
-        return metrics
-    return [m for m in metrics if _tier_passes_filter(m.tier, policy.tier_filter)]
+    result = metrics
+    if policy.tier_filter is not None:
+        result = [m for m in result if _tier_passes_filter(m.tier, policy.tier_filter)]
+    if policy.execution_scope is not None:
+        result = [m for m in result if m.execution_scope == policy.execution_scope]
+    return result
 
 
 def filter_dimensions(

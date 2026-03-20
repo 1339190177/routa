@@ -1,7 +1,13 @@
 """Tests for routa_fitness.cli."""
 
-from routa_fitness.cli import _domains_from_files, _metric_domains, build_parser
-from routa_fitness.model import Metric
+from routa_fitness.cli import (
+    _domains_from_files,
+    _matches_changed_files,
+    _metric_domains,
+    _report_to_dict,
+    build_parser,
+)
+from routa_fitness.model import ExecutionScope, FitnessReport, Metric, MetricResult, ResultState, Tier
 
 
 def test_parser_run_defaults():
@@ -12,20 +18,43 @@ def test_parser_run_defaults():
     assert args.parallel is False
     assert args.dry_run is False
     assert args.verbose is False
+    assert args.scope is None
+    assert args.output is None
     assert args.changed_only is False
+    assert args.files == []
     assert args.base == "HEAD"
 
 
 def test_parser_run_all_flags():
     parser = build_parser()
     args = parser.parse_args(
-        ["run", "--tier", "fast", "--parallel", "--dry-run", "--verbose", "--changed-only", "--base", "HEAD~2"]
+        [
+            "run",
+            "--tier",
+            "fast",
+            "--parallel",
+            "--dry-run",
+            "--verbose",
+            "--scope",
+            "staging",
+            "--output",
+            "report.json",
+            "--changed-only",
+            "--files",
+            "src/app/page.tsx",
+            "crates/routa-server/src/lib.rs",
+            "--base",
+            "HEAD~2",
+        ]
     )
     assert args.tier == "fast"
     assert args.parallel is True
     assert args.dry_run is True
     assert args.verbose is True
+    assert args.scope == "staging"
+    assert args.output == "report.json"
     assert args.changed_only is True
+    assert args.files == ["src/app/page.tsx", "crates/routa-server/src/lib.rs"]
     assert args.base == "HEAD~2"
 
 
@@ -118,6 +147,8 @@ def test_parser_graph_review_context():
             "review-context",
             "--base",
             "HEAD~2",
+            "--head",
+            "HEAD",
             "--depth",
             "3",
             "--max-targets",
@@ -126,6 +157,10 @@ def test_parser_graph_review_context():
             "4",
             "--max-lines-per-file",
             "80",
+            "--output",
+            "-",
+            "--files",
+            "src/b.ts",
             "--no-source",
             "src/a.ts",
         ]
@@ -133,12 +168,15 @@ def test_parser_graph_review_context():
     assert args.command == "graph"
     assert args.graph_command == "review-context"
     assert args.base == "HEAD~2"
+    assert args.head == "HEAD"
     assert args.depth == 3
     assert args.max_targets == 10
     assert args.max_files == 4
     assert args.max_lines_per_file == 80
+    assert args.output == "-"
     assert args.no_source is True
-    assert args.files == ["src/a.ts"]
+    assert args.files == ["src/b.ts"]
+    assert args.files_positional == ["src/a.ts"]
 
 
 def test_parser_no_command():
@@ -174,3 +212,51 @@ def test_metric_domains():
         "web",
         "config",
     }
+
+
+def test_metric_domains_prefers_explicit_scope():
+    metric = Metric(name="a", command="echo ok", scope=["web", "rust"])
+    assert _metric_domains(metric) == {"web", "rust"}
+
+
+def test_matches_changed_files_uses_run_when_changed():
+    metric = Metric(
+        name="obs",
+        command="echo ok",
+        run_when_changed=["src/instrumentation.ts", "crates/routa-server/src/telemetry/**"],
+    )
+    assert _matches_changed_files(metric, ["src/instrumentation.ts"], set()) is True
+    assert _matches_changed_files(metric, ["src/app/page.tsx"], {"web"}) is False
+
+
+def test_matches_changed_files_falls_back_to_domains():
+    metric = Metric(name="lint", command="npm run lint", execution_scope=ExecutionScope.LOCAL)
+    assert _matches_changed_files(metric, ["src/app/page.tsx"], {"web"}) is True
+
+
+def test_report_to_dict_includes_result_state():
+    report = FitnessReport(
+        final_score=100.0,
+        dimensions=[],
+    )
+    report.dimensions.append(
+        type("DimensionScoreStub", (), {
+            "dimension": "quality",
+            "weight": 100,
+            "score": 100.0,
+            "passed": 1,
+            "total": 1,
+            "hard_gate_failures": [],
+            "results": [
+                MetricResult(
+                    metric_name="lint",
+                    passed=True,
+                    output="ok",
+                    tier=Tier.FAST,
+                    state=ResultState.WAIVED,
+                )
+            ],
+        })()
+    )
+    payload = _report_to_dict(report)
+    assert payload["dimensions"][0]["results"][0]["state"] == "waived"

@@ -6,7 +6,7 @@ from routa_fitness.governance import (
     filter_dimensions,
     filter_metrics,
 )
-from routa_fitness.model import Dimension, FitnessReport, Metric, Tier
+from routa_fitness.model import Dimension, ExecutionScope, FitnessReport, Metric, Tier
 
 
 def test_filter_metrics_no_filter():
@@ -68,6 +68,16 @@ def test_filter_dimensions_preserves_matching():
     assert len(result) == 1
     assert len(result[0].metrics) == 1
     assert result[0].metrics[0].name == "lint"
+
+
+def test_filter_metrics_execution_scope():
+    metrics = [
+        Metric(name="local", command="x", execution_scope=ExecutionScope.LOCAL),
+        Metric(name="staging", command="x", execution_scope=ExecutionScope.STAGING),
+    ]
+    policy = GovernancePolicy(execution_scope=ExecutionScope.STAGING)
+    result = filter_metrics(metrics, policy)
+    assert [metric.name for metric in result] == ["staging"]
 
 
 def test_enforce_pass():
