@@ -642,7 +642,7 @@ async fn call_security_specialist_via_acp(
     let mut maybe_rx = state.acp_manager.subscribe(&session_id).await;
     let prompt = build_security_final_prompt(specialist, user_request);
 
-    state
+    let prompt_response = state
         .acp_manager
         .prompt(&session_id, &prompt)
         .await
@@ -665,11 +665,26 @@ async fn call_security_specialist_via_acp(
     } else {
         streamed_output
     };
+    let output = if output.trim().is_empty() {
+        extract_text_from_prompt_result(&prompt_response).unwrap_or_default()
+    } else {
+        output
+    };
+    let output = if output.trim().is_empty() {
+        extract_agent_output_from_process_output(&history)
+    } else {
+        output
+    };
 
     state.acp_manager.kill_session(&session_id).await;
 
     if output.trim().is_empty() {
-        return Err("Security specialist completed without producing an output.".to_string());
+        let response_preview = truncate(&prompt_response.to_string(), 600);
+        return Err(format!(
+            "Security specialist completed without producing an output. prompt_response={}, history_entries={}",
+            response_preview,
+            history.len()
+        ));
     }
 
     Ok(output)
@@ -740,12 +755,19 @@ async fn wait_for_turn_complete_with_updates(
                     return Ok(collected_output);
                 }
             }
-            Ok(Err(_)) => {
-                if let Some(renderer) = renderer.as_mut() {
-                    renderer.finish();
+            Ok(Err(err)) => match err {
+                tokio::sync::broadcast::error::RecvError::Lagged(_) => {
+                    // Large sessions (for example codex-acp) can emit many updates quickly.
+                    // Keep consuming the latest updates instead of terminating early.
+                    idle_count = 0;
                 }
-                return Ok(collected_output);
-            }
+                tokio::sync::broadcast::error::RecvError::Closed => {
+                    if let Some(renderer) = renderer.as_mut() {
+                        renderer.finish();
+                    }
+                    return Ok(collected_output);
+                }
+            },
             Err(_) => {
                 idle_count += 1;
                 if idle_count >= idle_with_output_threshold && !collected_output.trim().is_empty() {
@@ -863,10 +885,35 @@ fn extract_agent_output_from_history(history: &[serde_json::Value]) -> String {
 
 fn extract_update_text(update: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
     if let Some(text) = update
+        .get("data")
+        .and_then(|data| data.as_str())
+        .and_then(extract_text_from_process_output_line)
+    {
+        return Some(text);
+    }
+
+    if let Some(delta) = update.get("delta").and_then(|delta| delta.as_str()) {
+        return Some(delta.to_string());
+    }
+
+    if let Some(text) = update
         .get("content")
         .and_then(|content| content.get("text"))
         .and_then(|text| text.as_str())
     {
+        return Some(text.to_string());
+    }
+
+    if let Some(text) = update
+        .get("message")
+        .and_then(|message| message.get("content"))
+        .and_then(|content| content.get("text"))
+        .and_then(|text| text.as_str())
+    {
+        return Some(text.to_string());
+    }
+
+    if let Some(text) = update.get("content").and_then(|content| content.as_str()) {
         return Some(text.to_string());
     }
 
@@ -876,6 +923,34 @@ fn extract_update_text(update: &serde_json::Map<String, serde_json::Value>) -> O
 
     if let Some(text) = update.get("message").and_then(|text| text.as_str()) {
         return Some(text.to_string());
+    }
+
+    if let Some(text) = update
+        .get("message")
+        .and_then(|message| message.get("text"))
+        .and_then(|text| text.as_str())
+    {
+        return Some(text.to_string());
+    }
+
+    if let Some(content) = update
+        .get("message")
+        .and_then(|message| message.get("content"))
+        .and_then(|content| content.as_array())
+    {
+        let mut output = String::new();
+        for part in content {
+            if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                output.push_str(text);
+                continue;
+            }
+            if let Some(text) = part.get("content").and_then(|t| t.as_str()) {
+                output.push_str(text);
+            }
+        }
+        if !output.is_empty() {
+            return Some(output);
+        }
     }
 
     let content = update.get("content")?.as_array()?;
@@ -894,6 +969,106 @@ fn extract_update_text(update: &serde_json::Map<String, serde_json::Value>) -> O
     } else {
         Some(output)
     }
+}
+
+fn extract_text_from_prompt_result(value: &serde_json::Value) -> Option<String> {
+    let mut parts = Vec::new();
+    collect_prompt_text(value, &mut parts);
+    let combined = parts.join("");
+    if combined.trim().is_empty() {
+        None
+    } else {
+        Some(combined)
+    }
+}
+
+fn collect_prompt_text(value: &serde_json::Value, parts: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            if let Some(text) = map.get("text").and_then(|v| v.as_str()) {
+                parts.push(text.to_string());
+            }
+            if let Some(delta) = map.get("delta").and_then(|v| v.as_str()) {
+                parts.push(delta.to_string());
+            }
+            for nested in map.values() {
+                collect_prompt_text(nested, parts);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_prompt_text(item, parts);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn extract_agent_output_from_process_output(history: &[serde_json::Value]) -> String {
+    let mut delta_output = String::new();
+
+    for entry in history {
+        let Some(update) = entry
+            .get("params")
+            .and_then(|params| params.get("update"))
+            .and_then(|value| value.as_object())
+        else {
+            continue;
+        };
+
+        let session_update = update
+            .get("sessionUpdate")
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if session_update != "process_output" {
+            continue;
+        }
+
+        let Some(data) = update.get("data").and_then(|value| value.as_str()) else {
+            continue;
+        };
+
+        if let Some(parsed) = extract_text_from_process_output_line(data) {
+            if data.contains("Agent message (non-delta) received: \"") {
+                return parsed;
+            }
+            delta_output.push_str(&parsed);
+        }
+    }
+
+    delta_output
+}
+
+fn decode_log_escaped_text(raw: &str) -> String {
+    let quoted = format!("\"{}\"", raw);
+    serde_json::from_str::<String>(&quoted).unwrap_or_else(|_| {
+        raw.replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+            .replace("\\\"", "\"")
+    })
+}
+
+fn extract_text_from_process_output_line(data: &str) -> Option<String> {
+    let marker = "Agent message (non-delta) received: \"";
+    if let Some(start) = data.find(marker) {
+        let tail = &data[start + marker.len()..];
+        if let Some(end) = tail.rfind('"') {
+            let raw = &tail[..end];
+            return Some(decode_log_escaped_text(raw));
+        }
+    }
+
+    let marker = "delta: \"";
+    if let Some(start) = data.find(marker) {
+        let tail = &data[start + marker.len()..];
+        if let Some(end) = tail.rfind('"') {
+            let raw = &tail[..end];
+            return Some(decode_log_escaped_text(raw));
+        }
+    }
+
+    None
 }
 
 fn load_pr_reviewer(specialist_dir: Option<&str>) -> Result<SpecialistDef, String> {

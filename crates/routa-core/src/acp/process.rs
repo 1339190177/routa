@@ -69,21 +69,32 @@ impl AcpProcess {
         let resolved_command =
             crate::shell_env::which(command).unwrap_or_else(|| command.to_string());
 
-        let mut child = tokio::process::Command::new(&resolved_command)
+        let mut command_builder = tokio::process::Command::new(&resolved_command);
+        command_builder
             .args(args)
             .current_dir(cwd)
             .env("PATH", crate::shell_env::full_path())
             .env("NODE_NO_READLINE", "1")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-            .map_err(|e| {
-                format!(
-                    "Failed to spawn '{}' (resolved: '{}'): {}. Is it installed and in PATH?",
-                    command, resolved_command, e
-                )
-            })?;
+            .stderr(std::process::Stdio::piped());
+
+        // codex-acp often returns only stopReason in session/prompt result.
+        // Enabling lightweight codex logs gives us process_output lines that
+        // include assistant deltas, which the CLI can aggregate as final output.
+        if resolved_command.ends_with("codex-acp") && std::env::var_os("RUST_LOG").is_none() {
+            command_builder.env(
+                "RUST_LOG",
+                "info,codex_acp::thread=info,codex_acp::codex_agent=info",
+            );
+        }
+
+        let mut child = command_builder.spawn().map_err(|e| {
+            format!(
+                "Failed to spawn '{}' (resolved: '{}'): {}. Is it installed and in PATH?",
+                command, resolved_command, e
+            )
+        })?;
 
         let stdin = child
             .stdin
