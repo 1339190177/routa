@@ -13,7 +13,7 @@ use routa_core::workflow::specialist::{SpecialistDef, SpecialistLoader};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::output::{print_pretty_json, print_review_result};
+use super::output::{print_pretty_json, print_review_result, truncate};
 use super::stream_parser::{
     extract_agent_output_from_history, extract_agent_output_from_process_output,
     extract_text_from_prompt_result, extract_update_text, update_contains_turn_complete,
@@ -2436,15 +2436,6 @@ fn git_lines(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, String> {
         .collect())
 }
 
-fn truncate(content: &str, max_chars: usize) -> String {
-    if content.chars().count() <= max_chars {
-        content.to_string()
-    } else {
-        let truncated: String = content.chars().take(max_chars).collect();
-        format!("{}\n\n[truncated]", truncated)
-    }
-}
-
 fn load_dotenv() {
     for filename in &[".env.local", ".env"] {
         let path = std::path::Path::new(filename);
@@ -2480,14 +2471,6 @@ fn load_dotenv() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn truncate_marks_truncated_content() {
-        let content = "abcdefghijklmnopqrstuvwxyz";
-        let truncated = truncate(content, 8);
-        assert!(truncated.contains("[truncated]"));
-        assert!(truncated.starts_with("abcdefgh"));
-    }
 
     #[test]
     fn load_config_snippets_ignores_missing_files() {

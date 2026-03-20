@@ -32,3 +32,25 @@ pub(crate) fn print_review_result(
     }
     Ok(())
 }
+
+pub(crate) fn truncate(content: &str, max_chars: usize) -> String {
+    if content.chars().count() <= max_chars {
+        content.to_string()
+    } else {
+        let truncated: String = content.chars().take(max_chars).collect();
+        format!("{}\n\n[truncated]", truncated)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate;
+
+    #[test]
+    fn truncate_marks_truncated_content() {
+        let content = "abcdefghijklmnopqrstuvwxyz";
+        let truncated = truncate(content, 8);
+        assert!(truncated.contains("[truncated]"));
+        assert!(truncated.starts_with("abcdefgh"));
+    }
+}
