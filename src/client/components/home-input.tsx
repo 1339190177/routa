@@ -39,7 +39,11 @@ interface HomeInputProps {
   variant?: "default" | "hero";
   /** Called when workspace selection changes */
   onWorkspaceChange?: (workspaceId: string | null) => void;
-  onSessionCreated?: (sessionId: string) => void;
+  onSessionCreated?: (sessionId: string, promptText: string) => void;
+  /** Lock the input to a specific specialist and reuse its config */
+  lockedSpecialistId?: string;
+  /** Override the destination route after session creation */
+  buildSessionUrl?: (workspaceId: string | null, sessionId: string) => string;
   /** Externally triggered skill (e.g. from grid card click) */
   externalPendingSkill?: string | null;
   /** Called after the external skill has been consumed */
@@ -55,6 +59,8 @@ export function HomeInput({
   variant = "default",
   onWorkspaceChange,
   onSessionCreated,
+  lockedSpecialistId,
+  buildSessionUrl,
   externalPendingSkill,
   onExternalSkillConsumed,
   displaySkills,
@@ -76,7 +82,7 @@ export function HomeInput({
 
   // Specialists
   const [specialists, setSpecialists] = useState<SpecialistSummary[]>([]);
-  const [selectedSpecialistId, setSelectedSpecialistId] = useState<string | null>(null);
+  const [selectedSpecialistId, setSelectedSpecialistId] = useState<string | null>(lockedSpecialistId ?? null);
   const [showSpecialistDropdown, setShowSpecialistDropdown] = useState(false);
   const specialistDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -90,6 +96,12 @@ export function HomeInput({
       setSelectedWorkspaceId(propWorkspaceId);
     }
   }, [propWorkspaceId, selectedWorkspaceId]);
+
+  useEffect(() => {
+    if (lockedSpecialistId) {
+      setSelectedSpecialistId(lockedSpecialistId);
+    }
+  }, [lockedSpecialistId]);
 
   // Auto-select first workspace if none selected
   useEffect(() => {
@@ -186,7 +198,8 @@ export function HomeInput({
       try {
         const idempotencyKey = `home-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const wsId = selectedWorkspaceId ?? undefined;
-        const selectedSpec = selectedSpecialistId ? specialists.find((s) => s.id === selectedSpecialistId) : undefined;
+        const effectiveSpecialistId = lockedSpecialistId ?? selectedSpecialistId;
+        const selectedSpec = effectiveSpecialistId ? specialists.find((s) => s.id === effectiveSpecialistId) : undefined;
         const effectiveProvider = context.provider ?? selectedSpec?.defaultProvider ?? acp.selectedProvider;
         const conn = loadProviderConnectionConfig(effectiveProvider);
         const modelAliasOrName = context.model ?? selectedSpec?.model ?? conn.model;
@@ -201,17 +214,21 @@ export function HomeInput({
           wsId,
           def ? def.modelName : modelAliasOrName,
           idempotencyKey,
-          selectedSpecialistId ?? undefined,
+          effectiveSpecialistId ?? undefined,
           def?.baseUrl ?? conn.baseUrl,
           def?.apiKey ?? conn.apiKey,
           repoSelection?.branch,
         );
 
         if (result?.sessionId) {
-          const url = wsId ? `/workspace/${wsId}/sessions/${result.sessionId}` : `/workspace/${result.sessionId}`;
           const promptText = context.skill ? `/${context.skill} ${text}` : text;
+          const url = buildSessionUrl
+            ? buildSessionUrl(wsId ?? null, result.sessionId)
+            : wsId
+              ? `/workspace/${wsId}/sessions/${result.sessionId}`
+              : `/workspace/${result.sessionId}`;
           storePendingPrompt(result.sessionId, promptText);
-          onSessionCreated?.(result.sessionId);
+          onSessionCreated?.(result.sessionId, promptText);
           router.push(url);
         }
       } finally {
@@ -219,10 +236,15 @@ export function HomeInput({
         setIsSubmitting(false);
       }
     },
-    [acp, repoSelection, selectedRole, selectedWorkspaceId, selectedSpecialistId, router, onSessionCreated, specialists],
+    [acp, buildSessionUrl, lockedSpecialistId, repoSelection, selectedRole, selectedWorkspaceId, selectedSpecialistId, router, onSessionCreated, specialists],
   );
 
   const activeWorkspace = workspacesHook.workspaces.find((w) => w.id === selectedWorkspaceId);
+  const effectiveSelectedSpecialistId = lockedSpecialistId ?? selectedSpecialistId;
+  const selectedSpecialist = effectiveSelectedSpecialistId
+    ? specialists.find((s) => s.id === effectiveSelectedSpecialistId)
+    : undefined;
+  const specialistLocked = Boolean(lockedSpecialistId);
   const isHero = variant === "hero";
   const shellClass = isHero
     ? "relative rounded-[28px] border border-[#c7dafb]/80 bg-[linear-gradient(180deg,rgba(251,253,255,0.98),rgba(236,244,255,0.98))] shadow-[0_34px_100px_-44px_rgba(37,99,235,0.28)] transition-colors group-focus-within:border-[#38bdf8] dark:border-white/10 dark:bg-[linear-gradient(180deg,rgba(10,20,36,0.96),rgba(8,16,30,0.98))] dark:group-focus-within:border-[#38bdf8]/70"
@@ -263,11 +285,12 @@ export function HomeInput({
             onFetchModels={acp.listProviderModels}
             pendingSkill={pendingSkill}
             onSkillInserted={() => setPendingSkill(null)}
+            variant={variant}
           />
 
           {/* ─── Bottom Control Bar ─────────────────────────────────── */}
           <div className={bottomBarClass}>
-            {selectedSpecialistId ? (
+            {effectiveSelectedSpecialistId ? (
               /* ── Specialist mode: show specialist pill as primary selector ── */
               <div className="flex items-center gap-1.5">
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300">
@@ -275,19 +298,21 @@ export function HomeInput({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                   </svg>
                   <span className="max-w-[140px] truncate">
-                    {specialists.find((s) => s.id === selectedSpecialistId)?.name ?? "Custom Specialist"}
+                    {selectedSpecialist?.name ?? "Custom Specialist"}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSpecialistId(null)}
-                    className="ml-0.5 text-violet-400 hover:text-violet-700 dark:hover:text-violet-200 transition-colors"
-                    title="Switch to built-in role"
-                    aria-label="Clear specialist"
-                  >
-                    ×
-                  </button>
+                  {!specialistLocked && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSpecialistId(null)}
+                      className="ml-0.5 text-violet-400 hover:text-violet-700 dark:hover:text-violet-200 transition-colors"
+                      title="Switch to built-in role"
+                      aria-label="Clear specialist"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
-                {specialists.length > 1 && (
+                {!specialistLocked && specialists.length > 1 && (
                   <div className="relative" ref={specialistDropdownRef}>
                     <button
                       type="button"
@@ -496,9 +521,9 @@ export function HomeInput({
             </span>
           </div>
         )}
-        {selectedSpecialistId ? (
+        {effectiveSelectedSpecialistId ? (
           (() => {
-            const spec = specialists.find((s) => s.id === selectedSpecialistId);
+            const spec = selectedSpecialist;
             return (
               <div className="flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
                 <span className="w-2 h-2 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">

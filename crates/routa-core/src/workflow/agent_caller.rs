@@ -119,12 +119,9 @@ impl AcpAgentCaller {
             .contains("You are acting as the Context Gathering sub-agent for PR review")
         {
             "Context gathered from diff and repository snippets.".to_string()
-        } else if user_prompt
-            .contains("You are acting as the Diff Analysis sub-agent for PR review")
-        {
-            "{}".to_string()
-        } else if user_prompt
-            .contains("You are acting as the Finding Validation sub-agent for PR review")
+        } else if user_prompt.contains("You are acting as the Diff Analysis sub-agent for PR review")
+            || user_prompt
+                .contains("You are acting as the Finding Validation sub-agent for PR review")
         {
             "{}".to_string()
         } else {
@@ -166,10 +163,7 @@ impl AcpAgentCaller {
         let end = prompt.rfind('}')?;
         let payload = &prompt[start..=end];
         let top_level = serde_json::from_str::<serde_json::Value>(payload).ok()?;
-        if top_level.get("specialist_id").is_none() {
-            return None;
-        }
-
+        top_level.get("specialist_id")?;
         let specialist_id = top_level.get("specialist_id")?.as_str()?;
 
         if specialist_id == "security-authentication-reviewer" {

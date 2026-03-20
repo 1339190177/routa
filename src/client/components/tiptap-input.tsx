@@ -483,6 +483,8 @@ interface TiptapInputProps {
   prefillText?: string | null;
   /** Called after prefillText has been consumed so the parent can clear it */
   onPrefillConsumed?: () => void;
+  /** Larger presentation used by landing/team launch surfaces */
+  variant?: "default" | "hero";
 }
 
 export function TiptapInput({
@@ -508,7 +510,9 @@ export function TiptapInput({
   onSkillInserted,
   prefillText,
   onPrefillConsumed,
+  variant = "default",
 }: TiptapInputProps) {
+  const isHero = variant === "hero";
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
   const providerDropdownMenuRef = useRef<HTMLDivElement>(null);
@@ -526,6 +530,38 @@ export function TiptapInput({
   const modelBtnRef = useRef<HTMLButtonElement>(null);
   const [modelDropdownPos, setModelDropdownPos] = useState<{ left: number; bottom?: number; top?: number; maxHeight: number } | null>(null);
   const [modelFilter, setModelFilter] = useState("");
+  const selectedProviderInfo = providers.find((p) => p.id === selectedProvider);
+  const editorClass = isHero
+    ? "tiptap-chat-input outline-none min-h-[132px] max-h-[360px] overflow-y-auto text-base leading-8 text-slate-900 dark:text-slate-100"
+    : "tiptap-chat-input outline-none min-h-[60px] max-h-[240px] overflow-y-auto text-sm text-gray-900 dark:text-gray-100";
+  const wrapperClass = isHero
+    ? `tiptap-input-wrapper relative rounded-[22px] border border-[#d6e5fb] bg-white/88 px-5 py-4 shadow-[0_18px_48px_-36px_rgba(14,116,144,0.32)] transition-colors focus-within:ring-2 focus-within:ring-sky-500 focus-within:border-transparent dark:border-white/10 dark:bg-[#101a2d]/88 ${
+        disabled ? "opacity-40 cursor-not-allowed" : ""
+      }`
+    : `tiptap-input-wrapper relative px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#161922] transition-colors focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent ${
+        disabled ? "opacity-40 cursor-not-allowed" : ""
+      }`;
+  const toolbarClass = isHero
+    ? "mt-3 flex min-w-0 items-center gap-2.5 overflow-hidden"
+    : "mt-1.5 -mb-0.5 flex min-w-0 items-center gap-2 overflow-hidden";
+  const providerButtonClass = isHero
+    ? "flex items-center gap-2 rounded-lg border border-[#d6e5fb] px-3 py-1.5 text-sm transition-colors hover:bg-sky-50 dark:border-white/10 dark:hover:bg-white/5"
+    : "flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors";
+  const modelButtonClass = isHero
+    ? "flex items-center gap-2 rounded-lg border border-[#d6e5fb] px-3 py-1.5 text-sm transition-colors hover:bg-sky-50 dark:border-white/10 dark:hover:bg-white/5"
+    : "flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors";
+  const hintClass = isHero
+    ? "ml-auto mr-1 text-xs text-slate-400 dark:text-slate-500"
+    : "ml-auto mr-1 text-[10px] text-gray-300 dark:text-gray-600";
+  const hintKbdClass = isHero
+    ? "rounded bg-sky-50 px-1.5 py-0.5 font-mono text-[11px] text-slate-500 dark:bg-white/8 dark:text-slate-400"
+    : "px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono";
+  const sendButtonClass = isHero
+    ? "shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white transition-colors hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+    : "shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
+  const stopButtonClass = isHero
+    ? "shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 text-white transition-colors hover:bg-red-700"
+    : "shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors";
 
   // Keep mode chips aligned with the current session mode when switching sessions.
   useEffect(() => {
@@ -647,7 +683,7 @@ export function TiptapInput({
       createAtMention(() => fileSearchContext),
       createHashMention(() => agentItems),
       createSkillMention(() => mergedSkillItems),
-      // eslint-disable-next-line react-hooks/refs -- EnterToSend needs a stable handler; ref avoids editor re-init
+      // eslint-disable-next-line react-hooks/refs -- EnterToSend intentionally calls the latest ref-backed send handler
       EnterToSend.configure({
         onSend: handleSendProxy,
       }),
@@ -655,8 +691,7 @@ export function TiptapInput({
     editable: !disabled,
     editorProps: {
       attributes: {
-        class:
-          "tiptap-chat-input outline-none min-h-[60px] max-h-[240px] overflow-y-auto text-sm text-gray-900 dark:text-gray-100",
+        class: editorClass,
       },
       handlePaste: (view, event) => {
         const items = event.clipboardData?.items;
@@ -844,8 +879,6 @@ export function TiptapInput({
     if (editor) editor.setEditable(!disabled);
   }, [editor, disabled]);
 
-  const selectedProviderInfo = providers.find((p) => p.id === selectedProvider);
-
   // Group providers by source (builtin/static first, then registry)
   const builtinAvailable = providers.filter((p) => p.source === "static" && p.status === "available");
   const builtinUnavailable = providers.filter((p) => p.source === "static" && p.status !== "available");
@@ -855,15 +888,11 @@ export function TiptapInput({
   return (
     <div className="flex-1 flex flex-col gap-1.5">
       {/* Editor wrapper */}
-      <div
-        className={`tiptap-input-wrapper relative px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#161922] transition-colors focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent ${
-          disabled ? "opacity-40 cursor-not-allowed" : ""
-        }`}
-      >
+      <div className={wrapperClass}>
         <EditorContent editor={editor} />
 
         {/* Bottom toolbar */}
-        <div className="mt-1.5 -mb-0.5 flex min-w-0 items-center gap-2 overflow-hidden">
+        <div className={toolbarClass}>
           {/* Repo picker */}
           <div className="min-w-0 flex-1">
             <RepoPicker
@@ -909,11 +938,11 @@ export function TiptapInput({
                 }
                 setProviderDropdownOpen((v) => !v);
               }}
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors"
+              className={providerButtonClass}
               title="Select provider"
             >
               <span className={`w-1.5 h-1.5 rounded-full ${selectedProviderInfo?.status === "available" ? "bg-green-500" : "bg-gray-400"}`} />
-              <span className="text-gray-700 dark:text-gray-300 font-medium max-w-[120px] truncate">
+              <span className={`font-medium truncate ${isHero ? "max-w-[160px] text-slate-700 dark:text-slate-200" : "max-w-[120px] text-gray-700 dark:text-gray-300"}`}>
                 {selectedProviderInfo?.name ?? selectedProvider}
               </span>
               <svg className={`w-3 h-3 text-gray-400 transition-transform ${providerDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1102,13 +1131,13 @@ export function TiptapInput({
                   setModelDropdownOpen((v) => !v);
                   setModelFilter("");
                 }}
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs transition-colors"
+                className={modelButtonClass}
                 title="Select model"
               >
                 <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-                <span className="text-gray-700 dark:text-gray-300 font-medium max-w-[140px] truncate">
+                <span className={`font-medium truncate ${isHero ? "max-w-[180px] text-slate-700 dark:text-slate-200" : "max-w-[140px] text-gray-700 dark:text-gray-300"}`}>
                   {selectedModel ? selectedModel.split("/").pop() : "Default model"}
                 </span>
                 {modelLoading
@@ -1219,21 +1248,21 @@ export function TiptapInput({
           )}
 
           {/* Hints + send */}
-          <span className="text-[10px] text-gray-300 dark:text-gray-600 ml-auto mr-1">
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">@</kbd> file
+          <span className={hintClass}>
+            <kbd className={hintKbdClass}>@</kbd> file
             <span className="mx-1.5">&middot;</span>
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">#</kbd> agent
+            <kbd className={hintKbdClass}>#</kbd> agent
             <span className="mx-1.5">&middot;</span>
-            <kbd className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 font-mono">/</kbd> skill
+            <kbd className={hintKbdClass}>/</kbd> skill
           </span>
           {loading ? (
             <button
               type="button"
               onClick={() => onStop?.()}
-              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+              className={stopButtonClass}
               title="Stop"
             >
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+              <svg className={isHero ? "h-4 w-4" : "w-3 h-3"} fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="1" />
               </svg>
             </button>
@@ -1242,10 +1271,10 @@ export function TiptapInput({
               type="button"
               onClick={handleSend}
               disabled={disabled}
-              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className={sendButtonClass}
               title="Send"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className={isHero ? "h-4 w-4" : "w-3 h-3"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
               </svg>
             </button>

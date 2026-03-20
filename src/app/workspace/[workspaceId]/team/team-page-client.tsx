@@ -4,9 +4,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
-import { useAcp } from "@/client/hooks/use-acp";
-import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
-import { storePendingPrompt } from "@/client/utils/pending-prompt";
+import { HomeInput } from "@/client/components/home-input";
+import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import { formatRelativeTime } from "../ui-components";
 import type { SessionInfo } from "../types";
@@ -18,8 +17,6 @@ interface SpecialistSummary {
   name: string;
   description?: string;
   role?: string;
-  defaultProvider?: string;
-  model?: string;
 }
 
 interface TeamRunSummary {
@@ -79,31 +76,11 @@ export function TeamPageClient() {
       ? (window.location.pathname.match(/^\/workspace\/([^/]+)/)?.[1] ?? rawWorkspaceId)
       : rawWorkspaceId;
 
-  const acp = useAcp();
   const workspacesHook = useWorkspaces();
-  const { codebases } = useCodebases(workspaceId);
-  const {
-    connected: acpConnected,
-    loading: acpLoading,
-    selectedProvider: acpSelectedProvider,
-    providers: acpProviders,
-    createSession,
-    connect: connectAcp,
-  } = acp;
 
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [specialists, setSpecialists] = useState<SpecialistSummary[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [requirement, setRequirement] = useState("");
-  const [launching, setLaunching] = useState(false);
-  const [selectedCodebaseId, setSelectedCodebaseId] = useState<string>("");
-  const [selectedProvider, setSelectedProvider] = useState<string>("");
-
-  useEffect(() => {
-    if (!acpConnected && !acpLoading) {
-      void connectAcp();
-    }
-  }, [acpConnected, acpLoading, connectAcp]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -143,40 +120,10 @@ export function TeamPageClient() {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    if (selectedCodebaseId || codebases.length === 0) return;
-    const defaultCodebase = codebases.find((codebase) => codebase.isDefault) ?? codebases[0];
-    if (defaultCodebase) {
-      setSelectedCodebaseId(defaultCodebase.id);
-    }
-  }, [codebases, selectedCodebaseId]);
-
   const teamSpecialists = useMemo(
     () => specialists.filter((specialist) => specialist.id.startsWith("team-")).sort(compareTeamSpecialists),
     [specialists],
   );
-  const leadSpecialist = useMemo(
-    () => teamSpecialists.find((specialist) => specialist.id === TEAM_LEAD_SPECIALIST_ID),
-    [teamSpecialists],
-  );
-
-  useEffect(() => {
-    if (selectedProvider) return;
-    const providerId = leadSpecialist?.defaultProvider ?? acpSelectedProvider;
-    if (providerId) {
-      setSelectedProvider(providerId);
-    }
-  }, [leadSpecialist?.defaultProvider, acpSelectedProvider, selectedProvider]);
-
-  const providerOptions = useMemo(
-    () => acpProviders.filter((provider) => provider.status !== "unavailable"),
-    [acpProviders],
-  );
-
-  const selectedCodebase = useMemo(() => {
-    if (codebases.length === 0) return null;
-    return codebases.find((codebase) => codebase.id === selectedCodebaseId) ?? codebases[0];
-  }, [codebases, selectedCodebaseId]);
 
   const teamRuns = useMemo<TeamRunSummary[]>(() => {
     const childMap = new Map<string, SessionInfo[]>();
@@ -203,7 +150,7 @@ export function TeamPageClient() {
 
   const workspace = workspacesHook.workspaces.find((item) => item.id === workspaceId);
   const activeRuns = teamRuns.filter((run) => run.session.acpStatus === "connecting" || run.session.acpStatus === "ready").length;
-  const availableMembers = Math.max(teamSpecialists.length - (leadSpecialist ? 1 : 0), 0);
+  const availableMembers = Math.max(teamSpecialists.length - 1, 0);
 
   const handleWorkspaceSelect = useCallback((nextWorkspaceId: string) => {
     router.push(`/workspace/${nextWorkspaceId}/team`);
@@ -220,59 +167,14 @@ export function TeamPageClient() {
     setRefreshKey((current) => current + 1);
   }, []);
 
-  const handleLaunch = useCallback(async () => {
-    const prompt = requirement.trim();
-    if (!prompt || launching) return;
-
-    setLaunching(true);
-    try {
-      const effectiveProvider = selectedProvider || leadSpecialist?.defaultProvider || acpSelectedProvider;
-      const result = await createSession(
-        selectedCodebase?.repoPath,
-        effectiveProvider,
-        undefined,
-        leadSpecialist?.role ?? "ROUTA",
-        workspaceId,
-        leadSpecialist?.model,
-        `team-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        TEAM_LEAD_SPECIALIST_ID,
-        undefined,
-        undefined,
-        undefined,
-        selectedCodebase?.branch,
-      );
-
-      if (!result?.sessionId) {
-        return;
-      }
-
-      await desktopAwareFetch(`/api/sessions/${encodeURIComponent(result.sessionId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: buildTeamRunName(prompt) }),
-      }).catch(() => {});
-
-      storePendingPrompt(result.sessionId, prompt);
-      setRequirement("");
-      setRefreshKey((current) => current + 1);
-      router.push(`/workspace/${workspaceId}/team/${result.sessionId}`);
-    } finally {
-      setLaunching(false);
-    }
-  }, [
-    acpSelectedProvider,
-    createSession,
-    launching,
-    leadSpecialist?.defaultProvider,
-    leadSpecialist?.model,
-    leadSpecialist?.role,
-    requirement,
-    router,
-    selectedCodebase?.branch,
-    selectedCodebase?.repoPath,
-    selectedProvider,
-    workspaceId,
-  ]);
+  const handleTeamSessionCreated = useCallback((sessionId: string, promptText: string) => {
+    void desktopAwareFetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: buildTeamRunName(promptText) }),
+    }).catch(() => {});
+    setRefreshKey((current) => current + 1);
+  }, []);
 
   if (workspacesHook.loading && workspaceId !== "default") {
     return (
@@ -306,117 +208,58 @@ export function TeamPageClient() {
     >
       <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary">
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4">
-            <section className="rounded-[26px] border border-desktop-border bg-desktop-bg-secondary p-4">
+          <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-5 px-5 py-5">
+            <section className="rounded-[30px] border border-desktop-border bg-desktop-bg-secondary p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-desktop-text-muted">
                     Team Runs
                   </div>
-                  <h1 className="mt-2 text-2xl font-semibold text-desktop-text-primary">
+                  <h1 className="mt-3 text-3xl font-semibold tracking-tight text-desktop-text-primary">
                     Run a lead session and keep the list in the same surface.
                   </h1>
                 </div>
-                <div className="flex flex-wrap gap-2 text-[11px]">
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                <div className="flex flex-wrap gap-3 text-xs">
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
                     {teamRuns.length} runs
                   </span>
-                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 font-semibold text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300">
+                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 font-semibold text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300">
                     {activeRuns} active
                   </span>
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
                     {availableMembers} members
                   </span>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-[22px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-3 dark:border-slate-800 dark:bg-slate-950/30">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
-                      New Run
-                    </div>
-                    <h2 className="mt-2 text-xl font-semibold text-desktop-text-primary">Put the requirement here.</h2>
+              <div className="mt-5 rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 dark:border-slate-800 dark:bg-slate-950/30">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-desktop-text-muted">
+                    New Run
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleLaunch}
-                    disabled={!requirement.trim() || launching || !acpConnected}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#f59e0b,#f97316)] px-4 py-2 text-[12px] font-semibold text-white shadow-[0_14px_30px_-18px_rgba(249,115,22,0.7)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {launching ? "Launching..." : "Launch Team Lead"}
-                  </button>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-desktop-text-primary">Launch the Team lead with the shared input.</h2>
+                  <p className="mt-2 text-base leading-7 text-desktop-text-secondary">
+                    This now reuses the same input, provider, model, and pending-prompt flow as Home.
+                  </p>
                 </div>
 
-                <textarea
-                  value={requirement}
-                  onChange={(event) => setRequirement(event.target.value)}
-                  onKeyDown={(event) => {
-                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                      event.preventDefault();
-                      void handleLaunch();
+                <div className="mt-5">
+                  <HomeInput
+                    workspaceId={workspaceId}
+                    variant="hero"
+                    lockedSpecialistId={TEAM_LEAD_SPECIALIST_ID}
+                    buildSessionUrl={(nextWorkspaceId, sessionId) =>
+                      `/workspace/${nextWorkspaceId ?? workspaceId}/team/${sessionId}`
                     }
-                  }}
-                  rows={6}
-                  placeholder="Describe the deliverable, constraints, verification expectations, and anything the lead should coordinate across frontend/backend/QA."
-                  className="mt-4 min-h-[160px] w-full resize-y rounded-[18px] border border-slate-200 bg-white/90 px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100"
-                />
-
-                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.7fr)_auto]">
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                      Codebase
-                    </span>
-                    <select
-                      value={selectedCodebase?.id ?? ""}
-                      onChange={(event) => setSelectedCodebaseId(event.target.value)}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-cyan-400 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200"
-                    >
-                      {codebases.length === 0 && <option value="">No codebase linked</option>}
-                      {codebases.map((codebase) => (
-                        <option key={codebase.id} value={codebase.id}>
-                          {codebase.label ?? codebase.repoPath}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                      Provider
-                    </span>
-                    <select
-                      value={selectedProvider}
-                      onChange={(event) => setSelectedProvider(event.target.value)}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-cyan-400 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200"
-                    >
-                      {providerOptions.map((provider) => (
-                        <option key={provider.id} value={provider.id}>
-                          {provider.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <div className="flex flex-wrap items-end gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-                      {leadSpecialist?.name ?? "team-agent-lead"}
-                    </span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70">
-                      {acpConnected ? "ACP connected" : "Connecting ACP"}
-                    </span>
-                  </div>
+                    onSessionCreated={handleTeamSessionCreated}
+                  />
                 </div>
 
-                <div className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
-                  Press `Ctrl/Cmd + Enter` to launch. New runs open directly into the Team run view.
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                   {teamSpecialists.map((specialist) => (
                     <span
                       key={specialist.id}
-                      className={`rounded-full border px-2.5 py-1 font-semibold uppercase tracking-[0.16em] ${getRoleTone(specialist.role)}`}
+                      className={`rounded-full border px-3 py-1.5 font-semibold uppercase tracking-[0.16em] ${getRoleTone(specialist.role)}`}
                       title={specialist.description ?? specialist.id}
                     >
                       {specialist.name}
@@ -426,72 +269,72 @@ export function TeamPageClient() {
               </div>
             </section>
 
-            <section className="rounded-[26px] border border-desktop-border bg-desktop-bg-secondary p-4">
+            <section className="rounded-[30px] border border-desktop-border bg-desktop-bg-secondary p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-desktop-text-muted">
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-desktop-text-muted">
                     Team Runs
                   </div>
-                  <h2 className="mt-2 text-xl font-semibold text-desktop-text-primary">Top-level lead sessions only.</h2>
-                  <p className="mt-1 text-sm text-desktop-text-secondary">
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-desktop-text-primary">Top-level lead sessions only.</h2>
+                  <p className="mt-2 text-base leading-7 text-desktop-text-secondary">
                     Open any run to inspect the task tree, coordination feed, and team panel.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="rounded-xl border border-desktop-border px-3 py-2 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                  className="rounded-xl border border-desktop-border px-4 py-2.5 text-sm font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
                 >
                   Refresh
                 </button>
               </div>
 
               {teamRuns.length === 0 ? (
-                <div className="mt-4 rounded-[22px] border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center dark:border-slate-700 dark:bg-slate-900/40">
-                  <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                <div className="mt-5 rounded-[26px] border border-dashed border-slate-300 bg-slate-50/70 p-10 text-center dark:border-slate-700 dark:bg-slate-900/40">
+                  <div className="text-base font-medium text-slate-700 dark:text-slate-200">
                     No Team runs yet.
                   </div>
-                  <div className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                  <div className="mt-2 text-base leading-7 text-slate-500 dark:text-slate-400">
                     Launch a lead session above.
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                <div className="mt-5 grid gap-4 xl:grid-cols-2">
                   {teamRuns.map((run) => (
                     <button
                       key={run.session.sessionId}
                       type="button"
                       onClick={() => router.push(`/workspace/${workspaceId}/team/${run.session.sessionId}`)}
-                      className="group rounded-[22px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-[0_18px_45px_-30px_rgba(14,116,144,0.38)] dark:border-slate-800 dark:bg-slate-950/30 dark:hover:border-cyan-800"
+                      className="group rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-[0_18px_45px_-30px_rgba(14,116,144,0.38)] dark:border-slate-800 dark:bg-slate-950/30 dark:hover:border-cyan-800"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-lg font-semibold text-slate-900 transition-colors group-hover:text-cyan-700 dark:text-slate-100 dark:group-hover:text-cyan-300">
+                          <div className="text-[22px] font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-cyan-700 dark:text-slate-100 dark:group-hover:text-cyan-300">
                             {run.session.name ?? "Unnamed Team run"}
                           </div>
-                          <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                          <div className="mt-1.5 text-xs uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
                             {formatRelativeTime(run.session.createdAt)}
                           </div>
                         </div>
                         <StatusPill status={run.session.acpStatus} />
                       </div>
 
-                      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                      <div className="mt-5 grid gap-3 sm:grid-cols-3">
                         <RunMetric label="Direct delegates" value={run.directDelegates} />
                         <RunMetric label="Total sub-sessions" value={run.descendants} />
                         <RunMetric label="Provider" value={run.session.provider ?? "auto"} />
                       </div>
 
-                      <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                      <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
                           {run.session.specialistId ?? TEAM_LEAD_SPECIALIST_ID}
                         </span>
                         {run.session.branch && (
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70">
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-900/70">
                             {run.session.branch}
                           </span>
                         )}
-                        <span className="truncate rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70" title={run.session.cwd}>
+                        <span className="truncate rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-900/70" title={run.session.cwd}>
                           {run.session.cwd}
                         </span>
                       </div>
@@ -525,11 +368,11 @@ function RunMetric({
   value: number | string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/80 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+    <div className="rounded-[20px] border border-slate-200/80 bg-white/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
         {label}
       </div>
-      <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+      <div className="mt-1.5 text-base font-semibold text-slate-800 dark:text-slate-100">
         {value}
       </div>
     </div>
