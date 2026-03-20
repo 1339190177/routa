@@ -13,6 +13,7 @@ use routa_core::workflow::specialist::{SpecialistDef, SpecialistLoader};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::output::{print_pretty_json, print_review_result};
 use super::stream_parser::{
     extract_agent_output_from_history, extract_agent_output_from_process_output,
     extract_text_from_prompt_result, extract_update_text, update_contains_turn_complete,
@@ -263,20 +264,7 @@ pub async fn analyze(_state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
         return Err("Review workflow completed without producing an output.".to_string());
     }
 
-    println!();
-    println!("═══ Review Result ═══");
-    if options.as_json {
-        match serde_json::from_str::<serde_json::Value>(&final_output) {
-            Ok(value) => println!(
-                "{}",
-                serde_json::to_string_pretty(&value)
-                    .map_err(|err| format!("Failed to format review output: {}", err))?
-            ),
-            Err(_) => println!("{}", final_output),
-        }
-    } else {
-        println!("{}", final_output);
-    }
+    print_review_result("Review Result", &final_output, options.as_json, "review output")?;
 
     Ok(())
 }
@@ -293,11 +281,7 @@ pub async fn security(state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
         build_security_review_payload(&repo_root, options.base, options.head, options.rules_file)?;
 
     if options.payload_only {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&payload)
-                .map_err(|err| format!("Failed to format security review payload: {}", err))?
-        );
+        print_pretty_json(&payload, "security review payload")?;
         return Ok(());
     }
 
@@ -343,20 +327,12 @@ pub async fn security(state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
         return Err("Security review completed without producing an output.".to_string());
     }
 
-    println!();
-    println!("═══ Security Review Result ═══");
-    if options.as_json {
-        match serde_json::from_str::<serde_json::Value>(&final_output) {
-            Ok(value) => println!(
-                "{}",
-                serde_json::to_string_pretty(&value)
-                    .map_err(|err| format!("Failed to format security review output: {}", err))?
-            ),
-            Err(_) => println!("{}", final_output),
-        }
-    } else {
-        println!("{}", final_output);
-    }
+    print_review_result(
+        "Security Review Result",
+        &final_output,
+        options.as_json,
+        "security review output",
+    )?;
 
     Ok(())
 }
