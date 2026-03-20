@@ -1,6 +1,7 @@
 //! `routa review` — read-only Specialist-backed code review analysis.
 
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -309,6 +310,10 @@ pub async fn security(state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
     final_payload.specialist_reports = specialist_reports;
     final_payload.pre_merged_findings = pre_merged_findings;
 
+    // Use a writable home directory for local ACP runtimes (avoids failures to write
+    // runtime config under restricted system HOME locations in CLI contexts).
+    let _acp_runtime_env = SecurityAcpRuntimeEnv::install(&repo_root)?;
+
     let prompt = build_security_specialist_prompt(&final_payload)?;
     let provider = resolve_security_provider(&specialist);
 
@@ -350,6 +355,51 @@ pub async fn security(state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
     }
 
     Ok(())
+}
+
+struct SecurityAcpRuntimeEnv {
+    home: Option<OsString>,
+    xdg_config_home: Option<OsString>,
+}
+
+impl SecurityAcpRuntimeEnv {
+    fn install(repo_root: &Path) -> Result<Self, String> {
+        let acp_home = repo_root.join(SECURITY_REVIEW_HOME_DIR).join("acp");
+        let acp_config_dir = acp_home.join(".config");
+        fs::create_dir_all(&acp_config_dir).map_err(|err| {
+            format!(
+                "Failed to prepare ACP runtime home {}: {}",
+                acp_config_dir.display(),
+                err
+            )
+        })?;
+
+        let previous_home = std::env::var_os("HOME");
+        let previous_xdg = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::set_var("HOME", &acp_home);
+        std::env::set_var("XDG_CONFIG_HOME", &acp_config_dir);
+
+        Ok(Self {
+            home: previous_home,
+            xdg_config_home: previous_xdg,
+        })
+    }
+}
+
+impl Drop for SecurityAcpRuntimeEnv {
+    fn drop(&mut self) {
+        if let Some(home) = &self.home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        if let Some(xdg_config_home) = &self.xdg_config_home {
+            std::env::set_var("XDG_CONFIG_HOME", xdg_config_home);
+        } else {
+            std::env::remove_var("XDG_CONFIG_HOME");
+        }
+    }
 }
 
 async fn call_review_worker(
