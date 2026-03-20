@@ -11,21 +11,19 @@ metrics:
   # 代码膨胀检测 - 防止 AI 生成过长代码
   # ══════════════════════════════════════════════════════════════
   
+  - name: legacy_hotspot_budget_guard
+    command: python3 -m routa_fitness.file_budgets --config tools/routa-fitness/file_budgets.json --changed-only --overrides-only
+    pattern: "file_budget_violations: 0"
+    hard_gate: true
+    tier: fast
+    description: "已登记的历史热点文件必须满足冻结预算，只允许缩小不允许继续膨胀"
+
   - name: file_line_limit
-    command: |
-      changed_files=$(git diff --name-only --diff-filter=ACMR HEAD -- src apps crates 2>/dev/null | \
-        grep -E '\.(ts|tsx|rs)$' | \
-        grep -vE '(^|/)(node_modules|target|\.next|_next|bundled)/' || true)
-      if [ -z "$changed_files" ]; then
-        echo "changed_files_over_1000_lines: 0"
-      else
-        printf '%s\n' "$changed_files" | xargs wc -l 2>/dev/null | grep -v total | \
-          awk '$1 > 1000 {count++} END {print "changed_files_over_1000_lines:", count+0}'
-      fi
-    pattern: "changed_files_over_1000_lines: 0"
+    command: python3 -m routa_fitness.file_budgets --config tools/routa-fitness/file_budgets.json --changed-only
+    pattern: "file_budget_violations: 0"
     hard_gate: false
     tier: fast
-    description: "本次变更的代码文件行数限制 ≤1000 行"
+    description: "本次变更的代码文件必须满足行数预算；新文件 ≤1000 行，历史超标文件按 HEAD 基线冻结"
 
   - name: function_line_limit
     command: |
@@ -225,7 +223,8 @@ metrics:
 
 | 检测项 | 阈值 | Hard Gate | 工具 |
 |--------|------|-----------|------|
-| 文件行数 | 变更文件 ≤1000 行 | ❌ | wc -l |
+| 文件行数 | 新文件 ≤1000 行，历史超标文件按 HEAD 基线冻结 | ❌ | `python -m routa_fitness.file_budgets` |
+| 历史热点守护 | 已登记热点只允许缩小不允许继续膨胀 | ✅ | `python -m routa_fitness.file_budgets --overrides-only` |
 | 函数行数 | ≤100 行 | ❌ | grep + 人工 |
 | 重复代码 | 变更文件不新增大块 clone | ❌ | jscpd |
 | 结构坏味道 | 变更文件中结构型包装重复 = 0 | ❌ | ast-grep |
@@ -244,7 +243,7 @@ metrics:
 ### 1. 代码膨胀
 AI 倾向于生成冗长代码，缺乏抽象能力。
 
-**约束**: 变更文件 ≤1000 行，函数 ≤100 行
+**约束**: 新文件 ≤1000 行；历史超标热点必须进入预算冻结，只能缩小不能继续长大；函数 ≤100 行
 
 ### 2. 重复代码
 AI 经常"复制粘贴"式生成，忽略已有实现。
