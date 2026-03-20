@@ -105,8 +105,55 @@ impl AcpAgentCaller {
                 self.call_anthropic_compatible(config, user_prompt).await
             }
             "opencode-sdk" | "opencode" => self.call_opencode(config, user_prompt).await,
+            "mock" => Ok(self.call_mock(config, user_prompt)),
             other => Err(format!("Unknown adapter type: '{}'", other)),
         }
+    }
+
+    fn call_mock(&self, config: &AgentCallConfig, user_prompt: &str) -> AgentResponse {
+        let body = if user_prompt.contains("You are a scoped security specialist.") {
+            Self::mock_security_specialist_response(user_prompt)
+        } else if user_prompt.contains("You are running a tool-driven security review.") {
+            "## Security Review\n\nNo material security issues found.\n".to_string()
+        } else if user_prompt
+            .contains("You are acting as the Context Gathering sub-agent for PR review")
+        {
+            "Context gathered from diff and repository snippets.".to_string()
+        } else if user_prompt
+            .contains("You are acting as the Diff Analysis sub-agent for PR review")
+        {
+            "{}".to_string()
+        } else if user_prompt
+            .contains("You are acting as the Finding Validation sub-agent for PR review")
+        {
+            "{}".to_string()
+        } else {
+            "ok".to_string()
+        };
+
+        AgentResponse {
+            content: body.clone(),
+            model: config.model.clone(),
+            usage: Some(UsageInfo {
+                input_tokens: Some(32),
+                output_tokens: Some(body.len() as u64),
+            }),
+            success: true,
+            error: None,
+            raw: None,
+        }
+    }
+
+    fn mock_security_specialist_response(prompt: &str) -> String {
+        if prompt.contains("security-authentication-reviewer") {
+            return r#"{\n  \"specialist_id\": \"security-authentication-reviewer\",\n  \"category\": \"authentication\",\n  \"findings\": [\n    {\n      \"title\": \"Missing authentication for privileged route\",\n      \"severity\": \"HIGH\",\n      \"root_cause\": \"privileged endpoint lacks auth\",\n      \"affected_locations\": [\"app.js\"],\n      \"attack_path\": \"Unauthenticated route handler reads protected data\",\n      \"why_it_matters\": \"Any caller can access protected functionality\",\n      \"guardrails_present\": [\"No auth checks observed\"],\n      \"recommended_fix\": \"Add robust auth checks and enforce role checks\",\n      \"related_variants\": [\"role header spoofing\"],\n      \"confidence\": \"MEDIUM\"\n    }\n  ]\n}"#.to_string();
+        }
+
+        if prompt.contains("security-command-injection-reviewer") {
+            return r#"{\n  \"specialist_id\": \"security-command-injection-reviewer\",\n  \"category\": \"command-injection\",\n  \"findings\": [\n    {\n      \"title\": \"Command injection via shell execution\",\n      \"severity\": \"CRITICAL\",\n      \"root_cause\": \"untrusted input reaches cp.exec\",\n      \"affected_locations\": [\"app.js\"],\n      \"attack_path\": \"Request parameter -> command interpolation -> cp.exec\",\n      \"why_it_matters\": \"Remote code execution under process privileges\",\n      \"guardrails_present\": [\"No input validation\"],\n      \"recommended_fix\": \"Use allowlist command builder or avoid shell\",\n      \"related_variants\": [\"special chars\"],\n      \"confidence\": \"HIGH\"\n    }\n  ]\n}"#.to_string();
+        }
+
+        "{\"specialist_id\":\"mock\",\"findings\":[]}".to_string()
     }
 
     /// Call the Anthropic-compatible Messages API (also used by GLM/BigModel).

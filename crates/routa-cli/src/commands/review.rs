@@ -396,17 +396,31 @@ fn load_specialist_by_id(
 }
 
 fn build_agent_call_config(specialist: &SpecialistDef) -> Result<AgentCallConfig, String> {
-    let api_key = std::env::var("ANTHROPIC_AUTH_TOKEN")
-        .or_else(|_| std::env::var("ANTHROPIC_API_KEY"))
-        .map_err(|_| {
-            "No API key found. Set ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY.".to_string()
-        })?;
+    let use_mock_adapter = std::env::var("ROUTA_REVIEW_MOCK")
+        .ok()
+        .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"));
 
-    Ok(AgentCallConfig {
-        adapter: specialist
+    let api_key = if use_mock_adapter {
+        "mock-key".to_string()
+    } else {
+        std::env::var("ANTHROPIC_AUTH_TOKEN")
+            .or_else(|_| std::env::var("ANTHROPIC_API_KEY"))
+            .map_err(|_| {
+                "No API key found. Set ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY.".to_string()
+            })?
+    };
+
+    let adapter = if use_mock_adapter {
+        "mock".to_string()
+    } else {
+        specialist
             .default_adapter
             .clone()
-            .unwrap_or_else(|| "claude-code-sdk".to_string()),
+            .unwrap_or_else(|| "claude-code-sdk".to_string())
+    };
+
+    Ok(AgentCallConfig {
+        adapter,
         base_url: std::env::var("ANTHROPIC_BASE_URL")
             .unwrap_or_else(|_| "https://api.anthropic.com".to_string()),
         api_key,
