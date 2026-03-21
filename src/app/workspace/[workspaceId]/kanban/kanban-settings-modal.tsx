@@ -159,6 +159,33 @@ function ProviderField({
   );
 }
 
+function SelectControl({
+  className = "",
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement> & { children: ReactNode }) {
+  return (
+    <div className={`relative ${props.disabled ? "opacity-70" : ""}`}>
+      <select
+        {...props}
+        className={`${SELECT_CLASS} ${className}`.trim()}
+      >
+        {children}
+      </select>
+      <svg
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+        aria-hidden="true"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+      </svg>
+    </div>
+  );
+}
+
 function SpecialistCategoryTabs({
   category,
   onChange,
@@ -409,19 +436,18 @@ export function KanbanSettingsModal({
                         <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                           <label className="space-y-1 text-xs font-medium text-slate-600 dark:text-slate-300">
                             <span>Mode</span>
-                            <select
+                            <SelectControl
                               aria-label="Dev supervision mode"
                               value={devSessionSupervision.mode}
                               onChange={(event) => setDevSessionSupervision((current) => ({
                                 ...current,
                                 mode: event.target.value as KanbanDevSessionSupervisionInfo["mode"],
                               }))}
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100"
                             >
                               <option value="disabled">Off</option>
                               <option value="watchdog_retry">Watchdog retry</option>
                               <option value="ralph_loop">Ralph Loop</option>
-                            </select>
+                            </SelectControl>
                           </label>
                           <label className="space-y-1 text-xs font-medium text-slate-600 dark:text-slate-300">
                             <span>Idle min</span>
@@ -455,7 +481,7 @@ export function KanbanSettingsModal({
                           </label>
                           <label className="space-y-1 text-xs font-medium text-slate-600 dark:text-slate-300">
                             <span>Completion</span>
-                            <select
+                            <SelectControl
                               aria-label="Dev supervision completion requirement"
                               value={devSessionSupervision.completionRequirement}
                               onChange={(event) => setDevSessionSupervision((current) => ({
@@ -463,12 +489,12 @@ export function KanbanSettingsModal({
                                 completionRequirement: event.target.value as KanbanDevSessionSupervisionInfo["completionRequirement"],
                               }))}
                               disabled={devSessionSupervision.mode !== "ralph_loop"}
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100"
+                              className="disabled:cursor-not-allowed"
                             >
                               <option value="turn_complete">Turn complete</option>
                               <option value="completion_summary">Completion summary</option>
                               <option value="verification_report">Verification report</option>
-                            </select>
+                            </SelectControl>
                           </label>
                         </div>
                       </div>
@@ -707,7 +733,7 @@ function ColumnAutomationWorkspace({
                 </ConfigField>
 
                 <ConfigField label="Role">
-                  <select
+                  <SelectControl
                     aria-label="Role"
                     value={firstStep?.role ?? "DEVELOPER"}
                     onChange={(event) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
@@ -715,19 +741,18 @@ function ColumnAutomationWorkspace({
                         ? { ...currentStep, role: event.target.value }
                         : currentStep
                     ))))}
-                    className={SELECT_CLASS}
                   >
                     {ROLE_OPTIONS.map((role) => (
                       <option key={role} value={role}>
                         {role}
                       </option>
                     ))}
-                  </select>
+                  </SelectControl>
                 </ConfigField>
 
                 <ConfigField label="Specialist">
                   <div className="space-y-2">
-                    <select
+                    <SelectControl
                       aria-label="Specialist"
                       value={getLanguageSpecificSpecialistId(firstStep?.specialistId, specialistLanguage) ?? ""}
                       onChange={(event) => {
@@ -744,15 +769,14 @@ function ColumnAutomationWorkspace({
                             : currentStep
                         ))));
                       }}
-                      className={SELECT_CLASS}
                     >
                       <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
                       {filteredSpecialists.map((specialist) => (
                         <option key={specialist.id} value={specialist.id}>
                           {getSpecialistDisplayName(specialist)}
                         </option>
-                        ))}
-                      </select>
+                      ))}
+                    </SelectControl>
                     <SpecialistCategoryTabs
                       category={specialistCategory}
                       onChange={onSpecialistCategoryChange}
@@ -761,16 +785,15 @@ function ColumnAutomationWorkspace({
                 </ConfigField>
 
                 <ConfigField label="Trigger">
-                  <select
+                  <SelectControl
                     aria-label="Trigger moment"
                     value={automation.transitionType ?? "entry"}
                     onChange={(event) => onUpdate({ ...automation, transitionType: event.target.value as "entry" | "exit" | "both" })}
-                    className={SELECT_CLASS}
                   >
                     <option value="entry">On entry</option>
                     <option value="exit">On exit</option>
                     <option value="both">Both directions</option>
-                  </select>
+                  </SelectControl>
                 </ConfigField>
               </div>
             </div>
@@ -853,7 +876,7 @@ function ColumnAutomationWorkspace({
                             </ConfigField>
 
                             <ConfigField label={`Role ${index + 1}`}>
-                              <select
+                              <SelectControl
                                 aria-label={index === 0 ? "Role" : `Role ${index + 1}`}
                                 value={step.role ?? "DEVELOPER"}
                                 onChange={(event) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
@@ -861,18 +884,17 @@ function ColumnAutomationWorkspace({
                                     ? { ...currentStep, role: event.target.value }
                                     : currentStep
                                 ))))}
-                                className={SELECT_CLASS}
                               >
                                 {ROLE_OPTIONS.map((role) => (
                                   <option key={role} value={role}>
                                     {role}
                                   </option>
                                 ))}
-                              </select>
+                              </SelectControl>
                             </ConfigField>
 
                             <ConfigField label={`Specialist ${index + 1}`}>
-                              <select
+                              <SelectControl
                                 aria-label={index === 0 ? "Specialist" : `Specialist ${index + 1}`}
                                 value={getLanguageSpecificSpecialistId(step.specialistId, specialistLanguage) ?? ""}
                                 onChange={(event) => {
@@ -889,7 +911,6 @@ function ColumnAutomationWorkspace({
                                       : currentStep
                                   ))));
                                 }}
-                                className={SELECT_CLASS}
                               >
                                 <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
                                 {filteredSpecialists.map((specialist) => (
@@ -897,7 +918,7 @@ function ColumnAutomationWorkspace({
                                     {getSpecialistDisplayName(specialist)}
                                   </option>
                                 ))}
-                              </select>
+                              </SelectControl>
                             </ConfigField>
                           </div>
                         </div>
@@ -1090,4 +1111,4 @@ function getAutomationSummary(
   ].join(" • ");
 }
 
-const SELECT_CLASS = "h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100";
+const SELECT_CLASS = "h-10 w-full min-w-0 appearance-none rounded-xl border border-slate-200 bg-white px-3 pr-10 text-sm text-slate-900 outline-none transition hover:bg-slate-50 focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100 dark:hover:bg-[#111722]";
