@@ -24,6 +24,8 @@ import {
   checkoutBranch,
   pullBranch,
   getBranchInfo,
+  getRepoStatus,
+  resetLocalChanges,
 } from "@/core/git";
 
 export async function GET(request: NextRequest) {
@@ -67,15 +69,16 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const body = await request.json();
-  const { repoPath, branch, pull: doPull } = body as {
+  const { repoPath, branch, pull: doPull, action } = body as {
     repoPath?: string;
     branch?: string;
     pull?: boolean;
+    action?: "checkout" | "reset";
   };
 
-  if (!repoPath || !branch) {
+  if (!repoPath) {
     return NextResponse.json(
-      { error: "Missing repoPath or branch" },
+      { error: "Missing repoPath" },
       { status: 400 }
     );
   }
@@ -83,6 +86,36 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(
       { error: "Repository not found" },
       { status: 404 }
+    );
+  }
+
+  if (action === "reset") {
+    const result = resetLocalChanges(repoPath);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error || "Failed to reset local changes" },
+        { status: 500 }
+      );
+    }
+
+    const branchInfo = getBranchInfo(repoPath);
+    const status = getBranchStatus(repoPath, branchInfo.current);
+    const repoStatus = getRepoStatus(repoPath);
+
+    return NextResponse.json({
+      success: true,
+      action: "reset",
+      branch: branchInfo.current,
+      branches: branchInfo.branches,
+      status,
+      repoStatus,
+    });
+  }
+
+  if (!branch) {
+    return NextResponse.json(
+      { error: "Missing branch" },
+      { status: 400 }
     );
   }
 

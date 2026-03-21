@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { desktopAwareFetch } from "../utils/diagnostics";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -49,8 +50,29 @@ export function BranchSelector({
   const [loading, setLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const positionDropdown = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const dropdownWidth = 256;
+    const viewportPadding = 8;
+    const estimatedHeight = 320;
+    const openUp = window.innerHeight - rect.bottom < estimatedHeight && rect.top > estimatedHeight;
+    const left = Math.min(
+      Math.max(viewportPadding, rect.left),
+      window.innerWidth - dropdownWidth - viewportPadding
+    );
+
+    setDropdownPos(
+      openUp
+        ? { left, bottom: window.innerHeight - rect.top + 6 }
+        : { left, top: rect.bottom + 6 }
+    );
+  }, []);
 
   // ── Fetch branches ─────────────────────────────────────────────────
 
@@ -91,13 +113,30 @@ export function BranchSelector({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const inDropdown = dropdownRef.current?.contains(target);
+      const inTrigger = triggerRef.current?.contains(target);
+      if (!inDropdown && !inTrigger) {
         setShowDropdown(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+
+    positionDropdown();
+    const handleLayout = () => positionDropdown();
+
+    window.addEventListener("resize", handleLayout);
+    window.addEventListener("scroll", handleLayout, true);
+    return () => {
+      window.removeEventListener("resize", handleLayout);
+      window.removeEventListener("scroll", handleLayout, true);
+    };
+  }, [showDropdown, positionDropdown]);
 
   // ── Switch branch ──────────────────────────────────────────────────
 
@@ -163,13 +202,19 @@ export function BranchSelector({
   const status = branchData?.status;
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       {/* Trigger */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           if (!disabled) {
-            setShowDropdown((v) => !v);
+            if (showDropdown) {
+              setShowDropdown(false);
+            } else {
+              positionDropdown();
+              setShowDropdown(true);
+            }
             setTimeout(() => searchInputRef.current?.focus(), 50);
           }
         }}
@@ -192,8 +237,19 @@ export function BranchSelector({
       </button>
 
       {/* Dropdown - opens upward since input is at the bottom */}
-      {showDropdown && (
-        <div className="absolute bottom-full left-0 mb-1 w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl z-50 overflow-hidden">
+      {showDropdown && dropdownPos && createPortal(
+        <div
+          ref={dropdownRef}
+          style={{
+            position: "fixed",
+            left: dropdownPos.left,
+            top: dropdownPos.top,
+            bottom: dropdownPos.bottom,
+            width: 256,
+            zIndex: 10000,
+          }}
+          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e2130] shadow-xl overflow-hidden"
+        >
           {/* Header */}
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
             <div className="flex items-center justify-between mb-1.5">
@@ -304,7 +360,8 @@ export function BranchSelector({
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

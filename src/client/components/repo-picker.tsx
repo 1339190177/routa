@@ -62,6 +62,11 @@ interface CloneProgress {
   message: string;
 }
 
+interface RepoActionResult {
+  success?: boolean;
+  branch?: string;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────
 
 export function RepoPicker({
@@ -256,6 +261,41 @@ export function RepoPicker({
     setSearchQuery("");
   }, [onChange]);
 
+  const handleBranchChange = useCallback(
+    async (repo: ClonedRepo, branch: string) => {
+      await fetchRepos();
+      if (value?.path === repo.path) {
+        onChange({ ...value, branch });
+      }
+    },
+    [fetchRepos, onChange, value]
+  );
+
+  const handleResetRepo = useCallback(
+    async (repo: ClonedRepo) => {
+      const confirmed = window.confirm(
+        `Discard all local changes in ${repo.name} (${repo.branch})? This will run git reset --hard HEAD and git clean -fd.`
+      );
+      if (!confirmed) return;
+
+      const res = await desktopAwareFetch("/api/clone/branches", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoPath: repo.path, action: "reset" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as RepoActionResult & { error?: string };
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Failed to reset ${repo.name}`);
+      }
+
+      await fetchRepos();
+      if (value?.path === repo.path && data.branch) {
+        onChange({ ...value, branch: data.branch });
+      }
+    },
+    [fetchRepos, onChange, value]
+  );
+
   // ── Filtered repos ─────────────────────────────────────────────────
 
   // Merge cloned repos with additional repos (workspace codebases)
@@ -407,6 +447,8 @@ export function RepoPicker({
                         repo={repo}
                         isSelected={value?.path === repo.path}
                         onClick={() => handleSelectRepo(repo)}
+                        onBranchChange={(branch) => handleBranchChange(repo, branch)}
+                        onReset={() => handleResetRepo(repo)}
                       />
                     ))}
                   </>
@@ -638,47 +680,86 @@ function RepoListItem({
   repo,
   isSelected,
   onClick,
+  onBranchChange,
+  onReset,
 }: {
   repo: ClonedRepo;
   isSelected: boolean;
   onClick: () => void;
+  onBranchChange: (branch: string) => void | Promise<void>;
+  onReset: () => void | Promise<void>;
 }) {
+  const [resetting, setResetting] = useState(false);
+
+  const handleReset = async () => {
+    if (resetting) return;
+    setResetting(true);
+    try {
+      await onReset();
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={`w-full px-3 py-2 flex items-center gap-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
         isSelected ? "bg-blue-50 dark:bg-blue-900/10" : ""
       }`}
     >
-      <div className="w-7 h-7 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-        <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" viewBox="0 0 16 16" fill="currentColor">
-          <path fillRule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z" />
-        </svg>
-      </div>
-      <div className="flex-1 text-left min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
-            {repo.name}
-          </span>
-          {isSelected && <CheckIcon />}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+      >
+        <div className="w-7 h-7 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+          <svg className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" viewBox="0 0 16 16" fill="currentColor">
+            <path fillRule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z" />
+          </svg>
         </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono flex items-center gap-0.5">
-            <BranchIcon />
-            {repo.branch}
-          </span>
-          {!repo.status.clean && (
-            <span className="text-[9px] text-yellow-600 dark:text-yellow-400">modified</span>
-          )}
-          {repo.status.behind > 0 && (
-            <span className="text-[9px] text-blue-600 dark:text-blue-400">
-              {repo.status.behind} behind
+        <div className="flex-1 text-left min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
+              {repo.name}
             </span>
-          )}
+            {isSelected && <CheckIcon />}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-mono flex items-center gap-0.5">
+              <BranchIcon />
+              {repo.branch}
+            </span>
+            {!repo.status.clean && (
+              <span className="text-[9px] text-yellow-600 dark:text-yellow-400">modified</span>
+            )}
+            {repo.status.behind > 0 && (
+              <span className="text-[9px] text-blue-600 dark:text-blue-400">
+                {repo.status.behind} behind
+              </span>
+            )}
+          </div>
         </div>
+      </button>
+      <div className="flex shrink-0 items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
+        <BranchSelector
+          repoPath={repo.path}
+          currentBranch={repo.branch}
+          onBranchChange={onBranchChange}
+        />
+        {!repo.status.clean && (
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={resetting}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50 dark:text-rose-400 dark:hover:bg-rose-900/20"
+            title="Discard local changes"
+          >
+            <ResetIcon />
+            {resetting ? "Resetting..." : "Reset"}
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -728,6 +809,15 @@ function SearchIcon() {
   return (
     <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  );
+}
+
+function ResetIcon() {
+  return (
+    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v5h5" />
     </svg>
   );
 }

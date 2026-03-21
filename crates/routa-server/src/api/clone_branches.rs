@@ -102,20 +102,45 @@ struct CheckoutBody {
     repo_path: Option<String>,
     branch: Option<String>,
     pull: Option<bool>,
+    action: Option<String>,
 }
 
 async fn checkout(Json(body): Json<CheckoutBody>) -> Result<Json<serde_json::Value>, ServerError> {
     let repo_path = body
         .repo_path
         .ok_or_else(|| ServerError::BadRequest("Missing repoPath".into()))?;
-    let branch = body
-        .branch
-        .ok_or_else(|| ServerError::BadRequest("Missing branch".into()))?;
 
     if !std::path::Path::new(&repo_path).exists() {
         return Err(ServerError::NotFound("Repository not found".into()));
     }
 
+    if body.action.as_deref() == Some("reset") {
+        let (branch_info, status, repo_status) = tokio::task::spawn_blocking({
+            let rp = repo_path.clone();
+            move || {
+                git::reset_local_changes(&rp).map_err(ServerError::Internal)?;
+                let branch_info = git::get_branch_info(&rp);
+                let status = git::get_branch_status(&rp, &branch_info.current);
+                let repo_status = git::get_repo_status(&rp);
+                Ok::<_, ServerError>((branch_info, status, repo_status))
+            }
+        })
+        .await
+        .map_err(|e| ServerError::Internal(e.to_string()))??;
+
+        return Ok(Json(serde_json::json!({
+            "success": true,
+            "action": "reset",
+            "branch": branch_info.current,
+            "branches": branch_info.branches,
+            "status": status,
+            "repoStatus": repo_status,
+        })));
+    }
+
+    let branch = body
+        .branch
+        .ok_or_else(|| ServerError::BadRequest("Missing branch".into()))?;
     let do_pull = body.pull.unwrap_or(false);
 
     let (success, info, status) = tokio::task::spawn_blocking({

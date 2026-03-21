@@ -10,6 +10,7 @@ export {
   getBranchStatus,
   checkoutBranch,
   pullBranch,
+  resetLocalChanges,
   getRemoteUrl,
   getRepoStatus,
   getCloneBaseDir,

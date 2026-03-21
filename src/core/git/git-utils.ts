@@ -351,6 +351,22 @@ export function pullBranch(repoPath: string): { success: boolean; error?: string
 }
 
 /**
+ * Reset tracked and untracked local changes to match HEAD.
+ */
+export function resetLocalChanges(repoPath: string): { success: boolean; error?: string } {
+  try {
+    gitExecSync("git reset --hard HEAD", repoPath);
+    gitExecSync("git clean -fd", repoPath);
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Reset failed",
+    };
+  }
+}
+
+/**
  * Get the remote URL for the repo.
  */
 export function getRemoteUrl(repoPath: string): string | null {
