@@ -305,7 +305,7 @@ export function AcpProviderDropdown({
                   className="flex w-full items-center justify-between px-3 py-2 text-left"
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">
-                    Settings
+                    Quick Access
                   </p>
                   <svg
                     className={`h-3.5 w-3.5 text-gray-400 transition-transform ${settingsOpen ? "rotate-180" : ""}`}
@@ -321,6 +321,9 @@ export function AcpProviderDropdown({
 
               {settingsOpen && (
                 <div className="p-2 pt-1">
+                  <p className="px-2 pb-2 text-[10px] text-gray-400 dark:text-gray-500">
+                    Choose which providers appear in this dropdown and drag checked items to reorder them.
+                  </p>
                   {settingsProviders.map((provider) => {
                     const checked = visibleProviderIds.includes(provider.id);
                     return (
@@ -372,7 +375,7 @@ export function AcpProviderDropdown({
                   onClick={handleOpenSettingsPanel}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800/50"
                 >
-                  Manage Providers
+                  Open Provider Settings
                 </button>
               </div>
 
