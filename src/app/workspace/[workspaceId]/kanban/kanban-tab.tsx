@@ -1635,15 +1635,17 @@ export function KanbanTab({
                           <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">{column.name}</div>
                           <div className="text-[11px] text-gray-400 dark:text-gray-500">{columnTasks.length} cards</div>
                         </div>
-                        {laneAutomation?.enabled && (
-                          <div
-                            className="truncate text-[10px] leading-4 text-gray-500 dark:text-gray-400"
-                            data-testid={`kanban-column-automation-${column.id}`}
-                            title={formatLaneAutomationSummary(laneAutomation, providers, specialists)}
-                          >
-                            {formatLaneAutomationSummary(laneAutomation, providers, specialists)}
-                          </div>
-                        )}
+                        <div
+                          className="truncate text-[10px] leading-4 text-gray-500 dark:text-gray-400"
+                          data-testid={`kanban-column-automation-${column.id}`}
+                          title={laneAutomation?.enabled ? formatLaneAutomationSummary(laneAutomation, providers, specialists) : column.stage === "blocked" ? "Manual lane only" : "Manual lane"}
+                        >
+                          {laneAutomation?.enabled
+                            ? formatLaneAutomationSummary(laneAutomation, providers, specialists)
+                            : column.stage === "blocked"
+                              ? "Manual lane only"
+                              : "Manual lane"}
+                        </div>
                       </div>
 
                       <div className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-1">

@@ -3,6 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import { KanbanSettingsModal } from "../kanban-settings-modal";
 import type { KanbanBoardInfo } from "../../types";
 
+function clickWorkspaceTab(label: "Automation" | "Structure") {
+  const tab = screen.getAllByRole("button").find((button) => button.textContent?.trim() === label);
+  if (!tab) {
+    throw new Error(`Missing workspace tab ${label}`);
+  }
+  fireEvent.click(tab);
+}
+
 const board: KanbanBoardInfo = {
   id: "board-1",
   workspaceId: "workspace-1",
@@ -53,6 +61,7 @@ describe("KanbanSettingsModal", () => {
     );
 
     fireEvent.click(screen.getByRole("checkbox", { name: /toggle automation for review/i }));
+    clickWorkspaceTab("Automation");
     fireEvent.click(screen.getByTestId("kanban-settings-provider"));
     fireEvent.click(screen.getByRole("button", { name: /claude code/i }));
     fireEvent.click(screen.getByRole("button", { name: /save board settings/i }));
@@ -125,8 +134,49 @@ describe("KanbanSettingsModal", () => {
       />,
     );
 
+    clickWorkspaceTab("Automation");
     expect(screen.getAllByRole("button").some((button) => button.textContent?.trim() === "Kanban")).toBe(true);
     expect(screen.getAllByRole("option", { name: "Review Guard" }).length).toBeGreaterThan(0);
     expect(screen.queryAllByRole("option", { name: "Team QA" })).toHaveLength(0);
+  });
+
+  it("treats blocked as a manual-only lane when saving", async () => {
+    const onSave = vi.fn(async () => {});
+    const blockedBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [{ id: "blocked", name: "Blocked", position: 0, stage: "blocked" }],
+    };
+
+    render(
+      <KanbanSettingsModal
+        board={blockedBoard}
+        visibleColumns={["blocked"]}
+        columnAutomation={{ blocked: { enabled: true, steps: [{ id: "step-1", role: "ROUTA", providerId: "claude" }] } }}
+        availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[]}
+        specialistLanguage="en"
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    );
+
+    expect(screen.getAllByRole("button").some((button) => button.textContent?.trim() === "Structure")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /save board settings/i }));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith(
+        ["blocked"],
+        {
+          blocked: expect.objectContaining({ enabled: false }),
+        },
+        2,
+        {
+          mode: "watchdog_retry",
+          inactivityTimeoutMinutes: 10,
+          maxRecoveryAttempts: 1,
+          completionRequirement: "turn_complete",
+        },
+      );
+    });
   });
 });
