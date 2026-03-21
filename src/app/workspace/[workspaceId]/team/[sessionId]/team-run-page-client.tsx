@@ -578,7 +578,7 @@ function buildLaneSnippets(history: SessionHistoryEntry[], maxSnippets = 5): Ses
       if (updateType === "acp_status" && update.status !== "error") return null;
 
       const text = updateType === "task_completion"
-        ? summarizeText(update.completionSummary ?? extractHistoryText(update) ?? "Member finished and reported back to lead.", 180)
+        ? summarizeText(update.completionSummary ?? extractHistoryText(update) ?? "Member finished and handed the result back to lead.", 180)
         : summarizeText(
           extractHistoryText(update)
             ?? update.rawOutput?.output
@@ -1644,9 +1644,9 @@ export function TeamRunPageClient() {
             <div className="border-b border-desktop-border px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <div>
-                  <h2 className="text-base font-semibold text-desktop-text-primary">Live Sessions</h2>
+                  <h2 className="text-base font-semibold text-desktop-text-primary">Coordination Feed</h2>
                   <p className="mt-0.5 text-xs leading-5 text-desktop-text-secondary">
-                    Auto-refreshing lead and member transcripts. Reports back and pending questions stay inline with the lane.
+                    Auto-refreshing lead and member transcripts. Reports back to lead and pending questions stay inline with each lane.
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-desktop-text-secondary">
@@ -1662,7 +1662,7 @@ export function TeamRunPageClient() {
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
               {sessionLanes.length === 0 ? (
-                <EmptyPanel message="No live session lanes yet." />
+                  <EmptyPanel message="No coordination lanes yet." />
               ) : (
                 <div className="space-y-3">
                   {sessionLanes.map((lane) => (

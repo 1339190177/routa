@@ -824,7 +824,7 @@ export class RoutaOrchestrator {
       report: {
         agentId: childAgentId,
         taskId: record.taskId,
-        summary: "Agent completed its work (auto-reported by orchestrator).",
+        summary: "Reported completion back to lead (auto-submitted by orchestrator).",
         success: true,
       },
     });
