@@ -1054,12 +1054,12 @@ export function TeamRunPageClient() {
     >
       <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary">
         <header className="shrink-0 border-b border-desktop-border bg-desktop-bg-secondary/95">
-          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3">
+          <div className="mx-auto flex w-full max-w-[1760px] items-center justify-between gap-3 px-4 py-2.5">
             <div className="min-w-0">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 <Link
                   href={`/workspace/${workspaceId}/team`}
-                  className="inline-flex items-center gap-2 rounded-lg border border-desktop-border px-2.5 py-1.5 text-[12px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-desktop-border px-2.5 py-1.5 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
@@ -1071,7 +1071,7 @@ export function TeamRunPageClient() {
                   <h1 className="truncate text-sm font-semibold text-desktop-text-primary">
                     {session.name ?? "Team run"}
                   </h1>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-desktop-text-secondary">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-desktop-text-secondary">
                     <span>{formatRelativeTime(session.createdAt)}</span>
                     <span className="opacity-40">/</span>
                     <span>{session.provider ?? "auto"}</span>
@@ -1084,17 +1084,17 @@ export function TeamRunPageClient() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setRefreshKey((current) => current + 1)}
-                className="rounded-xl border border-desktop-border px-4 py-2 text-sm font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                className="rounded-lg border border-desktop-border px-3 py-1.5 text-sm font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
               >
                 Refresh
               </button>
               <Link
                 href={`/workspace/${workspaceId}/sessions/${sessionId}`}
-                className="rounded-xl bg-desktop-accent px-4 py-2 text-sm font-medium text-desktop-accent-text transition-colors hover:opacity-90"
+                className="rounded-lg bg-desktop-accent px-3 py-1.5 text-sm font-medium text-desktop-accent-text transition-colors hover:opacity-90"
               >
                 Open raw session
               </Link>
@@ -1102,29 +1102,29 @@ export function TeamRunPageClient() {
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[360px_minmax(0,1fr)_400px]">
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[320px_minmax(0,1fr)_360px] xl:grid-cols-[340px_minmax(0,1fr)_380px]">
           <section className="min-h-0 overflow-hidden border-r border-desktop-border bg-desktop-bg-secondary">
-            <div className="border-b border-desktop-border px-6 py-6">
+            <div className="border-b border-desktop-border px-5 py-4">
               <div className="text-[13px] font-semibold uppercase tracking-[0.2em] text-desktop-text-muted">Objective</div>
-              <div className="mt-4 rounded-[28px] border border-desktop-border bg-desktop-bg-primary p-5">
-                <div className="text-base leading-7 text-desktop-text-primary">{objective}</div>
+              <div className="mt-3 rounded-[22px] border border-desktop-border bg-desktop-bg-primary p-4">
+                <div className="text-sm leading-6 text-desktop-text-primary">{objective}</div>
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                 <MetricChip label="Done" value={taskCounts.done} tone="emerald" />
                 <MetricChip label="Active" value={taskCounts.active} tone="cyan" />
                 <MetricChip label="Blocked" value={taskCounts.blocked} tone="rose" />
               </div>
             </div>
 
-            <div className="border-b border-desktop-border px-6 py-4">
+            <div className="border-b border-desktop-border px-5 py-3">
               <h2 className="text-base font-semibold text-desktop-text-primary">Plan / Task Tree</h2>
-              <p className="mt-1.5 text-sm leading-6 text-desktop-text-secondary">Lead decomposition and current execution state.</p>
+              <p className="mt-1 text-sm leading-5 text-desktop-text-secondary">Lead decomposition and current execution state.</p>
             </div>
-            <div className="h-[calc(100%-244px)] overflow-y-auto px-4 py-4">
+            <div className="h-[calc(100%-206px)] overflow-y-auto px-3 py-3">
               {taskTree.length === 0 ? (
                 <EmptyPanel message="No task notes yet." />
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {taskTree.map((node) => <TaskTreeNode key={node.id} node={node} />)}
                 </div>
               )}
@@ -1132,30 +1132,30 @@ export function TeamRunPageClient() {
           </section>
 
           <section className="min-h-0 overflow-hidden bg-desktop-bg-primary">
-            <div className="border-b border-desktop-border px-7 py-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="border-b border-desktop-border px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <div>
                   <h2 className="text-base font-semibold text-desktop-text-primary">Coordination Feed</h2>
-                  <p className="mt-1.5 text-sm leading-6 text-desktop-text-secondary">
+                  <p className="mt-1 text-sm leading-5 text-desktop-text-secondary">
                     Supervision events only: planning, delegation, review, findings, and completion.
                   </p>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-desktop-text-secondary">
-                  <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-3 py-1.5">
+                <div className="flex items-center gap-1.5 text-[11px] text-desktop-text-secondary">
+                  <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">
                     {coordinationItems.length} events
                   </span>
-                  <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-3 py-1.5">
+                  <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">
                     {sessionStreams.length} sessions
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="h-[calc(100%-93px)] overflow-y-auto px-7 py-6">
+            <div className="h-[calc(100%-81px)] overflow-y-auto px-5 py-4">
               {coordinationItems.length === 0 ? (
                 <EmptyPanel message="No coordination events yet." />
               ) : (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   {coordinationItems.map((item, index) => (
                     <CoordinationFeedItem
                       key={item.id}
@@ -1170,30 +1170,30 @@ export function TeamRunPageClient() {
           </section>
 
           <aside className="min-h-0 overflow-hidden border-l border-desktop-border bg-desktop-bg-secondary">
-            <div className="border-b border-desktop-border px-6 py-4">
+            <div className="border-b border-desktop-border px-5 py-3">
               <h2 className="text-base font-semibold text-desktop-text-primary">Team Panel</h2>
-              <p className="mt-1.5 text-sm leading-6 text-desktop-text-secondary">
+              <p className="mt-1 text-sm leading-5 text-desktop-text-secondary">
                 Team supervision, outputs, and live controls routed into shared session UI.
               </p>
             </div>
 
-            <div className="h-[calc(100%-93px)] overflow-y-auto p-5">
-              <div className="space-y-5">
+            <div className="h-[calc(100%-81px)] overflow-y-auto p-4">
+              <div className="space-y-4">
                 <PanelCard title="Team Members">
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {teamMembers.map((member) => (
                       <button
                         key={member.specialist.id}
                         type="button"
                         onClick={() => member.sessionId && setSelectedSessionForModal(member.sessionId)}
                         disabled={!member.sessionId}
-                        className={`flex w-full items-start gap-4 rounded-[24px] px-4 py-4 text-left transition ${
+                        className={`flex w-full items-start gap-3 rounded-[18px] px-3 py-3 text-left transition ${
                           member.sessionId
                             ? "hover:bg-desktop-bg-active/80"
                             : "cursor-default opacity-80"
                         }`}
                       >
-                        <div className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${roleAvatarClass(member.specialist.id)}`}>
+                        <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${roleAvatarClass(member.specialist.id)}`}>
                           {member.actor
                             .split(" ")
                             .map((part) => part.charAt(0))
@@ -1204,15 +1204,15 @@ export function TeamRunPageClient() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-2">
-                            <div className="truncate text-base font-semibold text-desktop-text-primary">{member.actor}</div>
-                            <span className="shrink-0 text-xs capitalize text-desktop-text-secondary">{member.status}</span>
+                            <div className="truncate text-sm font-semibold text-desktop-text-primary">{member.actor}</div>
+                            <span className="shrink-0 text-[11px] capitalize text-desktop-text-secondary">{member.status}</span>
                           </div>
-                          <div className="mt-1 truncate text-sm text-desktop-text-secondary">{member.specialist.id}</div>
+                          <div className="mt-0.5 truncate text-xs text-desktop-text-secondary">{member.specialist.id}</div>
                           {member.preview && (
-                            <div className="mt-2.5 line-clamp-2 text-sm leading-6 text-desktop-text-muted">{member.preview}</div>
+                            <div className="mt-1.5 line-clamp-2 text-xs leading-5 text-desktop-text-muted">{member.preview}</div>
                           )}
                           {member.lastUpdatedLabel && (
-                            <div className="mt-2.5 text-xs text-desktop-text-muted">{member.lastUpdatedLabel}</div>
+                            <div className="mt-1.5 text-[11px] text-desktop-text-muted">{member.lastUpdatedLabel}</div>
                           )}
                         </div>
                       </button>
@@ -1221,7 +1221,7 @@ export function TeamRunPageClient() {
                 </PanelCard>
 
                 <PanelCard title="Deliverables">
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {deliverables.length === 0 ? (
                       <EmptyPanel message="No notes or deliverables yet." />
                     ) : (
@@ -1231,26 +1231,26 @@ export function TeamRunPageClient() {
                           type="button"
                           onClick={() => item.sessionId && setSelectedSessionForModal(item.sessionId)}
                           disabled={!item.sessionId}
-                          className={`flex w-full items-start gap-4 rounded-[24px] px-4 py-4 text-left transition ${
+                          className={`flex w-full items-start gap-3 rounded-[18px] px-3 py-3 text-left transition ${
                             item.sessionId
                               ? "hover:bg-desktop-bg-active/80"
                               : "cursor-default"
                           }`}
                         >
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-desktop-bg-active text-xs font-semibold uppercase tracking-[0.14em] text-desktop-text-primary">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-desktop-bg-active text-[10px] font-semibold uppercase tracking-[0.12em] text-desktop-text-primary">
                             {item.label.slice(0, 2)}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
-                              <div className="truncate text-base font-semibold text-desktop-text-primary">{item.label}</div>
-                              <span className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${deliverableTone(item.status)}`}>
+                              <div className="truncate text-sm font-semibold text-desktop-text-primary">{item.label}</div>
+                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${deliverableTone(item.status)}`}>
                                 {item.status}
                               </span>
                             </div>
-                            <div className="mt-1.5 truncate text-sm text-desktop-text-secondary">{item.title}</div>
-                            <div className="mt-1.5 text-xs text-desktop-text-muted">{item.owner}</div>
+                            <div className="mt-1 truncate text-xs text-desktop-text-secondary">{item.title}</div>
+                            <div className="mt-1 text-[11px] text-desktop-text-muted">{item.owner}</div>
                             {item.summary && (
-                              <div className="mt-2.5 line-clamp-2 text-sm leading-6 text-desktop-text-muted">{item.summary}</div>
+                              <div className="mt-1.5 line-clamp-2 text-xs leading-5 text-desktop-text-muted">{item.summary}</div>
                             )}
                           </div>
                         </button>
@@ -1260,7 +1260,7 @@ export function TeamRunPageClient() {
                 </PanelCard>
 
                 <PanelCard title="Controls">
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <ControlButton
                       title="Pause run"
                       description="Pause API is not wired yet. Use the raw session for manual intervention."
@@ -1283,7 +1283,7 @@ export function TeamRunPageClient() {
                     />
                     <Link
                       href={`/workspace/${workspaceId}/sessions/${sessionId}`}
-                      className="mt-2 flex items-center gap-2 rounded-[24px] border border-desktop-border px-4 py-4 text-base text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                      className="mt-1 flex items-center gap-2 rounded-[18px] border border-desktop-border px-3 py-3 text-sm text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75l6 6 13.5-13.5" />
@@ -1398,9 +1398,9 @@ function MetricChip({
         ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
         : "border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300";
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="mt-1 text-xs uppercase tracking-[0.14em]">{label}</div>
+    <div className={`rounded-[18px] border px-3 py-2.5 ${toneClass}`}>
+      <div className="text-xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-0.5 text-[10px] uppercase tracking-[0.12em]">{label}</div>
     </div>
   );
 }
@@ -1415,22 +1415,22 @@ function TaskTreeNode({
   return (
     <div>
       <div
-        className="rounded-[24px] border border-transparent px-4 py-3 transition-colors hover:border-desktop-border hover:bg-desktop-bg-active/70"
-        style={{ marginLeft: level * 20 }}
+        className="rounded-[18px] border border-transparent px-3 py-2.5 transition-colors hover:border-desktop-border hover:bg-desktop-bg-active/70"
+        style={{ marginLeft: level * 16 }}
       >
-        <div className="flex items-start gap-4">
-          <div className="pt-1">
+        <div className="flex items-start gap-3">
+          <div className="pt-0.5">
             <TaskStatusGlyph status={node.status} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-3">
-              <div className={`text-base leading-7 ${node.status === "done" ? "text-desktop-text-muted line-through" : "text-desktop-text-primary"}`}>
+              <div className={`text-sm leading-6 ${node.status === "done" ? "text-desktop-text-muted line-through" : "text-desktop-text-primary"}`}>
                 {node.title}
               </div>
               <TaskStatusPill status={node.status} />
             </div>
             {node.details && (
-              <div className="mt-1.5 line-clamp-2 text-sm leading-6 text-desktop-text-secondary">
+              <div className="mt-1 line-clamp-2 text-xs leading-5 text-desktop-text-secondary">
                 {node.details}
               </div>
             )}
@@ -1513,24 +1513,24 @@ function CoordinationFeedItem({
   return (
     <div className="relative">
       {!isLast && (
-        <div className="absolute bottom-[-22px] left-[17px] top-12 w-px bg-desktop-border" />
+        <div className="absolute bottom-[-18px] left-[15px] top-10 w-px bg-desktop-border" />
       )}
-      <div className="flex gap-4">
-        <div className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold ${activityTone(item.type)}`}>
+      <div className="flex gap-3">
+        <div className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${activityTone(item.type)}`}>
           {item.type[0].toUpperCase()}
         </div>
-        <div className="min-w-0 flex-1 rounded-[26px] border border-desktop-border bg-desktop-bg-secondary p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex-1 rounded-[20px] border border-desktop-border bg-desktop-bg-secondary p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="min-w-0">
-              <div className="text-base font-semibold text-desktop-text-primary">{item.title}</div>
-              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm text-desktop-text-secondary">
-                <span className={`rounded-full border px-2.5 py-1 font-medium ${roleChipClass(item.actorRoleId, "soft")}`}>
+              <div className="text-sm font-semibold text-desktop-text-primary">{item.title}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-desktop-text-secondary">
+                <span className={`rounded-full border px-2 py-0.5 font-medium ${roleChipClass(item.actorRoleId, "soft")}`}>
                   {item.actor}
                 </span>
                 {item.target && (
                   <>
                     <span className="opacity-40">→</span>
-                    <span className={`rounded-full border px-2.5 py-1 font-medium ${roleChipClass(item.targetRoleId, "soft")}`}>
+                    <span className={`rounded-full border px-2 py-0.5 font-medium ${roleChipClass(item.targetRoleId, "soft")}`}>
                       {item.target}
                     </span>
                   </>
@@ -1542,44 +1542,44 @@ function CoordinationFeedItem({
                 <button
                   type="button"
                   onClick={onInspectSession}
-                  className="rounded-full border border-desktop-border px-3 py-1.5 text-xs font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                  className="rounded-full border border-desktop-border px-2.5 py-1 text-[11px] font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
                 >
                   Inspect session
                 </button>
               )}
-              <span className="text-xs text-desktop-text-muted">{item.timestamp}</span>
+              <span className="text-[11px] text-desktop-text-muted">{item.timestamp}</span>
             </div>
           </div>
           {item.summary && (
-            <div className="mt-4 rounded-2xl border border-desktop-border bg-desktop-bg-primary px-4 py-3 text-base leading-7 text-desktop-text-secondary">
+            <div className="mt-3 rounded-[16px] border border-desktop-border bg-desktop-bg-primary px-3 py-2.5 text-sm leading-6 text-desktop-text-secondary">
               {item.summary}
             </div>
           )}
           {item.memberSession && (
-            <div className="relative mt-5 pl-8">
-              <div className="absolute bottom-4 left-[15px] top-2 w-px bg-desktop-border" />
-              <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-desktop-text-muted">
-                <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1">Member lane</span>
+            <div className="relative mt-4 pl-6">
+              <div className="absolute bottom-3 left-[11px] top-2 w-px bg-desktop-border" />
+              <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-desktop-text-muted">
+                <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-0.5">Member lane</span>
               </div>
               <button
                 type="button"
                 onClick={onInspectSession}
-                className={`flex w-full items-start justify-between gap-4 rounded-2xl border bg-desktop-bg-primary px-4 py-4 text-left transition hover:bg-desktop-bg-active/70 ${roleChipClass(item.memberSession.roleId, "soft")}`}
+                className={`flex w-full items-start justify-between gap-3 rounded-[16px] border bg-desktop-bg-primary px-3 py-3 text-left transition hover:bg-desktop-bg-active/70 ${roleChipClass(item.memberSession.roleId, "soft")}`}
               >
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] ${roleChipClass(item.memberSession.roleId, "strong")}`}>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] ${roleChipClass(item.memberSession.roleId, "strong")}`}>
                       {item.memberSession.actor}
                     </span>
-                    <span className="rounded-full border border-desktop-border px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-desktop-text-secondary">
+                    <span className="rounded-full border border-desktop-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-desktop-text-secondary">
                       {item.memberSession.badge}
                     </span>
                   </div>
-                  <div className="mt-2.5 line-clamp-2 text-sm leading-6 text-desktop-text-secondary">
+                  <div className="mt-1.5 line-clamp-2 text-xs leading-5 text-desktop-text-secondary">
                     {item.memberSession.preview ?? item.memberSession.sessionId}
                   </div>
                 </div>
-                <div className="shrink-0 text-xs text-desktop-text-muted">{item.memberSession.lastUpdatedLabel}</div>
+                <div className="shrink-0 text-[11px] text-desktop-text-muted">{item.memberSession.lastUpdatedLabel}</div>
               </button>
             </div>
           )}
@@ -1597,11 +1597,11 @@ function PanelCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[26px] border border-desktop-border bg-desktop-bg-primary">
-      <div className="border-b border-desktop-border px-5 py-4 text-base font-semibold text-desktop-text-primary">
+    <div className="rounded-[20px] border border-desktop-border bg-desktop-bg-primary">
+      <div className="border-b border-desktop-border px-4 py-3 text-sm font-semibold text-desktop-text-primary">
         {title}
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-3">{children}</div>
     </div>
   );
 }
@@ -1622,21 +1622,21 @@ function ControlButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`w-full rounded-[24px] border px-4 py-4 text-left transition ${
+      className={`w-full rounded-[18px] border px-3 py-3 text-left transition ${
         disabled
           ? "cursor-not-allowed border-desktop-border bg-desktop-bg-secondary/70 text-desktop-text-muted"
           : "border-desktop-border bg-desktop-bg-primary hover:bg-desktop-bg-active/80"
       }`}
     >
-      <div className="text-base font-medium text-desktop-text-primary">{title}</div>
-      <div className="mt-1.5 text-sm leading-6 text-desktop-text-secondary">{description}</div>
+      <div className="text-sm font-medium text-desktop-text-primary">{title}</div>
+      <div className="mt-1 text-xs leading-5 text-desktop-text-secondary">{description}</div>
     </button>
   );
 }
 
 function EmptyPanel({ message }: { message: string }) {
   return (
-    <div className="rounded-[24px] border border-dashed border-desktop-border px-5 py-8 text-center text-base text-desktop-text-secondary">
+    <div className="rounded-[18px] border border-dashed border-desktop-border px-4 py-6 text-center text-sm text-desktop-text-secondary">
       {message}
     </div>
   );

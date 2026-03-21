@@ -209,42 +209,42 @@ export function TeamPageClient() {
     >
       <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary">
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-5 px-5 py-5">
-            <section className="rounded-[30px] border border-desktop-border bg-desktop-bg-secondary p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-4 px-4 py-4">
+            <section className="rounded-[24px] border border-desktop-border bg-desktop-bg-secondary p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.2em] text-desktop-text-muted">
                     Team Runs
                   </div>
-                  <h1 className="mt-3 text-3xl font-semibold tracking-tight text-desktop-text-primary">
+                  <h1 className="mt-2 text-[28px] font-semibold tracking-tight text-desktop-text-primary">
                     Run a lead session and keep the list in the same surface.
                   </h1>
                 </div>
-                <div className="flex flex-wrap gap-3 text-xs">
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                <div className="flex flex-wrap gap-2 text-[11px]">
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
                     {teamRuns.length} runs
                   </span>
-                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 font-semibold text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300">
+                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 font-semibold text-cyan-700 dark:border-cyan-500/20 dark:bg-cyan-500/10 dark:text-cyan-300">
                     {activeRuns} active
                   </span>
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
                     {availableMembers} members
                   </span>
                 </div>
               </div>
 
-              <div className="mt-5 rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 dark:border-slate-800 dark:bg-slate-950/30">
+              <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-4 dark:border-slate-800 dark:bg-slate-950/30">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.2em] text-desktop-text-muted">
                     New Run
                   </div>
-                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-desktop-text-primary">Launch the Team lead with the shared input.</h2>
-                  <p className="mt-2 text-base leading-7 text-desktop-text-secondary">
+                  <h2 className="mt-2 text-xl font-semibold tracking-tight text-desktop-text-primary">Launch the Team lead with the shared input.</h2>
+                  <p className="mt-1.5 text-sm leading-6 text-desktop-text-secondary">
                     This now reuses the same input, provider, model, and pending-prompt flow as Home.
                   </p>
                 </div>
 
-                <div className="mt-5">
+                <div className="mt-4">
                   <HomeInput
                     workspaceId={workspaceId}
                     variant="hero"
@@ -256,11 +256,11 @@ export function TeamPageClient() {
                   />
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                   {teamSpecialists.map((specialist) => (
                     <span
                       key={specialist.id}
-                      className={`rounded-full border px-3 py-1.5 font-semibold uppercase tracking-[0.16em] ${getRoleTone(specialist.role)}`}
+                      className={`rounded-full border px-2.5 py-1 font-semibold uppercase tracking-[0.14em] ${getRoleTone(specialist.role)}`}
                       title={specialist.description ?? specialist.id}
                     >
                       {specialist.name}
@@ -270,72 +270,72 @@ export function TeamPageClient() {
               </div>
             </section>
 
-            <section className="rounded-[30px] border border-desktop-border bg-desktop-bg-secondary p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <section className="rounded-[24px] border border-desktop-border bg-desktop-bg-secondary p-5">
+              <div className="flex flex-wrap items-start justify-between gap-2.5">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.2em] text-desktop-text-muted">
                     Team Runs
                   </div>
-                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-desktop-text-primary">Top-level lead sessions only.</h2>
-                  <p className="mt-2 text-base leading-7 text-desktop-text-secondary">
+                  <h2 className="mt-2 text-xl font-semibold tracking-tight text-desktop-text-primary">Top-level lead sessions only.</h2>
+                  <p className="mt-1.5 text-sm leading-6 text-desktop-text-secondary">
                     Open any run to inspect the task tree, coordination feed, and team panel.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="rounded-xl border border-desktop-border px-4 py-2.5 text-sm font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                  className="rounded-lg border border-desktop-border px-3.5 py-2 text-sm font-medium text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
                 >
                   Refresh
                 </button>
               </div>
 
               {teamRuns.length === 0 ? (
-                <div className="mt-5 rounded-[26px] border border-dashed border-slate-300 bg-slate-50/70 p-10 text-center dark:border-slate-700 dark:bg-slate-900/40">
-                  <div className="text-base font-medium text-slate-700 dark:text-slate-200">
+                <div className="mt-4 rounded-[20px] border border-dashed border-slate-300 bg-slate-50/70 p-8 text-center dark:border-slate-700 dark:bg-slate-900/40">
+                  <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
                     No Team runs yet.
                   </div>
-                  <div className="mt-2 text-base leading-7 text-slate-500 dark:text-slate-400">
+                  <div className="mt-1.5 text-sm leading-6 text-slate-500 dark:text-slate-400">
                     Launch a lead session above.
                   </div>
                 </div>
               ) : (
-                <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                <div className="mt-4 grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
                   {teamRuns.map((run) => (
                     <button
                       key={run.session.sessionId}
                       type="button"
                       onClick={() => router.push(`/workspace/${workspaceId}/team/${run.session.sessionId}`)}
-                      className="group rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-[0_18px_45px_-30px_rgba(14,116,144,0.38)] dark:border-slate-800 dark:bg-slate-950/30 dark:hover:border-cyan-800"
+                      className="group rounded-[20px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-[0_18px_45px_-30px_rgba(14,116,144,0.38)] dark:border-slate-800 dark:bg-slate-950/30 dark:hover:border-cyan-800"
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start justify-between gap-2.5">
                         <div>
-                          <div className="text-[22px] font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-cyan-700 dark:text-slate-100 dark:group-hover:text-cyan-300">
+                          <div className="text-lg font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-cyan-700 dark:text-slate-100 dark:group-hover:text-cyan-300">
                             {run.session.name ?? "Unnamed Team run"}
                           </div>
-                          <div className="mt-1.5 text-xs uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                          <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
                             {formatRelativeTime(run.session.createdAt)}
                           </div>
                         </div>
                         <StatusPill status={run.session.acpStatus} />
                       </div>
 
-                      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                      <div className="mt-3 grid gap-2.5 sm:grid-cols-3">
                         <RunMetric label="Direct delegates" value={run.directDelegates} />
                         <RunMetric label="Total sub-sessions" value={run.descendants} />
                         <RunMetric label="Provider" value={run.session.provider ?? "auto"} />
                       </div>
 
-                      <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
                           {run.session.specialistId ?? TEAM_LEAD_SPECIALIST_ID}
                         </span>
                         {run.session.branch && (
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-900/70">
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70">
                             {run.session.branch}
                           </span>
                         )}
-                        <span className="truncate rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-900/70" title={run.session.cwd}>
+                        <span className="truncate rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/70" title={run.session.cwd}>
                           {run.session.cwd}
                         </span>
                       </div>
@@ -369,11 +369,11 @@ function RunMetric({
   value: number | string;
 }) {
   return (
-    <div className="rounded-[20px] border border-slate-200/80 bg-white/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+    <div className="rounded-2xl border border-slate-200/80 bg-white/80 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
         {label}
       </div>
-      <div className="mt-1.5 text-base font-semibold text-slate-800 dark:text-slate-100">
+      <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
         {value}
       </div>
     </div>
