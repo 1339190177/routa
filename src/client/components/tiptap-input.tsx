@@ -742,6 +742,10 @@ export function TiptapInput({
     editorProps: {
       attributes: {
         class: editorClass,
+        "data-testid": "tiptap-editor",
+        "aria-label": placeholder,
+        role: "textbox",
+        "aria-multiline": "true",
       },
       handlePaste: (view, event) => {
         const items = event.clipboardData?.items;
@@ -931,7 +935,7 @@ export function TiptapInput({
   return (
     <div className="flex-1 flex flex-col gap-1.5">
       {/* Editor wrapper */}
-      <div className={wrapperClass}>
+      <div className={wrapperClass} data-testid="tiptap-input">
         <EditorContent editor={editor} />
 
         {/* Bottom toolbar */}
@@ -1127,6 +1131,8 @@ export function TiptapInput({
               disabled={disabled}
               className={sendButtonClass}
               title="Send"
+              data-testid="tiptap-send-button"
+              aria-label="Send message"
             >
               <svg className={isHero ? "h-4 w-4" : "w-3 h-3"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
