@@ -330,7 +330,6 @@ export function KanbanSettingsModal({
     board.devSessionSupervision ?? DEFAULT_DEV_SESSION_SUPERVISION,
   );
   const [selectedColumnId, setSelectedColumnId] = useState<string>(board.columns[0]?.id ?? "");
-  const [activeTab, setActiveTab] = useState<"structure" | "automation">("structure");
   const [saving, setSaving] = useState(false);
   const [showRuntimeSettings, setShowRuntimeSettings] = useState(false);
   const [specialistCategory, setSpecialistCategory] = useState<SpecialistCategory>("kanban");
@@ -883,145 +882,90 @@ export function KanbanSettingsModal({
             <main className="min-h-0 overflow-y-auto bg-white p-2 dark:bg-[#0d1118] sm:p-2.5 xl:p-3">
               {selectedColumn ? (
                 <div className="space-y-3">
-                  <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 dark:border-slate-800 dark:bg-[#111722] sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                        Column workspace
-                      </div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {selectedColumn.name}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#0d1118] dark:text-slate-400">
-                        {selectedColumn.stage}
-                      </span>
-                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
-                        getColumnWorkflowMode(selectedColumn, columnAutomation[selectedColumn.id] ?? { enabled: false }) === "manual"
-                          ? "border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-[#0d1118] dark:text-slate-300"
-                          : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-                      }`}>
-                        {getColumnWorkflowMode(selectedColumn, columnAutomation[selectedColumn.id] ?? { enabled: false }) === "manual" ? "Manual lane" : "ACP automation"}
-                      </span>
-                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
-                        selectedColumn.visible !== false
-                          ? "border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
-                          : "border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-[#0d1118] dark:text-slate-300"
-                      }`}>
-                        {selectedColumn.visible !== false ? "Visible" : "Hidden"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div role="tablist" aria-label="Column configuration" className="mb-4 flex border-b border-slate-200 dark:border-slate-800">
-                    <button
-                      role="tab"
-                      id="tab-structure"
-                      aria-selected={activeTab === "structure"}
-                      aria-controls="panel-structure"
-                      onClick={() => setActiveTab("structure")}
-                      className={`px-4 py-2 text-sm font-semibold border-b-2 transition ${activeTab === "structure" ? "border-amber-500 text-amber-600 dark:text-amber-500" : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"}`}
-                    >
+                  <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 pb-3 dark:border-slate-800 xl:flex-nowrap">
+                    <div className="shrink-0 pb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400 xl:w-24">
                       Structure
-                    </button>
-                    <button
-                      role="tab"
-                      id="tab-automation"
-                      aria-selected={activeTab === "automation"}
-                      aria-controls="panel-automation"
-                      onClick={() => setActiveTab("automation")}
-                      className={`px-4 py-2 text-sm font-semibold border-b-2 transition ${activeTab === "automation" ? "border-amber-500 text-amber-600 dark:text-amber-500" : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"}`}
-                    >
-                      Automation
-                    </button>
-                  </div>
-
-                  <div id="panel-structure" role="tabpanel" aria-labelledby="tab-structure" hidden={activeTab !== "structure"}>
-                    {activeTab === "structure" && (
-                      <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-[#0d1118]/50">
-                        <label className="block space-y-1 text-sm font-medium">
-                          <span className="text-slate-700 dark:text-slate-300">Name</span>
-                          <input
-                            aria-label="Stage name"
-                            type="text"
-                            value={selectedColumn.name}
-                            onChange={(event) => updateColumn(selectedColumn.id, (current) => ({
-                              ...current,
-                              name: event.target.value,
-                            }))}
-                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100"
-                          />
-                        </label>
-
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <label className="block space-y-1 text-sm font-medium">
-                            <span className="text-slate-700 dark:text-slate-300">Stage type</span>
-                            <SelectControl
-                              aria-label="Stage type"
-                              value={selectedColumn.stage}
-                              onChange={(event) => handleStageTypeChange(selectedColumn.id, event.target.value)}
-                              className="h-10"
-                            >
-                              {STAGE_TYPE_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </SelectControl>
-                          </label>
-
-                          <label className="block space-y-1 text-sm font-medium">
-                            <span className="text-slate-700 dark:text-slate-300">Column Width</span>
-                            <SelectControl
-                              aria-label="Column width"
-                              value={selectedColumn.width || "standard"}
-                              onChange={(event) => updateColumn(selectedColumn.id, (current) => ({
-                                ...current,
-                                width: event.target.value as "compact" | "standard" | "wide",
-                              }))}
-                              className="h-10"
-                            >
-                              <option value="compact">Compact</option>
-                              <option value="standard">Standard</option>
-                              <option value="wide">Wide</option>
-                            </SelectControl>
-                          </label>
-                        </div>
-
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={selectedColumn.visible !== false}
-                            onChange={(event) => updateColumnVisibility(selectedColumn, event.target.checked)}
-                            className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500"
-                          />
-                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Column is visible on board</span>
-                        </label>
-
-                        {selectedColumn.stage === "blocked" ? (
-                          <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
-                            This is a manual-only stage. Automation features are disabled for this column.
-                          </div>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-
-                  <div id="panel-automation" role="tabpanel" aria-labelledby="tab-automation" hidden={activeTab !== "automation"}>
-                    {activeTab === "automation" && (
-                      <ColumnAutomationWorkspace
-                        column={selectedColumn}
-                        automation={columnAutomation[selectedColumn.id] ?? { enabled: false }}
-                        availableProviders={availableProviders}
-                        specialists={specialists}
-                        specialistCategory={specialistCategory}
-                        specialistLanguage={specialistLanguage}
-                        onSpecialistCategoryChange={setSpecialistCategory}
-                        onUpdate={(updated) => {
-                          updateColumnAutomation(selectedColumn.id, updated);
-                        }}
+                    </div>
+                    <label className="w-[14rem] shrink-0 space-y-1 text-sm font-medium">
+                      <span className="text-slate-700 dark:text-slate-300">Name</span>
+                      <input
+                        aria-label="Stage name"
+                        type="text"
+                        value={selectedColumn.name}
+                        onChange={(event) => updateColumn(selectedColumn.id, (current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))}
+                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-amber-400 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-100"
                       />
-                    )}
+                    </label>
+
+                    <label className="w-40 shrink-0 space-y-1 text-sm font-medium">
+                      <span className="text-slate-700 dark:text-slate-300">Stage type</span>
+                      <SelectControl
+                        aria-label="Stage type"
+                        value={selectedColumn.stage}
+                        onChange={(event) => handleStageTypeChange(selectedColumn.id, event.target.value)}
+                        className="h-10"
+                      >
+                        {STAGE_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </SelectControl>
+                    </label>
+
+                    <label className="w-40 shrink-0 space-y-1 text-sm font-medium">
+                      <span className="text-slate-700 dark:text-slate-300">Column Width</span>
+                      <SelectControl
+                        aria-label="Column width"
+                        value={selectedColumn.width || "standard"}
+                        onChange={(event) => updateColumn(selectedColumn.id, (current) => ({
+                          ...current,
+                          width: event.target.value as "compact" | "standard" | "wide",
+                        }))}
+                        className="h-10"
+                      >
+                        <option value="compact">Compact</option>
+                        <option value="standard">Standard</option>
+                        <option value="wide">Wide</option>
+                      </SelectControl>
+                    </label>
+
+                    <label className="flex h-10 items-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-[#0b1119] dark:text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={selectedColumn.visible !== false}
+                        onChange={(event) => updateColumnVisibility(selectedColumn, event.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500"
+                      />
+                      <span>Visible on board</span>
+                    </label>
+
+                    {selectedColumn.stage === "blocked" ? (
+                      <div className="flex h-10 items-center rounded-md border border-amber-200 bg-amber-50 px-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400 xl:ml-auto">
+                        Manual-only lane.
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                      Automation
+                    </div>
+                    <ColumnAutomationWorkspace
+                      column={selectedColumn}
+                      automation={columnAutomation[selectedColumn.id] ?? { enabled: false }}
+                      availableProviders={availableProviders}
+                      specialists={specialists}
+                      specialistCategory={specialistCategory}
+                      specialistLanguage={specialistLanguage}
+                      onSpecialistCategoryChange={setSpecialistCategory}
+                      onUpdate={(updated) => {
+                        updateColumnAutomation(selectedColumn.id, updated);
+                      }}
+                    />
                   </div>
                 </div>
               ) : (
@@ -1149,150 +1093,120 @@ function ColumnAutomationWorkspace({
     return [...baseSpecialists, ...fallbackSpecialists];
   }, [automationSteps, specialistCategory, specialists]);
   const firstStep = automationSteps[0];
-  const showAdvancedByDefault = true;
-  const [_showAdvanced, setShowAdvanced] = useState(showAdvancedByDefault);
   const applyDefaultAutomation = () => {
-    const defaultAutomation = getDefaultAutomationForStage(column.stage);
-    setShowAdvanced(true);
-    onUpdate(defaultAutomation);
+    onUpdate(getDefaultAutomationForStage(column.stage));
   };
 
   if (manualOnly) {
     return (
-      <SectionCard eyebrow="Automation" title={column.name} description="">
-        <div className="space-y-3">
-          <div className="rounded-lg border border-slate-200 bg-[linear-gradient(135deg,_rgba(148,163,184,0.08),_rgba(255,255,255,0.98)_38%,_rgba(255,255,255,1)_100%)] p-3 dark:border-slate-800 dark:bg-[linear-gradient(135deg,_rgba(148,163,184,0.08),_rgba(15,23,42,0.92)_38%,_rgba(13,17,24,0.98)_100%)]">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
-                {column.id}
-              </span>
-              <span className="rounded-md border border-slate-200 bg-white/90 px-2.5 py-1.5 text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-[#0d1118]/90 dark:text-slate-300">
-                Manual lane only
-              </span>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              Blocked is treated as a product-level manual lane. Cards can stop here without creating ACP sessions or looking misconfigured.
-            </p>
-            <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
-              Use the Structure workspace if you need to show or hide the lane. ACP automation is intentionally unavailable for this stage.
-            </p>
-          </div>
-        </div>
-      </SectionCard>
+      <div className="rounded-lg border border-slate-200 bg-[linear-gradient(135deg,_rgba(148,163,184,0.08),_rgba(255,255,255,0.98)_38%,_rgba(255,255,255,1)_100%)] p-3 dark:border-slate-800 dark:bg-[linear-gradient(135deg,_rgba(148,163,184,0.08),_rgba(15,23,42,0.92)_38%,_rgba(13,17,24,0.98)_100%)]">
+        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          Blocked is a manual-only lane.
+        </p>
+        <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+          Cards can stop here without creating ACP sessions or looking misconfigured.
+        </p>
+        <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+          Automation is intentionally unavailable for this stage.
+        </p>
+      </div>
     );
   }
-
   return (
     <div className="space-y-2">
       {automation.enabled ? (
         <div className="space-y-2">
-          <SectionCard eyebrow="Stage" title={column.name} description="">
-            <div className="space-y-2">
-              <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-[#111722] lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
-                    {column.id}
-                  </span>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-[#0d1118]/90 dark:text-slate-300">
-                    Configure in stage map
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={applyDefaultAutomation}
-                  className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+          <div className="space-y-2">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={applyDefaultAutomation}
+                className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+              >
+                Defaults
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-4">
+              <ConfigField label="Provider">
+                <ProviderField
+                  providers={availableProviders}
+                  value={firstStep?.providerId}
+                  ariaLabel="Provider"
+                  dataTestId="kanban-settings-provider"
+                  onChange={(providerId) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
+                    stepIndex === 0
+                      ? { ...currentStep, providerId }
+                      : currentStep
+                  ))))}
+                />
+              </ConfigField>
+              <ConfigField label="Role">
+                <SelectControl
+                  aria-label="Role"
+                  value={firstStep?.role ?? "DEVELOPER"}
+                  onChange={(event) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
+                    stepIndex === 0
+                      ? { ...currentStep, role: event.target.value }
+                      : currentStep
+                  ))))}
                 >
-                  Defaults
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-4">
-                <ConfigField label="Provider">
-                  <ProviderField
-                    providers={availableProviders}
-                    value={firstStep?.providerId}
-                    ariaLabel="Provider"
-                    dataTestId="kanban-settings-provider"
-                    onChange={(providerId) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
-                      stepIndex === 0
-                        ? { ...currentStep, providerId }
-                        : currentStep
-                    ))))}
-                  />
-                </ConfigField>
-
-                <ConfigField label="Role">
+                  {ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </SelectControl>
+              </ConfigField>
+              <ConfigField label="Specialist">
+                <div className="space-y-1.5">
                   <SelectControl
-                    aria-label="Role"
-                    value={firstStep?.role ?? "DEVELOPER"}
-                    onChange={(event) => onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
-                      stepIndex === 0
-                        ? { ...currentStep, role: event.target.value }
-                        : currentStep
-                    ))))}
+                    aria-label="Specialist"
+                    value={getLanguageSpecificSpecialistId(firstStep?.specialistId, specialistLanguage) ?? ""}
+                    onChange={(event) => {
+                      const specialist = findSpecialistById(specialists, event.target.value);
+                      onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
+                        stepIndex === 0
+                          ? {
+                            ...currentStep,
+                            specialistId: event.target.value || undefined,
+                            specialistName: specialist?.name,
+                            specialistLocale: event.target.value ? specialistLanguage : undefined,
+                            role: specialist?.role ?? currentStep.role,
+                          }
+                          : currentStep
+                      ))));
+                    }}
                   >
-                    {ROLE_OPTIONS.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
+                    <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
+                    {filteredSpecialists.map((specialist) => (
+                      <option key={specialist.id} value={specialist.id}>
+                        {getSpecialistDisplayName(specialist)}
                       </option>
                     ))}
                   </SelectControl>
-                </ConfigField>
-
-                <ConfigField label="Specialist">
-                  <div className="space-y-1.5">
-                    <SelectControl
-                      aria-label="Specialist"
-                      value={getLanguageSpecificSpecialistId(firstStep?.specialistId, specialistLanguage) ?? ""}
-                      onChange={(event) => {
-                        const specialist = findSpecialistById(specialists, event.target.value);
-                        onUpdate(updateAutomationSteps(automation, (steps) => steps.map((currentStep, stepIndex) => (
-                          stepIndex === 0
-                            ? {
-                              ...currentStep,
-                              specialistId: event.target.value || undefined,
-                              specialistName: specialist?.name,
-                              specialistLocale: event.target.value ? specialistLanguage : undefined,
-                              role: specialist?.role ?? currentStep.role,
-                            }
-                            : currentStep
-                        ))));
-                      }}
-                    >
-                      <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
-                      {filteredSpecialists.map((specialist) => (
-                        <option key={specialist.id} value={specialist.id}>
-                          {getSpecialistDisplayName(specialist)}
-                        </option>
-                      ))}
-                    </SelectControl>
-                    <SpecialistCategoryTabs
-                      category={specialistCategory}
-                      onChange={onSpecialistCategoryChange}
-                    />
-                  </div>
-                </ConfigField>
-
-                <ConfigField label="Trigger">
-                  <SelectControl
-                    aria-label="Trigger moment"
-                    value={automation.transitionType ?? "entry"}
-                    onChange={(event) => onUpdate({ ...automation, transitionType: event.target.value as "entry" | "exit" | "both" })}
-                  >
-                    <option value="entry">On entry</option>
-                    <option value="exit">On exit</option>
-                    <option value="both">Both directions</option>
-                  </SelectControl>
-                </ConfigField>
-              </div>
+                  <SpecialistCategoryTabs
+                    category={specialistCategory}
+                    onChange={onSpecialistCategoryChange}
+                  />
+                </div>
+              </ConfigField>
+              <ConfigField label="Trigger">
+                <SelectControl
+                  aria-label="Trigger moment"
+                  value={automation.transitionType ?? "entry"}
+                  onChange={(event) => onUpdate({ ...automation, transitionType: event.target.value as "entry" | "exit" | "both" })}
+                >
+                  <option value="entry">On entry</option>
+                  <option value="exit">On exit</option>
+                  <option value="both">Both directions</option>
+                </SelectControl>
+              </ConfigField>
             </div>
-          </SectionCard>
-
-          <SectionCard
-            eyebrow="Advanced"
-            title="Advanced"
-            description=""
-          >
+          </div>
+          <section className="border-t border-slate-200/80 pt-3 dark:border-slate-800">
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+              Advanced
+            </div>
             <div className="space-y-2">
                     {automationSteps.map((step, index) => {
                       const stepSpecialist = findSpecialistById(specialists, step.specialistId) ?? null;
@@ -1307,7 +1221,6 @@ function ColumnAutomationWorkspace({
                                 {getSpecialistDisplayName(stepSpecialist) ?? step.specialistName ?? step.role ?? "DEVELOPER"}
                               </div>
                             </div>
-
                             <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
                               <ConfigField label={`Provider ${index + 1}`}>
                                 <ProviderField
@@ -1369,7 +1282,6 @@ function ColumnAutomationWorkspace({
                                 </SelectControl>
                               </ConfigField>
                             </div>
-
                             <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
                               <button
                                 type="button"
@@ -1414,11 +1326,8 @@ function ColumnAutomationWorkspace({
                         </div>
                       );
                     })}
-
                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-slate-800 dark:bg-[#111722]">
-                      <div>
-                        <div className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">Automation steps</div>
-                      </div>
+                      <div className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">Automation steps</div>
                       <button
                         type="button"
                         onClick={() => onUpdate(updateAutomationSteps(automation, (steps) => [...steps, createEmptyAutomationStep(steps.length)]))}
@@ -1427,7 +1336,6 @@ function ColumnAutomationWorkspace({
                         Add step
                       </button>
                     </div>
-
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
                       {ARTIFACT_OPTIONS.map((artifact) => {
                         const checked = automation.requiredArtifacts?.includes(artifact.id) ?? false;
@@ -1465,7 +1373,6 @@ function ColumnAutomationWorkspace({
                         );
                       })}
                     </div>
-
                     <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-[#111722]">
                       <input
                         type="checkbox"
@@ -1481,34 +1388,23 @@ function ColumnAutomationWorkspace({
                       </span>
                     </label>
             </div>
-          </SectionCard>
+          </section>
         </div>
       ) : (
-        <SectionCard eyebrow="Stage" title={column.name} description="">
-            <div className="space-y-2">
-              <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-[linear-gradient(135deg,_rgba(251,191,36,0.08),_rgba(255,255,255,0.98)_38%,_rgba(255,255,255,1)_100%)] p-2.5 dark:border-slate-800 dark:bg-[linear-gradient(135deg,_rgba(245,158,11,0.08),_rgba(15,23,42,0.92)_38%,_rgba(13,17,24,0.98)_100%)] lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
-                    {column.id}
-                  </span>
-                  <div className="rounded-md border border-slate-200 bg-white/90 px-2.5 py-1.5 text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-[#0d1118]/90 dark:text-slate-300">
-                    Enable in stage map
-                  </div>
-                </div>
-                <button
-                  type="button"
-                onClick={applyDefaultAutomation}
-                className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
+        <div className="space-y-2">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={applyDefaultAutomation}
+              className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
               >
                 Defaults
               </button>
             </div>
-
-            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-xs leading-5 text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
-              Enable automation to configure this stage.
-            </div>
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-xs leading-5 text-slate-500 dark:border-slate-700 dark:bg-[#111722] dark:text-slate-400">
+            Turn on automation to configure this lane.
           </div>
-        </SectionCard>
+        </div>
       )}
     </div>
   );

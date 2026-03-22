@@ -51,7 +51,6 @@ describe("KanbanSettingsModal", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Automation$/i }));
     fireEvent.click(screen.getByRole("checkbox", { name: /toggle automation for review/i }));
     fireEvent.click(screen.getByTestId("kanban-settings-provider"));
     fireEvent.click(screen.getByRole("button", { name: /claude code/i }));
@@ -123,10 +122,31 @@ describe("KanbanSettingsModal", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Automation$/i }));
     expect(screen.getAllByRole("button").some((button) => button.textContent?.trim() === "Kanban")).toBe(true);
     expect(screen.getAllByRole("option", { name: "Review Guard" }).length).toBeGreaterThan(0);
     expect(screen.queryAllByRole("option", { name: "Team QA" })).toHaveLength(0);
+  });
+
+  it("keeps the selected lane workspace free of redundant summary labels", () => {
+    const reviewBoard: KanbanBoardInfo = {
+      ...board,
+      columns: [board.columns[1]],
+    };
+
+    render(
+      <KanbanSettingsModal
+        board={reviewBoard}
+        columnAutomation={{ review: { enabled: true, steps: [{ id: "step-1", role: "GATE" }] } }}
+        availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[{ id: "kanban-review-guard", name: "Review Guard", role: "GATE" }]}
+        specialistLanguage="en"
+        onClose={vi.fn()}
+        onSave={vi.fn(async () => {})}
+      />,
+    );
+
+    expect(screen.queryByText("Column workspace")).toBeNull();
+    expect(screen.queryByText("Configure in stage map")).toBeNull();
   });
 
   it("treats blocked as a manual-only lane when saving", async () => {
