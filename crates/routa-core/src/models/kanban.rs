@@ -4,19 +4,14 @@ use serde::{Deserialize, Serialize};
 use crate::models::task::TaskStatus;
 
 /// Transport protocol for Kanban automation
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum KanbanTransport {
     /// Agent Chat Protocol (default)
+    #[default]
     Acp,
     /// Agent-to-Agent protocol
     A2a,
-}
-
-impl Default for KanbanTransport {
-    fn default() -> Self {
-        KanbanTransport::Acp
-    }
 }
 
 /// Automation configuration for a Kanban column.
