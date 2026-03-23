@@ -6,7 +6,7 @@ severity: medium
 area: ui
 tags: [session-page, layout, sidebar, tasks, mobile]
 reported_by: "copilot"
-related_issues: ["https://github.com/phodal/routa/issues/69"]
+related_issues: ["https://github.com/phodal/routa/issues/69", "https://github.com/phodal/routa/issues/225", "2026-03-22-gh-225-refactor-session-page-client-pattern-extraction.md"]
 ---
 
 # Session page layout and sidebar interactions create navigation friction
@@ -59,3 +59,8 @@ session 页面应该让聊天主区域保持稳定，把导航、任务摘要、
 ## References
 
 - Session URL used during inspection: `http://localhost:3000/workspace/default/sessions/1eed8a78-7673-4a1b-b6b9-cd68dc5b75c7`
+
+## Sync Notes
+
+- 2026-03-23: GitHub issue `#225` was closed after the structural refactor of `session-page-client.tsx` and adjacent ACP route workflows.
+- That work reduced implementation mass and clarified workflow boundaries, but it did not by itself close the UX concerns recorded here around sidebar ownership, duplicate task surfaces, layout stability, and mobile information architecture.
