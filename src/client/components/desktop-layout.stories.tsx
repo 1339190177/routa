@@ -60,15 +60,33 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+const defaultStoryArgs = {
+  workspaceId: "default",
+  workspaces,
+  activeWorkspaceTitle: "Default Workspace",
+  workspacesLoading: false,
+  onWorkspaceSelect: () => {},
+  onWorkspaceCreate: async () => {},
+  children: (
+    <div className="h-full p-4 text-sm text-desktop-text-primary">
+      Desktop layout content area
+    </div>
+  ),
+};
+
+export const Default: Story = {
+  args: defaultStoryArgs,
+};
 
 export const LoadingSwitcher: Story = {
   args: {
+    ...defaultStoryArgs,
     workspacesLoading: true,
   },
 };
 
 export const DarkMode: Story = {
+  args: defaultStoryArgs,
   globals: {
     colorMode: "dark",
   },
