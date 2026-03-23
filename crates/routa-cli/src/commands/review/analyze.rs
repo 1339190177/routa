@@ -23,6 +23,7 @@ pub async fn analyze(_state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
         &specialist,
         ReviewWorkerType::Context,
         &context_prompt,
+        options.model,
         options.verbose,
     )
     .await?;
@@ -38,6 +39,7 @@ pub async fn analyze(_state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
         &specialist,
         ReviewWorkerType::Candidates,
         &candidates_prompt,
+        options.model,
         options.verbose,
     )
     .await?;
@@ -53,6 +55,7 @@ pub async fn analyze(_state: &AppState, options: ReviewAnalyzeOptions<'_>) -> Re
         &specialist,
         ReviewWorkerType::Validator,
         &validator_prompt,
+        options.validator_model.or(options.model),
         options.verbose,
     )
     .await?;
@@ -79,9 +82,10 @@ async fn call_review_worker(
     specialist: &SpecialistDef,
     worker_type: ReviewWorkerType,
     user_request: &str,
+    model_override: Option<&str>,
     verbose: bool,
 ) -> Result<String, String> {
-    let config = build_agent_call_config(specialist)?;
+    let config = build_agent_call_config(specialist, model_override)?;
     let prompt = build_specialist_prompt(specialist, worker_type, user_request);
 
     if verbose {
@@ -102,7 +106,10 @@ async fn call_review_worker(
     Ok(response.content.trim().to_string())
 }
 
-fn build_agent_call_config(specialist: &SpecialistDef) -> Result<AgentCallConfig, String> {
+fn build_agent_call_config(
+    specialist: &SpecialistDef,
+    model_override: Option<&str>,
+) -> Result<AgentCallConfig, String> {
     let use_mock_adapter = std::env::var("ROUTA_REVIEW_MOCK")
         .ok()
         .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"));
@@ -131,9 +138,12 @@ fn build_agent_call_config(specialist: &SpecialistDef) -> Result<AgentCallConfig
         base_url: std::env::var("ANTHROPIC_BASE_URL")
             .unwrap_or_else(|_| "https://api.anthropic.com".to_string()),
         api_key,
-        model: specialist.default_model.clone().unwrap_or_else(|| {
-            std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_| "GLM-4.7".to_string())
-        }),
+        model: model_override
+            .map(ToString::to_string)
+            .or_else(|| specialist.default_model.clone())
+            .unwrap_or_else(|| {
+                std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_| "GLM-4.7".to_string())
+            }),
         max_turns: 1,
         max_tokens: 8192,
         temperature: None,

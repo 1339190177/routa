@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { getSpecialistById, buildSpecialistFirstPrompt } from "../orchestration/specialist-prompts";
-import { gitExec } from "../utils/safe-exec";
+import { gitExec, safeExecSync } from "../utils/safe-exec";
 import { buildReviewWorkerPrompt, type ReviewWorkerType } from "./review-worker-prompts";
 
 const CONFIG_CANDIDATES = [
@@ -21,6 +21,7 @@ export interface ReviewAnalyzeOptions {
   head?: string;
   rulesFile?: string;
   model?: string;
+  validatorModel?: string;
 }
 
 export interface ReviewAnalysisPayload {
@@ -33,6 +34,7 @@ export interface ReviewAnalysisPayload {
   diff: string;
   configSnippets: Array<{ path: string; content: string }>;
   reviewRules?: string;
+  graphReviewContext?: unknown;
 }
 
 export interface ReviewAnalysisResult {
@@ -68,7 +70,7 @@ export async function analyzeReview(options: ReviewAnalyzeOptions = {}): Promise
     specialistId: "pr-reviewer",
     workerType: "validator",
     userRequest: buildReviewWorkerPrompt({ workerType: "validator", payload, contextRaw, candidatesRaw }),
-    modelOverride: options.model,
+    modelOverride: options.validatorModel ?? options.model,
   });
 
   return {
@@ -103,6 +105,7 @@ export function buildReviewAnalysisPayload(options: ReviewAnalyzeOptions = {}): 
     diff: truncate(gitExec(["diff", "--unified=3", diffRange], { cwd: repoRoot }), 40_000),
     configSnippets: loadConfigSnippets(repoRoot),
     reviewRules: loadReviewRules(repoRoot, options.rulesFile),
+    graphReviewContext: loadGraphReviewContext(repoRoot, base),
   };
 }
 
@@ -126,6 +129,16 @@ function loadReviewRules(repoRoot: string, rulesFile?: string): string | undefin
   const targetPath = rulesFile ? path.resolve(rulesFile) : path.join(repoRoot, ".routa", "review-rules.md");
   if (!fs.existsSync(targetPath)) return undefined;
   return truncate(fs.readFileSync(targetPath, "utf-8"), 8_000);
+}
+
+function loadGraphReviewContext(repoRoot: string, base: string): unknown {
+  try {
+    const raw = safeExecSync("entrix", ["graph", "review-context", "--base", base, "--json"], { cwd: repoRoot });
+    const parsed = parseJsonLoose(raw);
+    return parsed ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function runReviewSpecialist(params: {

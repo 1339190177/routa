@@ -680,6 +680,12 @@ enum ReviewAction {
         /// Optional project-specific review rules file
         #[arg(long)]
         rules_file: Option<String>,
+        /// Optional model override for all review workers
+        #[arg(long)]
+        model: Option<String>,
+        /// Optional model override for validator worker only
+        #[arg(long)]
+        validator_model: Option<String>,
         /// Enable verbose workflow output
         #[arg(long, short = 'v')]
         verbose: bool,
@@ -1251,6 +1257,8 @@ async fn main() {
                         head,
                         repo_path,
                         rules_file,
+                        model,
+                        validator_model,
                         verbose,
                         json,
                         specialist_dir,
@@ -1262,6 +1270,8 @@ async fn main() {
                                 head: &head,
                                 repo_path: repo_path.as_deref(),
                                 rules_file: rules_file.as_deref(),
+                                model: model.as_deref(),
+                                validator_model: validator_model.as_deref(),
                                 verbose,
                                 as_json: json,
                                 payload_only: false,
@@ -1287,6 +1297,8 @@ async fn main() {
                                 head: &head,
                                 repo_path: repo_path.as_deref(),
                                 rules_file: rules_file.as_deref(),
+                                model: None,
+                                validator_model: None,
                                 verbose,
                                 as_json: json,
                                 payload_only,

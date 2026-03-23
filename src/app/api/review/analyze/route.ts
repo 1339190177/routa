@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
       head: typeof body.head === "string" ? body.head : undefined,
       rulesFile: typeof body.rulesFile === "string" ? body.rulesFile : undefined,
       model: typeof body.model === "string" ? body.model : undefined,
+      validatorModel: typeof body.validatorModel === "string" ? body.validatorModel : undefined,
     });
 
     return NextResponse.json(result);

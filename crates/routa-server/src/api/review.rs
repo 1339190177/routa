@@ -34,6 +34,7 @@ struct ReviewAnalyzeRequest {
     head: Option<String>,
     rules_file: Option<String>,
     model: Option<String>,
+    validator_model: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -56,6 +57,8 @@ struct ReviewAnalysisPayload {
     config_snippets: Vec<ReviewConfigSnippet>,
     #[serde(skip_serializing_if = "Option::is_none")]
     review_rules: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    graph_review_context: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -102,13 +105,15 @@ async fn analyze_review(
     let payload = build_review_payload(&repo_root, &base, &head, body.rules_file.as_deref())?;
     let specialist = load_pr_reviewer()?;
     let caller = AcpAgentCaller::new();
+    let base_model = body.model.as_deref();
+    let validator_model = body.validator_model.as_deref().or(base_model);
 
     let context_raw = call_review_worker(
         &caller,
         &specialist,
         ReviewWorkerType::Context,
         &build_worker_prompt(ReviewWorkerType::Context, &payload, None, None)?,
-        body.model.as_deref(),
+        base_model,
     )
     .await?;
     let candidates_raw = call_review_worker(
@@ -121,7 +126,7 @@ async fn analyze_review(
             Some(&context_raw),
             None,
         )?,
-        body.model.as_deref(),
+        base_model,
     )
     .await?;
     let validated_raw = call_review_worker(
@@ -134,7 +139,7 @@ async fn analyze_review(
             Some(&context_raw),
             Some(&candidates_raw),
         )?,
-        body.model.as_deref(),
+        validator_model,
     )
     .await?;
 
@@ -318,6 +323,7 @@ fn build_review_payload(
         ),
         config_snippets: load_config_snippets(repo_root)?,
         review_rules: load_review_rules(repo_root, rules_file)?,
+        graph_review_context: load_graph_review_context(repo_root, base),
     })
 }
 
@@ -417,6 +423,19 @@ fn truncate(content: &str, max_chars: usize) -> String {
         return content.to_string();
     }
     format!("{}\n\n[truncated]", &content[..max_chars])
+}
+
+fn load_graph_review_context(repo_root: &Path, base: &str) -> Option<serde_json::Value> {
+    let output = Command::new("entrix")
+        .args(["graph", "review-context", "--base", base, "--json"])
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    serde_json::from_str(String::from_utf8_lossy(&output.stdout).trim()).ok()
 }
 
 fn load_dotenv() {

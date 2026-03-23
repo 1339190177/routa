@@ -25,6 +25,8 @@ pub struct ReviewAnalyzeOptions<'a> {
     pub head: &'a str,
     pub repo_path: Option<&'a str>,
     pub rules_file: Option<&'a str>,
+    pub model: Option<&'a str>,
+    pub validator_model: Option<&'a str>,
     pub verbose: bool,
     pub as_json: bool,
     pub payload_only: bool,
@@ -59,6 +61,7 @@ pub(crate) struct ReviewInputPayload {
     pub diff: String,
     pub config_snippets: Vec<ConfigSnippet>,
     pub review_rules: Option<String>,
+    pub graph_review_context: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -367,7 +370,21 @@ pub(crate) fn build_review_input_payload(
         diff,
         config_snippets,
         review_rules,
+        graph_review_context: load_graph_review_context(repo_root, base),
     })
+}
+
+fn load_graph_review_context(repo_root: &Path, base: &str) -> Option<Value> {
+    let output = Command::new("entrix")
+        .args(["graph", "review-context", "--base", base, "--json"])
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    serde_json::from_str(String::from_utf8_lossy(&output.stdout).trim()).ok()
 }
 
 pub(crate) fn load_specialist_by_id(
