@@ -1,9 +1,7 @@
 use chrono::Utc;
 use serde_json::{json, Value};
 
-use crate::models::kanban::{
-    KanbanAutomationStep, KanbanBoard, KanbanColumn, KanbanTransport,
-};
+use crate::models::kanban::{KanbanAutomationStep, KanbanBoard, KanbanColumn, KanbanTransport};
 use crate::models::task::{Task, TaskLaneSession, TaskLaneSessionStatus};
 use crate::rpc::error::RpcError;
 use crate::state::AppState;

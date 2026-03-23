@@ -24,9 +24,9 @@ mod shared;
 pub use boards::{
     create_board, create_column, delete_column, get_board, list_boards, update_board,
     CreateBoardParams, CreateBoardResult, CreateColumnParams, CreateColumnResult,
-    DeleteColumnParams, DeleteColumnResult, GetBoardParams, GetBoardResult,
-    KanbanBoardSummary, KanbanColumnWithCards, ListBoardsParams, ListBoardsResult,
-    UpdateBoardParams, UpdateBoardResult,
+    DeleteColumnParams, DeleteColumnResult, GetBoardParams, GetBoardResult, KanbanBoardSummary,
+    KanbanColumnWithCards, ListBoardsParams, ListBoardsResult, UpdateBoardParams,
+    UpdateBoardResult,
 };
 pub use cards::{
     create_card, decompose_tasks, delete_card, move_card, update_card, CreateCardParams,
@@ -171,8 +171,11 @@ mod tests {
 
         assert_eq!(resolved, "https://example.com/rpc");
         assert_eq!(
-            absolutize_url("https://example.com/agent-card.json", "https://agent.example/rpc")
-                .expect("absolute URLs should pass through"),
+            absolutize_url(
+                "https://example.com/agent-card.json",
+                "https://agent.example/rpc"
+            )
+            .expect("absolute URLs should pass through"),
             "https://agent.example/rpc"
         );
     }
@@ -415,7 +418,9 @@ mod tests {
         .await
         .expect_err("description update in dev should fail");
 
-        assert!(matches!(err, RpcError::BadRequest(message) if message.contains("comment field instead")));
+        assert!(
+            matches!(err, RpcError::BadRequest(message) if message.contains("comment field instead"))
+        );
     }
 
     #[tokio::test]
@@ -464,7 +469,10 @@ mod tests {
         )
         .await
         .expect("second comment update should succeed");
-        assert_eq!(second.card.comment.as_deref(), Some("First note\n\nSecond note"));
+        assert_eq!(
+            second.card.comment.as_deref(),
+            Some("First note\n\nSecond note")
+        );
 
         let saved = state
             .task_store

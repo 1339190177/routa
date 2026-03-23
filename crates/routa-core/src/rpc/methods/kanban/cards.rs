@@ -11,8 +11,8 @@ use super::automation::{
     maybe_trigger_lane_automation, resolve_transition_automation_column,
 };
 use super::shared::{
-    default_workspace_id, emit_kanban_workspace_event, ensure_column_exists, next_position_in_column,
-    parse_priority, resolve_board,
+    default_workspace_id, emit_kanban_workspace_event, ensure_column_exists,
+    next_position_in_column, parse_priority, resolve_board,
 };
 
 #[derive(Debug, Deserialize)]

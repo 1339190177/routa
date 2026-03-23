@@ -4,7 +4,9 @@ use crate::kanban::KanbanCard;
 use crate::rpc::error::RpcError;
 use crate::state::AppState;
 
-use super::shared::{default_workspace_id, ensure_workspace_exists, resolve_board, tasks_for_board};
+use super::shared::{
+    default_workspace_id, ensure_workspace_exists, resolve_board, tasks_for_board,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
