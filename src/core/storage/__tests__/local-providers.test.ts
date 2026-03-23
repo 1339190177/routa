@@ -12,6 +12,7 @@ import { MigrationTool } from "../migration-tool";
 import type { SessionRecord } from "../types";
 
 let tmpDir: string;
+const originalHome = process.env.HOME;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "storage-test-"));
@@ -21,6 +22,11 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });
+  if (originalHome === undefined) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = originalHome;
+  }
 });
 
 describe("LocalSessionProvider", () => {
