@@ -37,6 +37,7 @@ const requiredStories = {
   "src/client/components/branch-selector.stories.tsx": ["Default", "RemoteBranches", "Disabled", "DarkMode"],
   "src/client/components/markdown-viewer.stories.tsx": ["PlainText", "StaticMarkdown", "TaskList", "Streaming", "DarkMode"],
   "src/client/components/task-progress-bar.stories.tsx": ["Running", "Delegated", "AllCompleted", "WithFileChanges", "DarkMode"],
+  "src/client/components/tiptap-input.stories.tsx": ["Default", "HeroVariant", "WithProvidersAndModels", "PrefilledSkill", "DarkMode"],
   "src/client/components/desktop-color-tokens.stories.tsx": ["LightMode", "DarkMode"],
   "src/client/components/desktop-primitives.stories.tsx": ["Default", "InteractiveStates", "DarkMode"],
 };
