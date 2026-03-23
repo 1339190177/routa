@@ -39,9 +39,18 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+const defaultStoryArgs = {
+  workspaceId: "default",
+  workspaceTitle: "Default Workspace",
+  children: null,
+};
+
+export const Default: Story = {
+  args: defaultStoryArgs,
+};
 
 export const KanbanActive: Story = {
+  args: defaultStoryArgs,
   parameters: {
     nextjs: {
       navigation: {
@@ -52,6 +61,7 @@ export const KanbanActive: Story = {
 };
 
 export const FocusState: Story = {
+  args: defaultStoryArgs,
   play: async ({ canvasElement }) => {
     const firstNavLink = canvasElement.querySelector('[data-testid="desktop-shell-sidebar"] a');
     if (firstNavLink instanceof HTMLElement) {
@@ -61,6 +71,7 @@ export const FocusState: Story = {
 };
 
 export const DarkMode: Story = {
+  args: defaultStoryArgs,
   globals: {
     colorMode: "dark",
   },
