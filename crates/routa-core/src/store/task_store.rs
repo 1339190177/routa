@@ -35,7 +35,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 conn.execute(
-                    "INSERT INTO tasks (id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
+                    "INSERT INTO tasks (id, title, objective, comment, scope, acceptance_criteria, verification_commands, test_cases,
                                          assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                                          assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                                          trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -44,10 +44,11 @@ impl TaskStore {
                                          verification_report, codebase_ids, worktree_id, version, created_at, updated_at)
                                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
                                          ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36,
-                                         ?37, ?38, ?39, 1, ?40, ?41)
+                                         ?37, ?38, ?39, ?40, 1, ?41, ?42)
                      ON CONFLICT(id) DO UPDATE SET
                        title = excluded.title,
                        objective = excluded.objective,
+                       comment = excluded.comment,
                        scope = excluded.scope,
                        acceptance_criteria = excluded.acceptance_criteria,
                        verification_commands = excluded.verification_commands,
@@ -89,6 +90,7 @@ impl TaskStore {
                         t.id,
                         t.title,
                         t.objective,
+                        t.comment,
                         t.scope,
                         t.acceptance_criteria.map(|v| serde_json::to_string(&v).unwrap_or_default()),
                         t.verification_commands.map(|v| serde_json::to_string(&v).unwrap_or_default()),
@@ -139,7 +141,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
+                    "SELECT id, title, objective, comment, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -159,7 +161,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
+                    "SELECT id, title, objective, comment, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -181,7 +183,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
+                    "SELECT id, title, objective, comment, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -208,7 +210,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
+                    "SELECT id, title, objective, comment, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -232,7 +234,7 @@ impl TaskStore {
         self.db
             .with_conn_async(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, title, objective, scope, acceptance_criteria, verification_commands, test_cases,
+                    "SELECT id, title, objective, comment, scope, acceptance_criteria, verification_commands, test_cases,
                      assigned_to, status, board_id, column_id, position, priority, labels, assignee,
                      assigned_provider, assigned_role, assigned_specialist_id, assigned_specialist_name,
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
@@ -299,89 +301,90 @@ impl TaskStore {
 use rusqlite::Row;
 
 fn row_to_task(row: &Row<'_>) -> Task {
-    let created_ms: i64 = row.get(39).unwrap_or(0);
-    let updated_ms: i64 = row.get(40).unwrap_or(0);
+    let created_ms: i64 = row.get(40).unwrap_or(0);
+    let updated_ms: i64 = row.get(41).unwrap_or(0);
 
     let acceptance_criteria: Option<Vec<String>> = row
-        .get::<_, Option<String>>(4)
-        .unwrap_or(None)
-        .and_then(|s| serde_json::from_str(&s).ok());
-    let verification_commands: Option<Vec<String>> = row
         .get::<_, Option<String>>(5)
         .unwrap_or(None)
         .and_then(|s| serde_json::from_str(&s).ok());
-    let test_cases: Option<Vec<String>> = row
+    let verification_commands: Option<Vec<String>> = row
         .get::<_, Option<String>>(6)
         .unwrap_or(None)
         .and_then(|s| serde_json::from_str(&s).ok());
+    let test_cases: Option<Vec<String>> = row
+        .get::<_, Option<String>>(7)
+        .unwrap_or(None)
+        .and_then(|s| serde_json::from_str(&s).ok());
     let labels: Vec<String> = row
-        .get::<_, String>(13)
+        .get::<_, String>(14)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
     let dependencies: Vec<String> = row
-        .get::<_, String>(27)
+        .get::<_, String>(28)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
-    let session_ids: Vec<String> = parse_json_column(row, 31);
-    let lane_sessions: Vec<TaskLaneSession> = parse_json_column(row, 32);
-    let lane_handoffs: Vec<TaskLaneHandoff> = parse_json_column(row, 33);
+    let session_ids: Vec<String> = parse_json_column(row, 32);
+    let lane_sessions: Vec<TaskLaneSession> = parse_json_column(row, 33);
+    let lane_handoffs: Vec<TaskLaneHandoff> = parse_json_column(row, 34);
 
     Task {
         id: row.get(0).unwrap_or_default(),
         title: row.get(1).unwrap_or_default(),
         objective: row.get(2).unwrap_or_default(),
-        scope: row.get(3).unwrap_or(None),
+        comment: row.get(3).unwrap_or(None),
+        scope: row.get(4).unwrap_or(None),
         acceptance_criteria,
         verification_commands,
         test_cases,
-        assigned_to: row.get(7).unwrap_or(None),
-        status: TaskStatus::from_str(&row.get::<_, String>(8).unwrap_or_default())
+        assigned_to: row.get(8).unwrap_or(None),
+        status: TaskStatus::from_str(&row.get::<_, String>(9).unwrap_or_default())
             .unwrap_or(TaskStatus::Pending),
-        board_id: row.get(9).unwrap_or(None),
-        column_id: row.get(10).unwrap_or(None),
-        position: row.get(11).unwrap_or(0),
+        board_id: row.get(10).unwrap_or(None),
+        column_id: row.get(11).unwrap_or(None),
+        position: row.get(12).unwrap_or(0),
         priority: row
-            .get::<_, Option<String>>(12)
+            .get::<_, Option<String>>(13)
             .unwrap_or(None)
             .and_then(|s| TaskPriority::from_str(&s)),
         labels,
-        assignee: row.get(14).unwrap_or(None),
-        assigned_provider: row.get(15).unwrap_or(None),
-        assigned_role: row.get(16).unwrap_or(None),
-        assigned_specialist_id: row.get(17).unwrap_or(None),
-        assigned_specialist_name: row.get(18).unwrap_or(None),
-        trigger_session_id: row.get(19).unwrap_or(None),
-        github_id: row.get(20).unwrap_or(None),
-        github_number: row.get(21).unwrap_or(None),
-        github_url: row.get(22).unwrap_or(None),
-        github_repo: row.get(23).unwrap_or(None),
-        github_state: row.get(24).unwrap_or(None),
+        assignee: row.get(15).unwrap_or(None),
+        assigned_provider: row.get(16).unwrap_or(None),
+        assigned_role: row.get(17).unwrap_or(None),
+        assigned_specialist_id: row.get(18).unwrap_or(None),
+        assigned_specialist_name: row.get(19).unwrap_or(None),
+        trigger_session_id: row.get(20).unwrap_or(None),
+        github_id: row.get(21).unwrap_or(None),
+        github_number: row.get(22).unwrap_or(None),
+        github_url: row.get(23).unwrap_or(None),
+        github_repo: row.get(24).unwrap_or(None),
+        github_state: row.get(25).unwrap_or(None),
         github_synced_at: row
-            .get::<_, Option<i64>>(25)
+            .get::<_, Option<i64>>(26)
             .unwrap_or(None)
             .and_then(chrono::DateTime::from_timestamp_millis),
-        last_sync_error: row.get(26).unwrap_or(None),
+        last_sync_error: row.get(27).unwrap_or(None),
         dependencies,
-        parallel_group: row.get(28).unwrap_or(None),
-        workspace_id: row.get(29).unwrap_or_default(),
-        session_id: row.get(30).unwrap_or(None),
+        parallel_group: row.get(29).unwrap_or(None),
+        workspace_id: row.get(30).unwrap_or_default(),
+        session_id: row.get(31).unwrap_or(None),
         session_ids,
         lane_sessions,
         lane_handoffs,
-        completion_summary: row.get(34).unwrap_or(None),
+        completion_summary: row.get(35).unwrap_or(None),
         verification_verdict: row
-            .get::<_, Option<String>>(35)
+            .get::<_, Option<String>>(36)
             .unwrap_or(None)
             .and_then(|s| VerificationVerdict::from_str(&s)),
-        verification_report: row.get(36).unwrap_or(None),
+        verification_report: row.get(37).unwrap_or(None),
         codebase_ids: row
-            .get::<_, String>(37)
+            .get::<_, String>(38)
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
-        worktree_id: row.get(38).unwrap_or(None),
+        worktree_id: row.get(39).unwrap_or(None),
         created_at: chrono::DateTime::from_timestamp_millis(created_ms).unwrap_or_else(Utc::now),
         updated_at: chrono::DateTime::from_timestamp_millis(updated_ms).unwrap_or_else(Utc::now),
     }

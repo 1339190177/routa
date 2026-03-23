@@ -373,6 +373,110 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_card_rejects_description_changes_in_dev() {
+        let state = setup_state().await;
+        let created = create_card(
+            &state,
+            CreateCardParams {
+                workspace_id: "default".to_string(),
+                board_id: None,
+                column_id: Some("backlog".to_string()),
+                title: "Freeze description".to_string(),
+                description: Some("Original story".to_string()),
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect("create card should succeed");
+
+        move_card(
+            &state,
+            MoveCardParams {
+                card_id: created.card.id.clone(),
+                target_column_id: "dev".to_string(),
+                position: None,
+            },
+        )
+        .await
+        .expect("move card should succeed");
+
+        let err = update_card(
+            &state,
+            UpdateCardParams {
+                card_id: created.card.id,
+                title: None,
+                description: Some("Rewrite in dev".to_string()),
+                comment: None,
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect_err("description update in dev should fail");
+
+        assert!(matches!(err, RpcError::BadRequest(message) if message.contains("comment field instead")));
+    }
+
+    #[tokio::test]
+    async fn update_card_appends_comment_without_rewriting_description() {
+        let state = setup_state().await;
+        let created = create_card(
+            &state,
+            CreateCardParams {
+                workspace_id: "default".to_string(),
+                board_id: None,
+                column_id: Some("backlog".to_string()),
+                title: "Append comment".to_string(),
+                description: Some("Stable story".to_string()),
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect("create card should succeed");
+
+        let first = update_card(
+            &state,
+            UpdateCardParams {
+                card_id: created.card.id.clone(),
+                title: None,
+                description: None,
+                comment: Some("First note".to_string()),
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect("first comment update should succeed");
+        assert_eq!(first.card.comment.as_deref(), Some("First note"));
+
+        let second = update_card(
+            &state,
+            UpdateCardParams {
+                card_id: created.card.id.clone(),
+                title: None,
+                description: None,
+                comment: Some("Second note".to_string()),
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect("second comment update should succeed");
+        assert_eq!(second.card.comment.as_deref(), Some("First note\n\nSecond note"));
+
+        let saved = state
+            .task_store
+            .get(&created.card.id)
+            .await
+            .expect("task lookup should succeed")
+            .expect("task should exist");
+        assert_eq!(saved.objective, "Stable story");
+        assert_eq!(saved.comment.as_deref(), Some("First note\n\nSecond note"));
+    }
+
+    #[tokio::test]
     async fn move_card_applies_lane_automation_defaults_to_task() {
         let state = setup_state().await;
         let boards = list_boards(

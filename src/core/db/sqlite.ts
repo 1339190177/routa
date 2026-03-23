@@ -96,6 +96,7 @@ function initializeSqliteTables(db: SqliteDatabase): void {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       objective TEXT NOT NULL,
+      comment TEXT,
       scope TEXT,
       acceptance_criteria TEXT,
       verification_commands TEXT,
@@ -135,6 +136,7 @@ function initializeSqliteTables(db: SqliteDatabase): void {
       updated_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
     )
   `);
+  runAddColumn(sql`ALTER TABLE tasks ADD COLUMN comment TEXT`);
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN board_id TEXT`);
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN column_id TEXT`);
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN position INTEGER NOT NULL DEFAULT 0`);

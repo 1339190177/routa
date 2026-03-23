@@ -21,6 +21,7 @@ export class PgTaskStore implements TaskStore {
         id: task.id,
         title: task.title,
         objective: task.objective,
+        comment: task.comment,
         scope: task.scope,
         acceptanceCriteria: task.acceptanceCriteria,
         verificationCommands: task.verificationCommands,
@@ -66,6 +67,7 @@ export class PgTaskStore implements TaskStore {
         set: {
           title: task.title,
           objective: task.objective,
+          comment: task.comment,
           scope: task.scope,
           acceptanceCriteria: task.acceptanceCriteria,
           verificationCommands: task.verificationCommands,
@@ -197,6 +199,7 @@ export class PgTaskStore implements TaskStore {
       id: row.id,
       title: row.title,
       objective: row.objective,
+      comment: row.comment ?? undefined,
       scope: row.scope ?? undefined,
       acceptanceCriteria: (row.acceptanceCriteria as string[]) ?? undefined,
       verificationCommands: (row.verificationCommands as string[]) ?? undefined,

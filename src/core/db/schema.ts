@@ -66,6 +66,7 @@ export const tasks = pgTable("tasks", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   objective: text("objective").notNull(),
+  comment: text("comment"),
   scope: text("scope"),
   acceptanceCriteria: jsonb("acceptance_criteria").$type<string[]>(),
   verificationCommands: jsonb("verification_commands").$type<string[]>(),

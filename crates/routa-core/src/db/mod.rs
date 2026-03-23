@@ -178,6 +178,7 @@ impl Database {
                     id                      TEXT PRIMARY KEY,
                     title                   TEXT NOT NULL,
                     objective               TEXT NOT NULL,
+                    comment                 TEXT,
                     scope                   TEXT,
                     acceptance_criteria     TEXT,
                     verification_commands   TEXT,
@@ -350,6 +351,7 @@ impl Database {
     fn run_migrations(&self) -> Result<(), ServerError> {
         self.with_conn(|conn| {
             // Add session_id to tasks if it doesn't exist yet (ignore error if already present)
+            Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN comment TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN session_id TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN board_id TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN column_id TEXT", []))?;

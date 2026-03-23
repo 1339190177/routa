@@ -210,6 +210,7 @@ pub struct UpdateCardParams {
     pub card_id: String,
     pub title: Option<String>,
     pub description: Option<String>,
+    pub comment: Option<String>,
     pub priority: Option<String>,
     pub labels: Option<Vec<String>>,
 }
@@ -228,6 +229,14 @@ pub async fn update_card(
         .get(&params.card_id)
         .await?
         .ok_or_else(|| RpcError::NotFound(format!("Card {} not found", params.card_id)))?;
+    let stage = resolve_task_stage(state, &task).await?;
+
+    if params.description.is_some() && stage.as_deref().is_some_and(is_description_frozen_stage) {
+        return Err(RpcError::BadRequest(format!(
+            "Cannot update card description in {}. The story description is frozen from dev onward; update the comment field instead.",
+            stage.unwrap_or_else(|| "this stage".to_string())
+        )));
+    }
 
     if let Some(title) = params.title {
         let trimmed = title.trim();
@@ -240,6 +249,9 @@ pub async fn update_card(
     }
     if let Some(description) = params.description {
         task.objective = description;
+    }
+    if let Some(comment) = params.comment {
+        task.comment = Some(append_task_comment(task.comment.as_deref(), &comment));
     }
     if params.priority.is_some() {
         task.priority = parse_priority(params.priority.as_deref())?;
@@ -262,6 +274,44 @@ pub async fn update_card(
     Ok(UpdateCardResult {
         card: task_to_card(&task),
     })
+}
+
+async fn resolve_task_stage(state: &AppState, task: &Task) -> Result<Option<String>, RpcError> {
+    let column_id = task
+        .column_id
+        .clone()
+        .unwrap_or_else(|| "backlog".to_string());
+    let Some(board_id) = task.board_id.as_deref() else {
+        return Ok(Some(column_id));
+    };
+
+    let board = state.kanban_store.get(board_id).await?;
+    Ok(board
+        .and_then(|board| {
+            board
+                .columns
+                .iter()
+                .find(|column| column.id == column_id)
+                .map(|column| column.stage.clone())
+        })
+        .or(Some(column_id)))
+}
+
+fn is_description_frozen_stage(stage: &str) -> bool {
+    matches!(stage, "dev" | "review" | "blocked" | "done")
+}
+
+fn append_task_comment(existing: Option<&str>, next: &str) -> String {
+    let trimmed_next = next.trim();
+    if trimmed_next.is_empty() {
+        return existing.unwrap_or_default().to_string();
+    }
+    let trimmed_existing = existing.unwrap_or_default().trim();
+    if trimmed_existing.is_empty() {
+        trimmed_next.to_string()
+    } else {
+        format!("{trimmed_existing}\n\n{trimmed_next}")
+    }
 }
 
 #[derive(Debug, Deserialize)]

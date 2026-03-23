@@ -261,6 +261,8 @@ pub struct Task {
     pub title: String,
     pub objective: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub acceptance_criteria: Option<Vec<String>>,
@@ -360,6 +362,7 @@ impl Task {
             id,
             title,
             objective,
+            comment: None,
             scope,
             acceptance_criteria,
             verification_commands,

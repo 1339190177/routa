@@ -14,7 +14,12 @@ import { v4 as uuidv4 } from "uuid";
 import { KanbanBoardStore } from "../store/kanban-board-store";
 import { TaskStore } from "../store/task-store";
 import { ArtifactStore } from "../store/artifact-store";
-import { createKanbanBoard, KanbanColumn, columnIdToTaskStatus } from "../models/kanban";
+import {
+  createKanbanBoard,
+  KanbanColumn,
+  KanbanColumnStage,
+  columnIdToTaskStatus,
+} from "../models/kanban";
 import type { RoutaSystem } from "../routa-system";
 import {
   createTask,
@@ -38,6 +43,8 @@ import {
 } from "../kanban/task-lane-history";
 import { buildRemainingLaneStepsMessage, resolveCurrentLaneAutomationState } from "../kanban/lane-automation-state";
 import { getInternalApiOrigin } from "../kanban/agent-trigger";
+
+const DESCRIPTION_FROZEN_STAGES = new Set<KanbanColumnStage>(["dev", "review", "blocked", "done"]);
 
 export class KanbanTools {
   private eventBus?: EventBus;
@@ -283,6 +290,7 @@ export class KanbanTools {
     cardId: string;
     title?: string;
     description?: string;
+    comment?: string;
     priority?: "low" | "medium" | "high" | "urgent";
     labels?: string[];
   }): Promise<ToolResult> {
@@ -291,8 +299,16 @@ export class KanbanTools {
       return errorResult(`Card not found: ${params.cardId}`);
     }
 
+    const stage = await this.resolveTaskStage(task);
+    if (params.description !== undefined && stage && DESCRIPTION_FROZEN_STAGES.has(stage)) {
+      return errorResult(
+        `Cannot update card description in ${stage}. The story description is frozen from dev onward; update the comment field instead.`
+      );
+    }
+
     if (params.title !== undefined) task.title = params.title;
     if (params.description !== undefined) task.objective = params.description;
+    if (params.comment !== undefined) task.comment = appendTaskComment(task.comment, params.comment);
     if (params.priority !== undefined) task.priority = params.priority as TaskPriority;
     if (params.labels !== undefined) task.labels = params.labels;
     task.updatedAt = new Date();
@@ -655,6 +671,7 @@ export class KanbanTools {
       id: task.id,
       title: task.title,
       description: task.objective,
+      comment: task.comment,
       status: task.status,
       columnId: task.columnId ?? "backlog",
       position: task.position,
@@ -664,6 +681,16 @@ export class KanbanTools {
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     };
+  }
+
+  private async resolveTaskStage(task: Task): Promise<KanbanColumnStage | undefined> {
+    const columnId = task.columnId ?? "backlog";
+    if (!task.boardId) {
+      return normalizeColumnStage(columnId);
+    }
+
+    const board = await this.kanbanBoardStore.get(task.boardId);
+    return board?.columns.find((column) => column.id === columnId)?.stage ?? normalizeColumnStage(columnId);
   }
 
   private async promptSession(
@@ -812,4 +839,27 @@ export class KanbanTools {
       && this.automationSystem.kanbanBoardStore === this.kanbanBoardStore,
     );
   }
+}
+
+function normalizeColumnStage(columnId?: string): KanbanColumnStage | undefined {
+  switch ((columnId ?? "backlog").toLowerCase()) {
+    case "backlog":
+    case "todo":
+    case "dev":
+    case "review":
+    case "blocked":
+    case "done":
+      return (columnId ?? "backlog").toLowerCase() as KanbanColumnStage;
+    default:
+      return undefined;
+  }
+}
+
+function appendTaskComment(existing: string | undefined, next: string): string {
+  const trimmedNext = next.trim();
+  if (!trimmedNext) {
+    return existing ?? "";
+  }
+  const trimmedExisting = existing?.trim();
+  return trimmedExisting ? `${trimmedExisting}\n\n${trimmedNext}` : trimmedNext;
 }

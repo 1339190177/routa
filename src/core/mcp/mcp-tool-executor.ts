@@ -474,6 +474,7 @@ export async function executeMcpTool(
           cardId: args.cardId as string,
           title: args.title as string | undefined,
           description: args.description as string | undefined,
+          comment: args.comment as string | undefined,
           priority: args.priority as "low" | "medium" | "high" | "urgent" | undefined,
           labels: args.labels as string[] | undefined,
         })
@@ -1161,13 +1162,14 @@ export function getMcpToolDefinitions(
     },
     {
       name: "update_card",
-      description: "Update a Kanban card's title, description, priority, or labels. Use this to track progress on your assigned task.",
+      description: "Update a Kanban card's title, description, comment, priority, or labels. From dev onward, use comment for progress notes because the story description is frozen.",
       inputSchema: {
         type: "object",
         properties: {
           cardId: { type: "string", description: "Card ID (same as task ID)" },
           title: { type: "string", description: "New card title" },
           description: { type: "string", description: "New card description/objective" },
+          comment: { type: "string", description: "Comment or progress note to append to the card" },
           priority: { type: "string", enum: ["low", "medium", "high", "urgent"], description: "Card priority" },
           labels: { type: "array", items: { type: "string" }, description: "Card labels" },
         },

@@ -68,6 +68,7 @@ export const tasks = sqliteTable("tasks", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   objective: text("objective").notNull(),
+  comment: text("comment"),
   scope: text("scope"),
   acceptanceCriteria: text("acceptance_criteria", { mode: "json" }).$type<string[]>(),
   verificationCommands: text("verification_commands", { mode: "json" }).$type<string[]>(),

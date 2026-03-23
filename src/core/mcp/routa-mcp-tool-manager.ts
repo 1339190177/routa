@@ -1030,11 +1030,12 @@ Note: taskId must be a UUID from create_task, not a task name.`,
   private registerUpdateCard(server: McpServer) {
     server.tool(
       "update_card",
-      "Update card fields (title, description, priority, labels)",
+      "Update card fields (title, description, comment, priority, labels). From dev onward, prefer comment because description is frozen.",
       {
         cardId: z.string().describe("Card ID"),
         title: z.string().optional().describe("New title"),
         description: z.string().optional().describe("New description"),
+        comment: z.string().optional().describe("Comment or progress note to append"),
         priority: z.enum(["low", "medium", "high", "urgent"]).optional().describe("New priority"),
         labels: z.array(z.string()).optional().describe("New labels"),
       },
@@ -1046,6 +1047,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
           cardId: params.cardId,
           title: params.title,
           description: params.description,
+          comment: params.comment,
           priority: params.priority,
           labels: params.labels,
         });

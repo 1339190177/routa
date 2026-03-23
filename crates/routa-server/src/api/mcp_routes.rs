@@ -587,12 +587,13 @@ fn build_tool_list_inner() -> Vec<serde_json::Value> {
             },
             "required": ["cardId", "targetColumnId"]
         })),
-        tool_def("update_card", "Update card fields (title, description, priority, labels)", serde_json::json!({
+        tool_def("update_card", "Update card fields (title, description, comment, priority, labels). From dev onward, use comment because description is frozen.", serde_json::json!({
             "type": "object",
             "properties": {
                 "cardId": { "type": "string", "description": "Card ID" },
                 "title": { "type": "string", "description": "New title" },
                 "description": { "type": "string", "description": "New description" },
+                "comment": { "type": "string", "description": "Comment or progress note to append" },
                 "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "New priority" },
                 "labels": { "type": "array", "items": { "type": "string" }, "description": "New labels" }
             },
@@ -1443,6 +1444,7 @@ async fn execute_tool(state: &AppState, name: &str, args: &serde_json::Value) ->
                 "cardId": args.get("cardId").and_then(|v| v.as_str()).unwrap_or(""),
                 "title": args.get("title").cloned(),
                 "description": args.get("description").cloned(),
+                "comment": args.get("comment").cloned(),
                 "priority": args.get("priority").cloned(),
                 "labels": args.get("labels").cloned(),
             }),

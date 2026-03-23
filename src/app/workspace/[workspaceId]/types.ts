@@ -57,6 +57,7 @@ export interface TaskInfo {
   id: string;
   title: string;
   objective?: string;
+  comment?: string;
   testCases?: string[];
   status: string;
   boardId?: string;

@@ -427,4 +427,68 @@ describe("KanbanTools", () => {
       triggerSessionId: "session-todo-1",
     });
   });
+
+  it("rejects description updates from dev onward and tells the agent to use comment", async () => {
+    const boardStore = new InMemoryKanbanBoardStore();
+    const taskStore = new InMemoryTaskStore();
+    const tools = new KanbanTools(boardStore, taskStore);
+
+    const board = createKanbanBoard({
+      id: "board-1",
+      workspaceId: "default",
+      name: "Default Board",
+      isDefault: true,
+      columns: [
+        { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+        { id: "todo", name: "Todo", position: 1, stage: "todo" },
+        { id: "dev", name: "Dev", position: 2, stage: "dev" },
+      ],
+    });
+    await boardStore.save(board);
+
+    await taskStore.save(createTask({
+      id: "task-dev-1",
+      title: "Frozen story",
+      objective: "Original description",
+      workspaceId: "default",
+      boardId: board.id,
+      columnId: "dev",
+    }));
+
+    const result = await tools.updateCard({
+      cardId: "task-dev-1",
+      description: "Rewrite the story in dev",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("description is frozen");
+    expect(result.error).toContain("comment field instead");
+  });
+
+  it("appends update_card comment notes without rewriting the story description", async () => {
+    const boardStore = new InMemoryKanbanBoardStore();
+    const taskStore = new InMemoryTaskStore();
+    const tools = new KanbanTools(boardStore, taskStore);
+
+    const task = createTask({
+      id: "task-review-1",
+      title: "Review note trail",
+      objective: "Stable story body",
+      comment: "Initial note",
+      workspaceId: "default",
+      columnId: "review",
+    });
+    await taskStore.save(task);
+
+    const result = await tools.updateCard({
+      cardId: task.id,
+      comment: "Second note",
+    });
+
+    expect(result.success).toBe(true);
+    const saved = await taskStore.get(task.id);
+    expect(saved?.objective).toBe("Stable story body");
+    expect(saved?.comment).toBe("Initial note\n\nSecond note");
+    expect(result.data).toMatchObject({ comment: "Initial note\n\nSecond note" });
+  });
 });

@@ -105,6 +105,7 @@ export interface Task {
   id: string;
   title: string;
   objective: string;
+  comment?: string;
   scope?: string;
   acceptanceCriteria?: string[];
   verificationCommands?: string[];
@@ -155,6 +156,7 @@ export function createTask(params: {
   id: string;
   title: string;
   objective: string;
+  comment?: string;
   workspaceId: string;
   triggerSessionId?: string;
   sessionId?: string;
@@ -190,6 +192,7 @@ export function createTask(params: {
     id: params.id,
     title: params.title,
     objective: params.objective,
+    comment: params.comment,
     scope: params.scope,
     acceptanceCriteria: params.acceptanceCriteria,
     verificationCommands: params.verificationCommands,

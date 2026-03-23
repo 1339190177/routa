@@ -12,6 +12,8 @@ pub struct KanbanCard {
     pub id: String,
     pub title: String,
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
     pub status: String,
     pub column_id: String,
     pub position: i64,
@@ -61,6 +63,7 @@ pub fn task_to_card(task: &Task) -> KanbanCard {
         id: task.id.clone(),
         title: task.title.clone(),
         description: task.objective.clone(),
+        comment: task.comment.clone(),
         status: task.status.as_str().to_string(),
         column_id: task
             .column_id

@@ -123,6 +123,7 @@ export async function PATCH(
 
   if (body.title !== undefined) nextTask.title = body.title;
   if (body.objective !== undefined) nextTask.objective = body.objective;
+  if (body.comment !== undefined) nextTask.comment = body.comment;
   if (body.scope !== undefined) nextTask.scope = body.scope;
   if (body.acceptanceCriteria !== undefined) nextTask.acceptanceCriteria = body.acceptanceCriteria;
   if (body.verificationCommands !== undefined) nextTask.verificationCommands = body.verificationCommands;
