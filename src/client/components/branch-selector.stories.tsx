@@ -38,7 +38,7 @@ const routesFor = (branchData = defaultBranchData): StoryFetchRoute[] => [
 ];
 
 const meta = {
-  title: "Core/Controls/BranchSelector",
+  title: "Core/Branch Selector",
   component: BranchSelector,
   tags: ["autodocs"],
   parameters: {

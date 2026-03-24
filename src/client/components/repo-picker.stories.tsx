@@ -77,7 +77,7 @@ const routesFor = ({
 ];
 
 const meta = {
-  title: "Core/Controls/RepoPicker",
+  title: "Core/Repo Picker",
   component: RepoPicker,
   tags: ["autodocs"],
   parameters: {

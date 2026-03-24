@@ -4,7 +4,7 @@ import { Button } from "./button";
 import { DesktopAppShell } from "./desktop-app-shell";
 
 const meta = {
-  title: "Layouts/Desktop/DesktopAppShell",
+  title: "Layouts/Desktop App Shell",
   component: DesktopAppShell,
   tags: ["autodocs"],
   parameters: {

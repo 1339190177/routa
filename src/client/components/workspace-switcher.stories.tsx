@@ -24,7 +24,7 @@ const workspaces: WorkspaceData[] = [
 ];
 
 const meta = {
-  title: "Core/Controls/WorkspaceSwitcher",
+  title: "Core/Workspace Switcher",
   component: WorkspaceSwitcher,
   tags: ["autodocs"],
   parameters: {

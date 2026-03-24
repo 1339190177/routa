@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { DesktopSidebar } from "./desktop-sidebar";
 
 const meta = {
-  title: "Navigation/Desktop/DesktopSidebar",
+  title: "Navigation/Desktop Sidebar",
   component: DesktopSidebar,
   tags: ["autodocs"],
   parameters: {

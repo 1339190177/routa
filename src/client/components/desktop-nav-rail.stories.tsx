@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { DesktopNavRail } from "./desktop-nav-rail";
 
 const meta = {
-  title: "Navigation/Desktop/DesktopNavRail",
+  title: "Navigation/Desktop Nav Rail",
   component: DesktopNavRail,
   tags: ["autodocs"],
   parameters: {
