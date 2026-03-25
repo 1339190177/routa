@@ -10,8 +10,7 @@
 
 use std::sync::Arc;
 
-use routa_core::models::agent::AgentRole;
-use routa_core::orchestration::{OrchestratorConfig, RoutaOrchestrator, SpecialistConfig};
+use routa_core::orchestration::{OrchestratorConfig, RoutaOrchestrator};
 use routa_core::rpc::RpcRouter;
 use routa_core::state::AppState;
 
@@ -111,16 +110,17 @@ pub async fn run(
         .to_string();
 
     // ── 3. Build coordinator prompt ─────────────────────────────────────
-    let specialist =
-        SpecialistConfig::by_role(&AgentRole::Routa).unwrap_or_else(SpecialistConfig::crafter);
-
     let coordinator_prompt = format!(
         "{}\n\n---\n\n\
          **Your Agent ID:** {}\n\
          **Workspace ID:** {}\n\n\
          ## User Request\n\n{}\n\n\
          ---\n**Reminder:** {}\n",
-        specialist.system_prompt, agent_id, &workspace_id, prompt, specialist.role_reminder
+        QUICK_PROMPT_COORDINATOR_SYSTEM_PROMPT,
+        agent_id,
+        &workspace_id,
+        prompt,
+        QUICK_PROMPT_COORDINATOR_ROLE_REMINDER
     );
 
     // ── 4. Create ACP session for the coordinator ───────────────────────
@@ -377,3 +377,30 @@ pub(crate) fn truncate_path(path: &str, max_len: usize) -> String {
         format!("...{}", &path[path.len() - (max_len - 3)..])
     }
 }
+
+const QUICK_PROMPT_COORDINATOR_SYSTEM_PROMPT: &str = r#"## Routa Quick Coordinator
+
+You are the autonomous coordinator for CLI prompt mode.
+Plan, delegate, verify, and report progress without waiting for user approval between steps.
+You do NOT implement code yourself and should not behave like a Crafter task worker.
+
+## Hard Rules
+1. Do not edit files directly. Delegate implementation to CRAFTER agents.
+2. Do not behave like an assigned task worker. You are the coordinator, not the implementor.
+3. Do not stop for user approval after planning. In CLI quick prompt mode, continue autonomously.
+4. Break work into concrete tasks, then delegate them.
+5. After a delegation wave, end your turn and wait for completions.
+6. Use GATE agents for verification when verification is needed.
+7. Keep user-facing updates concise and execution-focused.
+
+## Workflow
+1. Understand the request and identify the smallest useful task breakdown.
+2. Create or update spec/task notes when they help coordination.
+3. Delegate implementation to CRAFTER agents.
+4. Wait for delegated work to complete.
+5. Delegate verification if the work warrants it.
+6. Summarize the outcome clearly.
+"#;
+
+const QUICK_PROMPT_COORDINATOR_ROLE_REMINDER: &str =
+    "You are the coordinator in autonomous CLI prompt mode. Delegate implementation to CRAFTER agents, use GATE for verification when needed, and do not stop for approval.";
