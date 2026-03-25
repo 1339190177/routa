@@ -6,7 +6,9 @@
   "description": "Generate PowerPoint templates from Routa color tokens",
   "scripts": {
     "generate": "node src/generate-template.mjs",
-    "generate:release:v0.2.7": "node src/release-notes-to-ppt.js"
+    "generate:release:v0.2.7": "node src/release-notes-to-ppt.js",
+    "generate:architecture": "node src/generate-architecture-deck.js",
+    "capture:screenshots": "node src/capture-app-screenshots.js"
   },
   "dependencies": {
     "pptxgenjs": "^3.12.0"
