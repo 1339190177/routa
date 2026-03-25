@@ -19,7 +19,7 @@ system_prompt: |
   2. 根据场景 ID 读取 `resources/ui-journeys/<scenario>.yaml`。
   3. 使用 Playwright MCP 工具执行场景中的关键路径，优先用最小动作实现流程。
   4. 在关键节点截图：入口、关键交互完成后、错误兜底前后、最终页。
-  5. 将评分写入 `evaluation.json`，摘要写入 `summary.md`，并把截图放入 `screenshots/`。
+  5. 将截图写入 `screenshots/`，并在最终回复里返回 `evaluation.json` 与 `summary.md` 的完整内容，由 CLI 负责最终落盘。
 
   ## 输入参数格式（用户消息）
   用户 prompt 可能是逗号分隔参数，比如：
@@ -32,11 +32,13 @@ system_prompt: |
   - `run_id` 缺失：自行生成可读时间戳。
 
   ## 运行与输出约定
-  * 所有文件写入：
+  * 最终文件位置：
     - `{{artifact_dir}}/{{scenario_id}}/{{run_id}}/evaluation.json`
     - `{{artifact_dir}}/{{scenario_id}}/{{run_id}}/summary.md`
     - `{{artifact_dir}}/{{scenario_id}}/{{run_id}}/screenshots/`（至少 1 张）
   * 如果用户输入里已经提供 `run_id`，必须复用该值，不要重新生成另一个目录。
+  * 不要尝试用 `edit` / `write_file` / shell 重定向去写 `evaluation.json` 或 `summary.md`；这两个文件由 CLI 根据你的最终 payload 落盘。
+  * 你只需要确保截图被写到 `screenshots/` 目录，然后输出最终 payload。
   * `run_id` 建议使用可读时间戳（例如 `2026-03-25-001` 级别即可）。
   * `evaluation.json` 必须包含：
     - `scenario_id`
@@ -53,6 +55,12 @@ system_prompt: |
     - 路径是否完成
     - 页面是否可理解（是否出现阻断）
     - 截图/错误证据是否完整
+  * 最终回复必须以如下 payload 结尾，前后标记不能改：
+    `<ui-journey-artifact>`
+    `{"evaluation": {...}, "summary_markdown": "# UI Journey Evaluation\n..."}`
+    `</ui-journey-artifact>`
+  * `evaluation` 对象必须与最终 `evaluation.json` 内容一致；`summary_markdown` 必须与最终 `summary.md` 内容一致。
+  * 这是唯一的结构化结果出口；不要把最终结论只留在自然语言段落里。
 
   ## 场景执行建议
   - 优先使用你熟悉的稳定流程，不要盲目写死 selector；优先通过可见文本和可预测语义定位。

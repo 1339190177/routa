@@ -11,6 +11,10 @@ use routa_core::state::AppState;
 use routa_core::workflow::specialist::{SpecialistDef, SpecialistLoader};
 
 use super::print_json;
+use super::review::stream_parser::{
+    extract_agent_output_from_history, extract_agent_output_from_process_output,
+    extract_text_from_prompt_result, extract_update_text,
+};
 use super::tui::TuiRenderer;
 
 mod ui_journey;
@@ -19,6 +23,8 @@ use ui_journey::{
     build_context as build_ui_journey_context,
     build_specialist_request as build_ui_journey_specialist_request, generate_run_id,
     load_aggregate_run as load_ui_journey_aggregate_run,
+    output_contains_artifact_payload as ui_journey_output_contains_artifact_payload,
+    recover_success_artifacts_from_output as recover_ui_journey_success_artifacts_from_output,
     validate_prompt as validate_ui_journey_prompt,
     validate_scenario_resource as validate_ui_journey_scenario_resource,
     validate_success_artifacts as validate_ui_journey_success_artifacts, verify_provider_readiness,
@@ -464,27 +470,57 @@ async fn execute_specialist_run(
     println!("🚀 Sending prompt to specialist...");
     println!();
 
-    if let Err(err) = state.acp_manager.prompt(&session_id, &initial_prompt).await {
-        let error = format!("Failed to send prompt: {}", err);
-        if let Some(context) = journey_context.as_ref() {
-            metrics.elapsed_ms = run_start.elapsed().as_millis();
-            write_ui_journey_failure_artifacts(context, "prompt_submission", &error, &metrics);
+    let prompt_response = match state.acp_manager.prompt(&session_id, &initial_prompt).await {
+        Ok(response) => response,
+        Err(err) => {
+            let error = format!("Failed to send prompt: {}", err);
+            if let Some(context) = journey_context.as_ref() {
+                metrics.elapsed_ms = run_start.elapsed().as_millis();
+                write_ui_journey_failure_artifacts(context, "prompt_submission", &error, &metrics);
+            }
+            state.acp_manager.kill_session(&session_id).await;
+            orchestrator.cleanup(&session_id).await;
+            return Err(error);
         }
-        state.acp_manager.kill_session(&session_id).await;
-        orchestrator.cleanup(&session_id).await;
-        return Err(error);
-    }
+    };
 
     let mut renderer = TuiRenderer::new();
     let mut idle_count = 0u32;
     let max_idle = 600;
     let mut failure_reason: Option<String> = None;
+    let mut collected_output = String::new();
 
     loop {
         match tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv()).await {
             Ok(Ok(update)) => {
                 idle_count = 0;
+                let update_payload = update
+                    .get("params")
+                    .and_then(|params| params.get("update"))
+                    .and_then(|value| value.as_object());
+                if let Some(update_payload) = update_payload {
+                    if let Some(text) = extract_update_text(update_payload) {
+                        collected_output.push_str(&text);
+                    }
+                }
                 renderer.handle_update(&update);
+                let payload_complete = journey_context.is_some()
+                    && ui_journey_output_contains_artifact_payload(&collected_output);
+                let turn_complete = update
+                    .get("params")
+                    .and_then(|params| params.get("update"))
+                    .and_then(|value| value.get("sessionUpdate"))
+                    .and_then(|value| value.as_str())
+                    == Some("turn_complete");
+                if payload_complete || turn_complete {
+                    renderer.finish();
+                    if payload_complete {
+                        println!("═══ Specialist artifact payload received ═══");
+                    } else {
+                        println!("═══ Specialist turn complete ═══");
+                    }
+                    break;
+                }
             }
             Ok(Err(_)) => {
                 renderer.finish();
@@ -510,6 +546,27 @@ async fn execute_specialist_run(
         }
     }
 
+    let history = state
+        .acp_manager
+        .get_session_history(&session_id)
+        .await
+        .unwrap_or_default();
+    let specialist_output = if collected_output.trim().is_empty() {
+        extract_agent_output_from_history(&history)
+    } else {
+        collected_output
+    };
+    let specialist_output = if specialist_output.trim().is_empty() {
+        extract_text_from_prompt_result(&prompt_response).unwrap_or_default()
+    } else {
+        specialist_output
+    };
+    let specialist_output = if specialist_output.trim().is_empty() {
+        extract_agent_output_from_process_output(&history)
+    } else {
+        specialist_output
+    };
+
     println!();
     super::prompt::print_session_summary(router, &workspace_id).await;
 
@@ -534,6 +591,12 @@ async fn execute_specialist_run(
 
     if let Some(context) = journey_context.as_ref() {
         metrics.elapsed_ms = run_start.elapsed().as_millis();
+        if let Err(error) =
+            recover_ui_journey_success_artifacts_from_output(context, &specialist_output)
+        {
+            write_ui_journey_failure_artifacts(context, "artifact_recovery", &error, &metrics);
+            return Err(error);
+        }
         if let Err(error) = validate_ui_journey_success_artifacts(context, &metrics) {
             write_ui_journey_failure_artifacts(context, "artifact_validation", &error, &metrics);
             return Err(error);

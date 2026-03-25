@@ -5,11 +5,14 @@ use std::path::{Path, PathBuf};
 
 use chrono::Local;
 use routa_core::acp::{get_preset_by_id_with_registry, AcpPreset};
+use serde::Deserialize;
 
 pub(crate) const JOURNEY_EVALUATOR_ID: &str = "ui-journey-evaluator";
 pub(crate) const DEFAULT_SCENARIO_ID: &str = "unknown-scenario";
 pub(crate) const DEFAULT_BASE_URL: &str = "http://localhost:3000";
 pub(crate) const DEFAULT_ARTIFACT_DIR: &str = "artifacts/ui-journey";
+const RESULT_PAYLOAD_START: &str = "<ui-journey-artifact>";
+const RESULT_PAYLOAD_END: &str = "</ui-journey-artifact>";
 
 #[derive(Debug, Clone)]
 pub(crate) struct UiJourneyPromptParams {
@@ -44,6 +47,12 @@ pub(crate) struct UiJourneyAggregateRun {
     pub(crate) verdict: String,
     pub(crate) failure_stage: Option<String>,
     pub(crate) artifact_dir: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+struct UiJourneyArtifactPayload {
+    evaluation: serde_json::Value,
+    summary_markdown: String,
 }
 
 pub(crate) fn build_context(
@@ -301,6 +310,55 @@ pub(crate) fn artifact_dir(context: &UiJourneyRunContext) -> PathBuf {
         .join(&context.run_id)
 }
 
+pub(crate) fn recover_success_artifacts_from_output(
+    context: &UiJourneyRunContext,
+    specialist_output: &str,
+) -> Result<bool, String> {
+    let artifact_dir = artifact_dir(context);
+    let evaluation_path = artifact_dir.join("evaluation.json");
+    let summary_path = artifact_dir.join("summary.md");
+
+    if evaluation_path.is_file() && summary_path.is_file() {
+        return Ok(false);
+    }
+
+    let Some(payload) = extract_artifact_payload(specialist_output)? else {
+        return Ok(false);
+    };
+
+    std::fs::create_dir_all(&artifact_dir)
+        .map_err(|err| format!("Failed to create {}: {}", artifact_dir.display(), err))?;
+
+    let mut recovered_any = false;
+    if !evaluation_path.is_file() {
+        let evaluation_json = serde_json::to_string_pretty(&payload.evaluation)
+            .map_err(|err| format!("Failed to serialize {}: {}", evaluation_path.display(), err))?;
+        std::fs::write(&evaluation_path, evaluation_json)
+            .map_err(|err| format!("Failed to write {}: {}", evaluation_path.display(), err))?;
+        recovered_any = true;
+    }
+
+    if !summary_path.is_file() {
+        std::fs::write(&summary_path, payload.summary_markdown)
+            .map_err(|err| format!("Failed to write {}: {}", summary_path.display(), err))?;
+        recovered_any = true;
+    }
+
+    if recovered_any {
+        println!(
+            "🛟 Recovered UI journey artifacts from specialist output at {}",
+            artifact_dir.display()
+        );
+    }
+
+    Ok(recovered_any)
+}
+
+pub(crate) fn output_contains_artifact_payload(specialist_output: &str) -> bool {
+    specialist_output.contains(RESULT_PAYLOAD_START)
+        && specialist_output.contains(RESULT_PAYLOAD_END)
+}
+
 pub(crate) fn validate_success_artifacts(
     context: &UiJourneyRunContext,
     metrics: &UiJourneyRunMetrics,
@@ -498,6 +556,33 @@ fn expected_verdict_for_score(task_fit_score: i64) -> &'static str {
     } else {
         "Poor Fit"
     }
+}
+
+fn extract_artifact_payload(output: &str) -> Result<Option<UiJourneyArtifactPayload>, String> {
+    let Some(start) = output.find(RESULT_PAYLOAD_START) else {
+        return Ok(None);
+    };
+    let content_start = start + RESULT_PAYLOAD_START.len();
+    let remaining = &output[content_start..];
+    let Some(relative_end) = remaining.find(RESULT_PAYLOAD_END) else {
+        return Err(
+            "Specialist output included a ui-journey artifact start marker without an end marker"
+                .to_string(),
+        );
+    };
+    let payload_text = remaining[..relative_end].trim();
+    if payload_text.is_empty() {
+        return Err("UI journey artifact payload marker was present but empty".to_string());
+    }
+
+    serde_json::from_str::<UiJourneyArtifactPayload>(payload_text)
+        .map(Some)
+        .map_err(|err| {
+            format!(
+                "Failed to parse ui-journey artifact payload from specialist output: {}",
+                err
+            )
+        })
 }
 
 pub(crate) fn load_aggregate_run(
@@ -750,10 +835,10 @@ fn verify_opencode_config_directory() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_prompt, validate_prompt, validate_success_artifacts, write_artifact_set,
-        write_baseline_artifacts, UiJourneyAggregateRun, UiJourneyPromptParams,
-        UiJourneyRunContext, UiJourneyRunMetrics, DEFAULT_ARTIFACT_DIR, DEFAULT_BASE_URL,
-        DEFAULT_SCENARIO_ID,
+        output_contains_artifact_payload, parse_prompt, recover_success_artifacts_from_output,
+        validate_prompt, validate_success_artifacts, write_artifact_set, write_baseline_artifacts,
+        UiJourneyAggregateRun, UiJourneyPromptParams, UiJourneyRunContext, UiJourneyRunMetrics,
+        DEFAULT_ARTIFACT_DIR, DEFAULT_BASE_URL, DEFAULT_SCENARIO_ID,
     };
     use serde_json::Value;
     use std::fs;
@@ -1126,6 +1211,97 @@ mod tests {
 
         let error = validate_success_artifacts(&context, &metrics).unwrap_err();
         assert!(error.contains("unsupported type"));
+    }
+
+    #[test]
+    fn recovers_success_artifacts_from_specialist_output_payload() {
+        let base_dir = tempdir().unwrap();
+        let artifact_dir = base_dir
+            .path()
+            .join("artifacts")
+            .to_string_lossy()
+            .to_string();
+        let context = UiJourneyRunContext {
+            specialist_id: "ui-journey-evaluator".to_string(),
+            provider: "opencode".to_string(),
+            run_id: "2026-03-25-007".to_string(),
+            prompt: UiJourneyPromptParams {
+                scenario_id: Some("core-home-session".to_string()),
+                base_url: DEFAULT_BASE_URL.to_string(),
+                artifact_dir: artifact_dir.clone(),
+                run_id: Some("2026-03-25-007".to_string()),
+            },
+        };
+
+        let output_dir = std::path::Path::new(&artifact_dir)
+            .join("core-home-session")
+            .join("2026-03-25-007");
+        fs::create_dir_all(output_dir.join("screenshots")).unwrap();
+        fs::write(output_dir.join("screenshots").join("step-01.png"), "png").unwrap();
+
+        let specialist_output = concat!(
+            "Execution completed successfully.\n",
+            "<ui-journey-artifact>\n",
+            "{\n",
+            "  \"evaluation\": {\n",
+            "    \"scenario_id\": \"core-home-session\",\n",
+            "    \"run_id\": \"2026-03-25-007\",\n",
+            "    \"task_fit_score\": 82,\n",
+            "    \"verdict\": \"Good Fit\",\n",
+            "    \"findings\": [\n",
+            "      {\n",
+            "        \"type\": \"observation\",\n",
+            "        \"description\": \"Provider picker was already selected.\",\n",
+            "        \"severity\": \"low\"\n",
+            "      }\n",
+            "    ],\n",
+            "    \"evidence_summary\": \"Homepage to session detail completed without blocking errors.\"\n",
+            "  },\n",
+            "  \"summary_markdown\": \"# UI Journey Evaluation\\n\\n- Result: Good Fit\\n- Notes: Journey completed.\\n\"\n",
+            "}\n",
+            "</ui-journey-artifact>\n",
+        );
+
+        let recovered = recover_success_artifacts_from_output(&context, specialist_output).unwrap();
+        assert!(recovered);
+        assert!(output_dir.join("evaluation.json").exists());
+        assert!(output_dir.join("summary.md").exists());
+    }
+
+    #[test]
+    fn rejects_malformed_specialist_output_payload() {
+        let base_dir = tempdir().unwrap();
+        let artifact_dir = base_dir
+            .path()
+            .join("artifacts")
+            .to_string_lossy()
+            .to_string();
+        let context = UiJourneyRunContext {
+            specialist_id: "ui-journey-evaluator".to_string(),
+            provider: "opencode".to_string(),
+            run_id: "2026-03-25-008".to_string(),
+            prompt: UiJourneyPromptParams {
+                scenario_id: Some("core-home-session".to_string()),
+                base_url: DEFAULT_BASE_URL.to_string(),
+                artifact_dir,
+                run_id: Some("2026-03-25-008".to_string()),
+            },
+        };
+
+        let error = recover_success_artifacts_from_output(
+            &context,
+            "<ui-journey-artifact>{not-json}</ui-journey-artifact>",
+        )
+        .unwrap_err();
+        assert!(error.contains("Failed to parse ui-journey artifact payload"));
+    }
+
+    #[test]
+    fn detects_complete_artifact_payload_markers() {
+        assert!(output_contains_artifact_payload(
+            "<ui-journey-artifact>{}</ui-journey-artifact>"
+        ));
+        assert!(!output_contains_artifact_payload("<ui-journey-artifact>{}"));
     }
 
     #[test]
