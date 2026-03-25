@@ -218,7 +218,7 @@ export function normalizeSnapshotBody(content) {
       return `[ref=${refMap.get(originalRef)}]`;
     })
     .replace(/\b[0-9a-f]{8}…/gi, "<id>…")
-    .replace(/\b\d{1,2}:\d{2}:\d{2}\s(?:AM|PM)\b/g, "<time>")
+    .replace(/\b\d{1,2}:\d{2}:\d{2}(?:\s(?:AM|PM))?\b/g, "<time>")
     .replace(/\b(?:just now|\d+\s*[smhdw] ago|\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago)\b/gi, "<relative-time>");
 }
 

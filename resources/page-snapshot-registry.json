@@ -70,7 +70,7 @@
     "group": "observability",
     "priority": "P1",
     "ci": true,
-    "route": "/traces",
+    "route": "/traces?view=trace",
     "pageFile": "src/app/traces/page.tsx",
     "snapshotFile": "src/app/traces/page.snapshot.yaml",
     "waitFor": {

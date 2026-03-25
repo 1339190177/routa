@@ -206,15 +206,14 @@ export function replayTracesAsEventBridge(
 ): WorkspaceAgentEvent[] {
   const bridge = new AgentEventBridge(sessionId);
   const events: WorkspaceAgentEvent[] = [];
-  const provider = traces[0]?.contributor?.provider ?? "unknown";
-
-  // Emit agent_started
-  events.push(makeStartedEvent(sessionId, provider));
-
-  // Sort by timestamp
   const sorted = [...traces].sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
   );
+  const provider = sorted[0]?.contributor?.provider ?? "unknown";
+  const startedAt = sorted[0]?.timestamp ? new Date(sorted[0].timestamp) : new Date();
+
+  // Emit agent_started with the persisted trace timestamp for deterministic replay.
+  events.push(makeStartedEvent(sessionId, provider, startedAt));
 
   for (const trace of sorted) {
     const update = traceToNormalizedUpdate(trace);

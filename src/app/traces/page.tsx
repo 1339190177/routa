@@ -35,6 +35,15 @@ interface Session {
   lastTimestamp: string;
 }
 
+function resolveTraceViewTab(
+  value: string | null | undefined,
+): TraceViewTab {
+  if (value === "trace" || value === "event-bridge") {
+    return "event-bridge";
+  }
+  return "chat";
+}
+
 function TracePageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -45,7 +54,7 @@ function TracePageContent() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
-  const [activeTab, setActiveTab] = useState<TraceViewTab>("chat");
+  const [activeTab, setActiveTab] = useState<TraceViewTab>(() => resolveTraceViewTab(searchParams.get("view")));
   const [sessionTraces, setSessionTraces] = useState<TraceRecord[]>([]);
   const [tracesLoading, setTracesLoading] = useState(false);
   const [sessionTracesLoaded, setSessionTracesLoaded] = useState(false);
@@ -66,6 +75,13 @@ function TracePageContent() {
     }
   }, [activeWorkspaceId, searchParams]);
 
+  useEffect(() => {
+    const viewFromUrl = resolveTraceViewTab(searchParams.get("view"));
+    if (viewFromUrl !== activeTab) {
+      setActiveTab(viewFromUrl);
+    }
+  }, [activeTab, searchParams]);
+
   const handleWorkspaceSelect = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId);
     const params = new URLSearchParams(searchParams.toString());
@@ -82,6 +98,18 @@ function TracePageContent() {
       router.push(`/traces?${params.toString()}`);
     }
   }, [createWorkspace, router, searchParams]);
+
+  const handleTabChange = useCallback((tab: TraceViewTab) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "event-bridge") {
+      params.set("view", "trace");
+    } else {
+      params.delete("view");
+    }
+    const next = params.toString();
+    router.replace(next ? `/traces?${next}` : "/traces");
+  }, [router, searchParams]);
 
   const workspaceQuery = activeWorkspaceId ? `?workspaceId=${encodeURIComponent(activeWorkspaceId)}` : "";
 
@@ -269,7 +297,7 @@ function TracePageContent() {
         />
 
         {/* View tab switcher */}
-        <TracesViewTabs className="shrink-0 px-4 pt-2" activeTab={activeTab} onTabChange={setActiveTab} />
+        <TracesViewTabs className="shrink-0 px-4 pt-2" activeTab={activeTab} onTabChange={handleTabChange} />
 
         {/* Main Content */}
         <div className="flex-1 flex min-h-0">

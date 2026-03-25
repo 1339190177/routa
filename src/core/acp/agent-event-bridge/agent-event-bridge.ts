@@ -47,7 +47,7 @@ export class AgentEventBridge {
    * Convert a NormalizedSessionUpdate into zero or more WorkspaceAgentEvents.
    */
   process(update: NormalizedSessionUpdate): WorkspaceAgentEvent[] {
-    const now = new Date();
+    const now = update.timestamp instanceof Date ? update.timestamp : new Date();
 
     switch (update.eventType) {
       case "tool_call":
@@ -336,12 +336,16 @@ export function makePlanUpdatedEvent(
 /**
  * Create an agent_started event.
  */
-export function makeStartedEvent(sessionId: string, provider: string): WorkspaceAgentEvent {
+export function makeStartedEvent(
+  sessionId: string,
+  provider: string,
+  timestamp: Date = new Date(),
+): WorkspaceAgentEvent {
   return {
     type: "agent_started",
     sessionId,
     provider,
-    timestamp: new Date(),
+    timestamp,
   };
 }
 
