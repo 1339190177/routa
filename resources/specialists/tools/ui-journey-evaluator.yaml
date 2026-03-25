@@ -39,6 +39,7 @@ system_prompt: |
   * 如果用户输入里已经提供 `run_id`，必须复用该值，不要重新生成另一个目录。
   * 不要尝试用 `edit` / `write_file` / shell 重定向去写 `evaluation.json` 或 `summary.md`；这两个文件由 CLI 根据你的最终 payload 落盘。
   * 你只需要确保截图被写到 `screenshots/` 目录，然后输出最终 payload。
+  * `screenshots/` 里的文件必须是真实图片文件，使用 `.png`、`.jpg`、`.jpeg` 或 `.webp`；不要把 DOM snapshot、YAML、文本文件放进去冒充截图。
   * `run_id` 建议使用可读时间戳（例如 `2026-03-25-001` 级别即可）。
   * `evaluation.json` 必须包含：
     - `scenario_id`
@@ -69,6 +70,7 @@ system_prompt: |
   - 总执行预算控制在约 3 分钟内；不要为了追求更多证据而无限等待。
   - 不要在拿到结论后继续查看 console、trace、日志或做额外交互；这些会显著拖慢旅程闭环。
   - `kanban-automation`：停留在 Kanban 页面完成创建卡片和移动卡片；不要跳去 Settings / Workspace overview / Sessions 列表页。移动到自动化列后，只观察 Kanban 页内可见的 session 标识、状态标签、toast 或 card 状态变化。
+  - `kanban-automation`：如果卡片已成功进入目标列，并且 Kanban 页内已经出现 session 标识、状态标签、toast、badge 或 card 细节变化中的任意一种，就立即截图并结束，不要继续追踪更深层后台状态。
   - `team-automation`：停留在 Team 页面完成触发和观察；不要离开 Team 页面去别的工作区页面寻找证据。
   - 遇到弹窗/提示，先尝试恢复式操作（返回、刷新、重试），再判定为不可恢复失败。
   - 在截图时记录当前页 URL 和关键状态（已创建、已跳转、已完成）。

@@ -359,6 +359,16 @@ pub(crate) fn output_contains_artifact_payload(specialist_output: &str) -> bool 
         && specialist_output.contains(RESULT_PAYLOAD_END)
 }
 
+fn is_supported_screenshot_file(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref(),
+        Some("png" | "jpg" | "jpeg" | "webp")
+    )
+}
+
 pub(crate) fn validate_success_artifacts(
     context: &UiJourneyRunContext,
     metrics: &UiJourneyRunMetrics,
@@ -390,11 +400,11 @@ pub(crate) fn validate_success_artifacts(
     let screenshot_count = std::fs::read_dir(&screenshot_dir)
         .map_err(|err| format!("Failed to read {}: {}", screenshot_dir.display(), err))?
         .filter_map(Result::ok)
-        .filter(|entry| entry.path().is_file())
+        .filter(|entry| entry.path().is_file() && is_supported_screenshot_file(&entry.path()))
         .count();
     if screenshot_count == 0 {
         return Err(format!(
-            "Specialist run completed but produced no screenshots in {}",
+            "Specialist run completed but produced no image screenshots in {}",
             screenshot_dir.display()
         ));
     }
@@ -1060,7 +1070,61 @@ mod tests {
         fs::write(output_dir.join("summary.md"), "# Summary\n").unwrap();
 
         let error = validate_success_artifacts(&context, &metrics).unwrap_err();
-        assert!(error.contains("produced no screenshots"));
+        assert!(error.contains("produced no image screenshots"));
+    }
+
+    #[test]
+    fn rejects_non_image_screenshot_artifacts() {
+        let base_dir = tempdir().unwrap();
+        let artifact_dir = base_dir
+            .path()
+            .join("artifacts")
+            .to_string_lossy()
+            .to_string();
+        let context = UiJourneyRunContext {
+            specialist_id: "ui-journey-evaluator".to_string(),
+            provider: "opencode".to_string(),
+            run_id: "2026-03-25-003a".to_string(),
+            prompt: UiJourneyPromptParams {
+                scenario_id: Some(DEFAULT_SCENARIO_ID.to_string()),
+                base_url: DEFAULT_BASE_URL.to_string(),
+                artifact_dir: artifact_dir.clone(),
+                run_id: Some("2026-03-25-003a".to_string()),
+            },
+        };
+        let metrics = UiJourneyRunMetrics {
+            attempts: 1,
+            provider_timeout_ms: None,
+            provider_retries: 0,
+            elapsed_ms: 900,
+            initialization_elapsed_ms: Some(120),
+        };
+
+        let output_dir = std::path::Path::new(&artifact_dir)
+            .join(DEFAULT_SCENARIO_ID)
+            .join("2026-03-25-003a");
+        fs::create_dir_all(output_dir.join("screenshots")).unwrap();
+        fs::write(
+            output_dir.join("evaluation.json"),
+            r#"{
+  "scenario_id": "unknown-scenario",
+  "run_id": "2026-03-25-003a",
+  "task_fit_score": 65,
+  "verdict": "Partial Fit",
+  "findings": [],
+  "evidence_summary": "Snapshot text saved but no actual image."
+}"#,
+        )
+        .unwrap();
+        fs::write(output_dir.join("summary.md"), "# Summary\n").unwrap();
+        fs::write(
+            output_dir.join("screenshots").join("step-01.yaml"),
+            "snapshot",
+        )
+        .unwrap();
+
+        let error = validate_success_artifacts(&context, &metrics).unwrap_err();
+        assert!(error.contains("produced no image screenshots"));
     }
 
     #[test]
