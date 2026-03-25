@@ -18,6 +18,7 @@ use super::review::stream_parser::{
 use super::tui::TuiRenderer;
 
 mod ui_journey;
+mod ui_journey_provider;
 
 use ui_journey::{
     build_context as build_ui_journey_context,
@@ -28,10 +29,14 @@ use ui_journey::{
     recover_success_artifacts_from_output as recover_ui_journey_success_artifacts_from_output,
     validate_prompt as validate_ui_journey_prompt,
     validate_scenario_resource as validate_ui_journey_scenario_resource,
-    validate_success_artifacts as validate_ui_journey_success_artifacts, verify_provider_readiness,
+    validate_success_artifacts as validate_ui_journey_success_artifacts,
     write_baseline_artifacts as write_ui_journey_baseline_artifacts,
     write_failure_artifacts as write_ui_journey_failure_artifacts, UiJourneyRunContext,
     UiJourneyRunMetrics, JOURNEY_EVALUATOR_ID,
+};
+use ui_journey_provider::{
+    augment_runtime_failure_message as augment_ui_journey_runtime_failure_message,
+    verify_provider_readiness,
 };
 
 pub async fn list(state: &AppState, workspace_id: &str) -> Result<(), String> {
@@ -284,6 +289,7 @@ async fn execute_specialist_run(
     journey_context_override: Option<UiJourneyRunContext>,
 ) -> Result<(), String> {
     let run_start = Instant::now();
+    let wall_clock_start = std::time::SystemTime::now();
     let journey_context = journey_context_override.or_else(|| {
         build_ui_journey_context(&selected_specialist.id, &user_prompt, effective_provider)
     });
@@ -632,7 +638,15 @@ async fn execute_specialist_run(
     metrics.output_chars = specialist_output.chars().count();
 
     if prompt_error.is_some() && specialist_output.trim().is_empty() && failure_reason.is_none() {
-        let error = prompt_error.unwrap_or_else(|| "Failed to send prompt".to_string());
+        let error = augment_ui_journey_runtime_failure_message(
+            effective_provider,
+            &prompt_error.unwrap_or_else(|| "Failed to send prompt".to_string()),
+            wall_clock_start,
+            metrics.prompt_status.as_deref(),
+            metrics.history_entry_count,
+            metrics.output_chars,
+            metrics.last_process_output.as_deref(),
+        );
         if let Some(context) = journey_context.as_ref() {
             metrics.elapsed_ms = run_start.elapsed().as_millis();
             write_ui_journey_failure_artifacts(context, "prompt_submission", &error, &metrics);
@@ -662,7 +676,21 @@ async fn execute_specialist_run(
                 "execution_timeout" => "UI journey exceeded the maximum runtime budget",
                 _ => "Provider process exited unexpectedly",
             };
-            write_ui_journey_failure_artifacts(context, reason.as_str(), failure_summary, &metrics);
+            let failure_summary = augment_ui_journey_runtime_failure_message(
+                effective_provider,
+                failure_summary,
+                wall_clock_start,
+                metrics.prompt_status.as_deref(),
+                metrics.history_entry_count,
+                metrics.output_chars,
+                metrics.last_process_output.as_deref(),
+            );
+            write_ui_journey_failure_artifacts(
+                context,
+                reason.as_str(),
+                &failure_summary,
+                &metrics,
+            );
             return Err(format!(
                 "Failed to complete specialist run: {}",
                 failure_summary

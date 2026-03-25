@@ -1,11 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
-use std::fs::OpenOptions;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::Local;
-use routa_core::acp::{get_preset_by_id_with_registry, AcpPreset};
 use serde::Deserialize;
 
 pub(crate) const JOURNEY_EVALUATOR_ID: &str = "ui-journey-evaluator";
@@ -790,90 +787,6 @@ pub(crate) fn write_baseline_artifacts(
         .map_err(|err| format!("Failed to write {}: {}", baseline_md_path.display(), err))?;
 
     Ok(baseline_json_path)
-}
-
-pub(crate) async fn verify_provider_readiness(provider: &str) -> Result<(), String> {
-    let normalized_provider = provider.trim().to_lowercase();
-    if normalized_provider.is_empty() {
-        return Err("Provider is empty".to_string());
-    }
-
-    let preset = get_preset_by_id_with_registry(&normalized_provider)
-        .await
-        .map_err(|err| format!("Unsupported provider '{}': {}", normalized_provider, err))?;
-    let command = resolve_preset_command(&preset);
-
-    if !command_exists(&command) {
-        return Err(format!(
-            "Provider '{}' requires '{}' but command not found. Is it installed and in PATH?",
-            normalized_provider, command
-        ));
-    }
-
-    if normalized_provider == "opencode" {
-        verify_opencode_config_directory()?;
-    }
-
-    if normalized_provider == "claude"
-        && std::env::var("ANTHROPIC_AUTH_TOKEN").is_err()
-        && std::env::var("ANTHROPIC_API_KEY").is_err()
-    {
-        println!(
-            "⚠️  Claude may require authentication (no ANTHROPIC_AUTH_TOKEN/ANTHROPIC_API_KEY)."
-        );
-    }
-
-    Ok(())
-}
-
-fn resolve_preset_command(preset: &AcpPreset) -> String {
-    if let Some(env_var) = &preset.env_bin_override {
-        if let Ok(custom_command) = std::env::var(env_var) {
-            let trimmed = custom_command.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
-    }
-
-    preset.command.clone()
-}
-
-fn command_exists(command: &str) -> bool {
-    if command.trim().is_empty() {
-        return false;
-    }
-
-    if Path::new(command).is_file() || command.contains(std::path::MAIN_SEPARATOR) {
-        Path::new(command).is_file()
-    } else {
-        routa_core::shell_env::which(command).is_some()
-    }
-}
-
-fn verify_opencode_config_directory() -> Result<(), String> {
-    let config_base = std::env::var("XDG_CONFIG_HOME")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|home| home.join(".config")))
-        .ok_or_else(|| "Failed to resolve config directory".to_string())?;
-    let config_dir: PathBuf = config_base.join("opencode");
-    std::fs::create_dir_all(&config_dir)
-        .map_err(|err| format!("Failed to ensure {}: {}", config_dir.display(), err))?;
-
-    let check_file = config_dir.join(format!(".routa-acp-{}-check", uuid::Uuid::new_v4()));
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(&check_file)
-        .map_err(|err| format!("Failed to write {}: {}", check_file.display(), err))?;
-    file.write_all(b"routa cli provider health check")
-        .map_err(|err| format!("Failed to write {}: {}", check_file.display(), err))?;
-    std::fs::remove_file(check_file)
-        .map_err(|err| format!("Failed to clean {}: {}", config_dir.display(), err))?;
-    Ok(())
 }
 
 #[cfg(test)]
