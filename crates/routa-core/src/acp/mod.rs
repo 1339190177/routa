@@ -888,16 +888,19 @@ fn resolve_preset_command(preset: &AcpPreset) -> String {
 
 /// Truncate content to a maximum length for storage in traces.
 fn truncate_content(text: &str, max_len: usize) -> String {
-    if text.len() <= max_len {
+    if text.chars().count() <= max_len {
         text.to_string()
+    } else if max_len <= 3 {
+        text.chars().take(max_len).collect()
     } else {
-        format!("{}...", &text[..max_len.saturating_sub(3)])
+        let truncated: String = text.chars().take(max_len - 3).collect();
+        format!("{truncated}...")
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{get_presets, AcpManager, AcpSessionRecord};
+    use super::{get_presets, truncate_content, AcpManager, AcpSessionRecord};
     use std::collections::HashMap;
     use std::sync::Arc;
     use tokio::sync::RwLock;
@@ -1042,5 +1045,12 @@ mod tests {
             rewritten["sessionId"].as_str(),
             Some("child-session")
         );
+    }
+
+    #[test]
+    fn truncate_content_handles_unicode_boundaries() {
+        assert_eq!(truncate_content("你好世界ABC", 5), "你好...");
+        assert_eq!(truncate_content("你好世界ABC", 3), "你好世");
+        assert_eq!(truncate_content("短文本", 10), "短文本");
     }
 }

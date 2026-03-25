@@ -281,10 +281,10 @@ enum AgentAction {
 
 #[derive(Subcommand)]
 enum SpecialistAction {
-    /// Execute a specialist definition file directly
+    /// Execute a specialist by id or definition file
     Run {
-        /// Path to a specialist definition file (.md/.yaml/.yml)
-        file: String,
+        /// Specialist ID or definition file path (.yaml/.yml)
+        specialist: String,
         /// Prompt to send to the specialist
         #[arg(long, short = 'p')]
         prompt: Option<String>,
@@ -845,14 +845,14 @@ async fn main() {
                 let state = commands::init_state(&cli.db).await;
                 match action {
                     SpecialistAction::Run {
-                        file,
+                        specialist,
                         prompt,
                         workspace_id,
                         provider,
                     } => {
                         commands::specialist::run(
                             &state,
-                            &file,
+                            &specialist,
                             prompt.as_deref(),
                             &workspace_id,
                             provider.as_deref(),

@@ -1,0 +1,21 @@
+id: kanban-automation
+goal: >
+  在 workspace Kanban 视图创建卡片，将其移动到自动化列，并验证 session 自动创建或相关状态更新。
+entry_url: "http://localhost:3000/workspace/default/kanban"
+preconditions:
+  - "Kanban 页面可访问"
+  - "有可编辑的默认看板与列"
+success_signals:
+  - "创建新卡成功并显示在 backlog"
+  - "卡片成功移动到自动化列"
+  - "自动化触发后在 session 区域有新会话记录或状态反馈"
+failure_signals:
+  - "卡片创建失败或不可见"
+  - "拖拽/移动卡片后无状态更新"
+  - "无法发现任何 session 触发痕迹"
+score_rubric: |
+  重点关注：
+  1. 任务流是否能从输入到自动化触发完整闭环
+  2. 错误状态是否可见且有恢复入口
+  3. 页面反馈（toast、状态标签）是否及时且清晰
+  4. 长等待是否有 loading 提示

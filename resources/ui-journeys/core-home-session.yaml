@@ -1,0 +1,21 @@
+id: core-home-session
+goal: >
+  从首页进入 workspace，选择 provider，提交 prompt，跳转到 session 详情页并验证可交互。
+entry_url: "http://localhost:3000"
+preconditions:
+  - "至少存在一个 workspace"
+  - "至少配置了一个 provider"
+success_signals:
+  - "成功跳转到 session 详情页"
+  - "session 页面显示用户提交的 prompt 内容"
+  - "页面可继续交互，无阻断性错误"
+failure_signals:
+  - "任何步骤出现页面白屏或 500 错误"
+  - "提交 prompt 后未跳转"
+  - "session 页面无法加载历史消息"
+score_rubric: |
+  重点关注：
+  1. 关键目标是否顺序完成
+  2. 页面是否清晰引导
+  3. 出错时恢复指引是否可理解
+  4. 交互过程是否出现明显阻断
