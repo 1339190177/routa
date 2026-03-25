@@ -12,7 +12,13 @@ Install from crates.io:
 cargo install routa-cli
 ```
 
-Or build from source:
+Install the CLI from the current checkout:
+
+```bash
+cargo install --path crates/routa-cli
+```
+
+Or build from source without installing:
 
 ```bash
 cargo build --release --manifest-path crates/routa-cli/Cargo.toml
@@ -24,7 +30,7 @@ The binary name is `routa`.
 
 ### Prompt Mode
 
-Run a full Routa coordination flow from a single requirement:
+Run a quick one-off `DEVELOPER` session from a single requirement:
 
 ```bash
 routa -p "Add OAuth login with Google and GitHub providers"
@@ -34,7 +40,7 @@ routa -p "Investigate flaky tests" --provider claude
 
 Prompt mode uses:
 - `--workspace-id <ID>`: target workspace, default `default`
-- `--provider <PROVIDER>`: ACP provider for the coordinator session, default `opencode`
+- `--provider <PROVIDER>`: ACP provider for the developer session, default `opencode`
 - `--db <PATH>`: SQLite database path, default `routa.db`
 
 ### HTTP Backend Server
@@ -146,7 +152,7 @@ routa session list --workspace-id default
 routa session get --id <session-id>
 routa session pick --workspace-id default
 
-routa kanban card create --title "Investigate release flow" --workspace-id default
+routa kanban card create --title "Investigate release flow" --workspace-id default --board-id <board-id> --column-id <column-id>
 routa kanban card move --card-id <card-id> --target-column-id todo
 
 routa workflow validate .routa/workflows/release.yaml
