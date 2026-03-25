@@ -89,6 +89,7 @@ pub struct SessionLaunchOptions {
 // ─── Managed Process ────────────────────────────────────────────────────
 
 /// Process type enum to support both ACP and Claude stream-json protocols.
+#[derive(Clone)]
 enum AgentProcessType {
     /// Standard ACP protocol (opencode, gemini, copilot, etc.)
     Acp(Arc<AcpProcess>),
@@ -533,28 +534,33 @@ impl AcpManager {
     pub async fn prompt(&self, session_id: &str, text: &str) -> Result<serde_json::Value, String> {
         self.mark_first_prompt_sent(session_id).await;
 
-        let processes = self.processes.read().await;
-        let managed = processes
-            .get(session_id)
-            .ok_or_else(|| format!("No agent process for session: {}", session_id))?;
+        let (process, acp_session_id, preset_id, trace_writer) = {
+            let processes = self.processes.read().await;
+            let managed = processes
+                .get(session_id)
+                .ok_or_else(|| format!("No agent process for session: {}", session_id))?;
+            (
+                managed.process.clone(),
+                managed.acp_session_id.clone(),
+                managed.preset_id.clone(),
+                managed.trace_writer.clone(),
+            )
+        };
 
-        let is_alive = match &managed.process {
+        let is_alive = match &process {
             AgentProcessType::Acp(p) => p.is_alive(),
             AgentProcessType::Claude(p) => p.is_alive(),
         };
 
         if !is_alive {
-            return Err(format!(
-                "Agent ({}) process is not running",
-                managed.preset_id
-            ));
+            return Err(format!("Agent ({}) process is not running", preset_id));
         }
 
         // Record UserMessage trace
         let trace = TraceRecord::new(
             session_id,
             TraceEventType::UserMessage,
-            Contributor::new(&managed.preset_id, None),
+            Contributor::new(&preset_id, None),
         )
         .with_conversation(TraceConversation {
             turn: None,
@@ -563,19 +569,19 @@ impl AcpManager {
             full_content: None,
         });
 
-        managed.trace_writer.append_safe(&trace).await;
+        trace_writer.append_safe(&trace).await;
 
         tracing::info!(
             target: "routa_acp_prompt",
             session_id = %session_id,
-            preset_id = %managed.preset_id,
-            acp_session_id = %managed.acp_session_id,
+            preset_id = %preset_id,
+            acp_session_id = %acp_session_id,
             prompt_len = text.len(),
             "acp prompt start"
         );
 
-        let result = match &managed.process {
-            AgentProcessType::Acp(p) => p.prompt(&managed.acp_session_id, text).await,
+        let result = match &process {
+            AgentProcessType::Acp(p) => p.prompt(&acp_session_id, text).await,
             AgentProcessType::Claude(p) => {
                 let stop_reason = p.prompt(text).await?;
                 Ok(serde_json::json!({ "stopReason": stop_reason }))
@@ -586,13 +592,13 @@ impl AcpManager {
             Ok(_) => tracing::info!(
                 target: "routa_acp_prompt",
                 session_id = %session_id,
-                preset_id = %managed.preset_id,
+                preset_id = %preset_id,
                 "acp prompt success"
             ),
             Err(error) => tracing::error!(
                 target: "routa_acp_prompt",
                 session_id = %session_id,
-                preset_id = %managed.preset_id,
+                preset_id = %preset_id,
                 error = %error,
                 "acp prompt failed"
             ),

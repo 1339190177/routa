@@ -474,82 +474,32 @@ async fn execute_specialist_run(
     println!("🚀 Sending prompt to specialist...");
     println!();
 
-    let prompt_future = state.acp_manager.prompt(&session_id, &initial_prompt);
-    let prompt_response = match execution_budget {
-        Some(budget) => {
-            let remaining = budget.saturating_sub(run_start.elapsed());
-            if remaining.is_zero() {
-                let error = format!(
-                    "UI journey exceeded max runtime budget of {} seconds before prompt submission",
-                    budget.as_secs()
-                );
-                if let Some(context) = journey_context.as_ref() {
-                    metrics.elapsed_ms = run_start.elapsed().as_millis();
-                    write_ui_journey_failure_artifacts(
-                        context,
-                        "execution_timeout",
-                        &error,
-                        &metrics,
-                    );
-                }
-                state.acp_manager.kill_session(&session_id).await;
-                orchestrator.cleanup(&session_id).await;
-                return Err(error);
-            }
-            match tokio::time::timeout(remaining, prompt_future).await {
-                Ok(result) => result,
-                Err(_) => {
-                    let error = format!(
-                        "UI journey exceeded max runtime budget of {} seconds while waiting for prompt submission",
-                        budget.as_secs()
-                    );
-                    if let Some(context) = journey_context.as_ref() {
-                        metrics.elapsed_ms = run_start.elapsed().as_millis();
-                        write_ui_journey_failure_artifacts(
-                            context,
-                            "execution_timeout",
-                            &error,
-                            &metrics,
-                        );
-                    }
-                    state.acp_manager.kill_session(&session_id).await;
-                    orchestrator.cleanup(&session_id).await;
-                    return Err(error);
-                }
-            }
-        }
-        None => prompt_future.await,
-    };
-    let prompt_response = match prompt_response {
-        Ok(response) => response,
-        Err(err)
-            if journey_context.is_some()
-                && err
-                    .to_string()
-                    .contains("Timeout waiting for session/prompt") =>
-        {
-            println!(
-                "⚠️  Prompt submission timed out waiting for RPC response; continuing to monitor session output..."
+    if let Some(budget) = execution_budget {
+        if run_start.elapsed() >= budget {
+            let error = format!(
+                "UI journey exceeded max runtime budget of {} seconds before prompt submission",
+                budget.as_secs()
             );
-            serde_json::Value::Null
-        }
-        Err(err) => {
-            let error = format!("Failed to send prompt: {}", err);
             if let Some(context) = journey_context.as_ref() {
                 metrics.elapsed_ms = run_start.elapsed().as_millis();
-                write_ui_journey_failure_artifacts(context, "prompt_submission", &error, &metrics);
+                write_ui_journey_failure_artifacts(context, "execution_timeout", &error, &metrics);
             }
             state.acp_manager.kill_session(&session_id).await;
             orchestrator.cleanup(&session_id).await;
             return Err(error);
         }
-    };
+    }
 
     let mut renderer = TuiRenderer::new();
     let mut idle_count = 0u32;
     let max_idle = 600;
     let mut failure_reason: Option<String> = None;
     let mut collected_output = String::new();
+    let mut prompt_response = serde_json::Value::Null;
+    let mut prompt_error: Option<String> = None;
+    let mut prompt_finished = false;
+    let prompt_future = state.acp_manager.prompt(&session_id, &initial_prompt);
+    tokio::pin!(prompt_future);
 
     loop {
         if let Some(budget) = execution_budget {
@@ -564,8 +514,34 @@ async fn execute_specialist_run(
             }
         }
 
-        match tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv()).await {
-            Ok(Ok(update)) => {
+        let tick = tokio::time::sleep(std::time::Duration::from_secs(1));
+        tokio::pin!(tick);
+
+        tokio::select! {
+            prompt_result = &mut prompt_future, if !prompt_finished => {
+                prompt_finished = true;
+                match prompt_result {
+                    Ok(response) => {
+                        prompt_response = response;
+                    }
+                    Err(err)
+                        if journey_context.is_some()
+                            && err
+                                .to_string()
+                                .contains("Timeout waiting for session/prompt") =>
+                    {
+                        println!(
+                            "⚠️  Prompt submission timed out waiting for RPC response; continuing to monitor session output..."
+                        );
+                    }
+                    Err(err) => {
+                        prompt_error = Some(format!("Failed to send prompt: {}", err));
+                    }
+                }
+            }
+            recv_result = rx.recv() => {
+                match recv_result {
+                    Ok(update) => {
                 idle_count = 0;
                 let update_payload = update
                     .get("params")
@@ -595,12 +571,14 @@ async fn execute_specialist_run(
                     break;
                 }
             }
-            Ok(Err(_)) => {
-                renderer.finish();
-                println!("═══ Specialist session ended ═══");
-                break;
+                    Err(_) => {
+                        renderer.finish();
+                        println!("═══ Specialist session ended ═══");
+                        break;
+                    }
+                }
             }
-            Err(_) => {
+            _ = &mut tick => {
                 idle_count += 1;
                 if idle_count >= max_idle {
                     renderer.finish();
@@ -640,8 +618,25 @@ async fn execute_specialist_run(
         specialist_output
     };
 
-    println!();
-    super::prompt::print_session_summary(router, &workspace_id).await;
+    if prompt_error.is_some() && specialist_output.trim().is_empty() && failure_reason.is_none() {
+        let error = prompt_error.unwrap_or_else(|| "Failed to send prompt".to_string());
+        if let Some(context) = journey_context.as_ref() {
+            metrics.elapsed_ms = run_start.elapsed().as_millis();
+            write_ui_journey_failure_artifacts(context, "prompt_submission", &error, &metrics);
+        }
+        if journey_context.is_none() {
+            println!();
+            super::prompt::print_session_summary(router, &workspace_id).await;
+        }
+        state.acp_manager.kill_session(&session_id).await;
+        orchestrator.cleanup(&session_id).await;
+        return Err(error);
+    }
+
+    if journey_context.is_none() {
+        println!();
+        super::prompt::print_session_summary(router, &workspace_id).await;
+    }
 
     state.acp_manager.kill_session(&session_id).await;
     orchestrator.cleanup(&session_id).await;
