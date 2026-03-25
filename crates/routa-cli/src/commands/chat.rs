@@ -18,6 +18,7 @@ use routa_core::rpc::RpcRouter;
 use routa_core::state::AppState;
 use tokio::sync::broadcast;
 
+use super::prompt::update_agent_status;
 use super::tui::TuiRenderer;
 
 pub async fn run(
@@ -107,6 +108,7 @@ pub async fn run(
     println!("╚══════════════════════════════════════════════════════════╝");
 
     let session_exists = state.acp_manager.get_session(&session_id).await.is_some();
+    let mut final_status = "COMPLETED";
 
     if !session_exists {
         let spawn_result = state
@@ -129,6 +131,9 @@ pub async fn run(
         match spawn_result {
             Ok((sid, _)) => {
                 println!("  {} Session: {}", style("●").green(), sid);
+                if let Err(err) = update_agent_status(&router, &agent_id, "ACTIVE").await {
+                    eprintln!("Failed to mark agent {} ACTIVE: {}", agent_id, err);
+                }
                 if resumed_session.is_none() {
                     state
                         .acp_session_store
@@ -146,6 +151,10 @@ pub async fn run(
                 }
             }
             Err(e) => {
+                final_status = "ERROR";
+                if let Err(err) = update_agent_status(&router, &agent_id, "ERROR").await {
+                    eprintln!("Failed to mark agent {} ERROR: {}", agent_id, err);
+                }
                 println!(
                     "  {} Could not create ACP session: {}. Running in offline mode.",
                     style("!").yellow(),
@@ -202,6 +211,9 @@ pub async fn run(
         // ── Slash commands ───────────────────────────────────────────────
         match trimmed {
             "/quit" | "/exit" | "/q" => {
+                if let Err(err) = update_agent_status(&router, &agent_id, final_status).await {
+                    eprintln!("Failed to mark agent {} COMPLETED: {}", agent_id, err);
+                }
                 println!("{}", style("Goodbye!").dim());
                 state.acp_manager.kill_session(&session_id).await;
                 break;
@@ -346,12 +358,23 @@ pub async fn run(
                 }
             }
             Err(e) => {
+                final_status = "ERROR";
+                if let Err(status_err) = update_agent_status(&router, &agent_id, "ERROR").await {
+                    eprintln!("Failed to mark agent {} ERROR: {}", agent_id, status_err);
+                }
                 println!("{} Failed to send prompt: {}", style("✘").red(), e);
             }
         }
 
         print!("\n> ");
         io::stdout().flush().ok();
+    }
+
+    if let Err(err) = update_agent_status(&router, &agent_id, final_status).await {
+        eprintln!(
+            "Failed to mark agent {} {}: {}",
+            agent_id, final_status, err
+        );
     }
 
     Ok(())

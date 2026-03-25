@@ -14,7 +14,7 @@ use routa_core::orchestration::{OrchestratorConfig, RoutaOrchestrator, Specialis
 use routa_core::rpc::RpcRouter;
 use routa_core::state::AppState;
 
-use super::prompt::{print_session_summary, truncate_path};
+use super::prompt::{print_session_summary, truncate_path, update_agent_status};
 use super::tui::TuiRenderer;
 
 /// Run the team coordination flow with an agent lead.
@@ -118,6 +118,9 @@ pub async fn run(
     match spawn_result {
         Ok((sid, _)) => {
             tracing::info!("Team lead session created: {}", sid);
+            if let Err(err) = update_agent_status(&router, &agent_id, "ACTIVE").await {
+                eprintln!("Failed to mark agent {} ACTIVE: {}", agent_id, err);
+            }
             if let Err(e) = state
                 .acp_session_store
                 .create(
@@ -135,6 +138,9 @@ pub async fn run(
             }
         }
         Err(e) => {
+            if let Err(err) = update_agent_status(&router, &agent_id, "ERROR").await {
+                eprintln!("Failed to mark agent {} ERROR: {}", agent_id, err);
+            }
             return Err(format!("Failed to create ACP session: {}", e));
         }
     }
@@ -153,11 +159,17 @@ pub async fn run(
         .await;
 
     // ── 8. Subscribe to session updates ──────────────────────────────────
-    let mut rx = state
-        .acp_manager
-        .subscribe(&session_id)
-        .await
-        .ok_or("Failed to subscribe to session updates")?;
+    let mut rx = match state.acp_manager.subscribe(&session_id).await {
+        Some(rx) => rx,
+        None => {
+            if let Err(err) = update_agent_status(&router, &agent_id, "ERROR").await {
+                eprintln!("Failed to mark agent {} ERROR: {}", agent_id, err);
+            }
+            state.acp_manager.kill_session(&session_id).await;
+            orchestrator.cleanup(&session_id).await;
+            return Err("Failed to subscribe to session updates".to_string());
+        }
+    };
 
     // ── 9. Build and send team lead prompt ───────────────────────────────
     let coordinator_prompt = build_team_prompt(
@@ -172,16 +184,24 @@ pub async fn run(
     println!("🚀 Sending requirement to team lead...");
     println!();
 
-    state
+    if let Err(err) = state
         .acp_manager
         .prompt(&session_id, &coordinator_prompt)
         .await
-        .map_err(|e| format!("Failed to send prompt: {}", e))?;
+    {
+        if let Err(status_err) = update_agent_status(&router, &agent_id, "ERROR").await {
+            eprintln!("Failed to mark agent {} ERROR: {}", agent_id, status_err);
+        }
+        state.acp_manager.kill_session(&session_id).await;
+        orchestrator.cleanup(&session_id).await;
+        return Err(format!("Failed to send prompt: {}", err));
+    }
 
     // ── 10. Stream updates until completion ──────────────────────────────
     let mut renderer = TuiRenderer::new();
     let mut idle_count = 0u32;
     let max_idle = 600; // 10 minutes at 1s intervals
+    let mut final_status = "COMPLETED";
 
     loop {
         match tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv()).await {
@@ -195,12 +215,15 @@ pub async fn run(
                     .and_then(|v| v.as_str())
                     == Some("turn_complete");
                 renderer.handle_update(&update);
-                if is_done && interactive {
+                if is_done {
+                    renderer.finish();
+                    println!("═══ Team lead turn complete ═══");
                     break;
                 }
             }
             Ok(Err(_)) => {
                 renderer.finish();
+                final_status = "ERROR";
                 println!("═══ Team lead session ended ═══");
                 break;
             }
@@ -208,11 +231,13 @@ pub async fn run(
                 idle_count += 1;
                 if idle_count >= max_idle {
                     renderer.finish();
+                    final_status = "ERROR";
                     println!("⏰ Timeout: no activity for {} seconds", max_idle);
                     break;
                 }
                 if !state.acp_manager.is_alive(&session_id).await {
                     renderer.finish();
+                    final_status = "ERROR";
                     println!("═══ Team lead process exited ═══");
                     break;
                 }
@@ -223,7 +248,7 @@ pub async fn run(
     // ── 11. Enter interactive REPL if requested ──────────────────────────
     if interactive && state.acp_manager.is_alive(&session_id).await {
         renderer.finish();
-        run_interactive_repl(
+        if let Err(err) = run_interactive_repl(
             state,
             &agent_id,
             &session_id,
@@ -232,7 +257,22 @@ pub async fn run(
             &team_members,
             &mut rx,
         )
-        .await?;
+        .await
+        {
+            if let Err(status_err) = update_agent_status(&router, &agent_id, "ERROR").await {
+                eprintln!("Failed to mark agent {} ERROR: {}", agent_id, status_err);
+            }
+            state.acp_manager.kill_session(&session_id).await;
+            orchestrator.cleanup(&session_id).await;
+            return Err(err);
+        }
+    }
+
+    if let Err(err) = update_agent_status(&router, &agent_id, final_status).await {
+        eprintln!(
+            "Failed to mark agent {} {}: {}",
+            agent_id, final_status, err
+        );
     }
 
     // ── 12. Print summary ────────────────────────────────────────────────

@@ -11,6 +11,7 @@ use routa_core::state::AppState;
 use routa_core::workflow::specialist::{SpecialistDef, SpecialistLoader};
 
 use super::print_json;
+use super::prompt::update_agent_status;
 use super::review::stream_parser::{
     extract_agent_output_from_history, extract_agent_output_from_process_output,
     extract_text_from_prompt_result, extract_update_text,
@@ -443,6 +444,9 @@ async fn execute_specialist_run(
                         &metrics,
                     );
                 }
+                if let Err(status_err) = update_agent_status(router, &agent_id, "ERROR").await {
+                    eprintln!("Failed to mark agent {} ERROR: {}", agent_id, status_err);
+                }
                 return Err(error);
             }
         }
@@ -455,6 +459,9 @@ async fn execute_specialist_run(
         )
     })?;
     metrics.session_id = Some(session_id.clone());
+    if let Err(err) = update_agent_status(router, &agent_id, "ACTIVE").await {
+        eprintln!("Failed to mark agent {} ACTIVE: {}", agent_id, err);
+    }
 
     let acp = Arc::new(state.acp_manager.clone());
     let orchestrator = RoutaOrchestrator::new(
@@ -468,11 +475,17 @@ async fn execute_specialist_run(
         .register_agent_session(&agent_id, &session_id)
         .await;
 
-    let mut rx = state
-        .acp_manager
-        .subscribe(&session_id)
-        .await
-        .ok_or("Failed to subscribe to session updates")?;
+    let mut rx = match state.acp_manager.subscribe(&session_id).await {
+        Some(rx) => rx,
+        None => {
+            if let Err(status_err) = update_agent_status(router, &agent_id, "ERROR").await {
+                eprintln!("Failed to mark agent {} ERROR: {}", agent_id, status_err);
+            }
+            state.acp_manager.kill_session(&session_id).await;
+            orchestrator.cleanup(&session_id).await;
+            return Err("Failed to subscribe to session updates".to_string());
+        }
+    };
 
     let effective_user_prompt = journey_context
         .as_ref()
@@ -497,6 +510,9 @@ async fn execute_specialist_run(
             if let Some(context) = journey_context.as_ref() {
                 metrics.elapsed_ms = run_start.elapsed().as_millis();
                 write_ui_journey_failure_artifacts(context, "execution_timeout", &error, &metrics);
+            }
+            if let Err(status_err) = update_agent_status(router, &agent_id, "ERROR").await {
+                eprintln!("Failed to mark agent {} ERROR: {}", agent_id, status_err);
             }
             state.acp_manager.kill_session(&session_id).await;
             orchestrator.cleanup(&session_id).await;
@@ -681,6 +697,9 @@ async fn execute_specialist_run(
             write_ui_journey_failure_artifacts(context, failure_stage, &error, &metrics);
         }
         if journey_context.is_none() {
+            if let Err(status_err) = update_agent_status(router, &agent_id, "ERROR").await {
+                eprintln!("Failed to mark agent {} ERROR: {}", agent_id, status_err);
+            }
             println!();
             super::prompt::print_session_summary(
                 router,
@@ -693,6 +712,18 @@ async fn execute_specialist_run(
         state.acp_manager.kill_session(&session_id).await;
         orchestrator.cleanup(&session_id).await;
         return Err(error);
+    }
+
+    let terminal_status = if failure_reason.is_some() {
+        "ERROR"
+    } else {
+        "COMPLETED"
+    };
+    if let Err(err) = update_agent_status(router, &agent_id, terminal_status).await {
+        eprintln!(
+            "Failed to mark agent {} {}: {}",
+            agent_id, terminal_status, err
+        );
     }
 
     if journey_context.is_none() {
