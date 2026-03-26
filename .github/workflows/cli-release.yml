@@ -1,0 +1,181 @@
+name: Routa CLI Release
+
+on:
+  push:
+    tags:
+      - 'cli-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version to publish (without cli- prefix), ex: 0.2.4"
+        required: true
+        type: string
+      publish:
+        description: "Publish npm packages after packaging"
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    name: Build CLI binaries
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            key: linux-x64
+          - runner: macos-13
+            target: aarch64-apple-darwin
+            key: darwin-arm64
+          - runner: macos-14
+            target: x86_64-apple-darwin
+            key: darwin-x64
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            key: win32-x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build routa CLI
+        run: |
+          cargo build --locked --release --package routa-cli --target ${{ matrix.target }}
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          mkdir -p dist/${{ matrix.key }}
+          if [[ "${{ matrix.key }}" == "win32-x64" ]]; then
+            cp target/${{ matrix.target }}/release/routa.exe dist/${{ matrix.key }}/routa.exe
+          else
+            cp target/${{ matrix.target }}/release/routa dist/${{ matrix.key }}/routa
+            chmod +x dist/${{ matrix.key }}/routa
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: routa-cli-${{ matrix.key }}
+          path: dist/${{ matrix.key }}
+          if-no-files-found: error
+
+  stage:
+    name: Stage npm packages
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/cli-artifacts
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.version }}" ]]; then
+            version="${{ github.event.inputs.version }}"
+            version="${version#v}"
+            version="${version#cli-v}"
+          else
+            version="${GITHUB_REF_NAME#cli-v}"
+          fi
+
+          if [[ -z "${version}" ]]; then
+            echo "Unable to resolve version" >&2
+            exit 1
+          fi
+
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Stage npm tarballs
+        run: |
+          node scripts/stage-routa-cli-npm.mjs \
+            --version "${{ steps.version.outputs.value }}" \
+            --artifacts dist/cli-artifacts \
+            --out dist/npm
+
+      - name: Upload npm artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: routa-cli-npm
+          path: dist/npm
+
+  publish:
+    name: Publish to npm
+    needs:
+      - build
+      - stage
+    if: |
+      github.event_name == 'push' ||
+      github.event.inputs.publish == 'true' ||
+      github.event.inputs.publish == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: routa-cli-npm
+          path: dist/npm
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+
+      - name: Publish tarballs
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${NPM_TOKEN:-}" ]]; then
+            echo "NPM_TOKEN is required for publish" >&2
+            exit 1
+          fi
+
+          version="${{ needs.stage.outputs.version }}"
+          if [[ -z "${version}" ]]; then
+            echo "Unable to resolve version from staging output" >&2
+            exit 1
+          fi
+
+          if [[ "${version}" == *-* ]]; then
+            npm_tag="next"
+          else
+            npm_tag="latest"
+          fi
+
+          npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+
+          shopt -s nullglob
+          for tarball in dist/npm/*.tgz; do
+            echo "Publishing ${tarball}"
+            output=$( { npm publish "${tarball}" --access public --tag "${npm_tag}"; } 2>&1 )
+            status=$?
+            if [[ ${status} -eq 0 ]]; then
+              continue
+            fi
+            if [[ "${output}" == *"You cannot publish over the previously published version"* || "${output}" == *"already exists"* ]]; then
+              echo "Skip existing version for ${tarball}"
+              continue
+            fi
+            echo "${output}"
+            exit ${status}
+          done

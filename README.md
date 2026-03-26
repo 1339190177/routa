@@ -160,9 +160,16 @@ docker compose --profile postgres up --build
 
 ### CLI (Rust)
 
-The desktop distribution includes a `routa` CLI:
+Install the CLI directly from NPM for terminal-first workflows:
 
 ```bash
+npm install -g routa
+```
+
+The desktop distribution also includes a `routa` CLI:
+
+```bash
+npx routa -h                      # one-off usage
 routa -p "Implement feature X"    # Full coordinator flow
 routa agent list|create|status    # Agent management
 routa task list|create|get        # Task management
