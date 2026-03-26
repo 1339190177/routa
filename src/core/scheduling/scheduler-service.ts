@@ -10,6 +10,8 @@
 import nodeCron from "node-cron";
 import type { ScheduledTask } from "node-cron";
 
+import { runWithSpan } from "../telemetry/tracing";
+
 let schedulerTask: ScheduledTask | null = null;
 let isStarted = false;
 
@@ -31,20 +33,39 @@ export function startSchedulerService(): void {
 
   console.log("[Scheduler] Starting in-process cron scheduler (every minute)");
 
-  schedulerTask = nodeCron.schedule("* * * * *", async () => {
-    try {
-      const resp = await fetch(TICK_URL, { method: "POST" });
-      if (!resp.ok) {
-        console.error("[Scheduler] Tick failed:", resp.status, await resp.text());
-        return;
-      }
-      const data = await resp.json();
-      if (data.fired > 0) {
-        console.log(`[Scheduler] Tick fired ${data.fired} schedule(s): ${data.scheduleIds?.join(", ")}`);
-      }
-    } catch {
+  schedulerTask = nodeCron.schedule("* * * * *", () => {
+    void runWithSpan(
+      "routa.scheduler.tick_cycle",
+      {
+        attributes: {
+          "routa.scheduler.tick_url": TICK_URL,
+        },
+      },
+      async (span) => {
+        const resp = await fetch(TICK_URL, { method: "POST" });
+        span.setAttribute("http.response.status_code", resp.status);
+
+        if (!resp.ok) {
+          const body = await resp.text();
+          span.setAttribute("routa.scheduler.tick_failed", true);
+          console.error("[Scheduler] Tick failed:", resp.status, body);
+          return;
+        }
+
+        const data = (await resp.json()) as {
+          fired?: number;
+          scheduleIds?: string[];
+        };
+        const firedCount = Number(data.fired ?? 0);
+        span.setAttribute("routa.schedules.fired_count", firedCount);
+
+        if (firedCount > 0) {
+          console.log(`[Scheduler] Tick fired ${firedCount} schedule(s): ${data.scheduleIds?.join(", ")}`);
+        }
+      },
+    ).catch(() => {
       // Server may not be ready yet during cold start — silently ignore
-    }
+    });
   });
 
   isStarted = true;

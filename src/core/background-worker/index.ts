@@ -14,6 +14,7 @@
 
 import { getRoutaSystem } from "../routa-system";
 import type { BackgroundTask } from "../models/background-task";
+import { runWithSpan } from "../telemetry/tracing";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -61,65 +62,101 @@ export class BackgroundTaskWorker {
    * Only runs up to MAX_CONCURRENT_TASKS at a time.
    */
   async dispatchPending(): Promise<void> {
-    const system = getRoutaSystem();
+    await runWithSpan(
+      "routa.background_task.dispatch_pending",
+      {
+        attributes: {
+          "routa.background_task.max_concurrency": MAX_CONCURRENT_TASKS,
+        },
+      },
+      async (span) => {
+        const system = getRoutaSystem();
 
-    // Check current running count
-    let running: BackgroundTask[];
-    try {
-      running = await system.backgroundTaskStore.listRunning();
-    } catch {
-      return; // DB not ready yet (cold start)
-    }
+        // Check current running count
+        let running: BackgroundTask[];
+        try {
+          running = await system.backgroundTaskStore.listRunning();
+        } catch {
+          span.setAttribute("routa.background_task.dispatch_skipped", "db_not_ready");
+          return;
+        }
 
-    // Skip if already at max concurrency
-    if (running.length >= MAX_CONCURRENT_TASKS) {
-      return;
-    }
+        span.setAttribute("routa.background_task.running_count", running.length);
 
-    const slotsAvailable = MAX_CONCURRENT_TASKS - running.length;
+        // Skip if already at max concurrency
+        if (running.length >= MAX_CONCURRENT_TASKS) {
+          span.setAttribute("routa.background_task.dispatch_skipped", "max_concurrency");
+          return;
+        }
 
-    // Use listReadyToRun() to support workflow task dependencies
-    // This returns PENDING tasks whose dependencies (if any) are all COMPLETED
-    let readyTasks: BackgroundTask[];
-    try {
-      readyTasks = await system.backgroundTaskStore.listReadyToRun();
-    } catch {
-      return;
-    }
+        const slotsAvailable = MAX_CONCURRENT_TASKS - running.length;
+        span.setAttribute("routa.background_task.slots_available", slotsAvailable);
 
-    // Only dispatch as many as we have slots for
-    const toDispatch = readyTasks.slice(0, slotsAvailable);
-    for (const task of toDispatch) {
-      await this.dispatchTask(task);
-    }
+        // Use listReadyToRun() to support workflow task dependencies
+        // This returns PENDING tasks whose dependencies (if any) are all COMPLETED
+        let readyTasks: BackgroundTask[];
+        try {
+          readyTasks = await system.backgroundTaskStore.listReadyToRun();
+        } catch {
+          span.setAttribute("routa.background_task.dispatch_skipped", "ready_query_failed");
+          return;
+        }
+
+        span.setAttribute("routa.background_task.ready_count", readyTasks.length);
+
+        // Only dispatch as many as we have slots for
+        const toDispatch = readyTasks.slice(0, slotsAvailable);
+        span.setAttribute("routa.background_task.dispatched_count", toDispatch.length);
+        for (const task of toDispatch) {
+          await this.dispatchTask(task);
+        }
+      },
+    );
   }
 
   async dispatchTask(task: BackgroundTask): Promise<void> {
-    const system = getRoutaSystem();
+    await runWithSpan(
+      "routa.background_task.dispatch_task",
+      {
+        attributes: {
+          "routa.background_task.id": task.id,
+          "routa.background_task.workspace_id": task.workspaceId,
+          "routa.background_task.agent_id": task.agentId,
+          "routa.background_task.trigger_source": task.triggerSource,
+          "routa.background_task.has_workflow_run": Boolean(task.workflowRunId),
+        },
+      },
+      async (span) => {
+        const system = getRoutaSystem();
 
-    // Resolve workflow step dependencies before dispatch, injecting prior step outputs
-    // into the prompt placeholders (e.g., ${steps.Analyze.output}).
-    const prompt = await this.resolveTaskPrompt(task);
+        // Resolve workflow step dependencies before dispatch, injecting prior step outputs
+        // into the prompt placeholders (e.g., ${steps.Analyze.output}).
+        const prompt = await this.resolveTaskPrompt(task);
+        span.setAttribute("routa.background_task.prompt_length", prompt.length);
 
-    // Optimistically mark RUNNING to prevent re-dispatch
-    await system.backgroundTaskStore.updateStatus(task.id, "RUNNING", { startedAt: new Date() });
+        // Optimistically mark RUNNING to prevent re-dispatch
+        await system.backgroundTaskStore.updateStatus(task.id, "RUNNING", { startedAt: new Date() });
 
-    try {
-      const sessionId = await this.createAndSendPrompt(task, prompt);
-      await system.backgroundTaskStore.updateStatus(task.id, "RUNNING", {
-        startedAt: task.startedAt ?? new Date(),
-        resultSessionId: sessionId,
-      });
-      this.sessionToTask.set(sessionId, task.id);
-      console.log(`[BGWorker] Task ${task.id} → session ${sessionId}`);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error(`[BGWorker] Task ${task.id} dispatch failed:`, err);
-      await system.backgroundTaskStore.updateStatus(task.id, "FAILED", {
-        errorMessage,
-        completedAt: new Date(),
-      });
-    }
+        try {
+          const sessionId = await this.createAndSendPrompt(task, prompt);
+          await system.backgroundTaskStore.updateStatus(task.id, "RUNNING", {
+            startedAt: task.startedAt ?? new Date(),
+            resultSessionId: sessionId,
+          });
+          this.sessionToTask.set(sessionId, task.id);
+          span.setAttribute("routa.background_task.session_id", sessionId);
+          console.log(`[BGWorker] Task ${task.id} → session ${sessionId}`);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          span.setAttribute("routa.background_task.failed", true);
+          console.error(`[BGWorker] Task ${task.id} dispatch failed:`, err);
+          await system.backgroundTaskStore.updateStatus(task.id, "FAILED", {
+            errorMessage,
+            completedAt: new Date(),
+          });
+        }
+      },
+    );
   }
 
   private async resolveTaskPrompt(task: BackgroundTask): Promise<string> {
@@ -184,74 +221,91 @@ export class BackgroundTaskWorker {
    * Returns the session ID.
    */
   private async createAndSendPrompt(task: BackgroundTask, prompt?: string): Promise<string> {
-    const base = getInternalBaseUrl();
-
-    // Known ACP providers — everything else is treated as a specialist ID
-    const KNOWN_PROVIDERS = new Set([
-      "opencode",
-      "gemini",
-      "codex",
-      "copilot",
-      "auggie",
-      "kimi",
-      "kiro",
-      "claude",
-      "claude-code-sdk",
-      "workspace",
-      "workspace-agent",
-      "routa-native",
-    ]);
-
-    // Determine provider and specialistId based on task.agentId
-    const isKnownProvider = KNOWN_PROVIDERS.has(task.agentId);
-    // Use default provider if agentId is not a known provider (it's a specialist)
-    const provider = isKnownProvider ? task.agentId : undefined; // Let API use default
-    const specialistId = isKnownProvider ? undefined : task.agentId;
-
-    // 1. Create session
-    const newRes = await fetch(`${base}/api/acp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "session/new",
-        params: {
-          provider,
-          specialistId,
-          workspaceId: task.workspaceId,
-          cwd: process.cwd(),
-          role: "CRAFTER",
-          sandboxId: task.sandboxId,
+    return runWithSpan(
+      "routa.background_task.create_and_send_prompt",
+      {
+        attributes: {
+          "routa.background_task.id": task.id,
+          "routa.background_task.workspace_id": task.workspaceId,
+          "routa.background_task.agent_id": task.agentId,
         },
-      }),
-    });
+      },
+      async (span) => {
+        const base = getInternalBaseUrl();
+        span.setAttribute("server.address", base);
 
-    if (!newRes.ok) throw new Error(`session/new HTTP ${newRes.status}`);
+        // Known ACP providers — everything else is treated as a specialist ID
+        const KNOWN_PROVIDERS = new Set([
+          "opencode",
+          "gemini",
+          "codex",
+          "copilot",
+          "auggie",
+          "kimi",
+          "kiro",
+          "claude",
+          "claude-code-sdk",
+          "workspace",
+          "workspace-agent",
+          "routa-native",
+        ]);
 
-    const newBody = (await newRes.json()) as {
-      result?: { sessionId?: string };
-      error?: { message: string };
-    };
-    if (newBody.error) throw new Error(newBody.error.message);
-    const sessionId = newBody.result?.sessionId;
-    if (!sessionId) throw new Error("No sessionId returned from session/new");
+        // Determine provider and specialistId based on task.agentId
+        const isKnownProvider = KNOWN_PROVIDERS.has(task.agentId);
+        // Use default provider if agentId is not a known provider (it's a specialist)
+        const provider = isKnownProvider ? task.agentId : undefined; // Let API use default
+        const specialistId = isKnownProvider ? undefined : task.agentId;
+        span.setAttribute("routa.background_task.provider", provider ?? "");
+        span.setAttribute("routa.background_task.specialist_id", specialistId ?? "");
 
-    // 2. Send prompt (fire-and-forget — SSE may block; we don't await)
-    void fetch(`${base}/api/acp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 2,
-        method: "session/prompt",
-        params: { sessionId, prompt: prompt ?? task.prompt, workspaceId: task.workspaceId },
-      }),
-    }).catch((err) => {
-      console.warn(`[BGWorker] session/prompt fire-and-forget error:`, err);
-    });
+        // 1. Create session
+        const newRes = await fetch(`${base}/api/acp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "session/new",
+            params: {
+              provider,
+              specialistId,
+              workspaceId: task.workspaceId,
+              cwd: process.cwd(),
+              role: "CRAFTER",
+              sandboxId: task.sandboxId,
+            },
+          }),
+        });
 
-    return sessionId;
+        span.setAttribute("routa.background_task.session_new_status", newRes.status);
+        if (!newRes.ok) throw new Error(`session/new HTTP ${newRes.status}`);
+
+        const newBody = (await newRes.json()) as {
+          result?: { sessionId?: string };
+          error?: { message: string };
+        };
+        if (newBody.error) throw new Error(newBody.error.message);
+        const sessionId = newBody.result?.sessionId;
+        if (!sessionId) throw new Error("No sessionId returned from session/new");
+        span.setAttribute("routa.background_task.session_id", sessionId);
+
+        // 2. Send prompt (fire-and-forget — SSE may block; we don't await)
+        void fetch(`${base}/api/acp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 2,
+            method: "session/prompt",
+            params: { sessionId, prompt: prompt ?? task.prompt, workspaceId: task.workspaceId },
+          }),
+        }).catch((err) => {
+          console.warn(`[BGWorker] session/prompt fire-and-forget error:`, err);
+        });
+
+        return sessionId;
+      },
+    );
   }
 
   // ─── Check completed sessions ─────────────────────────────────────────────
@@ -264,89 +318,115 @@ export class BackgroundTaskWorker {
    * 2. Database query (robust path for tasks that survived HMR/restart)
    */
   async checkCompletions(): Promise<void> {
-    const system = getRoutaSystem();
-    const { getHttpSessionStore } = await import("../acp/http-session-store");
-    const store = getHttpSessionStore();
-    const activeSessions = new Set(store.listSessions().map((s) => s.sessionId));
+    await runWithSpan(
+      "routa.background_task.check_completions",
+      {
+        attributes: {
+          "routa.background_task.session_map_size": this.sessionToTask.size,
+        },
+      },
+      async (span) => {
+        const system = getRoutaSystem();
+        const { getHttpSessionStore } = await import("../acp/http-session-store");
+        const store = getHttpSessionStore();
+        const activeSessions = new Set(store.listSessions().map((s) => s.sessionId));
+        span.setAttribute("routa.background_task.active_session_count", activeSessions.size);
 
-    // Strategy 1: Check in-memory Map (for tasks dispatched in this process)
-    for (const [sessionId, taskId] of [...this.sessionToTask.entries()]) {
-      if (!activeSessions.has(sessionId)) {
-        const task = await system.backgroundTaskStore.get(taskId);
-        if (task) {
-          await this.persistCompletedTaskOutput(task);
+        let completedInMemory = 0;
+        let completedRecovered = 0;
+        let failedOrphaned = 0;
+        let failedStale = 0;
+
+        // Strategy 1: Check in-memory Map (for tasks dispatched in this process)
+        for (const [sessionId, taskId] of [...this.sessionToTask.entries()]) {
+          if (!activeSessions.has(sessionId)) {
+            const task = await system.backgroundTaskStore.get(taskId);
+            if (task) {
+              await this.persistCompletedTaskOutput(task);
+            }
+            await system.backgroundTaskStore.updateStatus(taskId, "COMPLETED", {
+              completedAt: new Date(),
+              resultSessionId: sessionId,
+            });
+            this.sessionToTask.delete(sessionId);
+            completedInMemory += 1;
+            console.log(`[BGWorker] Task ${taskId} completed (session removed).`);
+          }
         }
-        await system.backgroundTaskStore.updateStatus(taskId, "COMPLETED", {
-          completedAt: new Date(),
-          resultSessionId: sessionId,
-        });
-        this.sessionToTask.delete(sessionId);
-        console.log(`[BGWorker] Task ${taskId} completed (session removed).`);
-      }
-    }
 
-    // Strategy 2: Query database for RUNNING tasks with resultSessionId
-    // This handles tasks that survived HMR or server restart
-    try {
-      const runningTasks = await system.backgroundTaskStore.listRunning();
-      for (const task of runningTasks) {
-        if (!task.resultSessionId) continue;
-        const sessionGone = !activeSessions.has(task.resultSessionId);
-        // Session exists but is idle (not streaming) and task has been running > 2 min
-        const sessionIdleAndDone = activeSessions.has(task.resultSessionId)
-          && !store.isSessionStreaming(task.resultSessionId)
-          && task.startedAt != null
-          && (Date.now() - new Date(task.startedAt).getTime()) > 2 * 60 * 1000;
+        // Strategy 2: Query database for RUNNING tasks with resultSessionId
+        // This handles tasks that survived HMR or server restart
+        try {
+          const runningTasks = await system.backgroundTaskStore.listRunning();
+          for (const task of runningTasks) {
+            if (!task.resultSessionId) continue;
+            const sessionGone = !activeSessions.has(task.resultSessionId);
+            // Session exists but is idle (not streaming) and task has been running > 2 min
+            const sessionIdleAndDone = activeSessions.has(task.resultSessionId)
+              && !store.isSessionStreaming(task.resultSessionId)
+              && task.startedAt != null
+              && (Date.now() - new Date(task.startedAt).getTime()) > 2 * 60 * 1000;
 
-        if (sessionGone || sessionIdleAndDone) {
-          await this.persistCompletedTaskOutput(task);
-          await system.backgroundTaskStore.updateStatus(task.id, "COMPLETED", {
-            completedAt: new Date(),
-            resultSessionId: task.resultSessionId,
-          });
-          console.log(`[BGWorker] Task ${task.id} completed (DB recovery, session ${task.resultSessionId}, gone=${sessionGone}, idle=${sessionIdleAndDone}).`);
+            if (sessionGone || sessionIdleAndDone) {
+              await this.persistCompletedTaskOutput(task);
+              await system.backgroundTaskStore.updateStatus(task.id, "COMPLETED", {
+                completedAt: new Date(),
+                resultSessionId: task.resultSessionId,
+              });
+              completedRecovered += 1;
+              console.log(`[BGWorker] Task ${task.id} completed (DB recovery, session ${task.resultSessionId}, gone=${sessionGone}, idle=${sessionIdleAndDone}).`);
+            }
+          }
+        } catch (err) {
+          // DB not ready or query failed — skip this cycle
+          span.setAttribute("routa.background_task.recovery_query_failed", true);
+          console.warn("[BGWorker] Failed to query running tasks:", err);
         }
-      }
-    } catch (err) {
-      // DB not ready or query failed — skip this cycle
-      console.warn("[BGWorker] Failed to query running tasks:", err);
-    }
 
-    // Strategy 3: Handle orphaned tasks (RUNNING but no session, stuck for > 5 min)
-    // These tasks were marked RUNNING but createAndSendPrompt failed silently
-    try {
-      const orphanedTasks = await system.backgroundTaskStore.listOrphaned(5);
-      for (const task of orphanedTasks) {
-        // Mark as FAILED so they can be retried or investigated
-        await system.backgroundTaskStore.updateStatus(task.id, "FAILED", {
-          completedAt: new Date(),
-          errorMessage: "Orphaned task: dispatch failed without creating a session",
-        });
-        console.log(`[BGWorker] Task ${task.id} marked FAILED (orphaned, no session after 5 min).`);
-      }
-    } catch {
-      // DB not ready — skip
-    }
+        // Strategy 3: Handle orphaned tasks (RUNNING but no session, stuck for > 5 min)
+        // These tasks were marked RUNNING but createAndSendPrompt failed silently
+        try {
+          const orphanedTasks = await system.backgroundTaskStore.listOrphaned(5);
+          for (const task of orphanedTasks) {
+            // Mark as FAILED so they can be retried or investigated
+            await system.backgroundTaskStore.updateStatus(task.id, "FAILED", {
+              completedAt: new Date(),
+              errorMessage: "Orphaned task: dispatch failed without creating a session",
+            });
+            failedOrphaned += 1;
+            console.log(`[BGWorker] Task ${task.id} marked FAILED (orphaned, no session after 5 min).`);
+          }
+        } catch {
+          // DB not ready — skip
+        }
 
-    // Strategy 4: Detect stale RUNNING tasks whose sessions have been alive too long
-    // Sessions can stay in memory indefinitely; tasks running > 2 hours are considered stale
-    try {
-      const staleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours
-      const runningTasks = await system.backgroundTaskStore.listRunning();
-      for (const task of runningTasks) {
-        if (!task.resultSessionId) continue;
-        if (!task.startedAt || task.startedAt > staleThreshold) continue;
-        // Task has been RUNNING for > 2 hours — mark as FAILED (session is effectively dead)
-        await system.backgroundTaskStore.updateStatus(task.id, "FAILED", {
-          completedAt: new Date(),
-          errorMessage: `Stale task: been running > 2 hours (session: ${task.resultSessionId})`,
-        });
-        this.sessionToTask.delete(task.resultSessionId);
-        console.log(`[BGWorker] Task ${task.id} marked FAILED (stale, running > 2h).`);
-      }
-    } catch {
-      // skip
-    }
+        // Strategy 4: Detect stale RUNNING tasks whose sessions have been alive too long
+        // Sessions can stay in memory indefinitely; tasks running > 2 hours are considered stale
+        try {
+          const staleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours
+          const runningTasks = await system.backgroundTaskStore.listRunning();
+          for (const task of runningTasks) {
+            if (!task.resultSessionId) continue;
+            if (!task.startedAt || task.startedAt > staleThreshold) continue;
+            // Task has been RUNNING for > 2 hours — mark as FAILED (session is effectively dead)
+            await system.backgroundTaskStore.updateStatus(task.id, "FAILED", {
+              completedAt: new Date(),
+              errorMessage: `Stale task: been running > 2 hours (session: ${task.resultSessionId})`,
+            });
+            this.sessionToTask.delete(task.resultSessionId);
+            failedStale += 1;
+            console.log(`[BGWorker] Task ${task.id} marked FAILED (stale, running > 2h).`);
+          }
+        } catch {
+          // skip
+        }
+
+        span.setAttribute("routa.background_task.completed_in_memory", completedInMemory);
+        span.setAttribute("routa.background_task.completed_recovered", completedRecovered);
+        span.setAttribute("routa.background_task.failed_orphaned", failedOrphaned);
+        span.setAttribute("routa.background_task.failed_stale", failedStale);
+      },
+    );
   }
 }
 

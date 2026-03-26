@@ -12,65 +12,78 @@ import { getRoutaSystem } from "@/core/routa-system";
 import { createBackgroundTask } from "@/core/models/background-task";
 import { resolveSchedulePrompt } from "@/core/models/schedule";
 import { getNextRunTime } from "@/core/scheduling/cron-utils";
+import { runWithSpan } from "@/core/telemetry/tracing";
 import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(_request: NextRequest) {
-  try {
-    const system = getRoutaSystem();
-    const dueSchedules = await system.scheduleStore.listDue();
-
-    if (dueSchedules.length === 0) {
-      return NextResponse.json({ fired: 0, scheduleIds: [] });
-    }
-
-    const fired: string[] = [];
-
-    for (const schedule of dueSchedules) {
+  return runWithSpan(
+    "routa.schedule.tick_route",
+    {
+      attributes: {
+        "http.request.method": "POST",
+      },
+    },
+    async (span) => {
       try {
-        const prompt = resolveSchedulePrompt(schedule);
-        const task = createBackgroundTask({
-          id: uuidv4(),
-          prompt,
-          agentId: schedule.agentId,
-          workspaceId: schedule.workspaceId,
-          title: `[Scheduled] ${schedule.name}`,
-          triggerSource: "schedule",
-          triggeredBy: `schedule:${schedule.id}`,
-          maxAttempts: 1,
-        });
+        const system = getRoutaSystem();
+        const dueSchedules = await system.scheduleStore.listDue();
+        span.setAttribute("routa.schedule.due_count", dueSchedules.length);
 
-        await system.backgroundTaskStore.save(task);
+        if (dueSchedules.length === 0) {
+          return NextResponse.json({ fired: 0, scheduleIds: [] });
+        }
 
-        // Advance schedule timing
-        const nextRunAt = getNextRunTime(schedule.cronExpr);
-        await system.scheduleStore.update(schedule.id, {
-          lastRunAt: new Date(),
-          lastTaskId: task.id,
-          nextRunAt: nextRunAt ?? undefined,
-        });
+        const fired: string[] = [];
 
-        fired.push(schedule.id);
-        console.log(
-          `[ScheduleTick] Fired schedule "${schedule.name}" (${schedule.id}) → task ${task.id}`
-        );
+        for (const schedule of dueSchedules) {
+          try {
+            const prompt = resolveSchedulePrompt(schedule);
+            const task = createBackgroundTask({
+              id: uuidv4(),
+              prompt,
+              agentId: schedule.agentId,
+              workspaceId: schedule.workspaceId,
+              title: `[Scheduled] ${schedule.name}`,
+              triggerSource: "schedule",
+              triggeredBy: `schedule:${schedule.id}`,
+              maxAttempts: 1,
+            });
+
+            await system.backgroundTaskStore.save(task);
+
+            // Advance schedule timing
+            const nextRunAt = getNextRunTime(schedule.cronExpr);
+            await system.scheduleStore.update(schedule.id, {
+              lastRunAt: new Date(),
+              lastTaskId: task.id,
+              nextRunAt: nextRunAt ?? undefined,
+            });
+
+            fired.push(schedule.id);
+            console.log(
+              `[ScheduleTick] Fired schedule "${schedule.name}" (${schedule.id}) → task ${task.id}`
+            );
+          } catch (err) {
+            console.error(
+              `[ScheduleTick] Failed to fire schedule ${schedule.id}:`,
+              err
+            );
+          }
+        }
+
+        span.setAttribute("routa.schedule.fired_count", fired.length);
+        return NextResponse.json({ fired: fired.length, scheduleIds: fired });
       } catch (err) {
-        console.error(
-          `[ScheduleTick] Failed to fire schedule ${schedule.id}:`,
-          err
+        console.error("[ScheduleTick] Error:", err);
+        return NextResponse.json(
+          { error: "Tick failed", details: String(err) },
+          { status: 500 }
         );
       }
-    }
-
-    return NextResponse.json({ fired: fired.length, scheduleIds: fired });
-  } catch (err) {
-    console.error("[ScheduleTick] Error:", err);
-    return NextResponse.json(
-      { error: "Tick failed", details: String(err) },
-      { status: 500 }
-    );
-  }
+    },
+  );
 }
 
 // Allow GET for manual testing in browser
