@@ -73,7 +73,7 @@ function formatLaneSessionHeading(
         : "A2A Task";
   }
 
-  return session?.name ?? session?.provider ?? "ACP Session";
+  return session?.name ?? session?.provider ?? "Automation Run";
 }
 
 function ActivitySection({
@@ -406,7 +406,7 @@ function SessionHistoryPanel({
               <div className="mt-2 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className={`truncate font-medium text-slate-900 dark:text-slate-100 ${compact ? "text-[13px]" : "text-sm"}`}>
-                    {laneSession ? formatLaneSessionHeading(laneSession, session) : (session?.name ?? session?.provider ?? "ACP Session")}
+                    {laneSession ? formatLaneSessionHeading(laneSession, session) : (session?.name ?? session?.provider ?? "Automation Run")}
                   </div>
                   <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                     {isA2ARun

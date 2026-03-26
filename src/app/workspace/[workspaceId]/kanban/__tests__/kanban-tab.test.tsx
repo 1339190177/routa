@@ -355,7 +355,7 @@ describe("KanbanTab card detail manual runs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
 
     expect(await screen.findByText("当前还没有启动 session")).toBeTruthy();
-    expect(screen.getByText("还没有 ACP 运行记录")).toBeTruthy();
+    expect(screen.getByText("还没有自动化运行记录")).toBeTruthy();
     expect(screen.getAllByText(/右侧 session pane 会先显示等待中的空态/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "关闭 session 面板" })).toBeTruthy();
   });
@@ -725,6 +725,83 @@ describe("KanbanTab card detail manual runs", () => {
       expect(acp.selectSession).toHaveBeenCalledWith("session-123");
     });
     expect(runOne.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("shows a synthetic A2A run without selecting an ACP session", async () => {
+    vi.stubGlobal("scrollIntoView", vi.fn());
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+    const acp = {
+      connected: true,
+      sessionId: null,
+      updates: [],
+      providers: [{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }],
+      selectedProvider: "claude",
+      loading: false,
+      error: null,
+      authError: null,
+      dockerConfigError: null,
+      connect: vi.fn(),
+      createSession: vi.fn(),
+      selectSession: vi.fn(),
+      setProvider: vi.fn(),
+      setMode: vi.fn(),
+      prompt: vi.fn(),
+      promptSession: vi.fn(),
+      respondToUserInput: vi.fn(),
+      respondToUserInputForSession: vi.fn(),
+      writeTerminal: vi.fn(),
+      resizeTerminal: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+      clearAuthError: vi.fn(),
+      clearDockerConfigError: vi.fn(),
+      listProviderModels: vi.fn(),
+    } satisfies Partial<UseAcpState & UseAcpActions> as UseAcpState & UseAcpActions;
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[{
+          ...createTask("task-1", "Story One", {
+            sessionIds: ["a2a-session-1"],
+            triggerSessionId: "a2a-session-1",
+            assignedRole: "CRAFTER",
+            assignedSpecialistName: "Todo Orchestrator",
+            laneSessions: [
+              {
+                sessionId: "a2a-session-1",
+                transport: "a2a",
+                status: "completed",
+                columnId: "todo",
+                columnName: "Todo",
+                role: "CRAFTER",
+                specialistName: "Todo Orchestrator",
+                externalTaskId: "remote-task-1",
+                contextId: "ctx-1",
+                startedAt: "2025-01-01T00:00:00.000Z",
+                completedAt: "2025-01-01T00:10:00.000Z",
+              },
+            ],
+          }),
+        }]}
+        sessions={[]}
+        providers={[]}
+        specialists={[]}
+        codebases={[]}
+        onRefresh={vi.fn()}
+        acp={acp}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Story One" }));
+
+    expect(acp.selectSession).not.toHaveBeenCalled();
+    expect(await screen.findByText("A2A Run")).toBeTruthy();
+    expect(screen.getByText(/ACP chat and trace are not available/i)).toBeTruthy();
+    expect(screen.getAllByText("remote-task-1").length).toBeGreaterThan(0);
+    expect(screen.getByText("ctx-1")).toBeTruthy();
   });
 
   it("closes the card detail from the run tabs close button", async () => {

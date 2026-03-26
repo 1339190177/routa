@@ -8,7 +8,7 @@ import {
   type KanbanSpecialistLanguage,
 } from "./kanban-specialist-language";
 import type { ColumnAutomationConfig } from "./kanban-settings-modal";
-import type { KanbanBoardInfo, TaskInfo } from "../types";
+import type { KanbanBoardInfo, SessionInfo, TaskInfo } from "../types";
 
 interface SpecialistOption {
   id: string;
@@ -61,6 +61,35 @@ export function getPreferredTaskSessionId(task: TaskInfo | null | undefined): st
   if (!task) return null;
   return task.triggerSessionId
     ?? (task.sessionIds && task.sessionIds.length > 0 ? task.sessionIds[task.sessionIds.length - 1] : null);
+}
+
+export function getTaskLaneSession(
+  task: TaskInfo | null | undefined,
+  sessionId: string | null | undefined,
+): NonNullable<TaskInfo["laneSessions"]>[number] | undefined {
+  if (!task || !sessionId) return undefined;
+  return task.laneSessions?.find((entry) => entry.sessionId === sessionId);
+}
+
+export function isA2ATaskSession(
+  task: TaskInfo | null | undefined,
+  sessionId: string | null | undefined,
+): boolean {
+  if (!sessionId) return false;
+  if (getTaskLaneSession(task, sessionId)?.transport === "a2a") {
+    return true;
+  }
+  return sessionId.startsWith("a2a-");
+}
+
+export function canSelectTaskSessionInAcp(
+  task: TaskInfo | null | undefined,
+  sessionId: string | null | undefined,
+  sessionMap: Map<string, SessionInfo>,
+): boolean {
+  if (!sessionId) return false;
+  if (isA2ATaskSession(task, sessionId)) return false;
+  return sessionMap.has(sessionId);
 }
 
 export function taskOwnsSession(task: TaskInfo | null | undefined, sessionId: string | null | undefined): boolean {

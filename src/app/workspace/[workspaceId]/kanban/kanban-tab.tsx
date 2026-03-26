@@ -30,8 +30,10 @@ import type { RepoSelection } from "@/client/components/repo-picker";
 import type { RepoSyncState } from "./kanban-repo-sync-status";
 import {
   applySpecialistLanguageToBoardColumns,
+  canSelectTaskSessionInAcp,
   extractSessionLiveTail,
   getPreferredTaskSessionId,
+  isA2ATaskSession,
   taskOwnsSession,
 } from "./kanban-tab-helpers";
 import { KanbanTabHeader } from "./kanban-tab-header";
@@ -460,6 +462,7 @@ export function KanbanTab({
     const targetSessionId = preferredActiveTaskSessionId ?? activeSessionId;
     const sessionsInFlight = sessionBackfillInFlightRef.current;
     if (!activeTask || !targetSessionId) return;
+    if (isA2ATaskSession(activeTask, targetSessionId)) return;
     if (sessionMap.has(targetSessionId)) return;
     if (sessionsInFlight.has(targetSessionId)) return;
 
@@ -669,19 +672,21 @@ export function KanbanTab({
     }
 
     // Select the session in ACP if it exists
-    if (latestSession && acp) {
+    if (latestSession && acp && canSelectTaskSessionInAcp(task, latestSession, sessionMap)) {
       acp.selectSession(latestSession);
     }
-  }, [acp, defaultCodebase, patchTask]);
+  }, [acp, defaultCodebase, patchTask, sessionMap]);
 
-  const openSession = useCallback((sessionId: string | null) => {
+  const openSession = useCallback((sessionId: string | null, task?: TaskInfo | null) => {
     setActiveTaskId(null);
     setActiveSessionId(sessionId);
     // Select the session in ACP
-    if (sessionId && acp) {
+    if (sessionId && acp && (
+      task ? canSelectTaskSessionInAcp(task, sessionId, sessionMap) : sessionMap.has(sessionId)
+    )) {
       acp.selectSession(sessionId);
     }
-  }, [acp]);
+  }, [acp, sessionMap]);
 
   const closeTaskDetail = useCallback(() => {
     setActiveTaskId(null);
@@ -1139,7 +1144,7 @@ export function KanbanTab({
         });
       }
       if (updated.triggerSessionId && updated.triggerSessionId !== movingTask.triggerSessionId) {
-        openSession(updated.triggerSessionId);
+        openSession(updated.triggerSessionId, updated);
       }
       setMoveError(null);
       onRefresh();

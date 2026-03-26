@@ -10,10 +10,16 @@ import { KanbanCard } from "./kanban-card";
 import { KanbanCardActivityBar, KanbanCardDetail } from "./kanban-card-detail";
 import type { KanbanTaskAgentCopy } from "./i18n/kanban-task-agent";
 import { KanbanCreateModal, type DraftIssue } from "../kanban-create-modal";
-import { KanbanEmptySessionPane } from "./kanban-card-activity";
+import { KanbanCardActivityPanel, KanbanEmptySessionPane } from "./kanban-card-activity";
+import { formatSessionTimestamp } from "./kanban-card-session-utils";
 import { KanbanRepoSyncStatus, type RepoSyncState } from "./kanban-repo-sync-status";
 import type { KanbanSpecialistLanguage } from "./kanban-specialist-language";
-import { formatLaneAutomationSummary } from "./kanban-tab-helpers";
+import {
+  canSelectTaskSessionInAcp,
+  formatLaneAutomationSummary,
+  getTaskLaneSession,
+  isA2ATaskSession,
+} from "./kanban-tab-helpers";
 import type { ColumnAutomationConfig } from "./kanban-settings-modal";
 import type { KanbanBoardInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 
@@ -439,6 +445,90 @@ export function KanbanCreateTaskModal({
   );
 }
 
+function A2ASessionPane({
+  task,
+  laneSession,
+  sessions,
+  specialists,
+  specialistLanguage,
+  currentSessionId,
+  onSelectSession,
+  onCloseSession,
+}: {
+  task: TaskInfo;
+  laneSession?: NonNullable<TaskInfo["laneSessions"]>[number];
+  sessions: SessionInfo[];
+  specialists: SpecialistOption[];
+  specialistLanguage: KanbanSpecialistLanguage;
+  currentSessionId?: string;
+  onSelectSession: (sessionId: string) => void;
+  onCloseSession: () => void;
+}) {
+  const metadata = [
+    { label: "Transport", value: (laneSession?.transport ?? "a2a").toUpperCase() },
+    { label: "Status", value: laneSession?.status ?? "running" },
+    { label: "Lane", value: laneSession?.columnName ?? laneSession?.columnId ?? task.columnId ?? "Unknown lane" },
+    { label: "Role", value: laneSession?.role ?? task.assignedRole ?? "Unknown role" },
+    { label: "Specialist", value: laneSession?.specialistName ?? laneSession?.specialistId ?? task.assignedSpecialistName ?? task.assignedSpecialistId ?? "Unknown specialist" },
+    { label: "Remote task", value: laneSession?.externalTaskId ?? "Unavailable" },
+    { label: "Context", value: laneSession?.contextId ?? "Unavailable" },
+    { label: "Started", value: formatSessionTimestamp(laneSession?.startedAt ?? task.createdAt) },
+    { label: "Completed", value: formatSessionTimestamp(laneSession?.completedAt) },
+  ];
+
+  return (
+    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-slate-200/80 bg-slate-50/80 p-2 dark:border-[#202433] dark:bg-[#10131a]">
+        <KanbanCardActivityBar
+          task={task}
+          sessions={sessions}
+          specialistLanguage={specialistLanguage}
+          currentSessionId={currentSessionId}
+          onSelectSession={onSelectSession}
+          onCloseSession={onCloseSession}
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto bg-gradient-to-br from-white via-sky-50/40 to-amber-50/30 p-5 dark:from-[#12141c] dark:via-[#101824] dark:to-[#17131c]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
+          <section className="rounded-3xl border border-slate-200/80 bg-white/95 p-5 shadow-sm dark:border-[#232736] dark:bg-[#121620]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600 dark:text-sky-300">A2A Run</div>
+            <div className="mt-2 text-xl font-semibold text-slate-950 dark:text-slate-50">
+              {laneSession?.externalTaskId ?? laneSession?.contextId ?? currentSessionId ?? "A2A task"}
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              This lane run completed through A2A transport. ACP chat and trace are not available for synthetic A2A sessions, so this pane shows the recorded task metadata instead.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {metadata.map((entry) => (
+                <div
+                  key={entry.label}
+                  className="rounded-2xl border border-slate-200 bg-slate-50/90 px-3 py-2.5 dark:border-slate-700 dark:bg-[#0d1018]"
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                    {entry.label}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-100">
+                    {entry.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+          <KanbanCardActivityPanel
+            task={task}
+            sessions={sessions}
+            specialists={specialists}
+            specialistLanguage={specialistLanguage}
+            currentSessionId={currentSessionId}
+            onSelectSession={onSelectSession}
+            compact
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function KanbanTaskDetailOverlay({
   activeSessionId,
   activeTaskId,
@@ -500,7 +590,15 @@ export function KanbanTaskDetailOverlay({
     resolveEffectiveTaskAutomation(activeTask, board?.columns ?? [], resolveSpecialist).canRun &&
     activeTask.columnId !== "done",
   );
-  const hasSessionPane = Boolean((activeSessionId && acp) || showEmptySessionPane);
+  const selectedLaneSession = getTaskLaneSession(activeTask, activeSessionId);
+  const isA2ASessionPane = Boolean(activeTask && isA2ATaskSession(activeTask, activeSessionId));
+  const hasSessionPane = Boolean(showEmptySessionPane || isA2ASessionPane || (activeSessionId && acp));
+  const selectTaskSession = (task: TaskInfo, sessionId: string) => {
+    setActiveSessionId(sessionId);
+    if (acp && canSelectTaskSessionInAcp(task, sessionId, sessionMap)) {
+      acp.selectSession(sessionId);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 animate-in fade-in duration-150">
@@ -509,7 +607,7 @@ export function KanbanTaskDetailOverlay({
           {activeTaskId && (() => {
             const task = activeTask;
             if (!task) return null;
-            const sessionInfo = task.triggerSessionId ? sessionMap.get(task.triggerSessionId) ?? null : null;
+            const sessionInfo = activeSessionId ? sessionMap.get(activeSessionId) ?? null : null;
             return (
               <div
                 className={`${hasSessionPane ? "shrink-0" : "flex-1"} h-full min-w-0 border-r border-slate-200/80 dark:border-[#202433]`}
@@ -542,8 +640,7 @@ export function KanbanTaskDetailOverlay({
                     void codebaseIds;
                   }}
                   onSelectSession={(sessionId) => {
-                    setActiveSessionId(sessionId);
-                    acp?.selectSession(sessionId);
+                    selectTaskSession(task, sessionId);
                   }}
                 />
               </div>
@@ -603,22 +700,30 @@ export function KanbanTaskDetailOverlay({
                 className="flex h-full min-w-0 flex-1 flex-col overflow-hidden"
                 style={activeTaskId ? { width: `${(1 - detailSplitRatio) * 100}%` } : undefined}
               >
-                {activeTask && (
+                {activeTask && !isA2ASessionPane && (
                   <div className="shrink-0 border-b border-slate-200/80 bg-slate-50/80 p-2 dark:border-[#202433] dark:bg-[#10131a]">
                     <KanbanCardActivityBar
                       task={activeTask}
                       sessions={combinedSessions}
                       specialistLanguage={specialistLanguage}
                       currentSessionId={activeSessionId ?? undefined}
-                      onSelectSession={(sessionId) => {
-                        setActiveSessionId(sessionId);
-                        acp?.selectSession(sessionId);
-                      }}
+                      onSelectSession={(sessionId) => selectTaskSession(activeTask, sessionId)}
                       onCloseSession={closeTaskDetail}
                     />
                   </div>
                 )}
-                {acp && (
+                {isA2ASessionPane && activeTask ? (
+                  <A2ASessionPane
+                    task={activeTask}
+                    laneSession={selectedLaneSession}
+                    sessions={combinedSessions}
+                    specialists={specialists}
+                    specialistLanguage={specialistLanguage}
+                    currentSessionId={activeSessionId ?? undefined}
+                    onSelectSession={(sessionId) => selectTaskSession(activeTask, sessionId)}
+                    onCloseSession={closeTaskDetail}
+                  />
+                ) : acp && (
                   <div className="min-h-0 flex-1">
                     <ChatPanel
                       acp={acp}
