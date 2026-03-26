@@ -135,6 +135,8 @@ const ANSI_RESET = "\u001B[0m";
 const ANSI_GREEN = "\u001B[32m";
 const ANSI_RED = "\u001B[31m";
 const ANSI_YELLOW = "\u001B[33m";
+const ANSI_BLUE = "\u001B[34m";
+const ANSI_DIM = "\u001B[2m";
 
 function shouldUseColor(stream?: NodeJS.WriteStream): boolean {
   if (!stream?.isTTY) {
@@ -158,6 +160,14 @@ function colorize(stream: NodeJS.WriteStream | undefined, color: string, text: s
   }
 
   return `${color}${text}${ANSI_RESET}`;
+}
+
+function statusColor(stream: NodeJS.WriteStream | undefined, value: number): string {
+  if (value > 0) {
+    return colorize(stream, ANSI_RED, `${value}`);
+  }
+
+  return colorize(stream, ANSI_DIM, `${value}`);
 }
 
 export function resolveRuntimeProfile(profileName: HookProfileName): HookRuntimeProfile {
@@ -199,7 +209,7 @@ function emitEvent(outputMode: HookRuntimeOutputMode, event: Record<string, unkn
 
 function logPhaseHeader(phase: string, step: number, outputMode: HookRuntimeOutputMode, total: number): void {
   if (outputMode === "human") {
-    console.log(`[phase ${step}/${total}] ${phase}`);
+    console.log(colorize(process.stdout, ANSI_BLUE, `[phase ${step}/${total}] ${phase}`));
   }
 }
 
@@ -511,13 +521,13 @@ async function runFitnessPhase(
         metrics: batch.skippedMetrics.map((metric) => metric.name),
       });
       if (options.outputMode === "human") {
+        const skippedCount = statusColor(process.stdout, batch.skippedMetrics.length);
+        const skippedList = batch.skippedMetrics.map((metric) => metric.name).join(", ");
         console.log(
           colorize(
             process.stdout,
             ANSI_YELLOW,
-            `[fitness] SKIP ${batch.skippedMetrics.length} queued metrics unstarted: ${batch.skippedMetrics
-              .map((metric) => metric.name)
-              .join(", ")}`,
+            `[fitness] ⚠ SKIP ${skippedCount} queued metrics unstarted: ${skippedList}`,
           ),
         );
       }
@@ -528,15 +538,13 @@ async function runFitnessPhase(
     const failed = batch.results.length - passed;
     const skipped = batch.skippedMetrics.length;
     if (options.outputMode === "human") {
-      const summary = `[fitness] summary: ${passed} passed, ${failed} failed, ${skipped} skipped | ${formatDuration(
-        durationMs,
-      )}`;
+      const summary = `[fitness] summary: ${colorize(process.stdout, ANSI_GREEN, `${passed} passed`)}, `
+        + `${colorize(process.stdout, failed > 0 ? ANSI_RED : ANSI_GREEN, `${failed} failed`)}, `
+        + `${colorize(process.stdout, skipped > 0 ? ANSI_YELLOW : ANSI_DIM, `${skipped} skipped`)} | ${formatDuration(
+          durationMs,
+        )}`;
       console.log(
-        colorize(
-          process.stdout,
-          failed > 0 ? ANSI_RED : ANSI_GREEN,
-          summary,
-        ),
+        summary,
       );
       console.log("");
     }
@@ -691,6 +699,6 @@ export async function runHookRuntime(
   });
 
   if (options.outputMode === "human") {
-    console.log("All checks passed! Ready to continue.");
+    console.log(colorize(process.stdout, ANSI_GREEN, "All checks passed! Ready to continue."));
   }
 }

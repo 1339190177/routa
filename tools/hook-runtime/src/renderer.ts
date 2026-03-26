@@ -7,6 +7,8 @@ const ANSI_YELLOW = "\u001B[33m";
 const ANSI_GREEN = "\u001B[32m";
 const ANSI_RED = "\u001B[31m";
 const ANSI_CYAN = "\u001B[36m";
+const ANSI_BLUE = "\u001B[34m";
+const ANSI_DIM = "\u001B[2m";
 
 function shouldUseColor(stream?: NodeJS.WriteStream): boolean {
   if (!stream?.isTTY) {
@@ -224,13 +226,20 @@ class DynamicHumanMetricReporter implements HumanMetricReporter {
       { queued: 0, running: 0, passed: 0, failed: 0 },
     );
     const tail = this.logBuffer.snapshot();
+    const stream = this.options.stream;
     const lines = [
       this.fitToWidth(
-        `[fitness] jobs ${this.options.concurrency} | ${counts.passed} passed | ${counts.failed} failed | ${counts.running} running | ${counts.queued} queued`,
+        `[fitness] jobs ${this.options.concurrency} | `
+          + `${colorize(stream, ANSI_GREEN, `${counts.passed} passed`)} | `
+          + `${colorize(stream, ANSI_RED, `${counts.failed} failed`)} | `
+          + `${colorize(stream, ANSI_BLUE, `${counts.running} running`)} | `
+          + `${colorize(stream, ANSI_YELLOW, `${counts.queued} queued`)}`,
       ),
       ...this.states.map((state) => this.fitToWidth(this.renderStateLine(state))),
-      this.fitToWidth(`[fitness tail] last ${this.options.tailLines} lines`),
-      ...(tail.length > 0 ? tail.map((line) => this.fitToWidth(line)) : ["(no command output yet)"]),
+      this.fitToWidth(colorize(stream, ANSI_DIM, `[fitness tail] last ${this.options.tailLines} lines`)),
+      ...(tail.length > 0
+        ? tail.map((line) => this.fitToWidth(this.emphasizeTailLine(line)))
+        : [this.fitToWidth(colorize(stream, ANSI_DIM, "(no command output yet)"))]),
     ];
 
     return lines;
@@ -251,7 +260,7 @@ class DynamicHumanMetricReporter implements HumanMetricReporter {
 
   private renderStateLine(state: MetricState): string {
     const suffix = state.durationMs === undefined ? "" : ` ${formatDuration(state.durationMs)}`;
-    return `[${state.index}/${this.states.length}] ${state.metric.name} ${this.statusLabel(state.status)}${suffix}`;
+    return `[${state.index}/${this.states.length}] ${this.statusLabel(state.status)} ${state.metric.name}${suffix}`;
   }
 
   private shouldCaptureOutputLine(line: string): boolean {
@@ -266,14 +275,27 @@ class DynamicHumanMetricReporter implements HumanMetricReporter {
   private statusLabel(status: MetricStatus): string {
     switch (status) {
       case "queued":
-        return "WAIT";
+        return `${colorize(this.options.stream, ANSI_YELLOW, "◻")} WAIT`;
       case "running":
-        return "RUN ";
+        return `${colorize(this.options.stream, ANSI_BLUE, "▶")} RUN`;
       case "passed":
-        return "PASS";
+        return `${colorize(this.options.stream, ANSI_GREEN, "✓")} PASS`;
       case "failed":
-        return "FAIL";
+        return `${colorize(this.options.stream, ANSI_RED, "✗")} FAIL`;
     }
+  }
+
+  private emphasizeTailLine(line: string): string {
+    const withWarns = colorize(this.options.stream, ANSI_YELLOW, line);
+    if (/\b(error|failed|panic|timeout|denied|cannot)\b/i.test(line)) {
+      return colorize(this.options.stream, ANSI_RED, line);
+    }
+
+    if (/\b(warn|warning|retry|retrying|timed out|skip|skipped)\b/i.test(line)) {
+      return withWarns;
+    }
+
+    return line;
   }
 }
 
@@ -294,18 +316,18 @@ class PlainHumanMetricReporter implements HumanMetricReporter {
   }
 
   onMetricStart(metric: HookMetric, index: number, total: number): void {
-    const status = colorize(this.options.stream, ANSI_YELLOW, "RUN");
-    console.log(`[fitness ${index}/${total}] ${metric.name} ${status}`);
+    const status = `${colorize(this.options.stream, ANSI_BLUE, "▶")} RUN`;
+    console.log(`[fitness ${index}/${total}] ${status} ${metric.name}`);
   }
 
   onMetricOutput(): void {}
 
   onMetricComplete(result: MetricExecution, index: number, total: number): void {
     const status = result.passed
-      ? colorize(this.options.stream, ANSI_GREEN, "PASS")
-      : colorize(this.options.stream, ANSI_RED, "FAIL");
+      ? `${colorize(this.options.stream, ANSI_GREEN, "✓")} PASS`
+      : `${colorize(this.options.stream, ANSI_RED, "✗")} FAIL`;
     console.log(
-      `[fitness ${index}/${total}] ${result.metric.name} ${status} in ${formatDuration(result.durationMs)}`,
+      `[fitness ${index}/${total}] ${status} ${result.metric.name} in ${formatDuration(result.durationMs)}`,
     );
   }
 
