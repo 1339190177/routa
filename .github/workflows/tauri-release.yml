@@ -1,10 +1,18 @@
 name: 'Tauri Release'
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    inputs:
+      version:
+        description: "Semver version to release, ex: 0.2.4"
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version to release, ex: 0.2.4"
+        required: true
+        type: string
 
 jobs:
   publish-tauri:
@@ -95,8 +103,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          tagName: v__VERSION__
-          releaseName: 'Routa Desktop v__VERSION__'
+          tagName: v${{ inputs.version || github.event.inputs.version }}
+          releaseName: Routa Desktop v${{ inputs.version || github.event.inputs.version }}
           releaseBody: |
             See the assets to download and install Routa Desktop.
 

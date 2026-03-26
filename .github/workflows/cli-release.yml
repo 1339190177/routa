@@ -1,9 +1,17 @@
 name: Routa CLI Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    inputs:
+      version:
+        description: "Semver version to publish, ex: 0.2.4"
+        required: true
+        type: string
+      publish:
+        description: "Publish npm packages after packaging"
+        required: false
+        default: true
+        type: boolean
   workflow_dispatch:
     inputs:
       version:
@@ -83,10 +91,10 @@ jobs:
         id: version
         env:
           EVENT_NAME: ${{ github.event_name }}
-          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_VERSION: ${{ inputs.version || github.event.inputs.version }}
         shell: bash
         run: |
-          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$INPUT_VERSION" ]]; then
+          if [[ -n "$INPUT_VERSION" ]]; then
             version="$INPUT_VERSION"
             version="${version#v}"
             version="${version#cli-v}"
@@ -127,9 +135,10 @@ jobs:
       - build
       - stage
     if: |
-      github.event_name == 'push' ||
+      github.event_name == 'workflow_call' ||
       github.event.inputs.publish == 'true' ||
-      github.event.inputs.publish == true
+      github.event.inputs.publish == true ||
+      inputs.publish == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
