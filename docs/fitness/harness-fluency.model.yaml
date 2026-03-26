@@ -1,4 +1,4 @@
-version: 1
+version: 2
 levels:
   - id: awareness
     name: Awareness
@@ -24,600 +24,800 @@ dimensions:
     name: Context Engineering
 
 criteria:
-  - id: collaboration.awareness.operating_contract
+  - id: collaboration.awareness.contract_surface
     level: awareness
     dimension: collaboration
     weight: 2
     critical: true
-    why_it_matters: Agents need an explicit repository contract before collaboration can scale.
-    recommended_action: Add or refresh AGENTS.md with routing and execution rules.
-    evidence_hint: AGENTS.md
+    why_it_matters: Repositories need an explicit human-agent contract before collaboration can scale.
+    recommended_action: Add a checked-in collaboration contract such as AGENTS.md or equivalent contributor guidance.
+    evidence_hint: AGENTS.md or .github/copilot-instructions.md
     detector:
-      type: file_exists
-      path: AGENTS.md
+      type: any_file_exists
+      paths:
+        - AGENTS.md
+        - CLAUDE.md
+        - .github/copilot-instructions.md
   - id: collaboration.awareness.ai_entrypoints
     level: awareness
     dimension: collaboration
     weight: 1
     critical: false
-    why_it_matters: Awareness-level repos should still expose at least one visible AI entrypoint.
-    recommended_action: Add a checked-in agent or skill entrypoint for contributors.
-    evidence_hint: .claude/skills or .agents/skills
+    why_it_matters: Visible AI entrypoints help contributors discover how the repository expects AI tooling to be used.
+    recommended_action: Add checked-in agent or AI tool entrypoints.
+    evidence_hint: .claude or .agents
     detector:
       type: any_file_exists
       paths:
-        - .claude/skills
+        - .claude
+        - .agents
+        - .cursor
+        - .windsurf
+
+  - id: collaboration.assisted.collaboration_templates
+    level: assisted_coding
+    dimension: collaboration
+    weight: 2
+    critical: true
+    why_it_matters: Assisted coding is more repeatable when issue and contribution handoff surfaces are checked in.
+    recommended_action: Add issue, PR, or contribution templates that shape AI-human collaboration.
+    evidence_hint: docs/issues or .github/ISSUE_TEMPLATE
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/issues
+        - .github/ISSUE_TEMPLATE
+        - .github/PULL_REQUEST_TEMPLATE.md
+        - CONTRIBUTING.md
+  - id: collaboration.assisted.command_surface
+    level: assisted_coding
+    dimension: collaboration
+    weight: 1
+    critical: false
+    why_it_matters: Durable collaboration needs checked-in command surfaces rather than ad hoc local conventions.
+    recommended_action: Add scripts, tools, or command directories contributors can reuse.
+    evidence_hint: scripts or tools
+    detector:
+      type: any_file_exists
+      paths:
+        - scripts
+        - tools
+        - bin
+        - cmd
+
+  - id: collaboration.structured_ai_coding.ai_workflow_defs
+    level: structured_ai_coding
+    dimension: collaboration
+    weight: 2
+    critical: true
+    why_it_matters: Structured AI coding shows up when AI-specific workflows or flows are codified in the repo.
+    recommended_action: Add AI, agent, copilot, or flow-oriented workflow definitions.
+    evidence_hint: .github/workflows/*agent*.yml or resources/flows/*.yaml
+    detector:
+      type: glob_count
+      patterns:
+        - .github/workflows/*ai*.yml
+        - .github/workflows/*ai*.yaml
+        - .github/workflows/*agent*.yml
+        - .github/workflows/*agent*.yaml
+        - .github/workflows/*copilot*.yml
+        - .github/workflows/*copilot*.yaml
+        - resources/flows/*.yaml
+      min: 1
+  - id: collaboration.structured_ai_coding.reusable_roles
+    level: structured_ai_coding
+    dimension: collaboration
+    weight: 1
+    critical: false
+    why_it_matters: Reusable roles or commands make collaboration repeatable across multiple tasks and contributors.
+    recommended_action: Add reusable specialist, command, or skill definitions.
+    evidence_hint: resources/specialists or .claude/commands
+    detector:
+      type: any_file_exists
+      paths:
+        - resources/specialists
+        - .claude/commands
         - .agents/skills
 
-  - id: collaboration.assisted.specialist_templates
-    level: assisted_coding
+  - id: collaboration.agent_centric.role_catalog_depth
+    level: agent_centric
     dimension: collaboration
     weight: 2
     critical: true
-    why_it_matters: Assisted coding is more repeatable when common agent roles are documented.
-    recommended_action: Add reusable specialist templates for implementation or verification roles.
-    evidence_hint: resources/specialists/core or resources/specialists/team
+    why_it_matters: Agent-centric systems expose a deeper role catalog than a single generic assistant surface.
+    recommended_action: Expand the checked-in role, command, or skill catalog.
+    evidence_hint: resources/specialists/**/*.yaml or .claude/commands/**/*.md
+    detector:
+      type: glob_count
+      patterns:
+        - resources/specialists/**/*.yaml
+        - .claude/commands/**/*.md
+        - .agents/skills/**/*.md
+      min: 5
+  - id: collaboration.agent_centric.collaboration_backlog
+    level: agent_centric
+    dimension: collaboration
+    weight: 1
+    critical: false
+    why_it_matters: Agent-centric collaboration benefits from durable backlog or task intake surfaces.
+    recommended_action: Keep a checked-in issue or backlog handoff surface.
+    evidence_hint: docs/issues or .github/ISSUE_TEMPLATE
     detector:
       type: any_file_exists
       paths:
-        - resources/specialists/core
-        - resources/specialists/team
-  - id: collaboration.assisted.agent_runner_entrypoint
-    level: assisted_coding
-    dimension: collaboration
-    weight: 1
-    critical: false
-    why_it_matters: Assisted workflows need a concrete local runner, not just ad hoc prompts.
-    recommended_action: Wire a checked-in CLI or script that launches agent execution.
-    evidence_hint: package.json scripts.acp:runner
-    detector:
-      type: json_path_exists
-      path: package.json
-      jsonPath: [scripts, "acp:runner"]
+        - docs/issues
+        - .github/ISSUE_TEMPLATE
+        - .github/PULL_REQUEST_TEMPLATE.md
 
-  - id: collaboration.structured_ai_coding.issue_enricher_workflow
-    level: structured_ai_coding
+  - id: collaboration.agent_first.review_or_merge_automation
+    level: agent_first
     dimension: collaboration
     weight: 2
     critical: true
-    why_it_matters: Structured AI coding needs a durable issue-to-agent handoff path.
-    recommended_action: Add workflow automation that enriches issues before agent execution.
-    evidence_hint: .github/workflows/issue-enricher.yml
-    detector:
-      type: yaml_path_exists
-      path: .github/workflows/issue-enricher.yml
-      yamlPath: [jobs, enrich-issue, steps]
-  - id: collaboration.structured_ai_coding.issue_specialist
-    level: structured_ai_coding
-    dimension: collaboration
-    weight: 1
-    critical: false
-    why_it_matters: Structured handoff needs a specialist or routing definition to encode the collaboration contract.
-    recommended_action: Add a reusable issue-enricher specialist definition.
-    evidence_hint: resources/specialists/issue/issue-enricher.yaml
-    detector:
-      type: file_exists
-      path: resources/specialists/issue/issue-enricher.yaml
-
-  - id: collaboration.agent_centric.team_specialist_roster
-    level: agent_centric
-    dimension: collaboration
-    weight: 2
-    critical: true
-    why_it_matters: Agent-centric collaboration requires stable multi-role boundaries, not a single generic agent.
-    recommended_action: Define a richer team specialist roster with role-specific ownership.
-    evidence_hint: resources/specialists/team/*.yaml
+    why_it_matters: Agent-first collaboration needs explicit review or merge automation instead of only manual fallbacks.
+    recommended_action: Add review, merge, or flow-oriented automation definitions.
+    evidence_hint: .github/workflows/*review*.yml or resources/flows/*review*.yaml
     detector:
       type: glob_count
       patterns:
-        - resources/specialists/team/*.yaml
-      min: 5
-  - id: collaboration.agent_centric.kanban_lane_specialists
-    level: agent_centric
+        - .github/workflows/*review*.yml
+        - .github/workflows/*review*.yaml
+        - .github/workflows/*merge*.yml
+        - .github/workflows/*merge*.yaml
+        - resources/flows/*review*.yaml
+      min: 1
+  - id: collaboration.agent_first.role_catalog_scale
+    level: agent_first
     dimension: collaboration
     weight: 1
     critical: false
-    why_it_matters: Lane-specific specialists show that agents can own substantial workflow slices.
-    recommended_action: Add workflow-bound specialists for planning, execution, and review lanes.
-    evidence_hint: resources/specialists/workflows/kanban/**/*.yaml
+    why_it_matters: Higher-maturity collaboration usually comes with broader role specialization and more reusable execution surfaces.
+    recommended_action: Expand the checked-in role or command catalog to cover more review and delivery work.
+    evidence_hint: resources/specialists/**/*.yaml or .claude/commands/**/*.md
     detector:
       type: glob_count
       patterns:
-        - resources/specialists/workflows/kanban/**/*.yaml
-      min: 5
+        - resources/specialists/**/*.yaml
+        - .claude/commands/**/*.md
+        - .agents/skills/**/*.md
+      min: 10
 
-  - id: collaboration.agent_first.review_flow_definition
-    level: agent_first
-    dimension: collaboration
-    weight: 2
-    critical: true
-    why_it_matters: Agent-first delivery needs explicit merge-readiness or review orchestration, not just coding agents.
-    recommended_action: Add a checked-in review flow that coordinates multi-step review work.
-    evidence_hint: resources/flows/code-review.yaml
-    detector:
-      type: file_exists
-      path: resources/flows/code-review.yaml
-  - id: collaboration.agent_first.code_reviewer_role
-    level: agent_first
-    dimension: collaboration
-    weight: 1
-    critical: false
-    why_it_matters: A dedicated code-review role is a strong signal that humans are validating leverage instead of hand-performing every review step.
-    recommended_action: Add a dedicated code-review specialist with clear ownership.
-    evidence_hint: resources/specialists/team/code-reviewer.yaml
-    detector:
-      type: file_exists
-      path: resources/specialists/team/code-reviewer.yaml
-
-  - id: sdlc.awareness.lint_script
+  - id: sdlc.awareness.repository_manifest
     level: awareness
     dimension: sdlc
     weight: 2
     critical: true
-    why_it_matters: Awareness-level AI usage should still land inside a basic feedback loop.
-    recommended_action: Add a lint script to establish a minimal SDLC baseline.
-    evidence_hint: package.json scripts.lint
+    why_it_matters: A baseline SDLC starts with a checked-in repository manifest or build definition.
+    recommended_action: Add a primary language or package manifest.
+    evidence_hint: package.json, Cargo.toml, pyproject.toml, or go.mod
     detector:
-      type: json_path_exists
-      path: package.json
-      jsonPath: [scripts, lint]
-  - id: sdlc.awareness.test_runner
+      type: any_file_exists
+      paths:
+        - package.json
+        - Cargo.toml
+        - pyproject.toml
+        - go.mod
+  - id: sdlc.awareness.ci_workflow
     level: awareness
     dimension: sdlc
     weight: 1
     critical: false
-    why_it_matters: Even early AI usage should be anchored to an executable validation command.
-    recommended_action: Add a repository test runner command.
-    evidence_hint: package.json scripts.test:run
-    detector:
-      type: json_path_exists
-      path: package.json
-      jsonPath: [scripts, "test:run"]
-
-  - id: sdlc.assisted.unit_test_evidence
-    level: assisted_coding
-    dimension: sdlc
-    weight: 2
-    critical: true
-    why_it_matters: Assisted coding should already include unit-test evidence rather than relying on manual checking.
-    recommended_action: Add or maintain an executable unit-test evidence file.
-    evidence_hint: docs/fitness/unit-test.md
-    detector:
-      type: file_exists
-      path: docs/fitness/unit-test.md
-  - id: sdlc.assisted.api_test_evidence
-    level: assisted_coding
-    dimension: sdlc
-    weight: 1
-    critical: false
-    why_it_matters: Broader SDLC support requires AI-generated work to respect API behaviors as well as code paths.
-    recommended_action: Add or maintain API contract evidence.
-    evidence_hint: docs/fitness/rust-api-test.md
-    detector:
-      type: file_exists
-      path: docs/fitness/rust-api-test.md
-
-  - id: sdlc.structured_ai_coding.pr_verify_flow
-    level: structured_ai_coding
-    dimension: sdlc
-    weight: 2
-    critical: true
-    why_it_matters: Structured AI coding should connect implementation to a repeatable validation flow.
-    recommended_action: Add a reusable PR verification workflow definition.
-    evidence_hint: resources/flows/pr-verify.yaml
-    detector:
-      type: file_exists
-      path: resources/flows/pr-verify.yaml
-  - id: sdlc.structured_ai_coding.defense_workflow
-    level: structured_ai_coding
-    dimension: sdlc
-    weight: 1
-    critical: false
-    why_it_matters: CI-backed defense workflows turn AI-generated changes into auditable SDLC checkpoints.
-    recommended_action: Add CI automation that executes the repository fitness rules.
-    evidence_hint: .github/workflows/defense.yaml
-    detector:
-      type: yaml_path_exists
-      path: .github/workflows/defense.yaml
-      yamlPath: [jobs]
-
-  - id: sdlc.agent_centric.red_fix_loop
-    level: agent_centric
-    dimension: sdlc
-    weight: 2
-    critical: true
-    why_it_matters: Agent-centric SDLC maturity shows up when agents handle diagnostics and repair loops, not just feature coding.
-    recommended_action: Add a CI red-fix loop or equivalent diagnostic automation.
-    evidence_hint: .github/scripts/ci-red-fixer.ts
-    detector:
-      type: file_exists
-      path: .github/scripts/ci-red-fixer.ts
-  - id: sdlc.agent_centric.entropy_cleanup_loop
-    level: agent_centric
-    dimension: sdlc
-    weight: 1
-    critical: false
-    why_it_matters: Non-feature maintenance work is a core signal of agent-centric SDLC coverage.
-    recommended_action: Add automated cleanup or repository hygiene workflows.
-    evidence_hint: .github/workflows/issue-garbage-collector.yml
-    detector:
-      type: yaml_path_exists
-      path: .github/workflows/issue-garbage-collector.yml
-      yamlPath: [jobs]
-
-  - id: sdlc.agent_first.completion_handler
-    level: agent_first
-    dimension: sdlc
-    weight: 2
-    critical: true
-    why_it_matters: Agent-first SDLC should automate the tail of the loop after implementation finishes.
-    recommended_action: Add a completion or submit-preparation handler for agent-generated changes.
-    evidence_hint: .github/workflows/copilot-complete.yml
-    detector:
-      type: yaml_path_exists
-      path: .github/workflows/copilot-complete.yml
-      yamlPath: [jobs, handle-complete, steps]
-  - id: sdlc.agent_first.release_flow
-    level: agent_first
-    dimension: sdlc
-    weight: 1
-    critical: false
-    why_it_matters: End-to-end SDLC autonomy is not complete without a submit or release-oriented flow.
-    recommended_action: Add a release-ready or submit orchestration flow under resources/flows.
-    evidence_hint: resources/flows/release.yaml
-    detector:
-      type: file_exists
-      path: resources/flows/release.yaml
-
-  - id: harness.awareness.acp_runtime_surface
-    level: awareness
-    dimension: harness
-    weight: 2
-    critical: true
-    why_it_matters: A harness begins when AI execution is exposed as a checked-in system surface.
-    recommended_action: Add a runtime integration surface for agent execution.
-    evidence_hint: src/core/acp
-    detector:
-      type: file_exists
-      path: src/core/acp
-  - id: harness.awareness.cli_runtime_surface
-    level: awareness
-    dimension: harness
-    weight: 1
-    critical: false
-    why_it_matters: Awareness-level harness maturity benefits from a local CLI or server entrypoint.
-    recommended_action: Add a local CLI or server runtime entrypoint for agent execution.
-    evidence_hint: crates/routa-cli
-    detector:
-      type: file_exists
-      path: crates/routa-cli
-
-  - id: harness.assisted.runtime_manager
-    level: assisted_coding
-    dimension: harness
-    weight: 2
-    critical: true
-    why_it_matters: Assisted harnessing requires a reusable runtime manager instead of ad hoc command launches.
-    recommended_action: Add a runtime manager for provider or agent orchestration.
-    evidence_hint: src/core/acp/runtime-manager.ts
-    detector:
-      type: file_exists
-      path: src/core/acp/runtime-manager.ts
-  - id: harness.assisted.hook_runtime
-    level: assisted_coding
-    dimension: harness
-    weight: 1
-    critical: false
-    why_it_matters: Local feedback loops are part of the harness, not optional polish.
-    recommended_action: Add a reusable local hook or validation runtime.
-    evidence_hint: tools/hook-runtime/src/cli.ts
-    detector:
-      type: file_exists
-      path: tools/hook-runtime/src/cli.ts
-
-  - id: harness.structured_ai_coding.review_triggers
-    level: structured_ai_coding
-    dimension: harness
-    weight: 2
-    critical: true
-    why_it_matters: Structured harnesses need deterministic escalation signals when AI changes look risky.
-    recommended_action: Add review-trigger rules to the fitness rulebook.
-    evidence_hint: docs/fitness/review-triggers.yaml
-    detector:
-      type: file_exists
-      path: docs/fitness/review-triggers.yaml
-  - id: harness.structured_ai_coding.defense_pipeline
-    level: structured_ai_coding
-    dimension: harness
-    weight: 1
-    critical: false
-    why_it_matters: Structured AI coding should connect local harnessing to CI enforcement.
-    recommended_action: Add a defense pipeline that executes fitness checks in CI.
-    evidence_hint: .github/workflows/defense.yaml
-    detector:
-      type: yaml_path_exists
-      path: .github/workflows/defense.yaml
-      yamlPath: [jobs]
-
-  - id: harness.agent_centric.kanban_execution_queue
-    level: agent_centric
-    dimension: harness
-    weight: 2
-    critical: true
-    why_it_matters: Agent-centric harnesses coordinate work queues rather than relying on single-threaded prompt loops.
-    recommended_action: Add a durable task or session queue for agent execution.
-    evidence_hint: src/core/kanban/kanban-session-queue.ts
-    detector:
-      type: file_exists
-      path: src/core/kanban/kanban-session-queue.ts
-  - id: harness.agent_centric.trace_ui
-    level: agent_centric
-    dimension: harness
-    weight: 1
-    critical: false
-    why_it_matters: Agents need first-class observability artifacts once they own substantial workflow slices.
-    recommended_action: Expose agent traces or observability surfaces in the product.
-    evidence_hint: src/app/traces/page.tsx
-    detector:
-      type: file_exists
-      path: src/app/traces/page.tsx
-
-  - id: harness.agent_first.red_fix_agent
-    level: agent_first
-    dimension: harness
-    weight: 2
-    critical: true
-    why_it_matters: Agent-first harnesses should react to failing feedback loops with autonomous repair attempts.
-    recommended_action: Add an automated red-fix agent or CI failure repair loop.
-    evidence_hint: .github/scripts/ci-red-fixer.ts
-    detector:
-      type: file_exists
-      path: .github/scripts/ci-red-fixer.ts
-  - id: harness.agent_first.entropy_reducer
-    level: agent_first
-    dimension: harness
-    weight: 1
-    critical: false
-    why_it_matters: High-throughput harnesses need background cleanup work to keep entropy under control.
-    recommended_action: Add a background cleanup or garbage-collection agent workflow.
-    evidence_hint: .github/scripts/issue-gc.ts
-    detector:
-      type: file_exists
-      path: .github/scripts/issue-gc.ts
-
-  - id: governance.awareness.contract_visible
-    level: awareness
-    dimension: governance
-    weight: 2
-    critical: true
-    why_it_matters: Governance starts when contributor rules are explicit and reviewable.
-    recommended_action: Add a repository operating contract that agents and humans both follow.
-    evidence_hint: AGENTS.md
-    detector:
-      type: file_exists
-      path: AGENTS.md
-  - id: governance.awareness.lint_config
-    level: awareness
-    dimension: governance
-    weight: 1
-    critical: false
-    why_it_matters: Even baseline governance should include codified style or static checks.
-    recommended_action: Add a lint configuration file.
-    evidence_hint: eslint.config.mjs
-    detector:
-      type: file_exists
-      path: eslint.config.mjs
-
-  - id: governance.assisted.lint_gate
-    level: assisted_coding
-    dimension: governance
-    weight: 2
-    critical: true
-    why_it_matters: Assisted coding needs basic guardrails that run without human interpretation.
-    recommended_action: Add or keep a lint gate in package.json.
-    evidence_hint: package.json scripts.lint
-    detector:
-      type: json_path_exists
-      path: package.json
-      jsonPath: [scripts, lint]
-  - id: governance.assisted.test_gate
-    level: assisted_coding
-    dimension: governance
-    weight: 1
-    critical: false
-    why_it_matters: Test execution is a second baseline governance layer for AI-generated changes.
-    recommended_action: Add or keep a test runner script in package.json.
-    evidence_hint: package.json scripts.test:run
-    detector:
-      type: json_path_exists
-      path: package.json
-      jsonPath: [scripts, "test:run"]
-
-  - id: governance.structured_ai_coding.fitness_rulebook
-    level: structured_ai_coding
-    dimension: governance
-    weight: 2
-    critical: true
-    why_it_matters: Structured AI governance needs a durable rulebook beyond informal reviewer expectations.
-    recommended_action: Add a fitness rulebook that defines evidence-driven validation.
-    evidence_hint: docs/fitness/README.md
-    detector:
-      type: file_exists
-      path: docs/fitness/README.md
-  - id: governance.structured_ai_coding.api_contract
-    level: structured_ai_coding
-    dimension: governance
-    weight: 1
-    critical: false
-    why_it_matters: Contract-first governance prevents AI changes from silently drifting API behavior.
-    recommended_action: Add an API contract source of truth.
-    evidence_hint: api-contract.yaml
-    detector:
-      type: file_exists
-      path: api-contract.yaml
-
-  - id: governance.agent_centric.entrix_runtime
-    level: agent_centric
-    dimension: governance
-    weight: 2
-    critical: true
-    why_it_matters: Agent-centric systems need architecture-aware guardrails that are stronger than generic lint rules.
-    recommended_action: Add or maintain a dedicated governance runtime for repository fitness.
-    evidence_hint: tools/entrix
-    detector:
-      type: file_exists
-      path: tools/entrix
-  - id: governance.agent_centric.review_trigger_rules
-    level: agent_centric
-    dimension: governance
-    weight: 1
-    critical: false
-    why_it_matters: Tailored risk escalation is a core sign of agent-specific governance.
-    recommended_action: Add repository-specific review-trigger rules.
-    evidence_hint: docs/fitness/review-triggers.yaml
-    detector:
-      type: file_exists
-      path: docs/fitness/review-triggers.yaml
-
-  - id: governance.agent_first.review_workflow
-    level: agent_first
-    dimension: governance
-    weight: 2
-    critical: true
-    why_it_matters: Agent-first governance needs a coded review workflow, not just implicit human fallback.
-    recommended_action: Add a reusable review or merge-readiness flow.
-    evidence_hint: resources/flows/code-review.yaml
-    detector:
-      type: file_exists
-      path: resources/flows/code-review.yaml
-  - id: governance.agent_first.review_specialists
-    level: agent_first
-    dimension: governance
-    weight: 1
-    critical: false
-    why_it_matters: Multiple specialized reviewers show that review work itself has been operationalized for agents.
-    recommended_action: Add a richer review specialist roster.
-    evidence_hint: resources/specialists/review/*.yaml
+    why_it_matters: Even early AI usage should land inside a repeatable CI or validation surface.
+    recommended_action: Add at least one CI workflow.
+    evidence_hint: .github/workflows/*.yml
     detector:
       type: glob_count
       patterns:
-        - resources/specialists/review/*.yaml
-      min: 4
+        - .github/workflows/*.yml
+        - .github/workflows/*.yaml
+      min: 1
 
-  - id: context.awareness.architecture_map
-    level: awareness
-    dimension: context
+  - id: sdlc.assisted.test_surface
+    level: assisted_coding
+    dimension: sdlc
     weight: 2
     critical: true
-    why_it_matters: Durable context starts with an explicit architecture map that survives any single session.
-    recommended_action: Add a canonical architecture overview document.
-    evidence_hint: docs/ARCHITECTURE.md
+    why_it_matters: Assisted coding should already rely on executable test surfaces rather than manual spot checks.
+    recommended_action: Add or keep checked-in test files across the repository.
+    evidence_hint: tests, __tests__, or language-native test files
     detector:
-      type: file_exists
-      path: docs/ARCHITECTURE.md
-  - id: context.awareness.feature_tree
-    level: awareness
-    dimension: context
+      type: glob_count
+      patterns:
+        - tests/**/*.*
+        - "**/__tests__/**/*.*"
+        - src/**/*.test.*
+        - src/**/*.spec.*
+        - "**/*_test.go"
+        - crates/**/*test*.rs
+      min: 2
+  - id: sdlc.assisted.validation_surface
+    level: assisted_coding
+    dimension: sdlc
     weight: 1
     critical: false
-    why_it_matters: Route and endpoint discovery should be repo-native instead of depending on tribal memory.
-    recommended_action: Add an auto-generated product or API feature index.
-    evidence_hint: docs/product-specs/FEATURE_TREE.md
+    why_it_matters: Assisted workflows are steadier when validation hooks are checked in alongside the code.
+    recommended_action: Add pre-commit, workflow, or task-runner validation surfaces.
+    evidence_hint: .pre-commit-config.yaml or .github/workflows
     detector:
-      type: file_exists
-      path: docs/product-specs/FEATURE_TREE.md
+      type: any_file_exists
+      paths:
+        - .github/workflows
+        - .pre-commit-config.yaml
+        - .husky
+        - Makefile
+        - justfile
 
-  - id: context.assisted.refactor_playbook
-    level: assisted_coding
-    dimension: context
-    weight: 2
-    critical: true
-    why_it_matters: Assisted coding improves when the repo documents how to split and reason about large changes.
-    recommended_action: Add a refactor or long-file triage playbook.
-    evidence_hint: docs/REFACTOR.md
-    detector:
-      type: file_exists
-      path: docs/REFACTOR.md
-  - id: context.assisted.reference_library
-    level: assisted_coding
-    dimension: context
-    weight: 1
-    critical: false
-    why_it_matters: A shared reference library helps agents stay anchored to durable project knowledge.
-    recommended_action: Add a repository references area for frequently used guidance.
-    evidence_hint: docs/references/README.md
-    detector:
-      type: file_exists
-      path: docs/references/README.md
-
-  - id: context.structured_ai_coding.issue_history
+  - id: sdlc.structured_ai_coding.quality_evidence
     level: structured_ai_coding
-    dimension: context
+    dimension: sdlc
     weight: 2
     critical: true
-    why_it_matters: Structured AI coding benefits from searchable local issue and incident history.
-    recommended_action: Keep a sizable local issue history under docs/issues.
-    evidence_hint: docs/issues/*.md
+    why_it_matters: Structured AI coding should leave behind durable quality evidence or test rulebooks.
+    recommended_action: Add docs or directories for fitness, QA, API, or end-to-end validation.
+    evidence_hint: docs/fitness, docs/qa, tests/api-contract, or e2e
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/fitness
+        - docs/qa
+        - tests/api-contract
+        - e2e
+  - id: sdlc.structured_ai_coding.multi_step_ci
+    level: structured_ai_coding
+    dimension: sdlc
+    weight: 1
+    critical: false
+    why_it_matters: Structured delivery usually spans more than one validation job or workflow.
+    recommended_action: Add multiple CI workflows that cover different validation concerns.
+    evidence_hint: .github/workflows/*.yml
+    detector:
+      type: glob_count
+      patterns:
+        - .github/workflows/*.yml
+        - .github/workflows/*.yaml
+      min: 3
+
+  - id: sdlc.agent_centric.maintenance_automation
+    level: agent_centric
+    dimension: sdlc
+    weight: 2
+    critical: true
+    why_it_matters: Agent-centric SDLC maturity often shows up in automated repair, cleanup, or triage loops.
+    recommended_action: Add fix, cleanup, or triage automation to the repository.
+    evidence_hint: .github/workflows/*fix*.yml or scripts/*cleanup*
+    detector:
+      type: glob_count
+      patterns:
+        - .github/workflows/*fix*.yml
+        - .github/workflows/*fix*.yaml
+        - .github/workflows/*cleanup*.yml
+        - .github/workflows/*cleanup*.yaml
+        - .github/workflows/*triage*.yml
+        - .github/workflows/*triage*.yaml
+        - .github/scripts/*fix*
+        - scripts/*cleanup*
+      min: 1
+  - id: sdlc.agent_centric.regression_assets
+    level: agent_centric
+    dimension: sdlc
+    weight: 1
+    critical: false
+    why_it_matters: Broader SDLC coverage should include richer regression assets such as e2e, API, or fitness checks.
+    recommended_action: Keep deeper regression assets checked in.
+    evidence_hint: tests/e2e, e2e, playwright.config.ts, tests/api-contract, or docs/fitness
+    detector:
+      type: any_file_exists
+      paths:
+        - tests/e2e
+        - e2e
+        - playwright.config.ts
+        - tests/api-contract
+        - docs/fitness
+
+  - id: sdlc.agent_first.release_automation
+    level: agent_first
+    dimension: sdlc
+    weight: 2
+    critical: true
+    why_it_matters: Agent-first SDLC needs explicit release or deploy automation at the tail of the loop.
+    recommended_action: Add release, deploy, or submit automation.
+    evidence_hint: .github/workflows/*release*.yml or resources/flows/*release*.yaml
+    detector:
+      type: glob_count
+      patterns:
+        - .github/workflows/*release*.yml
+        - .github/workflows/*release*.yaml
+        - .github/workflows/*deploy*.yml
+        - .github/workflows/*deploy*.yaml
+        - resources/flows/*release*.yaml
+      min: 1
+  - id: sdlc.agent_first.autonomous_followthrough_assets
+    level: agent_first
+    dimension: sdlc
+    weight: 1
+    critical: false
+    why_it_matters: Higher autonomy needs follow-through assets that survive any single contributor session.
+    recommended_action: Keep checked-in reports, scripts, or flow definitions for delivery follow-through.
+    evidence_hint: docs/fitness/reports, .github/scripts, scripts, or resources/flows
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/fitness/reports
+        - .github/scripts
+        - scripts
+        - resources/flows
+
+  - id: harness.awareness.runtime_surface
+    level: awareness
+    dimension: harness
+    weight: 2
+    critical: true
+    why_it_matters: A harness begins when the repository exposes a checked-in runtime or source surface.
+    recommended_action: Keep a primary runtime or source tree checked in.
+    evidence_hint: src, crates, cmd, apps, or packages
+    detector:
+      type: any_file_exists
+      paths:
+        - src
+        - crates
+        - cmd
+        - apps
+        - packages
+  - id: harness.awareness.local_entrypoint
+    level: awareness
+    dimension: harness
+    weight: 1
+    critical: false
+    why_it_matters: Awareness-level harnesses benefit from local entrypoints contributors can invoke directly.
+    recommended_action: Add local tools, scripts, or CLI entrypoints.
+    evidence_hint: bin, scripts, tools, or cli
+    detector:
+      type: any_file_exists
+      paths:
+        - bin
+        - scripts
+        - tools
+        - cli
+
+  - id: harness.assisted.runtime_abstractions
+    level: assisted_coding
+    dimension: harness
+    weight: 2
+    critical: true
+    why_it_matters: Assisted harnessing is stronger when the runtime has reusable abstractions instead of only leaf scripts.
+    recommended_action: Add a reusable core or library layer for execution.
+    evidence_hint: src/core, src/lib, internal, crates, lib, packages, or apps
+    detector:
+      type: any_file_exists
+      paths:
+        - src/core
+        - src/lib
+        - internal
+        - crates
+        - lib
+        - packages
+        - apps
+  - id: harness.assisted.local_validation_runtime
+    level: assisted_coding
+    dimension: harness
+    weight: 1
+    critical: false
+    why_it_matters: Local validation surfaces are part of the harness rather than optional polish.
+    recommended_action: Add reusable local validation scripts, hooks, or workflow surfaces.
+    evidence_hint: tools, scripts, .github/workflows, or .husky
+    detector:
+      type: any_file_exists
+      paths:
+        - tools
+        - scripts
+        - .github/workflows
+        - .husky
+
+  - id: harness.structured_ai_coding.review_trigger_rules
+    level: structured_ai_coding
+    dimension: harness
+    weight: 2
+    critical: true
+    why_it_matters: Structured harnesses need deterministic escalation or defense surfaces when AI changes look risky.
+    recommended_action: Add review-trigger, defense, or workflow-based escalation surfaces.
+    evidence_hint: docs/fitness/review-triggers.yaml or .github/workflows/defense.yaml
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/fitness/review-triggers.yaml
+        - .github/workflows/defense.yaml
+        - .github/workflows
+  - id: harness.structured_ai_coding.harness_docs
+    level: structured_ai_coding
+    dimension: harness
+    weight: 1
+    critical: false
+    why_it_matters: Durable harnesses are easier to reuse when the repository keeps harness-oriented docs or rulebooks.
+    recommended_action: Add docs for fitness, architecture, or runtime usage.
+    evidence_hint: docs/fitness or docs/ARCHITECTURE.md
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/fitness
+        - docs/ARCHITECTURE.md
+        - docs
+
+  - id: harness.agent_centric.orchestration_surface
+    level: agent_centric
+    dimension: harness
+    weight: 2
+    critical: true
+    why_it_matters: Agent-centric harnesses usually expose orchestration surfaces beyond a single command path.
+    recommended_action: Add orchestration, agent runtime, or flow surfaces.
+    evidence_hint: src/core/orchestration, src/core/acp, resources/flows, or apps
+    detector:
+      type: any_file_exists
+      paths:
+        - src/core/orchestration
+        - src/core/acp
+        - resources/flows
+        - apps
+  - id: harness.agent_centric.trace_or_reports
+    level: agent_centric
+    dimension: harness
+    weight: 1
+    critical: false
+    why_it_matters: Observable execution surfaces help teams trust higher-leverage harnesses.
+    recommended_action: Add traces, reports, or observability artifacts.
+    evidence_hint: src/app/traces, docs/fitness/reports, traces, or observability
+    detector:
+      type: any_file_exists
+      paths:
+        - src/app/traces
+        - docs/fitness/reports
+        - traces
+        - observability
+
+  - id: harness.agent_first.failure_reaction_assets
+    level: agent_first
+    dimension: harness
+    weight: 2
+    critical: true
+    why_it_matters: Agent-first harnesses react to failures with checked-in repair or fix assets.
+    recommended_action: Add failure-reaction scripts or workflows.
+    evidence_hint: .github/workflows/*fix*.yml or scripts/*repair*
+    detector:
+      type: glob_count
+      patterns:
+        - .github/workflows/*fix*.yml
+        - .github/workflows/*fix*.yaml
+        - .github/scripts/*fix*
+        - scripts/*repair*
+        - scripts/*fix*
+      min: 1
+  - id: harness.agent_first.background_automation_assets
+    level: agent_first
+    dimension: harness
+    weight: 1
+    critical: false
+    why_it_matters: High-autonomy harnesses need background cleanup or maintenance automation to keep entropy under control.
+    recommended_action: Add cleanup, GC, or background maintenance automation.
+    evidence_hint: .github/workflows/*cleanup*.yml or scripts/*cleanup*
+    detector:
+      type: glob_count
+      patterns:
+        - .github/workflows/*cleanup*.yml
+        - .github/workflows/*cleanup*.yaml
+        - .github/workflows/*gc*.yml
+        - .github/workflows/*gc*.yaml
+        - .github/scripts/*cleanup*
+        - scripts/*cleanup*
+      min: 1
+
+  - id: governance.awareness.repo_rules
+    level: awareness
+    dimension: governance
+    weight: 2
+    critical: true
+    why_it_matters: Governance starts when repository rules are visible and reviewable.
+    recommended_action: Add contributor-facing rules or policy docs.
+    evidence_hint: AGENTS.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, or SECURITY.md
+    detector:
+      type: any_file_exists
+      paths:
+        - AGENTS.md
+        - CONTRIBUTING.md
+        - CODE_OF_CONDUCT.md
+        - SECURITY.md
+  - id: governance.awareness.static_check_surface
+    level: awareness
+    dimension: governance
+    weight: 1
+    critical: false
+    why_it_matters: Baseline governance usually includes some checked-in static-check, build, or repository configuration surface.
+    recommended_action: Add codified static-check, build, or repository configuration.
+    evidence_hint: package.json, Cargo.toml, pyproject.toml, tsconfig.json, or lint config
+    detector:
+      type: any_file_exists
+      paths:
+        - package.json
+        - Cargo.toml
+        - pyproject.toml
+        - tsconfig.json
+        - eslint.config.mjs
+        - eslint.config.js
+        - .eslintrc.js
+        - .pre-commit-config.yaml
+        - .golangci.yml
+
+  - id: governance.assisted.guardrail_hooks
+    level: assisted_coding
+    dimension: governance
+    weight: 2
+    critical: true
+    why_it_matters: Assisted coding needs guardrails that run without human interpretation.
+    recommended_action: Add pre-commit, hook, or workflow guardrails.
+    evidence_hint: .pre-commit-config.yaml, .husky, lefthook.yml, or .github/workflows
+    detector:
+      type: any_file_exists
+      paths:
+        - .pre-commit-config.yaml
+        - .husky
+        - lefthook.yml
+        - .github/workflows
+  - id: governance.assisted.ownership_or_policy
+    level: assisted_coding
+    dimension: governance
+    weight: 1
+    critical: false
+    why_it_matters: Ownership and policy artifacts make AI-generated changes easier to review consistently.
+    recommended_action: Add ownership, security, or contribution policy files.
+    evidence_hint: CODEOWNERS, SECURITY.md, or CONTRIBUTING.md
+    detector:
+      type: any_file_exists
+      paths:
+        - CODEOWNERS
+        - .github/CODEOWNERS
+        - SECURITY.md
+        - CONTRIBUTING.md
+
+  - id: governance.structured_ai_coding.quality_rulebook
+    level: structured_ai_coding
+    dimension: governance
+    weight: 2
+    critical: true
+    why_it_matters: Structured AI governance benefits from a checked-in rulebook rather than informal reviewer memory.
+    recommended_action: Add quality, fitness, or QA rulebooks.
+    evidence_hint: docs/fitness, docs/qa, or docs/quality
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/fitness
+        - docs/qa
+        - docs/quality
+  - id: governance.structured_ai_coding.automated_review_surface
+    level: structured_ai_coding
+    dimension: governance
+    weight: 1
+    critical: false
+    why_it_matters: Automated review surfaces reduce the amount of purely manual interpretation in higher-maturity repos.
+    recommended_action: Add workflow-backed review automation or release-drafter style assets.
+    evidence_hint: .github/workflows or .github/release-drafter.yml
+    detector:
+      type: any_file_exists
+      paths:
+        - .github/workflows
+        - .reviewdog.yml
+        - .github/release-drafter.yml
+
+  - id: governance.agent_centric.governance_artifacts
+    level: agent_centric
+    dimension: governance
+    weight: 2
+    critical: true
+    why_it_matters: Agent-centric governance tends to accumulate explicit debt, planning, and dependency-management artifacts.
+    recommended_action: Add issue, plan, debt, or dependency-management artifacts.
+    evidence_hint: docs/issues, docs/exec-plans, docs/tech-debt, renovate.json, or dependabot
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/issues
+        - docs/exec-plans
+        - docs/tech-debt
+        - .github/dependabot.yml
+        - renovate.json
+  - id: governance.agent_centric.policy_coverage
+    level: agent_centric
+    dimension: governance
+    weight: 1
+    critical: false
+    why_it_matters: A broader governance corpus suggests the repository has moved beyond one-off policy files.
+    recommended_action: Expand governance-related docs and workflow coverage.
+    evidence_hint: docs/**/*.md and .github/**/*.yml
+    detector:
+      type: glob_count
+      patterns:
+        - docs/**/*.md
+        - .github/**/*.yml
+        - .github/**/*.yaml
+      min: 10
+
+  - id: governance.agent_first.machine_readable_guardrails
+    level: agent_first
+    dimension: governance
+    weight: 2
+    critical: true
+    why_it_matters: Agent-first governance requires machine-readable guardrails that can shape execution automatically.
+    recommended_action: Add review triggers, ownership rules, or dependency automation configs.
+    evidence_hint: docs/fitness/review-triggers.yaml, CODEOWNERS, or dependabot/renovate
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/fitness/review-triggers.yaml
+        - .github/CODEOWNERS
+        - renovate.json
+        - .github/dependabot.yml
+  - id: governance.agent_first.governance_history
+    level: agent_first
+    dimension: governance
+    weight: 1
+    critical: false
+    why_it_matters: High-maturity governance leaves behind a sizable checked-in history of issues, plans, and design decisions.
+    recommended_action: Keep a durable governance history in docs.
+    evidence_hint: docs/issues, docs/exec-plans, or docs/design-docs
     detector:
       type: glob_count
       patterns:
         - docs/issues/*.md
-      min: 20
-  - id: context.structured_ai_coding.issue_sync
+        - docs/exec-plans/**/*.md
+        - docs/design-docs/**/*.md
+      min: 5
+
+  - id: context.awareness.readme_or_docs
+    level: awareness
+    dimension: context
+    weight: 2
+    critical: true
+    why_it_matters: Durable context begins with a visible readme or docs surface that survives any single session.
+    recommended_action: Add a README or repository docs directory.
+    evidence_hint: README.md or docs
+    detector:
+      type: any_file_exists
+      paths:
+        - README.md
+        - docs
+  - id: context.awareness.architecture_hint
+    level: awareness
+    dimension: context
+    weight: 1
+    critical: false
+    why_it_matters: Orientation docs help agents and humans understand the repo shape faster, even before formal architecture docs exist.
+    recommended_action: Add architecture, design, or orientation docs that point contributors at the core code paths.
+    evidence_hint: docs/ARCHITECTURE.md, docs, or README.md
+    detector:
+      type: any_file_exists
+      paths:
+        - docs/ARCHITECTURE.md
+        - docs/architecture.md
+        - ARCHITECTURE.md
+        - docs/design-docs
+        - docs
+        - README.md
+
+  - id: context.assisted.change_guidance
+    level: assisted_coding
+    dimension: context
+    weight: 2
+    critical: true
+    why_it_matters: Assisted coding improves when the repository keeps more than a single landing page of durable change guidance.
+    recommended_action: Add or expand checked-in docs that guide contributors through architecture, changes, or operations.
+    evidence_hint: docs/**/*.md or multiple root markdown guides
+    detector:
+      type: glob_count
+      patterns:
+        - docs/**/*.md
+        - "*.md"
+      min: 3
+  - id: context.assisted.reference_surfaces
+    level: assisted_coding
+    dimension: context
+    weight: 1
+    critical: false
+    why_it_matters: Shared references and specs make repository knowledge more reusable across sessions and contributors.
+    recommended_action: Add references, specs, changelogs, or contributor-facing knowledge surfaces.
+    evidence_hint: docs, docs/references, docs/specs, CONTRIBUTING.md, or CHANGELOG.md
+    detector:
+      type: any_file_exists
+      paths:
+        - docs
+        - docs/references
+        - docs/specs
+        - docs/product-specs
+        - docs/design-docs
+        - CONTRIBUTING.md
+        - CHANGELOG.md
+
+  - id: context.structured_ai_coding.documentation_depth
+    level: structured_ai_coding
+    dimension: context
+    weight: 2
+    critical: true
+    why_it_matters: Structured AI coding needs more than a thin README; it needs a meaningful checked-in documentation corpus.
+    recommended_action: Expand repository docs beyond a single landing page.
+    evidence_hint: docs/**/*.md
+    detector:
+      type: glob_count
+      patterns:
+        - docs/**/*.md
+      min: 5
+  - id: context.structured_ai_coding.planning_artifacts
     level: structured_ai_coding
     dimension: context
     weight: 1
     critical: false
-    why_it_matters: Syncing external issue context into the repo makes retrieval repeatable for agents.
-    recommended_action: Add a GitHub issue sync script or equivalent ingestion pipeline.
-    evidence_hint: .github/scripts/sync-github-issues.ts
+    why_it_matters: Planning artifacts make change intent and decomposition more durable for AI tooling.
+    recommended_action: Add exec plans, issues, design docs, or specs.
+    evidence_hint: docs/exec-plans, docs/issues, docs/design-docs, or specs
     detector:
-      type: file_exists
-      path: .github/scripts/sync-github-issues.ts
+      type: any_file_exists
+      paths:
+        - docs/exec-plans
+        - docs/issues
+        - docs/design-docs
+        - specs
 
-  - id: context.agent_centric.repo_map
+  - id: context.agent_centric.layered_docs
     level: agent_centric
     dimension: context
     weight: 2
     critical: true
-    why_it_matters: Agent-centric context engineering relies on explicit routing, progressive disclosure, and navigation cues.
-    recommended_action: Expand the repository map in AGENTS.md or equivalent routing docs.
-    evidence_hint: AGENTS.md
+    why_it_matters: Agent-centric context engineering usually comes with multiple documentation layers, not a single catch-all page.
+    recommended_action: Add layered docs such as product specs, design docs, plans, or references.
+    evidence_hint: docs/product-specs, docs/design-docs, docs/exec-plans, or docs/references
     detector:
-      type: file_exists
-      path: AGENTS.md
-  - id: context.agent_centric.design_docs
+      type: any_file_exists
+      paths:
+        - docs/product-specs
+        - docs/design-docs
+        - docs/exec-plans
+        - docs/references
+  - id: context.agent_centric.large_doc_corpus
     level: agent_centric
     dimension: context
     weight: 1
     critical: false
-    why_it_matters: Design-intent documents help agents preserve system boundaries while making substantial changes.
-    recommended_action: Add durable design-intent docs under docs/design-docs.
-    evidence_hint: docs/design-docs/core-beliefs.md
+    why_it_matters: A larger checked-in doc corpus makes context retrieval more durable and less session-dependent.
+    recommended_action: Grow the repository doc corpus to cover more architecture and workflow detail.
+    evidence_hint: docs/**/*.md
     detector:
-      type: file_exists
-      path: docs/design-docs/core-beliefs.md
+      type: glob_count
+      patterns:
+        - docs/**/*.md
+      min: 10
 
-  - id: context.agent_first.issue_gc_agent
+  - id: context.agent_first.reference_and_runbook_depth
     level: agent_first
     dimension: context
     weight: 2
     critical: true
-    why_it_matters: Agent-first context engineering should include self-maintaining knowledge or entropy-reduction loops.
-    recommended_action: Add a background issue or knowledge cleanup agent.
-    evidence_hint: .github/scripts/issue-gc.ts
+    why_it_matters: Agent-first context engineering needs both reference material and operational runbooks.
+    recommended_action: Keep references, fitness docs, issues, and execution plans checked in.
+    evidence_hint: docs/references, docs/fitness, docs/issues, or docs/exec-plans
     detector:
-      type: file_exists
-      path: .github/scripts/issue-gc.ts
-  - id: context.agent_first.issue_gc_workflow
+      type: any_file_exists
+      paths:
+        - docs/references
+        - docs/fitness
+        - docs/issues
+        - docs/exec-plans
+  - id: context.agent_first.operational_history
     level: agent_first
     dimension: context
     weight: 1
     critical: false
-    why_it_matters: Context maintenance should be automated on a schedule, not left entirely to manual cleanup.
-    recommended_action: Add a scheduled workflow that maintains repository issue knowledge.
-    evidence_hint: .github/workflows/issue-garbage-collector.yml
+    why_it_matters: Operational history helps high-autonomy systems preserve learning over time.
+    recommended_action: Keep a sizable history of issues, plans, design docs, or references.
+    evidence_hint: docs/issues, docs/exec-plans, docs/design-docs, or docs/references
     detector:
-      type: yaml_path_exists
-      path: .github/workflows/issue-garbage-collector.yml
-      yamlPath: [jobs]
+      type: glob_count
+      patterns:
+        - docs/issues/*.md
+        - docs/exec-plans/**/*.md
+        - docs/design-docs/**/*.md
+        - docs/references/**/*.md
+      min: 10

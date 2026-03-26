@@ -1,13 +1,28 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { load as loadYaml } from "js-yaml";
 
+const BUNDLED_REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+
+export const DEFAULT_PROFILE = "generic";
+export type FluencyProfileName = "generic" | "agent_orchestrator";
 export const DEFAULT_MODEL_RELATIVE_PATH = path.join("docs", "fitness", "harness-fluency.model.yaml");
 export const DEFAULT_SNAPSHOT_RELATIVE_PATH = path.join("docs", "fitness", "reports", "harness-fluency-latest.json");
 export const CELL_PASS_THRESHOLD = 0.8;
 export const MAX_REGEX_PATTERN_LENGTH = 256;
 export const MAX_REGEX_INPUT_LENGTH = 20_000;
+
+const PROFILE_ALIASES: Record<string, FluencyProfileName> = {
+  orchestrator: "agent_orchestrator",
+};
+
+const PROFILE_MODEL_RELATIVE_PATHS: Record<FluencyProfileName, string> = {
+  generic: DEFAULT_MODEL_RELATIVE_PATH,
+  agent_orchestrator: path.join("docs", "fitness", "harness-fluency.profile.agent_orchestrator.yaml"),
+};
 
 export type OutputFormat = "text" | "json";
 export type CriterionStatus = "pass" | "fail" | "skipped";
@@ -135,6 +150,8 @@ export type ReportComparison = {
 
 export type HarnessFluencyReport = {
   modelVersion: number;
+  modelPath: string;
+  profile: FluencyProfileName;
   repoRoot: string;
   generatedAt: string;
   snapshotPath: string;
@@ -154,6 +171,7 @@ export type HarnessFluencyReport = {
 export type EvaluateOptions = {
   repoRoot: string;
   modelPath: string;
+  profile?: FluencyProfileName;
   snapshotPath: string;
   compareLast: boolean;
   save: boolean;
@@ -162,6 +180,7 @@ export type EvaluateOptions = {
 export type CliOptions = {
   repoRoot: string;
   modelPath: string;
+  profile: FluencyProfileName;
   snapshotPath: string;
   format: OutputFormat;
   compareLast: boolean;
@@ -206,6 +225,48 @@ function expectBoolean(value: unknown, label: string, defaultValue = false): boo
     throw new Error(`${label} must be a boolean`);
   }
   return value;
+}
+
+export function isFluencyProfileName(value: string): value is FluencyProfileName {
+  return value === "generic" || value === "agent_orchestrator";
+}
+
+export function normalizeProfileName(value: string): FluencyProfileName {
+  const normalized = value.trim().toLowerCase().replace(/-/g, "_");
+  const resolved = PROFILE_ALIASES[normalized] ?? normalized;
+  if (!isFluencyProfileName(resolved)) {
+    throw new Error(`unsupported profile "${value}"`);
+  }
+  return resolved;
+}
+
+function profilePathForRepo(repoRoot: string, profile: FluencyProfileName): string {
+  return path.resolve(repoRoot, PROFILE_MODEL_RELATIVE_PATHS[profile]);
+}
+
+function bundledProfilePath(profile: FluencyProfileName): string {
+  return path.resolve(BUNDLED_REPO_ROOT, PROFILE_MODEL_RELATIVE_PATHS[profile]);
+}
+
+function profileSnapshotFilename(profile: FluencyProfileName): string {
+  if (profile === "generic") {
+    return path.basename(DEFAULT_SNAPSHOT_RELATIVE_PATH);
+  }
+
+  return `harness-fluency-${profile.replace(/_/g, "-")}-latest.json`;
+}
+
+export function resolveDefaultModelPath(repoRoot: string, profile: FluencyProfileName): string {
+  const repoPath = profilePathForRepo(repoRoot, profile);
+  if (existsSync(repoPath)) {
+    return repoPath;
+  }
+
+  return bundledProfilePath(profile);
+}
+
+export function resolveDefaultSnapshotPath(repoRoot: string, profile: FluencyProfileName): string {
+  return path.resolve(repoRoot, "docs", "fitness", "reports", profileSnapshotFilename(profile));
 }
 
 function expectNumber(value: unknown, label: string, defaultValue?: number): number {
@@ -320,9 +381,50 @@ function parseDetector(value: unknown, label: string): DetectorDefinition {
   }
 }
 
-export async function loadFluencyModel(modelPath: string): Promise<FluencyModel> {
-  const rawContent = await readFile(modelPath, "utf8");
+async function loadRawFluencyModel(modelPath: string, visited: Set<string>): Promise<Record<string, unknown>> {
+  const resolvedModelPath = path.resolve(modelPath);
+  if (visited.has(resolvedModelPath)) {
+    throw new Error(`cyclic harness fluency model extends detected at ${resolvedModelPath}`);
+  }
+
+  visited.add(resolvedModelPath);
+  const rawContent = await readFile(resolvedModelPath, "utf8");
   const rawModel = expectRecord(loadYaml(rawContent), "harness fluency model");
+  const extendsPath = rawModel.extends;
+  if (extendsPath === undefined) {
+    visited.delete(resolvedModelPath);
+    return rawModel;
+  }
+
+  const baseModelPath = path.resolve(path.dirname(resolvedModelPath), expectString(extendsPath, "model.extends"));
+  const baseModel = await loadRawFluencyModel(baseModelPath, visited);
+  visited.delete(resolvedModelPath);
+
+  const mergedModel: Record<string, unknown> = {
+    ...baseModel,
+    ...rawModel,
+  };
+  delete mergedModel.extends;
+
+  if (rawModel.criteria === undefined) {
+    mergedModel.criteria = baseModel.criteria;
+    return mergedModel;
+  }
+
+  if (!Array.isArray(rawModel.criteria)) {
+    throw new Error("model.criteria must be an array");
+  }
+
+  if (!Array.isArray(baseModel.criteria)) {
+    throw new Error("base model.criteria must be an array");
+  }
+
+  mergedModel.criteria = [...baseModel.criteria, ...rawModel.criteria];
+  return mergedModel;
+}
+
+export async function loadFluencyModel(modelPath: string): Promise<FluencyModel> {
+  const rawModel = await loadRawFluencyModel(modelPath, new Set());
 
   const levelsRaw = rawModel.levels;
   if (!Array.isArray(levelsRaw) || levelsRaw.length === 0) {
@@ -415,13 +517,16 @@ export function parseArgs(argv: readonly string[]): CliOptions {
   const repoRoot = process.cwd();
   const options: CliOptions = {
     repoRoot,
-    modelPath: path.resolve(repoRoot, DEFAULT_MODEL_RELATIVE_PATH),
-    snapshotPath: path.resolve(repoRoot, DEFAULT_SNAPSHOT_RELATIVE_PATH),
+    modelPath: resolveDefaultModelPath(repoRoot, DEFAULT_PROFILE),
+    profile: DEFAULT_PROFILE,
+    snapshotPath: resolveDefaultSnapshotPath(repoRoot, DEFAULT_PROFILE),
     format: "text",
     compareLast: false,
     save: true,
     help: false,
   };
+  let hasExplicitModel = false;
+  let hasExplicitSnapshotPath = false;
 
   for (let index = 0; index < normalizedArgv.length; index += 1) {
     const arg = normalizedArgv[index];
@@ -442,7 +547,13 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       continue;
     }
     if (
-      (arg === "--format" || arg === "--repo-root" || arg === "--model" || arg === "--snapshot-path") &&
+      (
+        arg === "--format" ||
+        arg === "--repo-root" ||
+        arg === "--model" ||
+        arg === "--profile" ||
+        arg === "--snapshot-path"
+      ) &&
       index + 1 < normalizedArgv.length
     ) {
       const value = normalizedArgv[index + 1];
@@ -453,12 +564,26 @@ export function parseArgs(argv: readonly string[]): CliOptions {
         options.format = value;
       } else if (arg === "--repo-root") {
         options.repoRoot = path.resolve(value);
-        options.modelPath = path.resolve(options.repoRoot, DEFAULT_MODEL_RELATIVE_PATH);
-        options.snapshotPath = path.resolve(options.repoRoot, DEFAULT_SNAPSHOT_RELATIVE_PATH);
+        if (!hasExplicitModel) {
+          options.modelPath = resolveDefaultModelPath(options.repoRoot, options.profile);
+        }
+        if (!hasExplicitSnapshotPath) {
+          options.snapshotPath = resolveDefaultSnapshotPath(options.repoRoot, options.profile);
+        }
       } else if (arg === "--model") {
         options.modelPath = path.resolve(value);
+        hasExplicitModel = true;
+      } else if (arg === "--profile") {
+        options.profile = normalizeProfileName(value);
+        if (!hasExplicitModel) {
+          options.modelPath = resolveDefaultModelPath(options.repoRoot, options.profile);
+        }
+        if (!hasExplicitSnapshotPath) {
+          options.snapshotPath = resolveDefaultSnapshotPath(options.repoRoot, options.profile);
+        }
       } else if (arg === "--snapshot-path") {
         options.snapshotPath = path.resolve(value);
+        hasExplicitSnapshotPath = true;
       }
       index += 1;
       continue;
@@ -476,6 +601,7 @@ export function renderHelp(): string {
     "Options:",
     "  --format <text|json>     Output format",
     "  --json                   Shortcut for --format json",
+    "  --profile <name>         Built-in model profile (generic, agent_orchestrator)",
     "  --repo-root <path>       Repository root to evaluate",
     "  --model <path>           Override model YAML path",
     "  --snapshot-path <path>   Override persisted snapshot path",

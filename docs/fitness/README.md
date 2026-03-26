@@ -25,8 +25,11 @@ entrix run --tier normal
 # 完整检查（所有 tier，<15min）
 entrix run
 
-# Harness Fluency 评估（文本报告）
+# Harness Fluency 评估（默认 generic profile，文本报告）
 npm run fitness:fluency
+
+# Harness Fluency 评估（agent_orchestrator profile）
+npm run fitness:fluency -- --profile agent_orchestrator
 
 # Harness Fluency 评估（JSON + 与上次快照对比）
 npm run fitness:fluency -- --format json --compare-last
@@ -43,6 +46,8 @@ entrix run --tier normal --scope ci --dimension code_quality --dimension testabi
 # 校验维度权重
 entrix validate
 ```
+
+Harness Fluency 默认跑通用 `generic` 模型；如果要评估编排型 agent 平台能力，可显式传 `--profile agent_orchestrator`。不同 profile 会使用独立快照文件，避免 `--compare-last` 互相污染。
 
 ### Tier 分层
 

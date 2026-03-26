@@ -16,10 +16,8 @@ function writeJson(targetPath: string, value: unknown): void {
 }
 
 describe("loadFluencyModel", () => {
-  it("loads the production model and enforces at least two criteria per cell", async () => {
-    const model = await loadFluencyModel(
-      path.resolve(process.cwd(), "docs/fitness/harness-fluency.model.yaml"),
-    );
+  it("loads the production generic model and enforces at least two criteria per cell", async () => {
+    const model = await loadFluencyModel(path.resolve(process.cwd(), "docs/fitness/harness-fluency.model.yaml"));
 
     expect(model.levels).toHaveLength(5);
     expect(model.dimensions).toHaveLength(5);
@@ -33,6 +31,33 @@ describe("loadFluencyModel", () => {
         expect(criteria.length).toBeGreaterThanOrEqual(2);
       }
     }
+  });
+
+  it("loads the agent_orchestrator profile as a merged overlay", async () => {
+    const genericModel = await loadFluencyModel(path.resolve(process.cwd(), "docs/fitness/harness-fluency.model.yaml"));
+    const profileModel = await loadFluencyModel(
+      path.resolve(process.cwd(), "docs/fitness/harness-fluency.profile.agent_orchestrator.yaml"),
+    );
+
+    expect(profileModel.version).toBe(genericModel.version);
+    expect(profileModel.criteria.length).toBeGreaterThan(genericModel.criteria.length);
+    expect(profileModel.criteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "harness.assisted.runtime_manager" }),
+        expect.objectContaining({ id: "governance.agent_centric.entrix_runtime" }),
+      ]),
+    );
+  });
+
+  it("rejects cyclic model extends chains", async () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), "harness-fluency-cycle-"));
+    const firstModelPath = path.join(repoRoot, "first.yaml");
+    const secondModelPath = path.join(repoRoot, "second.yaml");
+
+    writeFileSync(firstModelPath, "extends: ./second.yaml\n", "utf8");
+    writeFileSync(secondModelPath, "extends: ./first.yaml\n", "utf8");
+
+    await expect(loadFluencyModel(firstModelPath)).rejects.toThrow("cyclic harness fluency model extends");
   });
 
   it("rejects invalid regex flags in command_output_regex detectors", async () => {
@@ -82,14 +107,32 @@ criteria:
 });
 
 describe("parseArgs", () => {
-  it("accepts repo-root and json aliases", () => {
-    const options = parseArgs(["--repo-root", "/tmp/repo", "--json", "--compare-last", "--no-save"]);
+  it("accepts repo-root, profile aliases, and profile-specific snapshot defaults", () => {
+    const options = parseArgs([
+      "--repo-root",
+      "/tmp/repo",
+      "--profile",
+      "orchestrator",
+      "--json",
+      "--compare-last",
+      "--no-save",
+    ]);
 
     expect(options.repoRoot).toBe("/tmp/repo");
+    expect(options.profile).toBe("agent_orchestrator");
     expect(options.format).toBe("json");
     expect(options.compareLast).toBe(true);
     expect(options.save).toBe(false);
-    expect(options.modelPath).toBe("/tmp/repo/docs/fitness/harness-fluency.model.yaml");
+    expect(options.modelPath).toBe(
+      path.resolve(process.cwd(), "docs/fitness/harness-fluency.profile.agent_orchestrator.yaml"),
+    );
+    expect(options.snapshotPath).toBe(
+      "/tmp/repo/docs/fitness/reports/harness-fluency-agent-orchestrator-latest.json",
+    );
+  });
+
+  it("rejects unsupported profile names", () => {
+    expect(() => parseArgs(["--profile", "unknown-profile"])).toThrow('unsupported profile "unknown-profile"');
   });
 });
 
@@ -319,6 +362,71 @@ criteria:
         expect.objectContaining({ id: "collaboration.assisted.attestation", status: "skipped" }),
       ]),
     );
+  });
+
+  it("skips snapshot comparison when the previous snapshot model version is incompatible", async () => {
+    const repoRoot = mkdtempSync(path.join(tmpdir(), "harness-fluency-compare-skip-"));
+    mkdirSync(path.join(repoRoot, "docs", "fitness"), { recursive: true });
+
+    const modelPath = path.join(repoRoot, "docs", "fitness", "model.yaml");
+    const snapshotPath = path.join(repoRoot, "docs", "fitness", "latest.json");
+
+    writeFileSync(path.join(repoRoot, "AGENTS.md"), "# contract\n", "utf8");
+    writeFileSync(
+      modelPath,
+      `version: 2
+levels:
+  - id: awareness
+    name: Awareness
+dimensions:
+  - id: collaboration
+    name: Collaboration
+criteria:
+  - id: collaboration.awareness.file
+    level: awareness
+    dimension: collaboration
+    weight: 1
+    critical: true
+    why_it_matters: file
+    recommended_action: file
+    evidence_hint: AGENTS.md
+    detector:
+      type: file_exists
+      path: AGENTS.md
+  - id: collaboration.awareness.path
+    level: awareness
+    dimension: collaboration
+    weight: 1
+    critical: false
+    why_it_matters: path
+    recommended_action: path
+    evidence_hint: AGENTS.md
+    detector:
+      type: any_file_exists
+      paths:
+        - AGENTS.md
+`,
+      "utf8",
+    );
+
+    writeJson(snapshotPath, {
+      modelVersion: 1,
+      profile: "generic",
+      generatedAt: "2026-03-26T00:00:00.000Z",
+      overallLevel: "awareness",
+      dimensions: {},
+      criteria: [],
+    });
+
+    const report = await evaluateHarnessFluency({
+      repoRoot,
+      modelPath,
+      snapshotPath,
+      compareLast: true,
+      save: false,
+    });
+
+    expect(report.comparison).toBeNull();
   });
 
   it("fails disallowed command executables instead of executing via shell", async () => {

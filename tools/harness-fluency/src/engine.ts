@@ -7,6 +7,7 @@ import { load as loadYaml } from "js-yaml";
 
 import {
   CELL_PASS_THRESHOLD,
+  DEFAULT_PROFILE,
   MAX_REGEX_INPUT_LENGTH,
   type CellResult,
   type CliOptions,
@@ -523,6 +524,10 @@ function buildComparison(
   };
 }
 
+function canCompareReports(previousReport: HarnessFluencyReport, currentReport: HarnessFluencyReport): boolean {
+  return previousReport.modelVersion === currentReport.modelVersion && previousReport.profile === currentReport.profile;
+}
+
 async function persistSnapshot(report: HarnessFluencyReport, snapshotPath: string): Promise<void> {
   await mkdir(path.dirname(snapshotPath), { recursive: true });
   await writeFile(snapshotPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -644,6 +649,8 @@ export async function evaluateHarnessFluency(options: EvaluateOptions): Promise<
 
   const report: HarnessFluencyReport = {
     modelVersion: model.version,
+    modelPath: path.resolve(options.modelPath),
+    profile: options.profile ?? DEFAULT_PROFILE,
     repoRoot,
     generatedAt: new Date().toISOString(),
     snapshotPath: path.resolve(options.snapshotPath),
@@ -660,7 +667,7 @@ export async function evaluateHarnessFluency(options: EvaluateOptions): Promise<
     comparison: null,
   };
 
-  if (previousSnapshot) {
+  if (previousSnapshot && canCompareReports(previousSnapshot, report)) {
     report.comparison = buildComparison(previousSnapshot, report, levelOrder);
   }
   if (options.save) {
@@ -675,6 +682,7 @@ export function formatTextReport(report: HarnessFluencyReport): string {
     "HARNESS FLUENCY REPORT",
     "",
     `Repository: ${report.repoRoot}`,
+    `Profile: ${report.profile}`,
     `Model Version: ${report.modelVersion}`,
     `Overall Level: ${report.overallLevelName}`,
     `Next Level: ${report.nextLevelName ?? "Reached top level"}`,
@@ -733,6 +741,7 @@ export async function runCli(
   const report = await evaluateHarnessFluency({
     repoRoot: options.repoRoot,
     modelPath: options.modelPath,
+    profile: options.profile,
     snapshotPath: options.snapshotPath,
     compareLast: options.compareLast,
     save: options.save,
