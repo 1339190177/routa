@@ -38,6 +38,12 @@ describe("runReviewTriggerPhase", () => {
     } else {
       process.env.ROUTA_ALLOW_REVIEW_UNAVAILABLE = originalAllowReviewUnavailable;
     }
+
+    if (originalAllowReviewTriggerPush === undefined) {
+      delete process.env.ROUTA_ALLOW_REVIEW_TRIGGER_PUSH;
+    } else {
+      process.env.ROUTA_ALLOW_REVIEW_TRIGGER_PUSH = originalAllowReviewTriggerPush;
+    }
   });
 
   it("passes when no review trigger matches", async () => {
@@ -70,6 +76,7 @@ describe("runReviewTriggerPhase", () => {
   });
 
   it("blocks a matched review trigger in non-interactive mode", async () => {
+    delete process.env.ROUTA_ALLOW_REVIEW_TRIGGER_PUSH;
     runCommandMock
       .mockResolvedValueOnce({
         command: "git rev-parse",
@@ -100,6 +107,41 @@ describe("runReviewTriggerPhase", () => {
     expect(result.status).toBe("blocked");
     expect(result.triggers).toHaveLength(1);
     expect(result.message).toContain("non-interactive push");
+  });
+
+  it("allows matched review trigger when bypass env var is set", async () => {
+    process.env.ROUTA_ALLOW_REVIEW_TRIGGER_PUSH = "1";
+    runCommandMock
+      .mockResolvedValueOnce({
+        command: "git rev-parse",
+        durationMs: 5,
+        exitCode: 0,
+        output: "origin/main\n",
+      })
+      .mockResolvedValueOnce({
+        command: "git rev-parse --show-toplevel",
+        durationMs: 5,
+        exitCode: 0,
+        output: `${process.cwd()}\n`,
+      })
+      .mockResolvedValueOnce({
+        command: "entrix review-trigger",
+        durationMs: 10,
+        exitCode: 3,
+        output: JSON.stringify({
+          triggers: [{ action: "review", name: "oversized_change", severity: "high" }],
+          changed_files: ["tools/hook-runtime/src/review.ts"],
+          diff_stats: { file_count: 1, added_lines: 10, deleted_lines: 2 },
+        }),
+      });
+
+    const result = await runReviewTriggerPhase("jsonl");
+
+    expect(result.allowed).toBe(true);
+    expect(result.status).toBe("passed");
+    expect(result.bypassed).toBe(true);
+    expect(result.triggers).toHaveLength(1);
+    expect(result.message).toContain("ROUTA_ALLOW_REVIEW_TRIGGER_PUSH=1 set");
   });
 
   it("blocks push when review evaluation is unavailable by default", async () => {
