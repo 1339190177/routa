@@ -6,6 +6,8 @@ import { load as loadYaml } from "js-yaml";
 export const DEFAULT_MODEL_RELATIVE_PATH = path.join("docs", "fitness", "harness-fluency.model.yaml");
 export const DEFAULT_SNAPSHOT_RELATIVE_PATH = path.join("docs", "fitness", "reports", "harness-fluency-latest.json");
 export const CELL_PASS_THRESHOLD = 0.8;
+export const MAX_REGEX_PATTERN_LENGTH = 256;
+export const MAX_REGEX_INPUT_LENGTH = 20_000;
 
 export type OutputFormat = "text" | "json";
 export type CriterionStatus = "pass" | "fail" | "skipped";
@@ -286,15 +288,31 @@ function parseDetector(value: unknown, label: string): DetectorDefinition {
         expectedExitCode: expectNumber(detector.expectedExitCode, `${label}.expectedExitCode`, 0),
         timeoutMs: expectNumber(detector.timeoutMs, `${label}.timeoutMs`, 10_000),
       };
-    case "command_output_regex":
+    case "command_output_regex": {
+      const pattern = expectString(detector.pattern, `${label}.pattern`);
+      if (pattern.length > MAX_REGEX_PATTERN_LENGTH) {
+        throw new Error(`${label}.pattern exceeds max length ${MAX_REGEX_PATTERN_LENGTH}`);
+      }
+
+      const flags = typeof detector.flags === "string" ? detector.flags : "i";
+      try {
+        void new RegExp(pattern, flags);
+      } catch (error) {
+        throw new Error(
+          `${label} has invalid regex settings: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
+
       return {
         type,
         command: expectString(detector.command, `${label}.command`),
-        pattern: expectString(detector.pattern, `${label}.pattern`),
-        flags: typeof detector.flags === "string" ? detector.flags : "i",
+        pattern,
+        flags,
         expectedExitCode: expectNumber(detector.expectedExitCode, `${label}.expectedExitCode`, 0),
         timeoutMs: expectNumber(detector.timeoutMs, `${label}.timeoutMs`, 10_000),
       };
+    }
     case "manual_attestation":
       return { type, prompt: expectString(detector.prompt, `${label}.prompt`) };
     default:

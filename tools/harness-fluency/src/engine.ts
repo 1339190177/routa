@@ -7,6 +7,7 @@ import { load as loadYaml } from "js-yaml";
 
 import {
   CELL_PASS_THRESHOLD,
+  MAX_REGEX_INPUT_LENGTH,
   type CellResult,
   type CliOptions,
   type CriterionResult,
@@ -32,6 +33,7 @@ type EvaluationContext = {
 type CommandExecutionResult = {
   exitCode: number;
   output: string;
+  timedOut: boolean;
 };
 
 type MutableCellAccumulator = {
@@ -42,6 +44,19 @@ type MutableCellAccumulator = {
   dimensionName: string;
   criteria: CriterionResult[];
 };
+
+const ALLOWED_COMMAND_EXECUTABLES = new Set([
+  "cargo",
+  "entrix",
+  "git",
+  "node",
+  "npm",
+  "npx",
+  "pnpm",
+  "python",
+  "python3",
+  "uv",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -55,11 +70,84 @@ function toAbsolutePath(basePath: string, targetPath: string): string {
   return path.isAbsolute(targetPath) ? targetPath : path.resolve(basePath, targetPath);
 }
 
+function parseCommand(command: string): { executable: string; args: string[] } {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | null = null;
+  let escaping = false;
+
+  const pushCurrent = () => {
+    if (current.length > 0) {
+      tokens.push(current);
+      current = "";
+    }
+  };
+
+  for (const char of command) {
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+
+    if (char === "'" || char === "\"") {
+      quote = char;
+      continue;
+    }
+
+    if (/\s/.test(char)) {
+      pushCurrent();
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (escaping || quote) {
+    throw new Error("command contains unterminated escaping or quotes");
+  }
+
+  pushCurrent();
+  if (tokens.length === 0) {
+    throw new Error("command must not be empty");
+  }
+
+  return {
+    executable: tokens[0],
+    args: tokens.slice(1),
+  };
+}
+
+function validateExecutable(executable: string): void {
+  const commandName = path.basename(executable);
+  if (!ALLOWED_COMMAND_EXECUTABLES.has(commandName)) {
+    throw new Error(`command executable "${commandName}" is not allowed`);
+  }
+}
+
 function formatPercent(value: number | null): string {
   if (value === null) {
     return "n/a";
   }
   return `${Math.round(value * 100)}%`;
+}
+
+function testRegexAgainstOutput(pattern: string, flags: string, output: string): boolean {
+  return new RegExp(pattern, flags).test(output.slice(0, MAX_REGEX_INPUT_LENGTH));
 }
 
 function lookupPath(source: unknown, spec: readonly (string | number)[]): unknown {
@@ -121,16 +209,21 @@ async function readYamlFile(context: EvaluationContext, relativePath: string): P
 }
 
 async function runCommand(command: string, repoRoot: string, timeoutMs: number): Promise<CommandExecutionResult> {
+  const { executable, args } = parseCommand(command);
+  validateExecutable(executable);
+
   return new Promise((resolve, reject) => {
-    const shell = process.env.SHELL || "zsh";
-    const child = spawn(shell, ["-lc", command], {
+    const child = spawn(executable, args, {
       cwd: repoRoot,
       env: process.env,
+      shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
     let output = "";
+    let timedOut = false;
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill("SIGTERM");
     }, timeoutMs);
 
@@ -149,9 +242,18 @@ async function runCommand(command: string, repoRoot: string, timeoutMs: number):
       resolve({
         exitCode: code ?? 1,
         output: output.trim(),
+        timedOut,
       });
     });
   });
+}
+
+function buildCommandFailure(error: unknown): Pick<CriterionResult, "status" | "detail" | "evidence"> {
+  return {
+    status: "fail",
+    detail: error instanceof Error ? error.message : String(error),
+    evidence: [],
+  };
 }
 
 async function evaluateDetector(
@@ -184,22 +286,31 @@ async function evaluateDetector(
       };
     }
     case "glob_count": {
-      const matches = new Set<string>();
-      for (const patternText of detector.patterns) {
-        const found = await glob(patternText, {
-          cwd: context.repoRoot,
-          dot: true,
-          nodir: false,
-        });
-        for (const match of found) {
-          matches.add(match);
+      try {
+        const matches = new Set<string>();
+        for (const patternText of detector.patterns) {
+          const found = await glob(patternText, {
+            cwd: context.repoRoot,
+            dot: true,
+            nodir: false,
+          });
+          for (const match of found) {
+            matches.add(match);
+          }
         }
+
+        return {
+          status: matches.size >= detector.min ? "pass" : "fail",
+          detail: `matched ${matches.size} paths (min ${detector.min})`,
+          evidence: Array.from(matches).sort().slice(0, 10),
+        };
+      } catch (error) {
+        return {
+          status: "fail",
+          detail: `glob failed: ${error instanceof Error ? error.message : String(error)}`,
+          evidence: [],
+        };
       }
-      return {
-        status: matches.size >= detector.min ? "pass" : "fail",
-        detail: `matched ${matches.size} paths (min ${detector.min})`,
-        evidence: Array.from(matches).sort().slice(0, 10),
-      };
     }
     case "json_path_exists": {
       try {
@@ -242,22 +353,40 @@ async function evaluateDetector(
       }
     }
     case "command_exit_code": {
-      const result = await runCommand(detector.command, context.repoRoot, detector.timeoutMs);
+      let result: CommandExecutionResult;
+      try {
+        result = await runCommand(detector.command, context.repoRoot, detector.timeoutMs);
+      } catch (error) {
+        return buildCommandFailure(error);
+      }
+
       return {
         status: result.exitCode === detector.expectedExitCode ? "pass" : "fail",
-        detail: `exit code ${result.exitCode}, expected ${detector.expectedExitCode}`,
+        detail: result.timedOut
+          ? `command timed out after ${detector.timeoutMs}ms`
+          : `exit code ${result.exitCode}, expected ${detector.expectedExitCode}`,
         evidence: result.output ? [result.output] : [],
       };
     }
     case "command_output_regex": {
-      const result = await runCommand(detector.command, context.repoRoot, detector.timeoutMs);
+      let result: CommandExecutionResult;
+      try {
+        result = await runCommand(detector.command, context.repoRoot, detector.timeoutMs);
+      } catch (error) {
+        return buildCommandFailure(error);
+      }
+
       const passed =
-        result.exitCode === detector.expectedExitCode && new RegExp(detector.pattern, detector.flags).test(result.output);
+        !result.timedOut &&
+        result.exitCode === detector.expectedExitCode &&
+        testRegexAgainstOutput(detector.pattern, detector.flags, result.output);
       return {
         status: passed ? "pass" : "fail",
-        detail: passed
-          ? `command output matched ${detector.pattern}`
-          : `command output did not match ${detector.pattern}`,
+        detail: result.timedOut
+          ? `command timed out after ${detector.timeoutMs}ms`
+          : passed
+            ? `command output matched ${detector.pattern}`
+            : `command output did not match ${detector.pattern}`,
         evidence: result.output ? [result.output] : [],
       };
     }
