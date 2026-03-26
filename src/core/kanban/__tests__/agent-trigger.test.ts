@@ -7,14 +7,27 @@ vi.mock("../../acp/claude-code-sdk-adapter", () => ({
   isClaudeCodeSdkConfigured: vi.fn(),
 }));
 
-const sendMessageMock = vi.fn();
-const waitForCompletionMock = vi.fn();
-
-vi.mock("../../a2a", () => ({
-  getA2AOutboundClient: vi.fn(() => ({
+const {
+  sendMessageMock,
+  waitForCompletionMock,
+  getA2AOutboundClientMock,
+} = vi.hoisted(() => {
+  const sendMessageMock = vi.fn();
+  const waitForCompletionMock = vi.fn();
+  const getA2AOutboundClientMock = vi.fn(() => ({
     sendMessage: sendMessageMock,
     waitForCompletion: waitForCompletionMock,
-  })),
+  }));
+
+  return {
+    sendMessageMock,
+    waitForCompletionMock,
+    getA2AOutboundClientMock,
+  };
+});
+
+vi.mock("../../a2a", () => ({
+  getA2AOutboundClient: getA2AOutboundClientMock,
 }));
 
 import { isClaudeCodeSdkConfigured } from "../../acp/claude-code-sdk-adapter";
@@ -272,6 +285,8 @@ describe("buildTaskPrompt", () => {
 describe("triggerAssignedTaskAgent", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    getA2AOutboundClientMock.mockClear();
     sendMessageMock.mockReset();
     waitForCompletionMock.mockReset();
   });
@@ -396,6 +411,61 @@ describe("triggerAssignedTaskAgent", () => {
         contextId: "ctx-1",
       }),
     }));
+  });
+
+  it("resolves auth headers from authConfigId for A2A steps", async () => {
+    vi.stubEnv("ROUTA_A2A_AUTH_CONFIGS", JSON.stringify({
+      "remote-review-auth": {
+        headers: {
+          "Authorization": "Bearer secret-token",
+          "X-Tenant": "review-team",
+        },
+      },
+    }));
+
+    sendMessageMock.mockResolvedValue({
+      id: "remote-task-2",
+      contextId: "ctx-2",
+      status: { state: "submitted", timestamp: "2026-03-21T00:00:00Z" },
+      history: [],
+    });
+    waitForCompletionMock.mockResolvedValue({
+      id: "remote-task-2",
+      contextId: "ctx-2",
+      status: { state: "completed", timestamp: "2026-03-21T00:00:10Z" },
+      history: [],
+    });
+
+    const task = createTask({
+      id: "task-a2a-auth",
+      title: "Run protected remote review",
+      objective: "Send this card to an authenticated remote reviewer",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "review",
+      assignedRole: "GATE",
+    });
+
+    const result = await triggerAssignedTaskAgent({
+      origin: "http://127.0.0.1:3000",
+      workspaceId: "default",
+      cwd: "/tmp/project",
+      task,
+      step: {
+        id: "remote-review",
+        transport: "a2a",
+        agentCardUrl: "https://agents.example.com/reviewer/agent-card.json",
+        authConfigId: "remote-review-auth",
+      },
+    });
+
+    expect(result.transport).toBe("a2a");
+    expect(getA2AOutboundClientMock).toHaveBeenCalledWith({
+      requestHeaders: {
+        "Authorization": "Bearer secret-token",
+        "X-Tenant": "review-team",
+      },
+    });
   });
 });
 

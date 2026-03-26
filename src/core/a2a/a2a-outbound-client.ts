@@ -46,6 +46,7 @@ const DEFAULT_OPTIONS: Required<A2AOutboundClientOptions> = {
   maxWaitTime: 300000, // 5 minutes
   maxRetries: 3,
   retryDelay: 1000,
+  requestHeaders: {},
 };
 
 /**
@@ -236,6 +237,7 @@ export class A2AOutboundClient {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...(this.options.requestHeaders ?? {}),
           },
           body: JSON.stringify(request),
           signal: AbortSignal.timeout(this.options.timeout),
@@ -351,6 +353,9 @@ function sleep(ms: number): Promise<void> {
 const GLOBAL_KEY = "__a2a_outbound_client__";
 
 export function getA2AOutboundClient(options?: A2AOutboundClientOptions): A2AOutboundClient {
+  if (options && Object.keys(options).length > 0) {
+    return new A2AOutboundClient(options);
+  }
   const g = globalThis as Record<string, unknown>;
   if (!g[GLOBAL_KEY]) {
     g[GLOBAL_KEY] = new A2AOutboundClient(options);

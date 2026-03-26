@@ -43,6 +43,7 @@ export async function fetchAgentCard(
         method: "GET",
         headers: {
           "Accept": "application/json",
+          ...(options?.requestHeaders ?? {}),
         },
         signal: AbortSignal.timeout(opts.timeout!),
       });

@@ -9,10 +9,11 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-16.1-black.svg)](https://nextjs.org/)
 [![Rust](https://img.shields.io/badge/Rust-Axum-orange.svg)](https://github.com/tokio-rs/axum)
-[![npm version](https://img.shields.io/npm/v/routa-cli)](https://www.npmjs.com/package/routa-cli)
-[![crates.io](https://img.shields.io/crates/v/routa-cli)](https://crates.io/crates/routa-cli)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Join Slack](https://img.shields.io/badge/Slack-Join%20Community-4A154B?logo=slack&logoColor=white)](https://join.slack.com/t/routa-group/shared_invite/zt-3txzzfxm8-tnRFwNpPvdfjAVoSD6MTJg)
+
+[![npm version](https://img.shields.io/npm/v/routa-cli)](https://www.npmjs.com/package/routa-cli)
+[![crates.io](https://img.shields.io/crates/v/routa-cli)](https://crates.io/crates/routa-cli)
 
 [Why Routa](#why-routa) • [Architecture](#architecture) • [How It Works](#how-it-works) • [Agent Team](#the-agent-team) • [Bring Your Own Agents](#bring-your-own-agents) • [Community](#community) • [Quick Start](#quick-start)
 

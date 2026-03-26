@@ -257,6 +257,74 @@ describe("A2AOutboundClient", () => {
       expect(task.id).toBe("task-125");
       expect(mockFetch).toHaveBeenCalledTimes(1); // Only the RPC call, no card fetch
     });
+
+    it("forwards configured request headers to both agent-card and RPC requests", async () => {
+      client = new A2AOutboundClient({
+        timeout: 5000,
+        pollInterval: 100,
+        maxWaitTime: 2000,
+        maxRetries: 2,
+        retryDelay: 50,
+        requestHeaders: {
+          "Authorization": "Bearer secret-token",
+          "X-Tenant": "review-team",
+        },
+      });
+
+      let callCount = 0;
+      mockFetch.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => mockAgentCard,
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jsonrpc: "2.0",
+            id: "test-id",
+            result: {
+              task: {
+                id: "task-headers",
+                contextId: "ctx-headers",
+                status: { state: "submitted", timestamp: "2024-01-01T00:00:00Z" },
+                history: [],
+              },
+            },
+          }),
+        };
+      });
+
+      await client.sendMessage("https://example.com/agent-card.json", "Protected RPC call");
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        "https://example.com/agent-card.json",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "Accept": "application/json",
+            "Authorization": "Bearer secret-token",
+            "X-Tenant": "review-team",
+          }),
+        }),
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        mockRpcEndpoint,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+            "Authorization": "Bearer secret-token",
+            "X-Tenant": "review-team",
+          }),
+        }),
+      );
+    });
   });
 
   describe("getTask", () => {

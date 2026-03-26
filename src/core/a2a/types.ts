@@ -128,6 +128,11 @@ export interface A2AOutboundClientOptions {
    * @default 1000 (1 second)
    */
   retryDelay?: number;
+
+  /**
+   * Static HTTP headers to attach to Agent Card fetches and JSON-RPC requests.
+   */
+  requestHeaders?: Record<string, string>;
 }
 
 // ─── A2A Outbound Client Errors ─────────────────────────────────────────────────

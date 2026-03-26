@@ -5,6 +5,7 @@ import { AgentEventType, type EventBus } from "../events/event-bus";
 import { isClaudeCodeSdkConfigured } from "../acp/claude-code-sdk-adapter";
 import { consumeAcpPromptResponse } from "../acp/prompt-response";
 import { getA2AOutboundClient } from "../a2a";
+import { resolveA2AAuthConfig } from "../a2a/a2a-auth-config";
 import { formatArtifactSummary, resolveKanbanTransitionArtifacts } from "./transition-artifacts";
 import type { TaskLaneSession } from "../models/task";
 import { resolveCurrentLaneAutomationState } from "./lane-automation-state";
@@ -407,7 +408,16 @@ async function triggerA2ATaskAgent(params: {
   }
 
   const localSessionId = `a2a-${uuidv4()}`;
-  const client = getA2AOutboundClient();
+  let authHeaders: Record<string, string> | undefined;
+  try {
+    authHeaders = resolveA2AAuthConfig(params.step?.authConfigId)?.headers;
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+
+  const client = getA2AOutboundClient(
+    authHeaders ? { requestHeaders: authHeaders } : undefined,
+  );
   const metadata: Record<string, unknown> = {
     workspaceId: params.workspaceId,
     cardId: params.task.id,
