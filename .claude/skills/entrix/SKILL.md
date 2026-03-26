@@ -15,6 +15,45 @@ executable guardrails. It answers three questions continuously:
 
 ---
 
+## Skill Verification (How to Test This Skill)
+
+After writing or updating this skill, verify it works end-to-end by running it
+against a blank project:
+
+```bash
+# 1. Create a minimal blank project
+mkdir /tmp/test-entrix && cd /tmp/test-entrix
+git init
+echo '{"name": "test-project", "scripts": {"lint": "echo lint ok", "test": "echo test ok"}}' > package.json
+
+# 2. Install entrix
+pip install entrix
+
+# 3. Invoke the skill via claude -p (replace with actual slash command name)
+claude -p "/entrix bootstrap fitness for this project"
+
+# 4. Verify files were created
+ls docs/fitness/
+# Expected: README.md  manifest.yaml  code-quality.md  testability.md  release-readiness.md  review-triggers.yaml
+
+# 5. Validate config correctness
+entrix validate
+# Expected: ✅ Weights sum to 100%
+
+# 6. Dry-run to confirm commands resolve
+entrix run --dry-run
+# Expected: prints dimension/metric list with no "fitness directory not found" error
+
+# 7. Fast-tier run to confirm commands actually execute
+entrix run --tier fast
+```
+
+A successful run means the skill can bootstrap a working fitness config from
+scratch in an unfamiliar project. If any step fails, fix the `claude -p` prompt
+in Step 1 below and re-run.
+
+---
+
 ## Step 0: Installation
 
 ```bash
