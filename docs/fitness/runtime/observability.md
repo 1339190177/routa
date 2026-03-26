@@ -7,7 +7,7 @@ threshold:
 metrics:
   - name: web_instrumentation_entrypoint_present
     command: |
-      rg -q 'export async function register|startSchedulerService|startBackgroundWorker' src/instrumentation.ts && \
+      rg -q 'export async function register|startSchedulerService|startBackgroundWorker|initializeNextRuntimeTelemetry' src/instrumentation.ts && \
       echo 'observability_instrumentation_ok'
     pattern: "observability_instrumentation_ok"
     tier: fast
@@ -22,6 +22,25 @@ metrics:
       - src/core/background-worker.ts
       - src/core/scheduling/**
     description: "Next.js instrumentation 入口继续接通后台 worker / scheduler 启动链"
+
+  - name: web_otel_trace_smoke
+    command: npm run test:otel:trace 2>&1
+    pattern: "✅ otel_trace_smoke"
+    tier: deep
+    execution_scope: ci
+    gate: advisory
+    kind: holistic
+    analysis: dynamic
+    stability: noisy
+    evidence_type: test
+    scope: [web]
+    run_when_changed:
+      - src/instrumentation.ts
+      - src/core/telemetry/**
+      - scripts/check-otel-trace-smoke.ts
+      - package.json
+      - package-lock.json
+    description: "当显式开启 ROUTA_OTEL_ENABLED 时，Next.js Node runtime 会输出最小可验证的 OTel span"
 
   - name: runtime_error_visibility_contract
     command: |
@@ -70,6 +89,7 @@ metrics:
 ## 当前覆盖
 
 - instrumentation 入口仍会启动后台 worker / scheduler
+- 显式开启 `ROUTA_OTEL_ENABLED=1` 时，Next.js Node runtime 会把最小 bootstrap span 输出到本地 JSONL
 - runtime error 会继续反映到 session `acpStatus` 与 API 输出
 - trace recorder 的关键回归测试仍在，避免会话可见性静默退化
 
