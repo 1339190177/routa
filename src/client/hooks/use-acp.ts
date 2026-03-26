@@ -145,6 +145,8 @@ export interface UseAcpActions {
       allowedNativeTools?: string[],
       /** Optional logical MCP profile, such as kanban-planning */
       mcpProfile?: McpServerProfile,
+      /** Optional session-scoped system prompt injected before the first user turn */
+      systemPrompt?: string,
     ) => Promise<AcpNewSessionResult | null>;
   selectSession: (sessionId: string) => void;
   setProvider: (provider: string) => void;
@@ -402,6 +404,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
       toolMode?: "essential" | "full",
       allowedNativeTools?: string[],
       mcpProfile?: McpServerProfile,
+      systemPrompt?: string,
     ): Promise<AcpNewSessionResult | null> => {
       const client = clientRef.current;
       if (!client) return null;
@@ -430,6 +433,7 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
           idempotencyKey,
           specialistId,
           specialistLocale,
+          systemPrompt,
           baseUrl,
           apiKey,
           customCommand: customProvider?.command,

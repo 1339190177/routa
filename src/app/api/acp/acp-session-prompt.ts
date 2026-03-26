@@ -429,6 +429,8 @@ export async function handleSessionPrompt({
     return autoCreateResponse;
   }
 
+  const visiblePromptText = promptText;
+
   const activeSessionRecord = store.getSession(sessionId);
   if (activeSessionRecord?.executionMode) {
     const refreshedBinding = refreshExecutionBinding(activeSessionRecord);
@@ -476,7 +478,7 @@ export async function handleSessionPrompt({
     }
   }
 
-  store.pushUserMessage(sessionId, promptText);
+  store.pushUserMessage(sessionId, visiblePromptText);
   await persistSessionHistorySnapshot(sessionId, store);
 
   const sessionRecord = store.getSession(sessionId);
@@ -484,7 +486,7 @@ export async function handleSessionPrompt({
     createTraceRecord(sessionId, "user_message", { provider: sessionRecord?.provider ?? "unknown" }),
     {
       role: "user",
-      contentPreview: promptText.slice(0, 200),
+      contentPreview: visiblePromptText.slice(0, 200),
     },
   );
   recordTrace(sessionRecord?.cwd ?? process.cwd(), userMsgTrace);

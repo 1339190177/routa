@@ -150,6 +150,8 @@ export class BrowserAcpClient {
     idempotencyKey?: string;
     specialistId?: string;
     specialistLocale?: string;
+    /** Optional session-scoped system prompt injected before the first user turn. */
+    systemPrompt?: string;
     /** Custom API base URL (overrides ANTHROPIC_BASE_URL env var) */
     baseUrl?: string;
     /** API key override (overrides ANTHROPIC_AUTH_TOKEN env var) */
@@ -182,6 +184,7 @@ export class BrowserAcpClient {
       idempotencyKey: params.idempotencyKey,
       specialistId: params.specialistId,
       specialistLocale: params.specialistLocale,
+      systemPrompt: params.systemPrompt,
       baseUrl: params.baseUrl,
       apiKey: params.apiKey,
       sandboxId: params.sandboxId,

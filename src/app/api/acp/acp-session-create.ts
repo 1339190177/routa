@@ -160,6 +160,7 @@ export async function handleSessionNew({
   const specialistId = (p.specialistId as string | undefined);
   const specialistLocale = (p.specialistLocale as string | undefined) ?? "en";
   const specialist = await loadSpecialistConfig(specialistId, specialistLocale);
+  const customSystemPrompt = (p.systemPrompt as string | undefined)?.trim() || undefined;
 
   const defaultProvider = isServerlessEnvironment() ? "claude-code-sdk" : "opencode";
   const requestedProvider = (p.provider as string | undefined);
@@ -271,7 +272,7 @@ export async function handleSessionNew({
     }
   }
 
-  const specialistSystemPrompt = buildSpecialistSystemPrompt(specialist);
+  const specialistSystemPrompt = customSystemPrompt ?? buildSpecialistSystemPrompt(specialist);
 
   let validatedWorktreeId: string | undefined;
   if (worktreeId) {
