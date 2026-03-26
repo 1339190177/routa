@@ -7,10 +7,10 @@
  * and re-runs the failing gates locally before allowing a commit.
  *
  * Usage:
- *   npx tsx scripts/ci-red-fixer.ts
- *   npx tsx scripts/ci-red-fixer.ts --dry-run
- *   npx tsx scripts/ci-red-fixer.ts --run-id 123456789
- *   npx tsx scripts/ci-red-fixer.ts --branch main --report-file /tmp/report.json
+ *   npx tsx .github/scripts/ci-red-fixer.ts
+ *   npx tsx .github/scripts/ci-red-fixer.ts --dry-run
+ *   npx tsx .github/scripts/ci-red-fixer.ts --run-id 123456789
+ *   npx tsx .github/scripts/ci-red-fixer.ts --branch main --report-file /tmp/report.json
  *
  * Environment:
  *   ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN      # Required unless --dry-run
@@ -38,7 +38,7 @@ import {
   type FailedJobContext,
   type WorkflowJobSummary,
   type WorkflowRunSummary,
-} from "../src/core/github/ci-red-fixer";
+} from "@/core/github/ci-red-fixer";
 
 interface WorkflowRunsResponse {
   workflow_runs: Array<{

@@ -128,7 +128,7 @@ jobs:
             args+=(--dry-run)
           fi
 
-          npx tsx scripts/ci-red-fixer.ts "${args[@]}" 2>&1 | tee /tmp/ci-red-fixer-output.txt
+          npx tsx .github/scripts/ci-red-fixer.ts "${args[@]}" 2>&1 | tee /tmp/ci-red-fixer-output.txt
 
       - name: Append summary
         if: env.ANTHROPIC_API_KEY != '' || github.event.inputs.dry_run == 'true'

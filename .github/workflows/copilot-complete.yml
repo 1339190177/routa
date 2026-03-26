@@ -82,7 +82,7 @@ jobs:
             ARGS="$ARGS --dry-run"
           fi
 
-          npx tsx scripts/copilot-complete-handler.ts $ARGS 2>&1 | tee /tmp/handler-output.txt
+          npx tsx .github/scripts/copilot-complete-handler.ts $ARGS 2>&1 | tee /tmp/handler-output.txt
 
           echo "### Output" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

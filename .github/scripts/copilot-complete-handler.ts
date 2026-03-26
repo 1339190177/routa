@@ -8,8 +8,8 @@
  * 3. Add an @augment review comment on the PR
  *
  * Usage:
- *   npx tsx scripts/copilot-complete-handler.ts --issue 123
- *   npx tsx scripts/copilot-complete-handler.ts --issue 123 --dry-run
+ *   npx tsx .github/scripts/copilot-complete-handler.ts --issue 123
+ *   npx tsx .github/scripts/copilot-complete-handler.ts --issue 123 --dry-run
  *
  * Environment:
  *   GH_TOKEN   # Required for gh CLI operations
@@ -190,7 +190,7 @@ function main(): void {
   const issueIndex = args.indexOf("--issue");
   if (issueIndex === -1 || !args[issueIndex + 1]) {
     console.error(
-      "Usage: npx tsx scripts/copilot-complete-handler.ts --issue <number> [--dry-run]"
+      "Usage: npx tsx .github/scripts/copilot-complete-handler.ts --issue <number> [--dry-run]"
     );
     process.exit(1);
   }
