@@ -21,3 +21,19 @@ export function parsePositiveInt(raw: string | undefined, fallback: number): num
 
   return value;
 }
+
+export function parseMetricNames(
+  raw: string | undefined,
+  fallback: readonly string[] = DEFAULT_PRE_PUSH_METRICS,
+): string[] {
+  if (!raw) {
+    return [...fallback];
+  }
+
+  const metrics = raw
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+
+  return metrics.length > 0 ? metrics : [...fallback];
+}

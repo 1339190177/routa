@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { formatReviewPhaseLabel, handleCliError } from "../cli.js";
+import { formatReviewPhaseLabel, handleCliError, parseArgs } from "../cli.js";
 
 describe("handleCliError", () => {
   const originalOutputMode = process.env.ROUTA_HOOK_RUNTIME_OUTPUT_MODE;
+  const originalMetrics = process.env.ROUTA_HOOK_RUNTIME_METRICS;
 
   afterEach(() => {
     process.exitCode = undefined;
@@ -11,6 +12,11 @@ describe("handleCliError", () => {
       delete process.env.ROUTA_HOOK_RUNTIME_OUTPUT_MODE;
     } else {
       process.env.ROUTA_HOOK_RUNTIME_OUTPUT_MODE = originalOutputMode;
+    }
+    if (originalMetrics === undefined) {
+      delete process.env.ROUTA_HOOK_RUNTIME_METRICS;
+    } else {
+      process.env.ROUTA_HOOK_RUNTIME_METRICS = originalMetrics;
     }
     vi.restoreAllMocks();
   });
@@ -32,6 +38,24 @@ describe("handleCliError", () => {
 
     expect(stderr).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
+  });
+});
+
+describe("parseArgs", () => {
+  it("uses metric names from environment by default", () => {
+    process.env.ROUTA_HOOK_RUNTIME_METRICS = "eslint_pass,ts_test_pass";
+
+    const options = parseArgs([]);
+
+    expect(options.metricNames).toEqual(["eslint_pass", "ts_test_pass"]);
+  });
+
+  it("lets --metrics override env metric names", () => {
+    process.env.ROUTA_HOOK_RUNTIME_METRICS = "eslint_pass,ts_test_pass";
+
+    const options = parseArgs(["--metrics", "clippy_pass,rust_test_pass"]);
+
+    expect(options.metricNames).toEqual(["clippy_pass", "rust_test_pass"]);
   });
 });
 

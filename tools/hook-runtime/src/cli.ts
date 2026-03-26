@@ -9,6 +9,7 @@ import {
   DEFAULT_PARALLEL_JOBS,
   DEFAULT_PRE_PUSH_METRICS,
   DEFAULT_TAIL_LINES,
+  parseMetricNames,
   parsePositiveInt,
 } from "./config.js";
 import {
@@ -32,6 +33,7 @@ type CliOptions = {
   dryRun: boolean;
   failFast: boolean;
   jobs: number;
+  metricNames: string[];
   outputMode: "human" | "jsonl";
   tailLines: number;
 };
@@ -66,12 +68,13 @@ function parseOutputMode(raw: string | undefined): "human" | "jsonl" {
   return "human";
 }
 
-function parseArgs(argv: string[]): CliOptions {
+export function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     autoFix: false,
     dryRun: false,
     failFast: true,
     jobs: parsePositiveInt(process.env.ROUTA_HOOK_RUNTIME_JOBS, DEFAULT_PARALLEL_JOBS),
+    metricNames: parseMetricNames(process.env.ROUTA_HOOK_RUNTIME_METRICS, DEFAULT_PRE_PUSH_METRICS),
     outputMode: parseOutputMode(process.env.ROUTA_HOOK_RUNTIME_OUTPUT_MODE),
     tailLines: parsePositiveInt(process.env.ROUTA_HOOK_RUNTIME_TAIL_LINES, DEFAULT_TAIL_LINES),
   };
@@ -92,6 +95,15 @@ function parseArgs(argv: string[]): CliOptions {
     }
     if (arg === "--jsonl") {
       options.outputMode = "jsonl";
+      continue;
+    }
+    if (arg === "--metrics" && i + 1 < argv.length) {
+      options.metricNames = parseMetricNames(argv[i + 1], options.metricNames);
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("--metrics=")) {
+      options.metricNames = parseMetricNames(arg.slice("--metrics=".length), options.metricNames);
       continue;
     }
     if (arg === "--jobs" && i + 1 < argv.length) {
@@ -280,10 +292,10 @@ async function runFitnessPhase(options: CliOptions): Promise<MetricExecution[]> 
   });
 
   if (options.dryRun) {
-    const metrics = await loadHookMetrics([...DEFAULT_PRE_PUSH_METRICS]);
+    const metrics = await loadHookMetrics(options.metricNames);
     if (options.outputMode === "human") {
       console.log(
-        `[fitness] Metrics (${options.jobs} workers): ${DEFAULT_PRE_PUSH_METRICS.join(", ")}`,
+        `[fitness] Metrics (${options.jobs} workers): ${options.metricNames.join(", ")}`,
       );
       for (const metric of metrics) {
         console.log(`[dry-run] ${metric.name} -> ${metric.command}`);
@@ -300,12 +312,12 @@ async function runFitnessPhase(options: CliOptions): Promise<MetricExecution[]> 
       durationMs: 0,
       reason: "dry_run",
       jobs: options.jobs,
-      metrics: DEFAULT_PRE_PUSH_METRICS,
+      metrics: options.metricNames,
     });
     return [];
   }
 
-  const metrics = await loadHookMetrics([...DEFAULT_PRE_PUSH_METRICS]);
+  const metrics = await loadHookMetrics(options.metricNames);
   const reporter =
     options.outputMode === "human"
       ? createHumanMetricReporter(metrics, {
@@ -459,6 +471,7 @@ export async function main(): Promise<void> {
     autoFix: options.autoFix,
     failFast: options.failFast,
     jobs: options.jobs,
+    metrics: options.metricNames,
     tailLines: options.tailLines,
   });
 
