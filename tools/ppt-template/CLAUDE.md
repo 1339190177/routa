@@ -79,6 +79,12 @@ basic validation.
 Run commands from `tools/ppt-template/` so local `package.json` resolution
 stays unambiguous.
 
+Default intent mapping:
+
+- Generic project intro, product intro, feature overview, and demo-style requests should default to `npm run generate:showcase`.
+- Architecture, system design, runtime boundary, and engineering deep-dive requests should default to `npm run generate:architecture`.
+- Do not create a new generator for a vague prompt when one of the existing entry points already fits.
+
 ## PPTX Workflow
 
 - If editing or extending an existing deck, inspect the current output first

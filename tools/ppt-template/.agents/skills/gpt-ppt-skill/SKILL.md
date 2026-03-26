@@ -24,12 +24,16 @@ Use this skill for work inside `tools/ppt-template/`.
 
 Match the request to the closest existing generator first:
 
-- Project or system architecture, technical overview, engineering intro: `npm run generate:architecture`
-- Product showcase, screen walkthrough, feature tour: `npm run generate:showcase`
+- Generic project introduction, product intro, feature overview, screen walkthrough, feature tour: `npm run generate:showcase`
+- Project or system architecture, technical overview, engineering intro, runtime design: `npm run generate:architecture`
 - Release summary, changelog, shipped features: `npm run generate:release:v0.2.7`
 - Template, palette, brand sample deck: `npm run generate`
 
-If the prompt is vague, choose the closest existing generator instead of creating a new one. State which generator you picked.
+Defaults:
+
+- If the prompt says "项目介绍", "项目简介", "project introduction", or similarly vague showcase-oriented wording, use `npm run generate:showcase`.
+- Only use `npm run generate:architecture` when the user explicitly asks for architecture, system design, technical internals, or engineering structure.
+- State which generator you picked before running it.
 
 ## When Editing Code
 
