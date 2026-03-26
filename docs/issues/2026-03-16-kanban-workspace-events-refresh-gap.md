@@ -1,7 +1,7 @@
 ---
 date: 2026-03-16
 title: Kanban Workspace Events Refresh Gap
-status: open
+status: resolved
 area: kanban
 labels: [bug, kanban, realtime, sse, architecture]
 ---
@@ -59,3 +59,14 @@ This keeps the UI aligned with the existing Routa architecture:
 - Kanban page updates shortly after agent tool calls even if the related ACP panel is closed
 - Multiple browser tabs in the same workspace stay in sync
 - Real-time behavior follows the same architectural style already used by Notes
+
+## Resolution
+
+- Date: 2026-03-26
+- Status: Resolved
+- Notes:
+  - `src/core/kanban/kanban-event-broadcaster.ts` now provides workspace-scoped SSE broadcast with `kanban:changed`.
+  - `src/app/api/kanban/events/route.ts` subscribes the client to a broadcaster stream and preserves live connection semantics.
+  - `src/app/workspace/[workspaceId]/kanban/kanban-page-client.tsx` mounts `useKanbanEvents` for refresh invalidation on workspace events.
+  - `src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx` has explicit session/task refresh burst and backfill synchronization handling.
+  - `src/client/hooks/use-kanban-events.ts` consumes both initial `connected` and `kanban:changed` event types for refresh.
