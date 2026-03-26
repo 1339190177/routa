@@ -292,7 +292,7 @@ export function HomeInput({
     ? "absolute -inset-3 rounded-[34px] bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.24),transparent_42%),radial-gradient(circle_at_85%_30%,rgba(96,165,250,0.18),transparent_38%)] opacity-0 blur-2xl transition-opacity duration-500 pointer-events-none group-focus-within:opacity-100"
     : "absolute -inset-1 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-400/10 to-blue-500/20 opacity-0 blur-xl transition-opacity duration-500 pointer-events-none group-focus-within:opacity-100";
   const bottomBarClass = isHero
-    ? "flex flex-wrap items-center gap-1.5 overflow-visible border-t border-blue-100 bg-blue-50/80 px-3 py-2 backdrop-blur dark:border-slate-800 dark:bg-slate-900/88"
+    ? "flex flex-wrap items-center gap-1.5 overflow-visible rounded-b-[27px] border-t border-blue-100 bg-blue-50/80 px-3 py-2 backdrop-blur dark:border-slate-800 dark:bg-slate-900/88"
     : "flex flex-wrap items-center gap-1.5 overflow-visible border-t border-slate-100 px-3 py-2 dark:border-slate-800";
   const skillPillClass = isHero
     ? "group shrink-0 flex w-[160px] flex-col gap-0.5 rounded-xl border border-blue-100/95 bg-white/94 px-3 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/70 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-blue-700/40 dark:hover:bg-slate-900"

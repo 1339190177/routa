@@ -570,7 +570,7 @@ export function TiptapInput({
         disabled ? "opacity-40 cursor-not-allowed" : ""
       }`;
   const toolbarClass = isHero
-    ? "mt-2.5 flex min-w-0 items-center gap-2.5 overflow-hidden"
+    ? "mt-2.5 flex min-w-0 items-center gap-2.5 overflow-visible"
     : "mt-1.5 -mb-0.5 flex min-w-0 items-center gap-2 overflow-hidden";
   const modelButtonClass = isHero
     ? "flex items-center gap-2 rounded-lg border border-[#d6e5fb] px-3 py-1.5 text-sm transition-colors hover:bg-sky-50 dark:border-white/10 dark:hover:bg-white/5"
