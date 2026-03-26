@@ -1,4 +1,12 @@
 name: Routa Release
+run-name: >-
+  Routa Release ${{
+    github.event_name == 'push' && github.ref_name || github.event.inputs.version
+  }}${{
+    github.event_name == 'workflow_dispatch' &&
+    ((github.event.inputs.dry_run == 'true' || github.event.inputs.dry_run == true) && ' [dry-run]' || ' [publish]') ||
+    ''
+  }}
 
 on:
   push:

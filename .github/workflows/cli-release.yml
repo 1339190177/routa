@@ -101,7 +101,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: routa-cli-${{ matrix.key }}
+          name: routa-cli-${{ inputs.version || github.event.inputs.version || 'snapshot' }}-${{ matrix.key }}
           path: dist/${{ matrix.key }}
           if-no-files-found: error
 
@@ -190,7 +190,7 @@ jobs:
       - name: Upload npm artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: routa-cli-npm
+          name: routa-cli-npm-${{ steps.version.outputs.value }}
           path: dist/npm
 
   publish:
@@ -207,7 +207,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: routa-cli-npm
+          name: routa-cli-npm-${{ needs.stage.outputs.version }}
           path: dist/npm
 
       - name: Set up Node.js

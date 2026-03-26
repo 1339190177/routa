@@ -159,7 +159,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tauri-build-${{ matrix.platform }}-${{ matrix.arch }}
+          name: tauri-build-${{ inputs.version || github.event.inputs.version || 'snapshot' }}-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             apps/desktop/src-tauri/target/release/bundle/**/*.dmg
             apps/desktop/src-tauri/target/release/bundle/**/*.app
