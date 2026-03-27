@@ -16,34 +16,17 @@ import {
   processKanbanColumnTransition,
 } from "@/core/kanban/workflow-orchestrator-singleton";
 import { buildRemainingLaneStepsMessage, resolveCurrentLaneAutomationState } from "@/core/kanban/lane-automation-state";
+import { buildTaskEvidenceSummary } from "../task-evidence-summary";
 
 export const dynamic = "force-dynamic";
 
-async function buildArtifactSummary(task: Task, system: ReturnType<typeof getRoutaSystem>) {
-  if (!system.artifactStore) {
-    return {
-      total: 0,
-      byType: {} as Partial<Record<ArtifactType, number>>,
-    };
-  }
-
-  const artifacts = await system.artifactStore.listByTask(task.id);
-  const byType: Partial<Record<ArtifactType, number>> = {};
-
-  for (const artifact of artifacts) {
-    byType[artifact.type] = (byType[artifact.type] ?? 0) + 1;
-  }
-
-  return {
-    total: artifacts.length,
-    byType,
-  };
-}
-
 async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSystem>) {
+  const evidenceSummary = await buildTaskEvidenceSummary(task, system);
+
   return {
     ...task,
-    artifactSummary: await buildArtifactSummary(task, system),
+    artifactSummary: evidenceSummary.artifact,
+    evidenceSummary,
     githubSyncedAt: task.githubSyncedAt?.toISOString(),
     createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
     updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,

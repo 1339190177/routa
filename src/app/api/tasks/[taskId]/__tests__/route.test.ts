@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createTask, TaskStatus, type Task } from "@/core/models/task";
+import { createArtifact } from "@/core/models/artifact";
+import { createTask, TaskStatus, VerificationVerdict, type Task } from "@/core/models/task";
+import { InMemoryArtifactStore } from "@/core/store/artifact-store";
 
 const notify = vi.fn();
 const removeCardJob = vi.fn();
@@ -22,8 +24,9 @@ const system = {
   worktreeStore: { assignSession: vi.fn() },
   codebaseStore: { findByRepoPath: vi.fn(), get: vi.fn(), getDefault: vi.fn() },
   eventBus: {},
-  artifactStore: undefined,
+  artifactStore: undefined as InMemoryArtifactStore | undefined,
 };
+const artifactStore = new InMemoryArtifactStore();
 
 vi.mock("@/core/routa-system", () => ({
   getRoutaSystem: () => system,
@@ -67,14 +70,16 @@ vi.mock("@/core/kanban/workflow-orchestrator-singleton", () => ({
   processKanbanColumnTransition: (...args: unknown[]) => processKanbanColumnTransition(...args),
 }));
 
-import { PATCH } from "../route";
+import { GET, PATCH } from "../route";
 
-describe("/api/tasks/[taskId] PATCH", () => {
-  beforeEach(() => {
+describe("/api/tasks/[taskId]", () => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     capturedEnqueueTask = undefined;
     taskStore.save.mockResolvedValue();
     system.kanbanBoardStore.get = vi.fn().mockResolvedValue(null);
+    system.artifactStore = undefined;
+    await artifactStore.deleteByTask("task-1");
     taskStore.get.mockResolvedValue(createTask({
       id: "task-1",
       title: "Retry review",
@@ -97,6 +102,119 @@ describe("/api/tasks/[taskId] PATCH", () => {
       };
     });
     processKanbanColumnTransition.mockResolvedValue(undefined);
+  });
+
+  it("returns default evidence summary when artifact storage is unavailable", async () => {
+    const response = await GET(new NextRequest("http://localhost/api/tasks/task-1"), {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.task.artifactSummary).toEqual({
+      total: 0,
+      byType: {},
+      requiredSatisfied: true,
+      missingRequired: [],
+    });
+    expect(data.task.evidenceSummary).toEqual({
+      artifact: {
+        total: 0,
+        byType: {},
+        requiredSatisfied: true,
+        missingRequired: [],
+      },
+      verification: {
+        hasVerdict: false,
+        verdict: undefined,
+        hasReport: false,
+      },
+      completion: {
+        hasSummary: false,
+      },
+      runs: {
+        total: 0,
+        latestStatus: "idle",
+      },
+    });
+  });
+
+  it("reports missing required artifacts and latest run status in evidence summary", async () => {
+    const task = createTask({
+      id: "task-1",
+      title: "Verify dev handoff",
+      objective: "Surface evidence requirements",
+      workspaceId: "workspace-1",
+      boardId: "board-1",
+      columnId: "todo",
+      status: TaskStatus.PENDING,
+      triggerSessionId: "session-todo-1",
+    });
+    task.sessionIds = ["session-todo-1"];
+    task.laneSessions = [{
+      sessionId: "session-todo-1",
+      columnId: "todo",
+      columnName: "Todo",
+      status: "running",
+      startedAt: "2026-03-18T00:00:00.000Z",
+    }];
+    task.verificationVerdict = VerificationVerdict.APPROVED;
+    task.verificationReport = "Checks passed";
+    task.completionSummary = "Ready for dev";
+    taskStore.get.mockResolvedValue(task);
+    system.artifactStore = artifactStore;
+    system.kanbanBoardStore.get = vi.fn().mockResolvedValue({
+      id: "board-1",
+      columns: [
+        { id: "todo", name: "Todo", position: 0, stage: "todo" },
+        {
+          id: "dev",
+          name: "Dev",
+          position: 1,
+          stage: "dev",
+          automation: {
+            requiredArtifacts: ["screenshot", "logs"],
+          },
+        },
+      ],
+    });
+
+    await artifactStore.saveArtifact(createArtifact({
+      id: "artifact-1",
+      type: "logs",
+      taskId: "task-1",
+      workspaceId: "workspace-1",
+      status: "provided",
+    }));
+
+    const response = await GET(new NextRequest("http://localhost/api/tasks/task-1"), {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.task.evidenceSummary).toMatchObject({
+      artifact: {
+        total: 1,
+        byType: {
+          logs: 1,
+        },
+        requiredSatisfied: false,
+        missingRequired: ["screenshot"],
+      },
+      verification: {
+        hasVerdict: true,
+        verdict: "APPROVED",
+        hasReport: true,
+      },
+      completion: {
+        hasSummary: true,
+      },
+      runs: {
+        total: 1,
+        latestStatus: "running",
+      },
+    });
   });
 
   it("clears the active queue entry before rerunning a task trigger", async () => {

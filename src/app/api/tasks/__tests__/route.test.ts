@@ -112,6 +112,28 @@ describe("/api/tasks GET", () => {
           logs: 1,
         },
       },
+      evidenceSummary: {
+        artifact: {
+          total: 2,
+          byType: {
+            screenshot: 1,
+            logs: 1,
+          },
+          requiredSatisfied: true,
+          missingRequired: [],
+        },
+        verification: {
+          hasVerdict: false,
+          hasReport: false,
+        },
+        completion: {
+          hasSummary: false,
+        },
+        runs: {
+          total: 0,
+          latestStatus: "idle",
+        },
+      },
     });
   });
 
