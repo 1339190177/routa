@@ -1,14 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-import { HomeInput } from "@/client/components/home-input";
 import type { RepoSelection } from "@/client/components/repo-picker";
 import { ConnectionDot, OnboardingCard } from "@/client/components/home-page-sections";
-import { useAcp } from "@/client/hooks/use-acp";
-import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { NotificationBell, NotificationProvider } from "@/client/components/notification-center";
 import {
   SettingsPanel,
@@ -17,7 +14,10 @@ import {
   loadProviderConnections,
 } from "@/client/components/settings-panel";
 import { ThemeSwitcher } from "@/client/components/theme-switcher";
+import { useAcp } from "@/client/hooks/use-acp";
+import { useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
+import { loadCustomAcpProviders } from "@/client/utils/custom-acp-providers";
 import {
   clearOnboardingState,
   ONBOARDING_COMPLETED_KEY,
@@ -26,8 +26,49 @@ import {
   parseOnboardingMode,
   type OnboardingMode,
 } from "@/client/utils/onboarding";
-import { loadCustomAcpProviders } from "@/client/utils/custom-acp-providers";
 import { useTranslation } from "@/i18n";
+import type { KanbanBoardInfo, SessionInfo, TaskInfo } from "@/app/workspace/[workspaceId]/types";
+
+interface WorkspaceHomeData {
+  boards: KanbanBoardInfo[];
+  sessions: SessionInfo[];
+  tasks: TaskInfo[];
+}
+
+const EMPTY_HOME_DATA: WorkspaceHomeData = {
+  boards: [],
+  sessions: [],
+  tasks: [],
+};
+
+function formatRelativeTime(value?: string) {
+  if (!value) return "刚刚";
+  const diffMs = Date.now() - new Date(value).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "刚刚";
+  if (mins < 60) return `${mins} 分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  return `${Math.floor(hours / 24)} 天前`;
+}
+
+function getSessionLabel(session: SessionInfo) {
+  if (session.name) return session.name;
+  if (session.provider && session.role) return `${session.provider} · ${session.role.toLowerCase()}`;
+  if (session.provider) return session.provider;
+  return `会话 ${session.sessionId.slice(0, 8)}`;
+}
+
+function getTaskTone(task: TaskInfo) {
+  const column = task.columnId?.toLowerCase() ?? "";
+  if (column.includes("done") || task.status === "COMPLETED") {
+    return "border-emerald-200 bg-emerald-50/85 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300";
+  }
+  if (column.includes("dev") || column.includes("doing") || task.status === "IN_PROGRESS") {
+    return "border-sky-200 bg-sky-50/85 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-sky-300";
+  }
+  return "border-amber-200 bg-amber-50/85 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300";
+}
 
 export default function HomePage() {
   const workspacesHook = useWorkspaces();
@@ -39,16 +80,8 @@ export default function HomePage() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<"providers" | "roles" | "specialists" | undefined>(undefined);
   const [preferredMode, setPreferredMode] = useState<OnboardingMode | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
-
-  const [showWorkspacesMenu, setShowWorkspacesMenu] = useState(false);
-  const workspacesMenuRef = useRef<HTMLDivElement>(null);
-  const { codebases, fetchCodebases } = useCodebases(activeWorkspaceId ?? "");
-
-  useEffect(() => {
-    if (!activeWorkspaceId && workspacesHook.workspaces.length > 0) {
-      setActiveWorkspaceId(workspacesHook.workspaces[0].id);
-    }
-  }, [activeWorkspaceId, workspacesHook.workspaces]);
+  const [workspaceHomeData, setWorkspaceHomeData] = useState<Record<string, WorkspaceHomeData>>({});
+  const [workspaceHomeLoading, setWorkspaceHomeLoading] = useState(false);
 
   useEffect(() => {
     if (!acp.connected && !acp.loading) {
@@ -58,15 +91,10 @@ export default function HomePage() {
   }, [acp.connected, acp.loading]);
 
   useEffect(() => {
-    if (!showWorkspacesMenu) return;
-    const handler = (event: MouseEvent) => {
-      if (workspacesMenuRef.current && !workspacesMenuRef.current.contains(event.target as Node)) {
-        setShowWorkspacesMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [showWorkspacesMenu]);
+    if (!activeWorkspaceId && workspacesHook.workspaces.length > 0) {
+      setActiveWorkspaceId(workspacesHook.workspaces[0].id);
+    }
+  }, [activeWorkspaceId, workspacesHook.workspaces]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -77,20 +105,64 @@ export default function HomePage() {
     setPreferredMode(parseOnboardingMode(window.localStorage.getItem(ONBOARDING_MODE_KEY)));
   }, []);
 
-  const handleWorkspaceSelect = useCallback((workspaceId: string) => {
-    setActiveWorkspaceId(workspaceId);
-    setShowWorkspacesMenu(false);
-  }, []);
+  useEffect(() => {
+    if (!activeWorkspaceId || workspaceHomeData[activeWorkspaceId]) {
+      return;
+    }
+
+    let cancelled = false;
+    setWorkspaceHomeLoading(true);
+
+    (async () => {
+      try {
+        const [boardsRes, tasksRes, sessionsRes] = await Promise.all([
+          desktopAwareFetch(`/api/kanban/boards?workspaceId=${encodeURIComponent(activeWorkspaceId)}`, { cache: "no-store" }),
+          desktopAwareFetch(`/api/tasks?workspaceId=${encodeURIComponent(activeWorkspaceId)}`, { cache: "no-store" }),
+          desktopAwareFetch(`/api/sessions?workspaceId=${encodeURIComponent(activeWorkspaceId)}&limit=8`, { cache: "no-store" }),
+        ]);
+
+        const [boardsData, tasksData, sessionsData] = await Promise.all([
+          boardsRes.json().catch(() => ({})),
+          tasksRes.json().catch(() => ({})),
+          sessionsRes.json().catch(() => ({})),
+        ]);
+
+        if (cancelled) return;
+
+        setWorkspaceHomeData((current) => ({
+          ...current,
+          [activeWorkspaceId]: {
+            boards: Array.isArray(boardsData?.boards) ? boardsData.boards : [],
+            tasks: Array.isArray(tasksData?.tasks) ? tasksData.tasks : [],
+            sessions: Array.isArray(sessionsData?.sessions) ? sessionsData.sessions : [],
+          },
+        }));
+      } catch {
+        if (cancelled) return;
+        setWorkspaceHomeData((current) => ({
+          ...current,
+          [activeWorkspaceId]: EMPTY_HOME_DATA,
+        }));
+      } finally {
+        if (!cancelled) {
+          setWorkspaceHomeLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId, workspaceHomeData]);
 
   const handleWorkspaceCreate = useCallback(async (title: string) => {
     const workspace = await workspacesHook.createWorkspace(title);
     if (workspace) {
-      handleWorkspaceSelect(workspace.id);
-      setShowWorkspacesMenu(false);
+      setActiveWorkspaceId(workspace.id);
       return true;
     }
     return false;
-  }, [handleWorkspaceSelect, workspacesHook]);
+  }, [workspacesHook]);
 
   const handleOpenProviders = useCallback(() => {
     setSettingsInitialTab("providers");
@@ -122,11 +194,12 @@ export default function HomePage() {
   }, []);
 
   const handleAddCodebase = useCallback(async (selection: RepoSelection) => {
-    if (!activeWorkspaceId) {
+    const targetWorkspaceId = activeWorkspaceId ?? workspacesHook.workspaces[0]?.id;
+    if (!targetWorkspaceId) {
       return false;
     }
 
-    const res = await desktopAwareFetch(`/api/workspaces/${encodeURIComponent(activeWorkspaceId)}/codebases`, {
+    const response = await desktopAwareFetch(`/api/workspaces/${encodeURIComponent(targetWorkspaceId)}/codebases`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -136,18 +209,28 @@ export default function HomePage() {
       }),
     });
 
-    if (!res.ok) {
-      return false;
-    }
-
-    await fetchCodebases();
-    return true;
-  }, [activeWorkspaceId, fetchCodebases]);
+    return response.ok;
+  }, [activeWorkspaceId, workspacesHook.workspaces]);
 
   const activeWorkspace = workspacesHook.workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null;
-  const workspaceCount = workspacesHook.workspaces.length;
-  const hasWorkspace = workspaceCount > 0;
-  const hasCodebase = codebases.length > 0;
+  const activeData = activeWorkspaceId ? (workspaceHomeData[activeWorkspaceId] ?? EMPTY_HOME_DATA) : EMPTY_HOME_DATA;
+  const sortedBoards = useMemo(() => (
+    [...activeData.boards].sort((left, right) => {
+      const leftDate = left.updatedAt ?? left.createdAt;
+      const rightDate = right.updatedAt ?? right.createdAt;
+      return new Date(rightDate).getTime() - new Date(leftDate).getTime();
+    })
+  ), [activeData.boards]);
+  const sortedTasks = useMemo(() => (
+    [...activeData.tasks].sort((left, right) => {
+      const leftDate = left.updatedAt ?? left.createdAt;
+      const rightDate = right.updatedAt ?? right.createdAt;
+      return new Date(rightDate).getTime() - new Date(leftDate).getTime();
+    })
+  ), [activeData.tasks]);
+  const recentSessions = activeData.sessions.slice(0, 5);
+
+  const hasWorkspace = workspacesHook.workspaces.length > 0;
   const hasProviderConfig =
     hasSavedProviderConfiguration(loadDefaultProviders(), loadProviderConnections(), {
       dockerOpencodeAuthJson: loadDockerOpencodeAuthJson(),
@@ -155,44 +238,28 @@ export default function HomePage() {
     });
   const needsInlineOnboarding =
     hasWorkspace &&
-    (!hasProviderConfig || !hasCodebase || preferredMode === null) &&
-    !onboardingCompleted;
-
-  const activeKanbanHref = activeWorkspaceId ? `/workspace/${activeWorkspaceId}/kanban` : "/";
-  const activeWorkspaceHref = activeWorkspaceId ? `/workspace/${activeWorkspaceId}` : "/";
-
-  useEffect(() => {
-    if (!hasWorkspace || !hasProviderConfig || !hasCodebase || preferredMode === null) {
-      return;
-    }
-
-    setOnboardingCompleted(true);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
-    }
-  }, [hasWorkspace, hasProviderConfig, hasCodebase, preferredMode]);
+    !onboardingCompleted &&
+    (!hasProviderConfig || preferredMode === null);
 
   return (
     <NotificationProvider>
-      <div className="relative flex h-screen min-h-screen flex-col overflow-hidden bg-[#f2f7ff] text-[#081120] dark:bg-[#040913] dark:text-gray-100">
+      <div className="relative flex h-screen min-h-screen flex-col overflow-hidden bg-[#f4f3ee] text-[#11151a] dark:bg-[#0d1117] dark:text-slate-100">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(248,252,255,0.98),rgba(233,240,249,0.9))] dark:bg-[linear-gradient(180deg,rgba(5,10,18,0.98),rgba(4,9,19,0.97))]" />
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(14,90,160,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(14,90,160,0.05)_1px,transparent_1px)] bg-[size:120px_120px] opacity-35 dark:opacity-18" />
-          <div className="home-float-slow absolute left-[-14rem] top-12 h-[24rem] w-[24rem] rounded-full bg-[radial-gradient(circle,_rgba(56,189,248,0.19),_transparent_68%)] blur-3xl" />
-          <div className="home-float-delay absolute right-[-10rem] top-[-6rem] h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,_rgba(37,99,235,0.17),_transparent_72%)] blur-3xl" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.86),transparent_40%),radial-gradient(circle_at_90%_10%,rgba(165,214,167,0.18),transparent_28%),linear-gradient(180deg,#f4f3ee_0%,#ece8de_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(31,41,55,0.35),transparent_30%),radial-gradient(circle_at_85%_15%,rgba(16,185,129,0.1),transparent_24%),linear-gradient(180deg,#0d1117_0%,#111827_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(17,21,26,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(17,21,26,0.03)_1px,transparent_1px)] bg-[size:120px_120px] opacity-50 dark:opacity-20" />
         </div>
 
-        <header className="relative z-10 flex h-14 shrink-0 items-center border-b border-sky-200/55 bg-white/55 px-3 backdrop-blur-xl sm:px-5 dark:border-white/6 dark:bg-[#040913]/76">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="rounded-xl border border-sky-200/70 bg-white/80 p-1.5 shadow-[0_10px_30px_-18px_rgba(37,99,235,0.45)] dark:border-white/10 dark:bg-white/5">
+        <header className="relative z-10 flex h-14 shrink-0 items-center border-b border-black/5 bg-white/70 px-4 backdrop-blur-xl dark:border-white/8 dark:bg-[#111827]/72">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="rounded-2xl border border-black/5 bg-white px-2 py-1.5 shadow-[0_14px_40px_-26px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-white/5">
               <Image src="/logo.svg" alt="Routa" width={22} height={22} className="rounded-md" />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold tracking-[0.02em] text-[#081120] dark:text-gray-100">
+              <div className="truncate text-[13px] font-semibold tracking-[0.01em] text-[#11151a] dark:text-slate-100">
                 Routa
               </div>
-              <div className="hidden text-[10px] uppercase tracking-[0.28em] text-[#4c7ec3] sm:block dark:text-sky-400/70">
-                {t.home.subtitle}
+              <div className="hidden text-[10px] uppercase tracking-[0.24em] text-[#607089] sm:block dark:text-slate-500">
+                工作区首页
               </div>
             </div>
           </div>
@@ -200,24 +267,14 @@ export default function HomePage() {
           <div className="flex-1" />
 
           <nav className="flex items-center gap-2">
-            {activeWorkspaceId && (
-              <Link
-                href={activeKanbanHref}
-                className="rounded-full px-3 py-1.5 text-[11px] font-medium text-[#46638b] transition-colors hover:bg-sky-100/70 hover:text-[#081120] dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-100"
-              >
-                {t.nav.kanban}
-              </Link>
-            )}
-
             <NotificationBell />
-            <ThemeSwitcher compact className="border-black/8 bg-white/60 dark:border-white/8 dark:bg-white/[0.03]" />
-
+            <ThemeSwitcher compact className="border-black/8 bg-white/70 dark:border-white/10 dark:bg-white/[0.03]" />
             <button
               onClick={() => {
                 setSettingsInitialTab(undefined);
                 setShowSettingsPanel(true);
               }}
-              className="rounded-full p-2 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/5 dark:hover:text-gray-300"
+              className="rounded-full p-2 text-slate-500 transition-colors hover:bg-black/5 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-100"
               title={t.nav.settings}
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -225,20 +282,19 @@ export default function HomePage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </button>
-
             <div className="ml-1 border-l border-black/8 pl-3 dark:border-white/8">
               <ConnectionDot connected={acp.connected} />
             </div>
           </nav>
         </header>
 
-        <main className="relative z-10 flex-1 overflow-y-auto">
+        <main className="relative z-10 min-h-0 flex-1 overflow-hidden">
           {workspacesHook.loading ? (
-            <div className="flex h-full items-center justify-center text-sm text-gray-400 dark:text-slate-500">
+            <div className="flex h-full items-center justify-center text-sm text-slate-500 dark:text-slate-400">
               {t.home.loadingWorkspaces}
             </div>
-          ) : workspacesHook.workspaces.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
+          ) : !hasWorkspace ? (
+            <div className="flex h-full items-center justify-center px-4">
               <OnboardingCard
                 hasWorkspace={false}
                 workspaceTitle={null}
@@ -252,87 +308,322 @@ export default function HomePage() {
               />
             </div>
           ) : (
-            <div className="mx-auto flex w-full max-w-5xl px-3 py-6 sm:px-6 sm:py-10">
-              <section className="w-full overflow-hidden rounded-[34px] border border-sky-200/75 bg-[linear-gradient(180deg,rgba(252,254,255,0.98),rgba(237,246,255,0.95))] shadow-[0_60px_170px_-120px_rgba(37,99,235,0.45)] dark:border-[#223049] dark:bg-[linear-gradient(180deg,rgba(7,12,21,0.96),rgba(9,15,26,0.98))]">
-                <div className="p-4 sm:p-6 lg:p-8">
-                  {needsInlineOnboarding && (
-                    <div className="mb-6">
-                      <OnboardingCard
-                        hasWorkspace={true}
-                        workspaceTitle={activeWorkspace?.title ?? null}
-                        hasProviderConfig={hasProviderConfig}
-                        hasCodebase={hasCodebase}
-                        preferredMode={preferredMode}
-                        onCreateWorkspace={handleWorkspaceCreate}
-                        onOpenProviders={handleOpenProviders}
-                        onAddCodebase={handleAddCodebase}
-                        onSelectMode={handleModeSelect}
-                        onDismiss={handleDismissOnboarding}
-                      />
+            <div className="grid h-full grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
+              <aside className="rounded-[28px] border border-black/5 bg-white/82 p-4 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.45)] dark:border-white/8 dark:bg-[#111827]/84">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#728197] dark:text-slate-500">
+                      工作区
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      选择一个工作区
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleWorkspaceCreate("New Workspace");
+                    }}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-black/5 bg-[#eef2ea] text-[#425746] transition-colors hover:bg-[#e4ebdf] dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]"
+                    title="新建工作区"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="mt-5 space-y-2">
+                  {workspacesHook.workspaces.map((workspace) => {
+                    const active = workspace.id === activeWorkspaceId;
+                    return (
+                      <button
+                        key={workspace.id}
+                        type="button"
+                        onClick={() => setActiveWorkspaceId(workspace.id)}
+                        className={`w-full rounded-[22px] border px-4 py-3 text-left transition-all ${
+                          active
+                            ? "border-[#99c18f] bg-[#edf5e8] text-[#1e3320] shadow-[0_18px_40px_-34px_rgba(34,84,61,0.45)] dark:border-emerald-800/50 dark:bg-emerald-950/20 dark:text-emerald-100"
+                            : "border-black/5 bg-white/78 text-slate-700 hover:border-[#d4dccb] hover:bg-[#f7f7f2] dark:border-white/8 dark:bg-white/[0.03] dark:text-slate-200 dark:hover:bg-white/[0.05]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold">
+                              {workspace.title}
+                            </div>
+                            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              更新于 {formatRelativeTime(workspace.updatedAt)}
+                            </div>
+                          </div>
+                          {active && (
+                            <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#4a6a4d] dark:bg-emerald-900/50 dark:text-emerald-200">
+                              当前
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-6 rounded-[24px] border border-dashed border-black/8 bg-[#f6f3ec] p-4 dark:border-white/10 dark:bg-white/[0.03]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#728197] dark:text-slate-500">
+                    工作区状态
+                  </div>
+                  <div className="mt-3 space-y-2 text-[12px] text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>运行时</span>
+                      <span className={acp.connected ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}>
+                        {acp.connected ? "在线" : "离线"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span>模型配置</span>
+                      <span className={hasProviderConfig ? "text-emerald-600 dark:text-emerald-300" : "text-amber-600 dark:text-amber-300"}>
+                        {hasProviderConfig ? "已就绪" : "待配置"}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenProviders}
+                    className="mt-4 w-full rounded-full border border-black/8 bg-white/80 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700 transition-colors hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]"
+                  >
+                    打开模型设置
+                  </button>
+                </div>
+              </aside>
+
+              <section className="space-y-4">
+                {needsInlineOnboarding && (
+                  <OnboardingCard
+                    hasWorkspace
+                    workspaceTitle={activeWorkspace?.title ?? null}
+                    hasProviderConfig={hasProviderConfig}
+                    hasCodebase={sortedBoards.length > 0}
+                    preferredMode={preferredMode}
+                    onCreateWorkspace={handleWorkspaceCreate}
+                    onOpenProviders={handleOpenProviders}
+                    onAddCodebase={handleAddCodebase}
+                    onSelectMode={handleModeSelect}
+                    onDismiss={handleDismissOnboarding}
+                  />
+                )}
+
+                <section className="overflow-hidden rounded-[32px] border border-black/5 bg-[linear-gradient(135deg,#f7f5ef_0%,#ebe6d8_100%)] p-5 shadow-[0_30px_80px_-56px_rgba(15,23,42,0.45)] dark:border-white/8 dark:bg-[linear-gradient(135deg,#111827_0%,#172033_100%)]">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                    <div className="max-w-2xl">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#728197] dark:text-slate-500">
+                        {activeWorkspace?.title ?? "工作区"} 首页
+                      </div>
+                      <h1 className="mt-3 font-['Avenir_Next_Condensed','Avenir_Next','Segoe_UI','Helvetica_Neue',sans-serif] text-[2.4rem] font-semibold leading-[0.92] tracking-[-0.05em] text-[#11151a] dark:text-slate-100 sm:text-[3.15rem]">
+                        先看板，再进入执行。
+                      </h1>
+                      <p className="mt-4 max-w-xl text-sm leading-7 text-slate-600 dark:text-slate-300">
+                        把看板、卡片和最近执行放在同一个入口里。先判断现在要推进什么，再进入具体会话，不用在首页和详情页之间来回切换。
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Link
+                        href={activeWorkspaceId ? `/workspace/${activeWorkspaceId}/kanban` : "/"}
+                        className="rounded-[22px] border border-black/6 bg-[#1a7349] px-4 py-4 text-white transition-colors hover:bg-[#17663f] dark:border-white/10 dark:bg-emerald-500 dark:text-[#08130f] dark:hover:bg-emerald-400"
+                      >
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-80">主入口</div>
+                        <div className="mt-2 text-sm font-semibold">打开看板</div>
+                      </Link>
+                      <Link
+                        href={activeWorkspaceId ? `/workspace/${activeWorkspaceId}` : "/"}
+                        className="rounded-[22px] border border-black/6 bg-white/84 px-4 py-4 text-slate-900 transition-colors hover:bg-white dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-100 dark:hover:bg-white/[0.1]"
+                      >
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">概览</div>
+                        <div className="mt-2 text-sm font-semibold">工作区概览</div>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSettingsInitialTab(undefined);
+                          setShowSettingsPanel(true);
+                        }}
+                        className="rounded-[22px] border border-black/6 bg-white/56 px-4 py-4 text-left text-slate-900 transition-colors hover:bg-white/86 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-100 dark:hover:bg-white/[0.08]"
+                      >
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">设置</div>
+                        <div className="mt-2 text-sm font-semibold">系统设置</div>
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[32px] border border-black/5 bg-white/82 p-5 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.4)] dark:border-white/8 dark:bg-[#111827]/84">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#728197] dark:text-slate-500">
+                        最近看板
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        从正在推进的看板继续。
+                      </div>
+                    </div>
+                    <Link
+                      href={activeWorkspaceId ? `/workspace/${activeWorkspaceId}/kanban` : "/"}
+                      className="rounded-full border border-black/8 bg-white/85 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700 transition-colors hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08]"
+                    >
+                      查看全部
+                    </Link>
+                  </div>
+
+                  {workspaceHomeLoading && activeData.boards.length === 0 ? (
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="h-40 animate-pulse rounded-[24px] border border-black/6 bg-[#f3f0e8] dark:border-white/8 dark:bg-white/[0.04]" />
+                      ))}
+                    </div>
+                  ) : sortedBoards.length > 0 ? (
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {sortedBoards.slice(0, 6).map((board, index) => {
+                        const taskCount = sortedTasks.filter((task) => task.boardId === board.id).length;
+                        const runningCount = sortedTasks.filter((task) => task.boardId === board.id && task.status === "IN_PROGRESS").length;
+
+                        return (
+                          <Link
+                            key={board.id}
+                            href={`/workspace/${board.workspaceId}/kanban`}
+                            className={`group rounded-[26px] border p-4 transition-all hover:-translate-y-0.5 hover:shadow-[0_26px_60px_-40px_rgba(15,23,42,0.45)] ${
+                              index === 0
+                                ? "border-[#9fc690] bg-[linear-gradient(180deg,#eef6ea_0%,#e4efdd_100%)] dark:border-emerald-800/40 dark:bg-[linear-gradient(180deg,rgba(16,185,129,0.12),rgba(17,24,39,0.75))]"
+                                : "border-black/6 bg-[#f9f8f3] dark:border-white/8 dark:bg-white/[0.03]"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                  看板 {String(index + 1).padStart(2, "0")}
+                                </div>
+                                <div className="mt-2 truncate text-lg font-semibold text-[#11151a] dark:text-slate-100">
+                                  {board.name}
+                                </div>
+                              </div>
+                              <span className="rounded-full border border-black/6 bg-white/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-300">
+                                {taskCount} 张卡片
+                              </span>
+                            </div>
+
+                            <div className="mt-6 grid grid-cols-2 gap-2">
+                              <div className="rounded-[18px] border border-black/6 bg-white/80 px-3 py-2 dark:border-white/8 dark:bg-white/[0.03]">
+                                <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">进行中</div>
+                                <div className="mt-1 text-sm font-semibold text-[#11151a] dark:text-slate-100">{runningCount}</div>
+                              </div>
+                              <div className="rounded-[18px] border border-black/6 bg-white/80 px-3 py-2 dark:border-white/8 dark:bg-white/[0.03]">
+                                <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">最近更新</div>
+                                <div className="mt-1 text-sm font-semibold text-[#11151a] dark:text-slate-100">{formatRelativeTime(board.updatedAt ?? board.createdAt)}</div>
+                              </div>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-[26px] border border-dashed border-black/10 bg-[#f8f5ee] px-5 py-10 text-center dark:border-white/10 dark:bg-white/[0.03]">
+                      <div className="text-lg font-semibold text-[#11151a] dark:text-slate-100">
+                        还没有看板
+                      </div>
+                      <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                        先进入看板页，为这个工作区创建第一个看板。
+                      </div>
+                      <Link
+                        href={activeWorkspaceId ? `/workspace/${activeWorkspaceId}/kanban` : "/"}
+                        className="mt-5 inline-flex rounded-full bg-[#1a7349] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#17663f] dark:bg-emerald-500 dark:text-[#08130f] dark:hover:bg-emerald-400"
+                      >
+                        打开看板
+                      </Link>
                     </div>
                   )}
-
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-[#4a74a8] dark:text-slate-400">
-                    <span className="rounded-full border border-sky-200/70 bg-white/80 px-3 py-1.5 dark:border-white/10 dark:bg-white/5">
-                      {t.home.minimalHome}
-                    </span>
-                    <span className="rounded-full border border-sky-200/70 bg-white/60 px-3 py-1.5 dark:border-white/10 dark:bg-white/[0.03]">
-                      {String(workspaceCount).padStart(2, "0")} {t.home.workspaceCount}
-                    </span>
-                    <span className="rounded-full border border-sky-200/70 bg-white/60 px-3 py-1.5 dark:border-white/10 dark:bg-white/[0.03]">
-                      {acp.connected ? t.home.runtimeReady : t.home.runtimeOffline}
-                    </span>
-                  </div>
-
-                  <h1 className="mt-5 max-w-3xl font-['Avenir_Next_Condensed','Avenir_Next','Segoe_UI','Helvetica_Neue',sans-serif] text-[2.3rem] leading-[0.94] font-semibold tracking-[-0.05em] text-[#081120] dark:text-white sm:text-[3.1rem]">
-                    {t.home.heroTitle}
-                  </h1>
-                  <p className="mt-4 max-w-2xl text-sm leading-7 text-[#4d6689] dark:text-slate-300">
-                    {t.home.heroDescription}
-                  </p>
-
-                  <div className="mt-6 rounded-[30px] border border-sky-200/80 bg-white/82 p-4 shadow-[0_30px_100px_-58px_rgba(37,99,235,0.24)] backdrop-blur dark:border-white/10 dark:bg-[#0a1322]/70 sm:p-5">
-                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#356fb0] dark:text-slate-400">
-                        {t.home.composer}
-                      </div>
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-[#6b84aa] dark:text-slate-500">
-                        {t.home.currentWorkspace}: {activeWorkspace?.title ?? t.common.none}
-                      </div>
-                    </div>
-                    <HomeInput
-                      variant="hero"
-                      workspaceId={activeWorkspaceId ?? undefined}
-                      defaultAgentRole={preferredMode ?? "ROUTA"}
-                      onWorkspaceChange={(workspaceId) => {
-                        setActiveWorkspaceId(workspaceId);
-                      }}
-                    />
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowWorkspacesMenu((value) => !value)}
-                      className="inline-flex items-center justify-center rounded-full border border-sky-200/70 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[#45678f] transition-colors hover:border-sky-300 hover:text-[#081120] dark:border-[#2a3042] dark:text-slate-400 dark:hover:border-[#39415a] dark:hover:text-slate-200"
-                    >
-                      {activeWorkspace?.title ?? t.home.switchWorkspace}
-                    </button>
-                    <Link
-                      href={activeWorkspaceHref}
-                      className="inline-flex items-center justify-center rounded-full border border-sky-200/70 bg-white/90 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2b6fc8] transition-colors hover:bg-white dark:border-white/10 dark:bg-[#1b2232] dark:text-slate-300 dark:hover:bg-[#101826]"
-                    >
-                      {t.home.workspaceOverview}
-                    </Link>
-                    <Link
-                      href={activeKanbanHref}
-                      className="inline-flex items-center justify-center rounded-full bg-[#0f62d6] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white transition-colors hover:bg-[#2a77e4] dark:bg-[#5ee5ff] dark:text-[#04111d] dark:hover:bg-[#87edff]"
-                    >
-                      {t.home.openKanban}
-                    </Link>
-                  </div>
-                </div>
+                </section>
               </section>
+
+              <aside className="space-y-4">
+                <section className="rounded-[28px] border border-black/5 bg-white/82 p-4 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.45)] dark:border-white/8 dark:bg-[#111827]/84">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#728197] dark:text-slate-500">
+                    最近卡片
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {sortedTasks.slice(0, 6).map((task) => (
+                      <Link
+                        key={task.id}
+                        href={activeWorkspaceId ? `/workspace/${activeWorkspaceId}/kanban` : "/"}
+                        className="block rounded-[22px] border border-black/6 bg-[#faf8f1] p-3 transition-colors hover:bg-white dark:border-white/8 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-[#11151a] dark:text-slate-100">
+                              {task.title}
+                            </div>
+                            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              {task.boardId ? `看板 ${task.boardId.slice(0, 6)}` : "未分配看板"} · {formatRelativeTime(task.updatedAt ?? task.createdAt)}
+                            </div>
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getTaskTone(task)}`}>
+                            {task.columnId ?? task.status}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                    {sortedTasks.length === 0 && (
+                      <div className="rounded-[22px] border border-dashed border-black/10 px-4 py-8 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                        这个工作区里还没有卡片。
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[28px] border border-black/5 bg-white/82 p-4 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.45)] dark:border-white/8 dark:bg-[#111827]/84">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#728197] dark:text-slate-500">
+                    继续上次工作
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {recentSessions.map((session) => (
+                      <Link
+                        key={session.sessionId}
+                        href={`/workspace/${session.workspaceId}/sessions/${session.sessionId}`}
+                        className="block rounded-[22px] border border-black/6 bg-[#faf8f1] p-3 transition-colors hover:bg-white dark:border-white/8 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
+                      >
+                        <div className="text-sm font-semibold text-[#11151a] dark:text-slate-100">
+                          {getSessionLabel(session)}
+                        </div>
+                        <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          {session.role ? `${session.role} · ` : ""}{formatRelativeTime(session.createdAt)}
+                        </div>
+                      </Link>
+                    ))}
+                    {recentSessions.length === 0 && (
+                      <div className="rounded-[22px] border border-dashed border-black/10 px-4 py-8 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                        卡片开始执行后，最近会话会显示在这里。
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[28px] border border-black/5 bg-[linear-gradient(180deg,#f8f5ee_0%,#efe9dc_100%)] p-4 shadow-[0_24px_70px_-52px_rgba(15,23,42,0.45)] dark:border-white/8 dark:bg-[linear-gradient(180deg,#111827_0%,#1a2335_100%)]">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#728197] dark:text-slate-500">
+                    快捷入口
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    <Link
+                      href={activeWorkspaceId ? `/workspace/${activeWorkspaceId}/kanban` : "/"}
+                      className="rounded-[20px] border border-black/6 bg-white/84 px-4 py-3 text-sm font-semibold text-[#11151a] transition-colors hover:bg-white dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-100 dark:hover:bg-white/[0.1]"
+                    >
+                      打开看板视图
+                    </Link>
+                    <Link
+                      href={activeWorkspaceId ? `/workspace/${activeWorkspaceId}` : "/"}
+                      className="rounded-[20px] border border-black/6 bg-white/60 px-4 py-3 text-sm font-semibold text-[#11151a] transition-colors hover:bg-white/90 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-100 dark:hover:bg-white/[0.08]"
+                    >
+                      工作区概览
+                    </Link>
+                  </div>
+                </section>
+              </aside>
             </div>
           )}
         </main>
@@ -344,36 +635,6 @@ export default function HomePage() {
           initialTab={settingsInitialTab}
           onResetOnboarding={handleResetOnboarding}
         />
-
-        {showWorkspacesMenu && (
-          <div ref={workspacesMenuRef} className="fixed inset-0 z-40">
-            <div className="absolute right-4 top-14 w-60 rounded-2xl border border-sky-200/80 bg-white p-1.5 shadow-lg dark:border-[#1c1f2e] dark:bg-[#12141c]">
-              {workspacesHook.workspaces.map((workspace) => (
-                <button
-                  type="button"
-                  key={workspace.id}
-                  onClick={() => handleWorkspaceSelect(workspace.id)}
-                  className={`mb-0.5 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-sky-50 dark:hover:bg-[#1a1f31] ${workspace.id === activeWorkspaceId ? "bg-sky-50 dark:bg-[#1c2740]" : ""}`}
-                >
-                  <span className="truncate text-[#081120] dark:text-slate-100">{workspace.title}</span>
-                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-sky-700 dark:bg-sky-900/35 dark:text-sky-200">
-                    {workspace.id === activeWorkspaceId ? t.common.active : t.common.enter}
-                  </span>
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  void handleWorkspaceCreate("New Workspace");
-                  setShowWorkspacesMenu(false);
-                }}
-                className="mt-1 flex w-full items-center rounded-xl bg-sky-50 px-3 py-2 text-left text-sm text-[#081120] transition-colors hover:bg-sky-100 dark:bg-[#1a1f31] dark:text-slate-200 dark:hover:bg-[#232a3f]"
-              >
-                {t.home.newWorkspace}
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </NotificationProvider>
   );
