@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 const {
@@ -42,6 +43,19 @@ describe("ThemeSwitcher", () => {
     expect(screen.getByText("Theme")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Light" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Dark" })).not.toBeNull();
+  });
+
+  it("keeps server markup deterministic and syncs the mounted title afterward", async () => {
+    getStoredThemePreference.mockReturnValue("dark");
+    resolveThemePreference.mockReturnValue("dark");
+
+    expect(renderToString(<ThemeSwitcher compact />)).toContain('title="Dark · System"');
+
+    render(<ThemeSwitcher compact />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Dark" }).getAttribute("title")).toBe("Dark");
+    });
   });
 
   it("updates the theme preference when a button is clicked", () => {

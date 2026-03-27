@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { useTranslation } from "@/i18n";
 
@@ -21,17 +21,16 @@ interface ThemeSwitcherProps {
 
 export function ThemeSwitcher({ showLabel = false, compact = false, className = "" }: ThemeSwitcherProps) {
   const { t } = useTranslation();
-  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() => getStoredThemePreference());
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
-    resolveThemePreference(getStoredThemePreference()),
+  const themeSnapshot = useSyncExternalStore(
+    (onStoreChange) => subscribeToThemePreference(() => onStoreChange()),
+    () => {
+      const nextThemePreference = getStoredThemePreference();
+      const nextResolvedTheme = resolveThemePreference(nextThemePreference);
+      return `${nextThemePreference}:${nextResolvedTheme}` as const;
+    },
+    () => "system:light",
   );
-
-  useEffect(() => {
-    return subscribeToThemePreference((nextThemePreference, nextResolvedTheme) => {
-      setThemePreferenceState(nextThemePreference);
-      setResolvedTheme(nextResolvedTheme);
-    });
-  }, []);
+  const [themePreference, resolvedTheme] = themeSnapshot.split(":") as [ThemePreference, ResolvedTheme];
 
   const buttonBaseClassName = compact
     ? "rounded-md p-1.5 transition-colors"
@@ -47,9 +46,7 @@ export function ThemeSwitcher({ showLabel = false, compact = false, className = 
         key={nextTheme}
         type="button"
         onClick={() => {
-          const nextResolvedTheme = setThemePreference(nextTheme);
-          setThemePreferenceState(nextTheme);
-          setResolvedTheme(nextResolvedTheme);
+          setThemePreference(nextTheme);
         }}
         className={`${buttonBaseClassName} ${
           active
