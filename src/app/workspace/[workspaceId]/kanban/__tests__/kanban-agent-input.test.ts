@@ -26,6 +26,9 @@ describe("buildKanbanTaskAgentPrompt", () => {
     expect(prompt).toContain("call create_card with title plus columnId: \"backlog\"");
     expect(prompt).toContain("Pass boardId: board-1 when available");
     expect(prompt).toContain("Do not invent alternate argument names such as \"column\"; prefer \"columnId\"");
+    expect(prompt).toContain("exactly one ```yaml code block");
+    expect(prompt).toContain("story.version");
+    expect(prompt).toContain("Independent, Negotiable, Valuable, Estimable, Small, and Testable");
     expect(prompt).toContain("User request: echo hello world");
   });
 
@@ -41,6 +44,8 @@ describe("buildKanbanTaskAgentPrompt", () => {
     expect(prompt).toContain("你是当前工作区的看板任务代理");
     expect(prompt).toContain("所有新建卡片的目标列：backlog");
     expect(prompt).toContain("不要开始实现工作。");
+    expect(prompt).toContain("description 必须包含一个唯一的 ```yaml 代码块");
+    expect(prompt).toContain("invest 下必须显式给出 Independent、Negotiable、Valuable、Estimable、Small、Testable 六项");
     expect(prompt).toContain("用户请求：创建一个 hello world");
   });
 });

@@ -89,9 +89,58 @@ export function buildKanbanTaskAgentPrompt(params: {
 8. 如果请求包含多个彼此独立的任务，优先使用 decompose_tasks。
 9. 如果请求本质上是单个任务，就只创建一张 backlog 卡，标题尽量贴近用户原始表述。
 10. 只有在 backlog 或进行中的工作里已经存在完全重复的卡片时，才不要新建卡片。
-11. 最后要明确汇报你创建了哪些 backlog 卡片，并说明 backlog 自动化会在创建后继续运行。
+11. 新建 backlog 卡片时，description 必须包含一个唯一的 \`\`\`yaml 代码块，作为 canonical user story contract。
+12. 这个 YAML 代码块必须包含 story.version、language、title、problem_statement、user_value、acceptance_criteria、constraints_and_affected_areas、dependencies_and_sequencing、out_of_scope、invest。
+13. invest 下必须显式给出 Independent、Negotiable、Valuable、Estimable、Small、Testable 六项，每项都要有 status 和 reason。
+14. YAML 之外可以有极少量说明文字，但下游 gate 只信任这个 canonical YAML。
+15. 最后要明确汇报你创建了哪些 backlog 卡片，并说明 backlog 自动化会在创建后继续运行。
 
-用户请求：${agentInput}`;
+canonical YAML 结构示例：
+\`\`\`yaml
+story:
+  version: 1
+  language: zh-CN
+  title: 卡片标题
+  problem_statement: 为什么这个需求重要
+  user_value: 用户或业务价值
+  acceptance_criteria:
+    - id: AC1
+      text: 可客观验证的验收标准
+      testable: true
+    - id: AC2
+      text: 第二条可客观验证的验收标准
+      testable: true
+  constraints_and_affected_areas:
+    - 受影响模块或文件
+  dependencies_and_sequencing:
+    independent_story_check: pass
+    depends_on:
+      - none
+    unblock_condition: 可立即开始 / 需要什么前置条件
+  out_of_scope:
+    - 明确不做什么
+  invest:
+    independent:
+      status: pass
+      reason: 原因
+    negotiable:
+      status: warning
+      reason: 原因
+    valuable:
+      status: pass
+      reason: 原因
+    estimable:
+      status: pass
+      reason: 原因
+    small:
+      status: pass
+      reason: 原因
+    testable:
+      status: pass
+      reason: 原因
+\`\`\`
+
+	用户请求：${agentInput}`;
   }
 
   return `You are the KanbanTask Agent for this workspace.
@@ -128,7 +177,56 @@ Hard rules:
 8. Prefer decompose_tasks when the request contains multiple independent tasks.
 9. If the request is a single task, create exactly one backlog card and keep the title close to the user's wording.
 10. Only avoid creating a new card when an exact duplicate already exists in backlog or active work.
-11. Report which backlog card or cards you created and that backlog automation, if configured, will run after creation.
+11. Every new backlog card description must contain exactly one \`\`\`yaml code block as the canonical user story contract.
+12. That YAML block must include story.version, language, title, problem_statement, user_value, acceptance_criteria, constraints_and_affected_areas, dependencies_and_sequencing, out_of_scope, and invest.
+13. The invest object must explicitly cover Independent, Negotiable, Valuable, Estimable, Small, and Testable with both status and reason.
+14. You may include a short human-readable summary outside the YAML block, but downstream gates only trust the canonical YAML.
+15. Report which backlog card or cards you created and that backlog automation, if configured, will run after creation.
+
+Canonical YAML example:
+\`\`\`yaml
+story:
+  version: 1
+  language: en
+  title: Story title
+  problem_statement: Why this requirement matters
+  user_value: User or business value
+  acceptance_criteria:
+    - id: AC1
+      text: Objectively verifiable acceptance criterion
+      testable: true
+    - id: AC2
+      text: Second objectively verifiable acceptance criterion
+      testable: true
+  constraints_and_affected_areas:
+    - impacted file or module
+  dependencies_and_sequencing:
+    independent_story_check: pass
+    depends_on:
+      - none
+    unblock_condition: Ready now / prerequisite required
+  out_of_scope:
+    - explicitly excluded work
+  invest:
+    independent:
+      status: pass
+      reason: why
+    negotiable:
+      status: warning
+      reason: why
+    valuable:
+      status: pass
+      reason: why
+    estimable:
+      status: pass
+      reason: why
+    small:
+      status: pass
+      reason: why
+    testable:
+      status: pass
+      reason: why
+\`\`\`
 
 User request: ${agentInput}`;
 }
