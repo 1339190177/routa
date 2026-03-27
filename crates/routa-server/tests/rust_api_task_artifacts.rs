@@ -703,6 +703,98 @@ async fn api_task_create_triggers_a2a_lane_automation_and_persists_lane_metadata
 }
 
 #[tokio::test]
+async fn api_task_runs_returns_normalized_a2a_ledger_entries() {
+    let fixture = ApiFixture::new().await;
+    let mock_a2a_base = start_mock_a2a_server().await;
+
+    let boards_response = fixture
+        .client
+        .get(fixture.endpoint("/api/kanban/boards?workspaceId=default"))
+        .send()
+        .await
+        .expect("list boards");
+    assert_eq!(boards_response.status(), StatusCode::OK);
+    let boards_json: Value = boards_response.json().await.expect("decode boards");
+    let board_id = boards_json["boards"][0]["id"].as_str().expect("board id");
+
+    let board_response = fixture
+        .client
+        .get(fixture.endpoint(&format!("/api/kanban/boards/{board_id}")))
+        .send()
+        .await
+        .expect("get board");
+    assert_eq!(board_response.status(), StatusCode::OK);
+    let board_json: Value = board_response.json().await.expect("decode board");
+    let mut columns = board_json["board"]["columns"]
+        .as_array()
+        .expect("columns array")
+        .clone();
+    let todo = columns
+        .iter_mut()
+        .find(|column| column["id"].as_str() == Some("todo"))
+        .expect("todo column");
+    todo["automation"] = json!({
+        "enabled": true,
+        "steps": [
+            {
+                "id": "todo-a2a",
+                "transport": "a2a",
+                "role": "CRAFTER",
+                "specialistName": "Todo Remote Worker",
+                "agentCardUrl": format!("{}/card", mock_a2a_base),
+                "skillId": "remote-skill"
+            }
+        ]
+    });
+
+    let update_board = fixture
+        .client
+        .patch(fixture.endpoint(&format!("/api/kanban/boards/{board_id}")))
+        .json(&json!({ "columns": columns }))
+        .send()
+        .await
+        .expect("update board");
+    assert_eq!(update_board.status(), StatusCode::OK);
+
+    let create_task = fixture
+        .client
+        .post(fixture.endpoint("/api/tasks"))
+        .json(&json!({
+            "title": "A2A ledger task",
+            "objective": "Return normalized runs",
+            "workspaceId": "default",
+            "boardId": board_id,
+            "columnId": "todo"
+        }))
+        .send()
+        .await
+        .expect("create task");
+    assert_eq!(create_task.status(), StatusCode::CREATED);
+    let task_json: Value = create_task.json().await.expect("decode task");
+    let task_id = task_json["task"]["id"].as_str().expect("task id");
+
+    let runs_response = fixture
+        .client
+        .get(fixture.endpoint(&format!("/api/tasks/{task_id}/runs")))
+        .send()
+        .await
+        .expect("get task runs");
+    assert_eq!(runs_response.status(), StatusCode::OK);
+    let runs_json: Value = runs_response.json().await.expect("decode task runs");
+    let runs = runs_json["runs"].as_array().expect("runs array");
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0]["kind"].as_str(), Some("a2a_task"));
+    assert_eq!(runs[0]["status"].as_str(), Some("running"));
+    assert_eq!(runs[0]["externalTaskId"].as_str(), Some("remote-task-1"));
+    assert_eq!(runs[0]["contextId"].as_str(), Some("ctx-1"));
+    assert_eq!(runs[0]["resumeTarget"]["type"].as_str(), Some("external_task"));
+    assert_eq!(
+        runs[0]["resumeTarget"]["id"].as_str(),
+        Some("remote-task-1")
+    );
+}
+
+#[tokio::test]
 async fn api_task_create_reconciles_a2a_lane_terminal_state() {
     let fixture = ApiFixture::new().await;
     let mock_a2a_base = start_mock_a2a_server().await;
