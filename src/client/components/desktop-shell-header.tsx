@@ -25,14 +25,14 @@ export function DesktopShellHeader({
 
   return (
     <header
-      className="h-9 shrink-0 flex items-center border-b border-desktop-border bg-desktop-bg-tertiary select-none"
+      className="h-10 shrink-0 flex items-center border-b border-desktop-border bg-desktop-bg-tertiary backdrop-blur-md select-none"
       data-testid="desktop-shell-header"
     >
       <div className="w-20 h-full app-drag-region" />
 
-      <div className="flex items-center gap-2 px-2">
+      <div className="flex items-center gap-2 px-3">
         <Image src="/logo.svg" alt="Routa" width={16} height={16} className="rounded" />
-        <span className="text-[11px] font-medium text-desktop-text-primary">Routa</span>
+        <span className="text-[11px] font-semibold tracking-[0.01em] text-desktop-text-primary">Routa</span>
       </div>
 
       <div className="ml-3">
@@ -40,7 +40,7 @@ export function DesktopShellHeader({
           workspaceHref ? (
           <Link
             href={workspaceHref}
-            className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-desktop-text-primary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+            className="flex items-center gap-1.5 rounded-xl border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] text-desktop-text-primary transition-colors hover:bg-desktop-bg-active"
           >
             <svg className="w-3 h-3 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
@@ -48,7 +48,7 @@ export function DesktopShellHeader({
             <span className="max-w-[120px] truncate">{workspaceLabel}</span>
           </Link>
           ) : (
-            <div className="flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-desktop-text-secondary">
+            <div className="flex items-center gap-1.5 rounded-xl border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1.5 text-[11px] text-desktop-text-secondary">
               <svg className="w-3 h-3 text-desktop-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
               </svg>
