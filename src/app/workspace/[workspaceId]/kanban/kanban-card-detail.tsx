@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
+import { Select } from "@/client/components/select";
 import {
   type EffectiveTaskAutomation,
   resolveEffectiveTaskAutomation,
@@ -540,7 +541,7 @@ function MetaSelect({
   return (
     <label className={`inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 font-medium text-slate-700 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 ${compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]"}`}>
       <span className="uppercase tracking-wide text-slate-400 dark:text-slate-500">{label}</span>
-      <select
+      <Select
         value={value}
         onChange={(event) => {
           void onChange(event.target.value);
@@ -550,7 +551,7 @@ function MetaSelect({
         {options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }
@@ -702,7 +703,7 @@ function ExecutionSection({
           </div>
         )}
         <div className="mt-3 space-y-2.5">
-          <select
+          <Select
             value={task.assignedProvider ?? ""}
             onChange={async (event) => {
               const newProvider = event.target.value || null;
@@ -728,10 +729,10 @@ function ExecutionSection({
             {availableProviders.map((provider) => (
               <option key={`${provider.id}-${provider.name}`} value={provider.id}>{provider.name}</option>
             ))}
-          </select>
+          </Select>
           {task.assignedProvider && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <select
+              <Select
                 value={task.assignedRole ?? "DEVELOPER"}
                 onChange={async (event) => {
                   await onPatchTask(task.id, { assignedRole: event.target.value });
@@ -739,8 +740,8 @@ function ExecutionSection({
                 className={`rounded-2xl border border-slate-200 bg-white text-sm text-slate-700 outline-none focus:border-amber-400 dark:border-slate-700 dark:bg-[#121620] dark:text-slate-300 ${compact ? "px-2.5 py-2" : "px-3 py-2"}`}
               >
                 {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
-              </select>
-              <select
+              </Select>
+              <Select
                 value={getLanguageSpecificSpecialistId(task.assignedSpecialistId, specialistLanguage) ?? ""}
                 onChange={async (event) => {
                   const specialist = findSpecialistById(specialists, event.target.value);
@@ -754,7 +755,7 @@ function ExecutionSection({
               >
                 <option value="">{KANBAN_SPECIALIST_LANGUAGE_LABELS[specialistLanguage].noSpecialist}</option>
                 {specialists.map((specialist) => <option key={specialist.id} value={specialist.id}>{getSpecialistDisplayName(specialist)}</option>)}
-              </select>
+              </Select>
             </div>
           )}
         </div>

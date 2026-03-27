@@ -4,6 +4,7 @@ import { useState, type DragEvent } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { formatArtifactLabel, resolveKanbanTransitionArtifacts } from "@/core/kanban/transition-artifacts";
+import { Select } from "@/client/components/select";
 import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import {
   findSpecialistById,
@@ -427,7 +428,7 @@ export function KanbanCard({
                 <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
                   Provider
                 </span>
-                <select
+                <Select
                   value={task.assignedProvider ?? ""}
                   disabled={availableProviders.length === 0}
                   onMouseDown={stopCardInteraction}
@@ -445,7 +446,7 @@ export function KanbanCard({
                       {provider.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </div>
           )}
@@ -535,7 +536,7 @@ function AssignmentSection({
       {task.assignedProvider && (
         <div className="flex items-center gap-2">
           <span className="w-16 shrink-0 text-[10px] font-medium text-slate-500 dark:text-gray-400">Role</span>
-          <select
+          <Select
             value={task.assignedRole ?? "DEVELOPER"}
             onClick={stopCardInteraction}
             onChange={async (event) => {
@@ -547,14 +548,14 @@ function AssignmentSection({
             {ROLE_OPTIONS.map((role) => (
               <option key={role} value={role}>{role}</option>
             ))}
-          </select>
+          </Select>
         </div>
       )}
 
       {task.assignedProvider && (
         <div className="flex items-center gap-2">
           <span className="w-16 shrink-0 text-[10px] font-medium text-slate-500 dark:text-gray-400">Specialist</span>
-          <select
+          <Select
             value={getLanguageSpecificSpecialistId(task.assignedSpecialistId, specialistLanguage) ?? ""}
             onClick={stopCardInteraction}
             onChange={async (event) => {
@@ -574,7 +575,7 @@ function AssignmentSection({
                 {getSpecialistDisplayName(specialist)}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       )}
     </div>

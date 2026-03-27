@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatRelativeTime } from "../ui-components";
 import type { BackgroundTaskInfo } from "../types";
+import { Select } from "@/client/components/select";
 
 interface WorkspaceBackgroundAgent {
   id: string;
@@ -591,7 +592,7 @@ export function KanbanBgAgentPanel({ workspaceId }: KanbanBgAgentPanelProps) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-[12px] font-medium text-slate-600 dark:text-slate-400">Role</label>
-                  <select
+                  <Select
                     value={createForm.role}
                     onChange={(event) => setCreateForm((current) => ({ ...current, role: event.target.value }))}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-800 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20 dark:border-[#252838] dark:bg-[#0d1018] dark:text-slate-100"
@@ -600,11 +601,11 @@ export function KanbanBgAgentPanel({ workspaceId }: KanbanBgAgentPanelProps) {
                     <option value="CRAFTER">CRAFTER</option>
                     <option value="GATE">GATE</option>
                     <option value="ROUTA">ROUTA</option>
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="mb-1 block text-[12px] font-medium text-slate-600 dark:text-slate-400">Model tier</label>
-                  <select
+                  <Select
                     value={createForm.modelTier}
                     onChange={(event) => setCreateForm((current) => ({ ...current, modelTier: event.target.value }))}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-800 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20 dark:border-[#252838] dark:bg-[#0d1018] dark:text-slate-100"
@@ -612,7 +613,7 @@ export function KanbanBgAgentPanel({ workspaceId }: KanbanBgAgentPanelProps) {
                     <option value="FAST">FAST</option>
                     <option value="BALANCED">BALANCED</option>
                     <option value="SMART">SMART</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 

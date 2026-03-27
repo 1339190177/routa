@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { OverlayModal, BgTaskStatusIcon, bgTaskStatusClass, formatRelativeTime } from "./ui-components";
 import type { BackgroundTaskInfo } from "./types";
+import { Select } from "@/client/components/select";
 
 interface BgTasksTabProps {
   bgTasks: BackgroundTaskInfo[];
@@ -503,7 +504,7 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
               <div>
                 <label className="block text-[12px] font-medium text-slate-600 dark:text-slate-400 mb-1">Agent / Provider</label>
                 {specialists.length > 0 ? (
-                  <select
+                  <Select
                     data-testid="dispatch-agent-input"
                     value={dispatchAgentId}
                     onChange={(e) => { setDispatchAgentId(e.target.value); handleCheckDuplicate(dispatchPrompt, e.target.value); }}
@@ -513,7 +514,7 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
                     {specialists.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}{s.description ? ` — ${s.description}` : ""}</option>
                     ))}
-                  </select>
+                  </Select>
                 ) : (
                   <input
                     data-testid="dispatch-agent-input"
@@ -527,7 +528,7 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
               </div>
               <div>
                 <label className="block text-[12px] font-medium text-slate-600 dark:text-slate-400 mb-1">Priority</label>
-                <select
+                <Select
                   value={dispatchPriority}
                   onChange={(e) => setDispatchPriority(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-[#252838] bg-slate-50 dark:bg-[#151720] text-[13px] text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
@@ -535,12 +536,12 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
                   <option value="LOW">Low</option>
                   <option value="NORMAL">Normal</option>
                   <option value="HIGH">High</option>
-                </select>
+                </Select>
               </div>
             </div>
             <div>
               <label className="block text-[12px] font-medium text-slate-600 dark:text-slate-400 mb-1">Workspace</label>
-              <select
+              <Select
                 value={dispatchWorkspaceId}
                 onChange={(e) => setDispatchWorkspaceId(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-[#252838] bg-slate-50 dark:bg-[#151720] text-[13px] text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
@@ -551,7 +552,7 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
                 {workspaces.length === 0 && (
                   <option value={workspaceId}>{workspaceId} (current)</option>
                 )}
-              </select>
+              </Select>
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button
@@ -599,7 +600,7 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
               <div>
                 <label className="block text-[12px] font-medium text-slate-600 dark:text-slate-400 mb-1">Agent</label>
                 {specialists.length > 0 ? (
-                  <select
+                  <Select
                     value={editForm.agentId}
                     onChange={(e) => setEditForm((f) => ({ ...f, agentId: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-[#252838] bg-slate-50 dark:bg-[#151720] text-[13px] text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
@@ -608,7 +609,7 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
                     {specialists.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
-                  </select>
+                  </Select>
                 ) : (
                   <input
                     type="text"
@@ -620,7 +621,7 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
               </div>
               <div>
                 <label className="block text-[12px] font-medium text-slate-600 dark:text-slate-400 mb-1">Priority</label>
-                <select
+                <Select
                   value={editForm.priority}
                   onChange={(e) => setEditForm((f) => ({ ...f, priority: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-[#252838] bg-slate-50 dark:bg-[#151720] text-[13px] text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
@@ -628,7 +629,7 @@ export function BgTasksTab({ bgTasks, workspaceId, workspaces, onRefresh }: BgTa
                   <option value="LOW">Low</option>
                   <option value="NORMAL">Normal</option>
                   <option value="HIGH">High</option>
-                </select>
+                </Select>
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-1">

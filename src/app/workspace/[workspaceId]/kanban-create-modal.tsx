@@ -5,6 +5,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
+import { Select } from "@/client/components/select";
 
 export type DraftIssue = {
   title: string;
@@ -169,7 +170,7 @@ export function KanbanCreateModal({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <select
+            <Select
               value={draft.priority}
               onChange={(e) => setDraft((d) => ({ ...d, priority: e.target.value }))}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-200"
@@ -178,7 +179,7 @@ export function KanbanCreateModal({
               <option value="medium">Medium</option>
               <option value="high">High</option>
               <option value="urgent">Urgent</option>
-            </select>
+            </Select>
             <input
               value={draft.labels}
               onChange={(e) => setDraft((d) => ({ ...d, labels: e.target.value }))}

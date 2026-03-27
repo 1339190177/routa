@@ -25,6 +25,7 @@ import {
   type KanbanSpecialistLanguage,
 } from "./kanban-specialist-language";
 import type { KanbanBoardInfo, KanbanDevSessionSupervisionInfo } from "../types";
+import { Select } from "@/client/components/select";
 
 interface SpecialistOption {
   id: string;
@@ -275,12 +276,12 @@ function SelectControl({
 }: React.SelectHTMLAttributes<HTMLSelectElement> & { children: ReactNode }) {
   return (
     <div className={`relative ${props.disabled ? "opacity-70" : ""}`}>
-      <select
+      <Select
         {...props}
         className={`${SELECT_CLASS} ${className}`.trim()}
       >
         {children}
-      </select>
+      </Select>
       <svg
         className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
         fill="none"

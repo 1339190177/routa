@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { v4 as uuidv4 } from "uuid";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
+import { Select } from "@/client/components/select";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -727,7 +728,7 @@ export default function AGUIPage() {
           <div className="flex items-center gap-3">
             <ProtocolToggle mode={protocolMode} onChange={setProtocolMode} />
 
-            <select
+            <Select
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
               className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1 text-xs text-slate-600 dark:text-slate-300"
@@ -741,7 +742,7 @@ export default function AGUIPage() {
                   </option>
                 ))
               )}
-            </select>
+            </Select>
 
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 dark:bg-[#1e2130] text-[11px] font-medium text-slate-500 dark:text-slate-400">
               <span className={`w-1.5 h-1.5 rounded-full ${sending ? "bg-amber-400 animate-pulse" : "bg-emerald-500"}`} />

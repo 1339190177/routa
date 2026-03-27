@@ -13,6 +13,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
+import { Select } from "@/client/components/select";
 
 interface BackgroundTask {
   id: string;
@@ -97,7 +98,7 @@ export default function MessagesPage() {
           <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-200">Messages</span>
         </Link>
         <div className="flex gap-1">
-          <select
+          <Select
             value={effectiveWorkspaceId}
             onChange={(e) => setSelectedWorkspaceId(e.target.value)}
             disabled={workspacesLoading || workspaces.length === 0}
@@ -112,7 +113,7 @@ export default function MessagesPage() {
                 </option>
               ))
             )}
-          </select>
+          </Select>
           <button
             onClick={() => setTab("tasks")}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === "tasks" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"}`}
