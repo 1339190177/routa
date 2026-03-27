@@ -125,6 +125,10 @@ async function main() {
   const session = await createSnapshotScriptSession({
     baseUrl: BASE_URL,
     timeoutMs: TIMEOUT_MS,
+    useSnapshotFixtures: true,
+    managedServerConflictMessage:
+      `Snapshot fixtures require an isolated dev server, but ${BASE_URL} is already in use. ` +
+      "Accessibility smoke will use a dedicated snapshot server instead.",
   });
   const { context, page } = await session.createPageSession();
 
@@ -145,7 +149,7 @@ async function main() {
         await captureSnapshot({
           page,
           target,
-          baseUrl: BASE_URL,
+          baseUrl: session.baseUrl,
           timeoutMs: TIMEOUT_MS,
           outputPath: tempPath,
         });

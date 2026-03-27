@@ -49,7 +49,7 @@ async function main() {
         await captureSnapshot({
           page,
           target,
-          baseUrl: options.baseUrl,
+          baseUrl: session.baseUrl,
           timeoutMs: options.timeoutMs,
           outputPath: snapshotPath,
         });

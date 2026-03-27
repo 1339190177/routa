@@ -3,6 +3,7 @@
 import {
   createSnapshotScriptSession,
   getSnapshotTargetsByIds,
+  waitForSnapshotTarget,
 } from "./page-snapshot-lib.mjs";
 
 const PERFORMANCE_PAGE_IDS = ["workspace", "kanban", "traces", "session-detail"];
@@ -20,22 +21,12 @@ function getTargets() {
   return getSnapshotTargetsByIds(PERFORMANCE_PAGE_IDS);
 }
 
-async function waitForTarget(page, target) {
-  await page.goto(new globalThis.URL(target.route, BASE_URL).toString(), {
+async function waitForTarget(page, target, baseUrl) {
+  await page.goto(new globalThis.URL(target.route, baseUrl).toString(), {
     waitUntil: "domcontentloaded",
     timeout: TIMEOUT_MS,
   });
-
-  const waitFor = target.waitFor ?? { strategy: "networkidle", timeoutMs: TIMEOUT_MS, settleMs: 1_000 };
-  const effectiveTimeout = waitFor.timeoutMs ?? TIMEOUT_MS;
-  if (waitFor.strategy === "selector" && waitFor.value) {
-    await page.waitForSelector(waitFor.value, { timeout: effectiveTimeout });
-  } else if (waitFor.strategy === "text" && waitFor.value) {
-    await page.getByText(waitFor.value, { exact: false }).first().waitFor({ timeout: effectiveTimeout });
-  } else {
-    await page.waitForLoadState("networkidle", { timeout: effectiveTimeout }).catch(() => {});
-  }
-  await page.waitForTimeout(waitFor.settleMs ?? 1_000);
+  await waitForSnapshotTarget(page, target, TIMEOUT_MS);
 }
 
 async function main() {
@@ -43,6 +34,10 @@ async function main() {
   const session = await createSnapshotScriptSession({
     baseUrl: BASE_URL,
     timeoutMs: TIMEOUT_MS,
+    useSnapshotFixtures: true,
+    managedServerConflictMessage:
+      `Snapshot fixtures require an isolated dev server, but ${BASE_URL} is already in use. ` +
+      "Performance smoke will use a dedicated snapshot server instead.",
   });
   const { context, page } = await session.createPageSession();
 
@@ -67,7 +62,7 @@ async function main() {
 
   try {
     for (const target of targets) {
-      await waitForTarget(page, target);
+      await waitForTarget(page, target, session.baseUrl);
       const metrics = await page.evaluate(() => {
         const navigation = globalThis.performance.getEntriesByType("navigation")[0];
         const resources = globalThis.performance.getEntriesByType("resource");

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-
-import { captureSnapshot, getSnapshotTargetsByIds, parseCliArgs } from "../page-snapshot-lib.mjs";
+import {
+  captureSnapshot,
+  getSnapshotTargetsByIds,
+  parseCliArgs,
+  resolveManagedServerBaseUrl,
+  waitForSnapshotTarget,
+} from "../page-snapshot-lib.mjs";
 
 describe("page-snapshot-lib", () => {
   it("parses --page in both supported CLI forms", () => {
@@ -18,6 +23,13 @@ describe("page-snapshot-lib", () => {
       { id: "home", route: "/" },
       { id: "kanban", route: "/workspace/default/kanban" },
     ]);
+  });
+
+  it("moves fixture-managed servers to a free port when the requested port is occupied", async () => {
+    const managedBaseUrl = await resolveManagedServerBaseUrl("http://127.0.0.1:3000", vi.fn().mockResolvedValue(4010));
+
+    expect(new URL(managedBaseUrl).hostname).toBe("127.0.0.1");
+    expect(new URL(managedBaseUrl).port).toBe("4010");
   });
 
   it("waits for a configured snapshot selector before taking the aria snapshot", async () => {
@@ -67,5 +79,27 @@ describe("page-snapshot-lib", () => {
     expect(locator).toHaveBeenCalledWith("[data-testid=\"kanban-board-content\"]");
     expect(waitFor).toHaveBeenCalledWith({ state: "visible", timeout: 1234 });
     expect(ariaSnapshot).toHaveBeenCalledOnce();
+  });
+
+  it("supports text-absent wait strategies for dynamic pages", async () => {
+    const page = {
+      waitForLoadState: vi.fn(),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined),
+      waitForSelector: vi.fn(),
+      getByText: vi.fn(),
+      waitForFunction: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await waitForSnapshotTarget(page, {
+      waitFor: {
+        strategy: "text-absent",
+        value: "worktree loading...",
+        timeoutMs: 2345,
+        settleMs: 50,
+      },
+    }, 3000);
+
+    expect(page.waitForFunction).toHaveBeenCalledOnce();
+    expect(page.waitForTimeout).toHaveBeenCalledWith(50);
   });
 });

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { URL } from "node:url";
@@ -161,6 +162,7 @@ export async function createSnapshotScriptSession({
   extraEnv = {},
 }) {
   let devServer = null;
+  let resolvedBaseUrl = baseUrl;
   let snapshotRuntime = {
     requiresManagedServer: false,
     env: {},
@@ -170,27 +172,30 @@ export async function createSnapshotScriptSession({
   const serverReachable = await isServerReachable(baseUrl);
   if (useSnapshotFixtures) {
     snapshotRuntime = await createSnapshotRuntime();
-    if (snapshotRuntime.requiresManagedServer && serverReachable) {
-      throw new Error(
-        managedServerConflictMessage ??
-          `Snapshot fixtures require an isolated dev server, but ${baseUrl} is already in use.`,
-      );
+    if (snapshotRuntime.requiresManagedServer) {
+      resolvedBaseUrl = await resolveManagedServerBaseUrl(baseUrl);
+      if (serverReachable && managedServerConflictMessage) {
+        console.warn(
+          `${managedServerConflictMessage} Switching snapshot fixtures to ${resolvedBaseUrl} instead.`,
+        );
+      }
     }
   }
 
   const mustStartManagedServer = useSnapshotFixtures && snapshotRuntime.requiresManagedServer;
   if (mustStartManagedServer || !serverReachable) {
-    devServer = startDevServer(baseUrl, {
+    devServer = startDevServer(resolvedBaseUrl, {
       ...snapshotRuntime.env,
       ...extraEnv,
     });
-    await waitForServer(baseUrl, timeoutMs, devServer.getLogs);
+    await waitForServer(resolvedBaseUrl, timeoutMs, devServer.getLogs);
   }
 
   const browser = await createBrowser(headed);
 
   return {
     browser,
+    baseUrl: resolvedBaseUrl,
     async createPageSession() {
       const context = await browser.newContext({ viewport });
       const page = await context.newPage();
@@ -206,6 +211,36 @@ export async function createSnapshotScriptSession({
   };
 }
 
+export async function resolveManagedServerBaseUrl(baseUrl, findPort = findAvailablePort) {
+  const url = new URL(baseUrl);
+  url.port = String(await findPort(url.hostname));
+  return url.toString().replace(/\/$/, "");
+}
+
+export async function findAvailablePort(hostname = "127.0.0.1") {
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, hostname, () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Unable to determine an available port")));
+        return;
+      }
+
+      const { port } = address;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
+
 export function startDevServer(baseUrl, extraEnv = {}) {
   const url = new URL(baseUrl);
   const host = url.hostname;
@@ -216,6 +251,7 @@ export function startDevServer(baseUrl, extraEnv = {}) {
     cwd: ROOT_DIR,
     env: {
       ...process.env,
+      ROUTA_PAGE_SNAPSHOT_SERVER: "1",
       ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -368,34 +404,14 @@ export async function captureSnapshot({
   outputPath,
 }) {
   const targetUrl = new URL(target.route, baseUrl).toString();
-  
+
   await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs });
-
-  const waitFor = target.waitFor ?? { strategy: "networkidle", timeoutMs, settleMs: 1000 };
-  const effectiveTimeout = waitFor.timeoutMs ?? timeoutMs;
-  const settleMs = waitFor.settleMs ?? 1000;
-
-  if (waitFor.strategy === "selector" && waitFor.value) {
-    await page.waitForSelector(waitFor.value, { timeout: effectiveTimeout });
-  } else if (waitFor.strategy === "text" && waitFor.value) {
-    await page.getByText(waitFor.value, { exact: false }).first().waitFor({ timeout: effectiveTimeout });
-  } else if (waitFor.strategy === "text-absent" && waitFor.value) {
-    await page.waitForFunction(
-      (text) => !globalThis.document.body?.innerText?.includes(text),
-      waitFor.value,
-      { timeout: effectiveTimeout }
-    );
-  } else {
-    await page.waitForLoadState("networkidle", { timeout: effectiveTimeout }).catch(() => {});
-  }
-
-  if (settleMs > 0) {
-    await page.waitForTimeout(settleMs);
-  }
+  await waitForSnapshotTarget(page, target, timeoutMs);
 
   const title = await page.title();
   const finalUrl = page.url();
-  
+  const effectiveTimeout = target.waitFor?.timeoutMs ?? timeoutMs;
+
   const snapshotRoot = target.snapshotSelector ? page.locator(target.snapshotSelector) : page.locator("body");
   if (target.snapshotSelector) {
     await snapshotRoot.waitFor({ state: "visible", timeout: effectiveTimeout });
@@ -425,6 +441,30 @@ export async function captureSnapshot({
   ensureParentDir(outputPath);
   fs.writeFileSync(outputPath, `${header}${snapshotBody}\n`, "utf-8");
   return { outputPath, title, finalUrl };
+}
+
+export async function waitForSnapshotTarget(page, target, timeoutMs) {
+  const waitFor = target.waitFor ?? { strategy: "networkidle", timeoutMs, settleMs: 1000 };
+  const effectiveTimeout = waitFor.timeoutMs ?? timeoutMs;
+  const settleMs = waitFor.settleMs ?? 1000;
+
+  if (waitFor.strategy === "selector" && waitFor.value) {
+    await page.waitForSelector(waitFor.value, { timeout: effectiveTimeout });
+  } else if (waitFor.strategy === "text" && waitFor.value) {
+    await page.getByText(waitFor.value, { exact: false }).first().waitFor({ timeout: effectiveTimeout });
+  } else if (waitFor.strategy === "text-absent" && waitFor.value) {
+    await page.waitForFunction(
+      (text) => !globalThis.document.body?.innerText?.includes(text),
+      waitFor.value,
+      { timeout: effectiveTimeout },
+    );
+  } else {
+    await page.waitForLoadState("networkidle", { timeout: effectiveTimeout }).catch(() => {});
+  }
+
+  if (settleMs > 0) {
+    await page.waitForTimeout(settleMs);
+  }
 }
 
 async function getPlaywrightVersion() {

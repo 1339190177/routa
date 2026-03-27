@@ -36,7 +36,7 @@ async function main() {
 
   const report = {
     generatedAt: new Date().toISOString(),
-    baseUrl: options.baseUrl,
+    baseUrl: session.baseUrl,
     similarityThreshold: options.similarityThreshold,
     validated: 0,
     matched: 0,
@@ -65,7 +65,7 @@ async function main() {
         await captureSnapshot({
           page,
           target,
-          baseUrl: options.baseUrl,
+          baseUrl: session.baseUrl,
           timeoutMs: options.timeoutMs,
           outputPath: tempPath,
         });

@@ -3,11 +3,13 @@ import type { NextConfig } from "next";
 const isStaticBuild = process.env.ROUTA_BUILD_STATIC === "1";
 const isDesktopServerBuild = process.env.ROUTA_DESKTOP_SERVER_BUILD === "1";
 const isDesktopStandaloneBuild = process.env.ROUTA_DESKTOP_STANDALONE === "1";
+const isPageSnapshotServerBuild = process.env.ROUTA_PAGE_SNAPSHOT_SERVER === "1";
 
 // When set, proxy API requests to the Rust backend server (desktop mode without Node.js backend)
 const rustBackendUrl = process.env.ROUTA_RUST_BACKEND_URL;
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1"],
   typescript: {
     tsconfigPath: isDesktopServerBuild ? "tsconfig.desktop.json" : "tsconfig.json",
   },
@@ -31,7 +33,9 @@ const nextConfig: NextConfig = {
       "./.agents/skills/**/*",
     ],
   },
-  ...(isDesktopServerBuild ? { distDir: ".next-desktop" } : {}),
+  ...((isDesktopServerBuild || isPageSnapshotServerBuild)
+    ? { distDir: isDesktopServerBuild ? ".next-desktop" : ".next-page-snapshots" }
+    : {}),
   ...(isDesktopStandaloneBuild
     ? {
         output: "standalone",
