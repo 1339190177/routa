@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { A2AOutboundClient } from "../a2a-outbound-client";
+import { A2AOutboundClient, getA2AOutboundClient } from "../a2a-outbound-client";
 import { fetchAgentCard, validateAgentCard } from "../a2a-agent-card";
 import type { AgentCard } from "@a2a-js/sdk";
 import {
@@ -15,6 +15,7 @@ import {
 // Mock fetch for tests
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
+const OUTBOUND_CLIENT_GLOBAL_KEY = "__a2a_outbound_client__";
 
 describe("A2AOutboundClient", () => {
   let client: A2AOutboundClient;
@@ -60,6 +61,7 @@ describe("A2AOutboundClient", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    delete (globalThis as Record<string, unknown>)[OUTBOUND_CLIENT_GLOBAL_KEY];
   });
 
   describe("fetchAgentCard", () => {
@@ -512,6 +514,22 @@ describe("A2AOutboundClient", () => {
 
       expect(task.status.state).toBe("completed");
     });
+  });
+});
+
+describe("getA2AOutboundClient", () => {
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>)[OUTBOUND_CLIENT_GLOBAL_KEY];
+  });
+
+  it("recreates stale global clients after HMR", () => {
+    const legacyClient = { runtimeVersion: 1 };
+    (globalThis as Record<string, unknown>)[OUTBOUND_CLIENT_GLOBAL_KEY] = legacyClient;
+
+    const client = getA2AOutboundClient();
+
+    expect(client).toBeInstanceOf(A2AOutboundClient);
+    expect(client).not.toBe(legacyClient);
   });
 });
 

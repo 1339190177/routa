@@ -48,6 +48,7 @@ const DEFAULT_OPTIONS: Required<A2AOutboundClientOptions> = {
   retryDelay: 1000,
   requestHeaders: {},
 };
+const OUTBOUND_CLIENT_RUNTIME_VERSION = 2;
 
 /**
  * Terminal states for A2A tasks
@@ -70,6 +71,7 @@ function hasStatusMessage(
  * A2A Outbound Client for calling remote A2A agents
  */
 export class A2AOutboundClient {
+  readonly runtimeVersion = OUTBOUND_CLIENT_RUNTIME_VERSION;
   private options: Required<A2AOutboundClientOptions>;
 
   constructor(options?: A2AOutboundClientOptions) {
@@ -361,7 +363,9 @@ export function getA2AOutboundClient(options?: A2AOutboundClientOptions): A2AOut
     return new A2AOutboundClient(options);
   }
   const g = globalThis as Record<string, unknown>;
-  if (!g[GLOBAL_KEY]) {
+  const client = g[GLOBAL_KEY] as (A2AOutboundClient & { runtimeVersion?: unknown }) | undefined;
+  const isCompatible = client?.runtimeVersion === OUTBOUND_CLIENT_RUNTIME_VERSION;
+  if (!isCompatible) {
     g[GLOBAL_KEY] = new A2AOutboundClient(options);
   }
   return g[GLOBAL_KEY] as A2AOutboundClient;
