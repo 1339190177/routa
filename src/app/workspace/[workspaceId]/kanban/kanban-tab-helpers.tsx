@@ -59,7 +59,11 @@ export function extractSessionLiveTail(history: unknown): string | null {
 
 export function getPreferredTaskSessionId(task: TaskInfo | null | undefined): string | null {
   if (!task) return null;
+  const latestLaneSessionId = task.laneSessions && task.laneSessions.length > 0
+    ? task.laneSessions[task.laneSessions.length - 1]?.sessionId ?? null
+    : null;
   return task.triggerSessionId
+    ?? latestLaneSessionId
     ?? (task.sessionIds && task.sessionIds.length > 0 ? task.sessionIds[task.sessionIds.length - 1] : null);
 }
 

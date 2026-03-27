@@ -20,6 +20,27 @@ export interface SessionInfo {
   createdAt: string;
 }
 
+export interface TaskRunInfo {
+  id: string;
+  kind: "embedded_acp" | "runner_acp" | "a2a_task";
+  status: "running" | "completed" | "failed" | "timed_out" | "transitioned" | "unknown";
+  sessionId?: string;
+  externalTaskId?: string;
+  contextId?: string;
+  columnId?: string;
+  stepId?: string;
+  stepName?: string;
+  provider?: string;
+  specialistName?: string;
+  startedAt: string;
+  completedAt?: string;
+  ownerInstanceId?: string;
+  resumeTarget?: {
+    type: "session" | "external_task";
+    id: string;
+  };
+}
+
 export interface KanbanAgentPromptOptions {
   provider?: string;
   role?: string;

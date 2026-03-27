@@ -65,6 +65,44 @@ struct TaskEvidenceSummary {
     runs: TaskRunSummary,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskRunResumeTarget {
+    r#type: String,
+    id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskRunLedgerEntry {
+    id: String,
+    kind: String,
+    status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    external_task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    column_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    step_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    step_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    specialist_name: Option<String>,
+    started_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    owner_instance_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resume_target: Option<TaskRunResumeTarget>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route(
@@ -79,6 +117,7 @@ pub fn router() -> Router<AppState> {
             "/{id}/artifacts",
             get(list_task_artifacts).post(create_task_artifact),
         )
+        .route("/{id}/runs", get(list_task_runs))
         .route("/{id}/status", axum::routing::post(update_task_status))
         .route("/ready", get(find_ready_tasks))
 }
@@ -135,6 +174,21 @@ async fn list_task_artifacts(
 
     Ok(Json(serde_json::json!({
         "artifacts": artifacts,
+    })))
+}
+
+async fn list_task_runs(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let task = state
+        .task_store
+        .get(&id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound(format!("Task {} not found", id)))?;
+
+    Ok(Json(serde_json::json!({
+        "runs": build_task_run_ledger(&state, &task).await?
     })))
 }
 
@@ -649,6 +703,64 @@ async fn serialize_task_with_evidence(
         })?,
     );
     Ok(task_value)
+}
+
+async fn build_task_run_ledger(
+    state: &AppState,
+    task: &routa_core::models::task::Task,
+) -> Result<Vec<TaskRunLedgerEntry>, ServerError> {
+    let mut lane_sessions = task.lane_sessions.clone();
+    lane_sessions.sort_by(|left, right| right.started_at.cmp(&left.started_at));
+
+    let mut runs = Vec::with_capacity(lane_sessions.len());
+    for lane_session in lane_sessions {
+        let session = state.acp_session_store.get(&lane_session.session_id).await?;
+        let is_a2a = lane_session.transport.as_deref() == Some("a2a");
+        let resume_target = if is_a2a {
+            lane_session
+                .external_task_id
+                .clone()
+                .map(|id| TaskRunResumeTarget {
+                    r#type: "external_task".to_string(),
+                    id,
+                })
+        } else {
+            Some(TaskRunResumeTarget {
+                r#type: "session".to_string(),
+                id: lane_session.session_id.clone(),
+            })
+        };
+
+        runs.push(TaskRunLedgerEntry {
+            id: lane_session.session_id.clone(),
+            kind: if is_a2a {
+                "a2a_task".to_string()
+            } else {
+                "embedded_acp".to_string()
+            },
+            status: serde_json::to_value(&lane_session.status)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_string))
+                .unwrap_or_else(|| "unknown".to_string()),
+            session_id: Some(lane_session.session_id.clone()),
+            external_task_id: lane_session.external_task_id.clone(),
+            context_id: lane_session.context_id.clone(),
+            column_id: lane_session.column_id.clone(),
+            step_id: lane_session.step_id.clone(),
+            step_name: lane_session.step_name.clone(),
+            provider: lane_session
+                .provider
+                .clone()
+                .or_else(|| session.as_ref().and_then(|row| row.provider.clone())),
+            specialist_name: lane_session.specialist_name.clone(),
+            started_at: lane_session.started_at.clone(),
+            completed_at: lane_session.completed_at.clone(),
+            owner_instance_id: None,
+            resume_target,
+        });
+    }
+
+    Ok(runs)
 }
 
 async fn build_task_evidence_summary(

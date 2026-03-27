@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
 import type { KanbanColumnInfo } from "../types";
-import type { SessionInfo, TaskInfo } from "../types";
+import type { SessionInfo, TaskInfo, TaskRunInfo } from "../types";
 import {
   buildSessionDisplayLabel,
   createKanbanSpecialistResolver,
@@ -16,8 +16,55 @@ import {
 } from "./kanban-card-session-utils";
 import type { KanbanSpecialistLanguage } from "./kanban-specialist-language";
 import { getKanbanSessionCopy } from "./i18n/kanban-session-copy";
+import { useTaskRuns } from "./use-task-runs";
 
 type ActivityTabId = "runs" | "handoffs" | "github";
+
+function formatTaskRunKind(kind: TaskRunInfo["kind"] | undefined): string {
+  switch (kind) {
+    case "a2a_task":
+      return "A2A";
+    case "runner_acp":
+      return "Runner ACP";
+    case "embedded_acp":
+      return "ACP";
+    default:
+      return "Run";
+  }
+}
+
+function formatTaskRunStatus(status: TaskRunInfo["status"] | undefined): string {
+  switch (status) {
+    case "running":
+      return "Running";
+    case "completed":
+      return "Completed";
+    case "failed":
+      return "Failed";
+    case "timed_out":
+      return "Timed out";
+    case "transitioned":
+      return "Transitioned";
+    default:
+      return "Unknown";
+  }
+}
+
+function getTaskRunStatusClasses(status: TaskRunInfo["status"] | undefined): string {
+  switch (status) {
+    case "completed":
+      return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200";
+    case "failed":
+    case "timed_out":
+      return "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200";
+    case "running":
+      return "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200";
+    case "transitioned":
+      return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200";
+    default:
+      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  }
+}
 
 function formatAgentCardTarget(agentCardUrl?: string): string | undefined {
   const trimmed = agentCardUrl?.trim();
@@ -107,6 +154,7 @@ export function KanbanCardActivityPanel({
   specialistLanguage = "en",
   currentSessionId,
   onSelectSession,
+  refreshSignal,
   compact = false,
 }: {
   task: TaskInfo;
@@ -115,11 +163,16 @@ export function KanbanCardActivityPanel({
   specialistLanguage?: KanbanSpecialistLanguage;
   currentSessionId?: string;
   onSelectSession?: (sessionId: string) => void;
+  refreshSignal?: number;
   compact?: boolean;
 }) {
   const copy = getKanbanSessionCopy(specialistLanguage);
+  const { runs } = useTaskRuns(
+    task.id,
+    `${refreshSignal ?? ""}:${task.updatedAt ?? ""}:${task.triggerSessionId ?? ""}:${task.laneSessions?.length ?? 0}`,
+  );
   const tabs: Array<{ id: ActivityTabId; label: string; count?: number }> = [
-    { id: "runs", label: copy.runs, count: getOrderedSessionIds(task).length },
+    { id: "runs", label: copy.runs, count: runs?.length ?? getOrderedSessionIds(task).length },
     ...((task.laneHandoffs?.length ?? 0) > 0 ? [{ id: "handoffs" as const, label: copy.handoffs, count: task.laneHandoffs?.length }] : []),
     ...(task.githubNumber ? [{ id: "github" as const, label: "GitHub" }] : []),
   ];
@@ -161,6 +214,7 @@ export function KanbanCardActivityPanel({
           {visibleTab === "runs" && (
             <SessionHistoryPanel
               task={task}
+              runs={runs ?? undefined}
               specialists={specialists}
               sessions={sessions}
               specialistLanguage={specialistLanguage}
@@ -200,14 +254,20 @@ export function KanbanCardActivityBar({
   onCloseSession?: () => void;
 }) {
   const copy = getKanbanSessionCopy(specialistLanguage);
-  const orderedSessionIds = getOrderedSessionIds(task);
+  const { runs } = useTaskRuns(
+    task.id,
+    `${task.updatedAt ?? ""}:${task.triggerSessionId ?? ""}:${task.laneSessions?.length ?? 0}`,
+  );
+  const orderedSessionIds = runs?.map((run) => run.sessionId ?? run.id) ?? getOrderedSessionIds(task);
   const laneSessions = task.laneSessions ?? [];
   const laneSessionMap = new Map(laneSessions.map((entry) => [entry.sessionId, entry]));
   const sessionMap = new Map(sessions.map((session) => [session.sessionId, session]));
+  const runMap = new Map((runs ?? []).map((run) => [run.sessionId ?? run.id, run]));
   const selectedRunId = currentSessionId && orderedSessionIds.includes(currentSessionId)
     ? currentSessionId
     : orderedSessionIds[orderedSessionIds.length - 1];
   const selectedLaneSession = selectedRunId ? laneSessionMap.get(selectedRunId) : undefined;
+  const selectedRun = selectedRunId ? runMap.get(selectedRunId) : undefined;
   const selectedStepLabel = getLaneSessionStepLabel(selectedLaneSession);
 
   if (orderedSessionIds.length === 0) {
@@ -236,6 +296,7 @@ export function KanbanCardActivityBar({
           {orderedSessionIds.map((sessionId, index) => {
             const active = sessionId === selectedRunId;
             const laneSession = laneSessionMap.get(sessionId);
+            const run = runMap.get(sessionId);
             const laneLabel = laneSession?.columnName ?? laneSession?.columnId ?? "Run";
             const runLabel = buildSessionDisplayLabel(sessionId, index, sessionMap);
 
@@ -253,6 +314,11 @@ export function KanbanCardActivityBar({
                 title={`${laneLabel} · Run ${index + 1} (${runLabel})`}
               >
                 <span className="truncate font-semibold">{laneLabel}</span>
+                {run && (
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${getTaskRunStatusClasses(run.status)}`}>
+                    {formatTaskRunStatus(run.status)}
+                  </span>
+                )}
                 <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${
                   active
                     ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
@@ -288,6 +354,11 @@ export function KanbanCardActivityBar({
               {selectedLaneSession.transport}
             </span>
           )}
+          {selectedRun && (
+            <span className={`rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide ${getTaskRunStatusClasses(selectedRun.status)}`}>
+              {formatTaskRunStatus(selectedRun.status)}
+            </span>
+          )}
           {selectedStepLabel && (
             <span className="rounded-full bg-blue-100 px-2 py-0.5 font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
               {selectedStepLabel}
@@ -306,6 +377,7 @@ export function KanbanCardActivityBar({
 
 function SessionHistoryPanel({
   task,
+  runs,
   specialists,
   sessions,
   specialistLanguage = "en",
@@ -314,6 +386,7 @@ function SessionHistoryPanel({
   compact = false,
 }: {
   task: TaskInfo;
+  runs?: TaskRunInfo[];
   specialists: KanbanSpecialistOption[];
   sessions: SessionInfo[];
   specialistLanguage?: KanbanSpecialistLanguage;
@@ -323,7 +396,7 @@ function SessionHistoryPanel({
 }) {
   const copy = getKanbanSessionCopy(specialistLanguage);
   const laneSessions = task.laneSessions ?? [];
-  const orderedSessionIds = getOrderedSessionIds(task);
+  const orderedSessionIds = runs?.map((run) => run.sessionId ?? run.id) ?? getOrderedSessionIds(task);
 
   if (orderedSessionIds.length === 0) {
     return (
@@ -336,6 +409,7 @@ function SessionHistoryPanel({
 
   const sessionMap = new Map(sessions.map((session) => [session.sessionId, session]));
   const laneSessionMap = new Map(laneSessions.map((entry) => [entry.sessionId, entry]));
+  const runMap = new Map((runs ?? []).map((run) => [run.sessionId ?? run.id, run]));
 
   return (
     <>
@@ -355,18 +429,20 @@ function SessionHistoryPanel({
           const session = sessionMap.get(sessionId);
           const isCurrent = sessionId === currentSessionId;
           const laneSession = laneSessionMap.get(sessionId);
+          const run = runMap.get(sessionId);
           const laneSpecialist = getSpecialistName(
             laneSession?.specialistId,
-            laneSession?.specialistName,
+            run?.specialistName ?? laneSession?.specialistName,
             specialists,
           );
           const stepLabel = getLaneSessionStepLabel(laneSession);
           const isA2ARun = laneSession?.transport === "a2a";
+          const reconnectLabel = run?.resumeTarget?.type === "external_task" ? "Inspect" : "Open";
 
           return (
             <button
               key={sessionId}
-              onClick={() => onSelectSession?.(sessionId)}
+              onClick={() => onSelectSession?.(run?.sessionId ?? sessionId)}
               className={`w-full rounded-xl border text-left transition-colors ${compact ? "px-2.5 py-2" : "px-3 py-2.5"} ${
                 isCurrent
                   ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-200"
@@ -377,6 +453,11 @@ function SessionHistoryPanel({
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   Run {index + 1}
                 </span>
+                {run && (
+                  <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700 dark:bg-[#141926] dark:text-slate-200">
+                    {formatTaskRunKind(run.kind)}
+                  </span>
+                )}
                 {laneSession?.columnName && (
                   <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
                     {laneSession.columnName}
@@ -397,9 +478,9 @@ function SessionHistoryPanel({
                     Active
                   </span>
                 )}
-                {laneSession?.status && (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
-                    {laneSession.status}
+                {(run?.status ?? laneSession?.status) && (
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${getTaskRunStatusClasses(run?.status ?? laneSession?.status)}`}>
+                    {formatTaskRunStatus(run?.status ?? laneSession?.status)}
                   </span>
                 )}
               </div>
@@ -416,26 +497,26 @@ function SessionHistoryPanel({
                         laneSpecialist,
                       ].filter(Boolean).join(" · ")
                       : [
-                        laneSession?.provider ?? session?.provider ?? "Unknown provider",
+                        run?.provider ?? laneSession?.provider ?? session?.provider ?? "Unknown provider",
                         laneSession?.role ?? session?.role ?? "Unknown role",
                         laneSpecialist,
                       ].filter(Boolean).join(" · ")}
                   </div>
                   <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
-                    {formatSessionTimestamp(session?.createdAt ?? laneSession?.startedAt)}
+                    {formatSessionTimestamp(run?.startedAt ?? session?.createdAt ?? laneSession?.startedAt)}
                   </div>
                 </div>
                 <span className={`shrink-0 rounded-lg bg-slate-100 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300 ${compact ? "px-1.5 py-0.5" : "px-2 py-1"}`}>
-                  {(laneSession?.externalTaskId ?? sessionId).slice(0, 8)}
+                  {(run?.externalTaskId ?? laneSession?.externalTaskId ?? sessionId).slice(0, 8)}
                 </span>
               </div>
               <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-slate-500 dark:text-slate-400">
                 <span className="truncate">
                   {isA2ARun
-                    ? laneSession?.contextId ? `Context ${laneSession.contextId}` : "Remote task metadata available"
+                    ? (run?.contextId ?? laneSession?.contextId) ? `Context ${run?.contextId ?? laneSession?.contextId}` : "Remote task metadata available"
                     : session?.cwd ?? "Working directory unavailable"}
                 </span>
-                <span className="font-medium text-amber-600 dark:text-amber-300">{isA2ARun ? "Task" : "Open"}</span>
+                <span className="font-medium text-amber-600 dark:text-amber-300">{reconnectLabel}</span>
               </div>
             </button>
           );

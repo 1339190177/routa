@@ -378,6 +378,7 @@ export function KanbanCardDetail({
           {!splitMode && (
             <KanbanCardActivityPanel
               task={task}
+              refreshSignal={refreshSignal}
               sessions={sessions ?? []}
               specialists={specialists}
               specialistLanguage={specialistLanguage}
