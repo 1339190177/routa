@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useWorkspaces } from "@/client/hooks/use-workspaces";
+import { Select } from "./select";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -481,7 +482,7 @@ function ExecuteModal({ workflow, onClose }: ExecuteModalProps) {
             <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
               Workspace
             </label>
-            <select
+            <Select
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
               disabled={executing || workspacesHook.loading || workspacesHook.workspaces.length === 0}
@@ -496,7 +497,7 @@ function ExecuteModal({ workflow, onClose }: ExecuteModalProps) {
                   </option>
                 ))
               )}
-            </select>
+            </Select>
           </div>
 
           <div>

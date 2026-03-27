@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
+import { Select } from "./select";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -406,7 +407,7 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Role *
                     </label>
-                    <select
+                    <Select
                       value={form.role}
                       onChange={(e) => setForm({ ...form, role: e.target.value as AgentRole })}
                       className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-slate-100"
@@ -416,7 +417,7 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
                           {label} - {ROLE_DESCRIPTIONS[key as AgentRole]}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
 
                   {/* Model Tier */}
@@ -424,7 +425,7 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       Default Model Tier *
                     </label>
-                    <select
+                    <Select
                       value={form.defaultModelTier}
                       onChange={(e) => setForm({ ...form, defaultModelTier: e.target.value as ModelTier })}
                       className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm text-slate-900 dark:text-slate-100"
@@ -434,7 +435,7 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
                           {label}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 </div>
 

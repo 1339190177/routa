@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Select } from "./select";
 
 import { desktopAwareFetch } from "../utils/diagnostics";
 import {
@@ -235,13 +236,13 @@ export function McpServersTab() {
 
           <div className="space-y-1">
             <label className={labelCls}>Type</label>
-            <select value={form.type}
+            <Select value={form.type}
               onChange={(event) => setForm({ ...form, type: event.target.value as McpServerType })}
               className={inputCls}>
               <option value="stdio">stdio (local command)</option>
               <option value="http">http (Streamable HTTP)</option>
               <option value="sse">sse (Server-Sent Events)</option>
-            </select>
+            </Select>
           </div>
 
           {form.type === "stdio" ? (

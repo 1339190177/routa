@@ -30,6 +30,7 @@ import {
   ONBOARDING_COMPLETED_KEY,
 } from "../utils/onboarding";
 import { useTranslation } from "@/i18n";
+import { Select } from "./select";
 import {
   AGENT_ROLES,
   ROLE_DESCRIPTIONS,
@@ -219,7 +220,7 @@ function RolesTab({
                 <div className="text-xs font-medium text-slate-700 dark:text-slate-300">{role}</div>
                 <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">{ROLE_DESCRIPTIONS[role]}</div>
               </div>
-              <select
+              <Select
                 value={settings[role]?.provider ?? ""}
                 onChange={(event) => onChange(role, "provider", event.target.value)}
                 className="w-[180px] shrink-0 text-xs px-2 py-1.5 rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#1e2130] text-slate-900 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 focus:outline-none"
@@ -264,7 +265,7 @@ function RolesTab({
                     ))}
                   </optgroup>
                 )}
-              </select>
+              </Select>
               <input
                 type="text"
                 list={datalistId}

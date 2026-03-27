@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState } from "react";
+import { Select } from "./select";
 
 import { desktopAwareFetch } from "../utils/diagnostics";
 import {
@@ -176,19 +177,19 @@ export function SpecialistsTab({ modelDefs }: SpecialistsTabProps) {
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className={labelCls}>Role *</label>
-              <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as AgentRole })} className={inputCls}>
+              <Select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as AgentRole })} className={inputCls}>
                 {(["ROUTA", "CRAFTER", "GATE", "DEVELOPER"] as AgentRole[]).map((role) => (
                   <option key={role} value={role}>{role}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <label className={labelCls}>Model Tier *</label>
-              <select value={form.defaultModelTier} onChange={(event) => setForm({ ...form, defaultModelTier: event.target.value as ModelTier })} className={inputCls}>
+              <Select value={form.defaultModelTier} onChange={(event) => setForm({ ...form, defaultModelTier: event.target.value as ModelTier })} className={inputCls}>
                 {(["FAST", "BALANCED", "SMART"] as ModelTier[]).map((tier) => (
                   <option key={tier} value={tier}>{TIER_LABELS[tier]}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
           <div className="space-y-1">

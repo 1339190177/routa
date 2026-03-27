@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { Select } from "./select";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -434,8 +435,8 @@ export function GitHubWebhookPanel() {
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <select
-                    value={pollingInterval}
+                  <Select
+                    value={String(pollingInterval)}
                     onChange={(e) => handleUpdatePollingInterval(Number(e.target.value))}
                     className="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                     disabled={!pollingEnabled}
@@ -444,7 +445,7 @@ export function GitHubWebhookPanel() {
                     <option value={30}>30s</option>
                     <option value={60}>1min</option>
                     <option value={300}>5min</option>
-                  </select>
+                  </Select>
                   <button
                     onClick={handleManualCheck}
                     disabled={pollingChecking}
@@ -682,7 +683,7 @@ function WebhookConfigForm({ form, setForm, editId, saving, specialists, onSubmi
         <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
           Trigger Agent <span className="text-red-500">*</span>
         </label>
-        <select
+        <Select
           data-testid="webhook-agent"
           value={form.triggerAgentId}
           onChange={(e) => setForm((p) => ({ ...p, triggerAgentId: e.target.value }))}
@@ -701,7 +702,7 @@ function WebhookConfigForm({ form, setForm, editId, saving, specialists, onSubmi
               <option value="developer">Developer</option>
             </>
           )}
-        </select>
+        </Select>
       </div>
 
       {/* Prompt Template */}
