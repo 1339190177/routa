@@ -820,16 +820,17 @@ function DockerConfigModalContent({ open: _open, errorMessage, onClose, onSaved 
 }
 
 // ─── Main Settings Panel ───────────────────────────────────────────────────
-export function SettingsPanel({ open, onClose, providers, initialTab, onResetOnboarding }: SettingsPanelProps) {
+export function SettingsPanel({ open, onClose, providers, initialTab, onResetOnboarding, variant = "modal" }: SettingsPanelProps) {
   if (!open) return null;
-  return <SettingsPanelContent onClose={onClose} providers={providers} initialTab={initialTab} onResetOnboarding={onResetOnboarding} />;
+  return <SettingsPanelContent onClose={onClose} providers={providers} initialTab={initialTab} onResetOnboarding={onResetOnboarding} variant={variant} />;
 }
 
-function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboarding }: Omit<SettingsPanelProps, "open">) {
+function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboarding, variant = "modal" }: Omit<SettingsPanelProps, "open">) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<DefaultProviderSettings>(() => loadDefaultProviders());
   const [modelDefs, setModelDefs] = useState<ModelDefinition[]>(() => loadModelDefinitions());
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => initialTab ?? "providers");
+  const isPageVariant = variant === "page";
 
   const handleChange = useCallback(
     (role: AgentRoleKey, field: "provider" | "model", value: string) => {
@@ -859,6 +860,125 @@ function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboardin
     { key: "models", label: t.settings.models },
     { key: "webhooks", label: t.settings.webhooks },
   ];
+
+  const TAB_GROUPS: Array<{ label: string; tabs: typeof TAB_DEFS }> = [
+    { label: "General", tabs: [TAB_DEFS[0], TAB_DEFS[1]] },
+    { label: "Advanced", tabs: [TAB_DEFS[2], TAB_DEFS[3]] },
+  ];
+
+  const activeTabMeta = TAB_DEFS.find((tab) => tab.key === activeTab) ?? TAB_DEFS[0];
+
+  const renderTabContent = () => (
+    <div className="flex-1 min-h-0 overflow-hidden">
+      {activeTab === "providers" && (
+        <div className="px-4 py-4 space-y-4 overflow-y-auto h-full">
+          <div className={settingsCardCls}>
+            <p className={sectionHeadCls}>Providers</p>
+            <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+              Manage detected ACP providers, install additional agents, hide noisy entries, and configure provider-specific credentials.
+            </p>
+          </div>
+
+          <OnboardingSettingsSection onResetOnboarding={onResetOnboarding} />
+
+          <ProviderCatalogSection allProviders={providers} />
+
+          <div className={settingsCardCls}>
+            <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Provider Credentials</p>
+            <DockerOpenCodeSection embedded={true} />
+          </div>
+
+          <CustomAcpProvidersSection />
+
+          <div className={settingsCardCls}>
+            <div className="mb-3">
+              <p className={sectionHeadCls}>ACP Registry</p>
+              <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+                Browse and install ACP agents from the registry.
+              </p>
+            </div>
+            <AgentInstallPanel embedded={true} />
+          </div>
+        </div>
+      )}
+      {activeTab === "roles" && (
+        <RolesTab
+          settings={settings}
+          modelDefs={modelDefs}
+          builtinProviders={builtinProviders}
+          customProviders={customProviders}
+          registryProviders={registryProviders}
+          onChange={handleChange}
+          onOpenModelsTab={() => handleTabChange("models")}
+        />
+      )}
+      {activeTab === "models" && <ModelsTab />}
+      {activeTab === "webhooks" && <WebhooksTab />}
+    </div>
+  );
+
+  if (isPageVariant) {
+    return (
+      <div className="flex h-full min-h-0 bg-desktop-bg-primary text-desktop-text-primary">
+        <aside className="flex w-64 shrink-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary px-4 py-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-desktop-text-secondary transition-colors hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+            </svg>
+            <span>Back to app</span>
+          </button>
+
+          <div className="mt-8 space-y-6">
+            {TAB_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-tertiary">
+                  {group.label}
+                </p>
+                <div className="mt-2 space-y-1">
+                  {group.tabs.map((tab) => {
+                    const active = activeTab === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => handleTabChange(tab.key)}
+                        className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                          active
+                            ? "bg-desktop-bg-active text-desktop-accent"
+                            : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="border-b border-desktop-border px-8 py-8">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-tertiary">Preferences</p>
+            <h1 className="mt-2 text-3xl font-semibold text-desktop-text-primary">{activeTabMeta.label}</h1>
+            <p className="mt-2 max-w-2xl text-sm text-desktop-text-secondary">
+              {activeTab === "providers" && "Configure providers, credentials, onboarding, and agent installation defaults."}
+              {activeTab === "roles" && "Set default provider and model behavior for each built-in Routa role."}
+              {activeTab === "models" && "Manage custom model aliases, base URLs, and shared model definitions."}
+              {activeTab === "webhooks" && "Review GitHub webhook triggers and development-oriented automation hooks."}
+            </p>
+          </header>
+
+          {renderTabContent()}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -902,53 +1022,7 @@ function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboardin
           ))}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          {activeTab === "providers" && (
-            <div className="px-4 py-4 space-y-4 overflow-y-auto h-full">
-              <div className={settingsCardCls}>
-                <p className={sectionHeadCls}>Providers</p>
-                <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
-                  Manage detected ACP providers, install additional agents, hide noisy entries, and configure provider-specific credentials.
-                </p>
-              </div>
-
-              <OnboardingSettingsSection onResetOnboarding={onResetOnboarding} />
-
-              <ProviderCatalogSection allProviders={providers} />
-
-              <div className={settingsCardCls}>
-                <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Provider Credentials</p>
-                <DockerOpenCodeSection embedded={true} />
-              </div>
-
-              <CustomAcpProvidersSection />
-
-              <div className={settingsCardCls}>
-                <div className="mb-3">
-                  <p className={sectionHeadCls}>ACP Registry</p>
-                  <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
-                    Browse and install ACP agents from the registry.
-                  </p>
-                </div>
-                <AgentInstallPanel embedded={true} />
-              </div>
-            </div>
-          )}
-          {activeTab === "roles" && (
-            <RolesTab
-              settings={settings}
-              modelDefs={modelDefs}
-              builtinProviders={builtinProviders}
-              customProviders={customProviders}
-              registryProviders={registryProviders}
-              onChange={handleChange}
-              onOpenModelsTab={() => handleTabChange("models")}
-            />
-          )}
-          {activeTab === "models" && <ModelsTab />}
-          {activeTab === "webhooks" && <WebhooksTab />}
-        </div>
+        {renderTabContent()}
 
         <SystemInfoFooter />
 

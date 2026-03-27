@@ -156,6 +156,7 @@ export interface SettingsPanelProps {
   providers: ProviderOption[];
   initialTab?: SettingsTab;
   onResetOnboarding?: () => void;
+  variant?: "modal" | "page";
 }
 
 export type SettingsTab =
