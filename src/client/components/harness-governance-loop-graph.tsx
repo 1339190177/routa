@@ -52,6 +52,7 @@ type WorkflowSummary = {
   flowCount: number;
   jobCount: number;
   remoteSignals: string[];
+  hasRepairLoop: boolean;
 };
 
 type InstructionSummary = {
@@ -81,14 +82,12 @@ type HarnessGovernanceLoopGraphProps = {
   hardGateCount: number;
 };
 
-type LoopNodeKind = "core" | "local" | "spec" | "plan" | "remote" | "feedback";
+type LoopNodeKind = "core" | "local" | "spec" | "metric" | "plan" | "remote" | "feedback";
 type LoopTone = "neutral" | "sky" | "emerald" | "amber" | "violet";
 
 type LoopNodeData = {
   kind: LoopNodeKind;
   title: string;
-  subtitle: string;
-  meta: string[];
   tone: LoopTone;
 };
 
@@ -149,26 +148,18 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
       <Handle id="source-bottom" type="source" position={Position.Bottom} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
       <Handle id="source-left" type="source" position={Position.Left} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
       <div className={isCore
-        ? `flex h-[208px] w-[208px] flex-col items-center justify-center rounded-full border bg-desktop-bg-primary/96 px-5 py-5 text-center shadow-sm ${tone.border} ${tone.shadow}`
-        : `w-[188px] rounded-[24px] border bg-desktop-bg-primary/96 px-4 py-3 shadow-sm ${tone.border} ${tone.shadow}`}>
+        ? `flex h-[176px] w-[176px] flex-col items-center justify-center rounded-full border bg-desktop-bg-primary/96 px-4 py-4 text-center shadow-sm ${tone.border} ${tone.shadow}`
+        : `flex h-[78px] w-[164px] items-center rounded-[22px] border bg-desktop-bg-primary/96 px-3.5 py-3 shadow-sm ${tone.border} ${tone.shadow}`}>
         <div className={isCore ? "flex flex-col items-center" : "flex items-start justify-between gap-3"}>
           <div className="min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">{data.kind}</div>
-            <div className="mt-1 text-[13px] font-semibold text-desktop-text-primary">{data.title}</div>
-            <div className={`mt-1 text-[11px] leading-5 text-desktop-text-secondary ${isCore ? "max-w-[160px]" : ""}`}>{data.subtitle}</div>
+            <div className="mt-1 text-[12px] font-semibold text-desktop-text-primary">{data.title}</div>
           </div>
           {!isCore ? (
             <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${tone.badge}`}>
               {data.kind}
             </span>
           ) : null}
-        </div>
-        <div className={`mt-3 flex flex-wrap gap-1.5 ${isCore ? "justify-center" : ""}`}>
-          {data.meta.map((item) => (
-            <span key={item} className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2 py-0.5 text-[10px] text-desktop-text-secondary">
-              {item}
-            </span>
-          ))}
         </div>
       </div>
     </div>
@@ -251,101 +242,100 @@ function summarizeSignals(flows: GitHubActionsFlow[]) {
   return [...orderedSignals, ...extraSignals].slice(0, 3);
 }
 
+function detectRepairLoop(flows: GitHubActionsFlow[]) {
+  return flows.some((flow) => {
+    const name = `${flow.id} ${flow.name}`.toLowerCase();
+    return name.includes("ci-red-fixer") || name.includes("red fixer") || name.includes("repair");
+  });
+}
+
 function buildGraph(args: {
-  repoLabel: string;
-  selectedTier: TierValue;
-  hookSummary: HookSummary | null;
-  workflowSummary: WorkflowSummary | null;
   instructionSummary: InstructionSummary | null;
-  fitnessFileCount: number;
-  dimensionCount: number;
-  metricCount: number;
-  hardGateCount: number;
+  workflowSummary: WorkflowSummary | null;
 }) {
   const {
-    repoLabel,
-    selectedTier,
-    hookSummary,
-    workflowSummary,
     instructionSummary,
-    fitnessFileCount,
-    dimensionCount,
-    metricCount,
-    hardGateCount,
+    workflowSummary,
   } = args;
 
   const nodes: Node<LoopNodeData>[] = [
-    buildNode("instructions", 92, 228, {
+    buildNode("instructions", 220, 246, {
       kind: "spec",
       title: instructionSummary?.fileName ?? "Instruction File",
-      subtitle: instructionSummary?.fallbackUsed ? "Fallback repository rulebook." : "Preferred repository rulebook.",
-      meta: instructionSummary?.fallbackUsed ? ["fallback", "hook preflight"] : ["preferred", "hook preflight"],
       tone: "neutral",
     }),
-    buildNode("hook", 246, 112, {
+    buildNode("fitness", 470, 246, {
+      kind: "metric",
+      title: "Fitness Files",
+      tone: "emerald",
+    }),
+    buildNode("hook", 720, 246, {
       kind: "local",
       title: "Hook Runtime",
-      subtitle: "First local gate.",
-      meta: hookSummary
-        ? [`${hookSummary.profileCount} profiles`, `${hookSummary.hookCount} hooks`]
-        : ["loading hooks", "git bindings"],
       tone: "sky",
     }),
-    buildNode("fitness", 516, 44, {
-      kind: "spec",
-      title: "Fitness Files",
-      subtitle: "Narrative + executable specs.",
-      meta: [`${fitnessFileCount} files`, `${dimensionCount} dimensions`],
-      tone: "emerald",
-    }),
-    buildNode("plan", 836, 110, {
+    buildNode("plan", 970, 246, {
       kind: "plan",
       title: "Execution Plan",
-      subtitle: "Filter, dispatch, score.",
-      meta: [`${metricCount} metrics`, `${hardGateCount} hard gates`],
       tone: "amber",
     }),
-    buildNode("actions", 862, 366, {
+    buildNode("actions", 970, 430, {
       kind: "remote",
       title: "GitHub Actions",
-      subtitle: "Remote enforcement.",
-      meta: workflowSummary
-        ? [`${workflowSummary.flowCount} workflows`, `${workflowSummary.jobCount} jobs`]
-        : ["loading workflows", "remote checks"],
       tone: "violet",
     }),
-    buildNode("feedback", 344, 374, {
+    buildNode("feedback", 720, 430, {
       kind: "feedback",
       title: "Evidence",
-      subtitle: "Scores feed back.",
-      meta: [
-        `${hookSummary?.mappedMetricCount ?? metricCount} metrics`,
-        `${hardGateCount} gates`,
-      ],
       tone: "emerald",
-    }),
-    buildNode("core", 552, 236, {
-      kind: "core",
-      title: "Governance Loop",
-      subtitle: "Local gates, executable fitness, and CI feedback in one loop.",
-      meta: [repoLabel, `tier ${selectedTier}`],
-      tone: "neutral",
     }),
   ];
 
   const edges: Edge[] = [
-    buildEdge("instructions-hook", "instructions", "hook", "source-right", "target-left", "rulebook", "#64748b", "6 4"),
-    buildEdge("hook-fitness", "hook", "fitness", "source-right", "target-left", "local gate", "#3b82f6"),
-    buildEdge("fitness-plan", "fitness", "plan", "source-right", "target-top", "frontmatter", "#10b981"),
+    buildEdge("instructions-fitness", "instructions", "fitness", "source-right", "target-left", "rulebook", "#64748b", "6 4"),
+    buildEdge("fitness-hook", "fitness", "hook", "source-right", "target-left", "local gate", "#3b82f6"),
+    buildEdge("fitness-plan", "fitness", "plan", "source-right", "target-left", "frontmatter", "#10b981"),
     buildEdge("plan-actions", "plan", "actions", "source-bottom", "target-top", "dispatch", "#f59e0b"),
     buildEdge("actions-feedback", "actions", "feedback", "source-left", "target-right", "artifacts", "#8b5cf6"),
     buildEdge("feedback-instructions", "feedback", "instructions", "source-left", "target-bottom", "tighten loop", "#059669", "6 4"),
     buildEdge("feedback-hook", "feedback", "hook", "source-top", "target-bottom", "internal loop", "#38bdf8", "6 4"),
-    buildEdge("actions-core", "actions", "core", "source-left", "target-right", "remote signal", "#a855f7", "6 4"),
-    buildEdge("core-hook", "core", "hook", "source-left", "target-right", "govern", "#60a5fa", "6 4"),
+    ...(workflowSummary?.hasRepairLoop
+      ? [
+        {
+          id: "actions-self-heal",
+          source: "actions",
+          target: "actions",
+          sourceHandle: "source-right",
+          targetHandle: "target-top",
+          type: "smoothstep",
+          label: "ci red fixer",
+          style: {
+            stroke: "#7c3aed",
+            strokeWidth: 1.8,
+            strokeDasharray: "6 4",
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: "#7c3aed",
+          },
+          labelStyle: {
+            fontSize: 10,
+            fill: "#475569",
+            fontWeight: 500,
+          },
+          labelBgPadding: [6, 3],
+          labelBgBorderRadius: 8,
+          labelBgStyle: {
+            fill: "rgba(248, 250, 252, 0.92)",
+            fillOpacity: 1,
+            stroke: "rgba(203, 213, 225, 0.9)",
+          },
+        } satisfies Edge,
+      ]
+      : []),
   ];
 
-  return { nodes, edges, minHeight: 568 };
+  return { nodes, edges, minHeight: 592 };
 }
 
 export function HarnessGovernanceLoopGraph({
@@ -356,12 +346,10 @@ export function HarnessGovernanceLoopGraph({
   selectedTier,
   specsLoading,
   specsError,
-  fitnessFileCount,
   dimensionCount,
   planLoading,
   planError,
   metricCount,
-  hardGateCount,
 }: HarnessGovernanceLoopGraphProps) {
   const hasContext = Boolean(workspaceId && codebaseId && repoPath);
   const contextKey = hasContext ? `${workspaceId}:${codebaseId}:${repoPath}` : "";
@@ -446,10 +434,11 @@ export function HarnessGovernanceLoopGraph({
         }
         const data = payload as GitHubActionsFlowsResponse;
         const flows = Array.isArray(data.flows) ? data.flows : [];
-        const summary: WorkflowSummary = {
+    const summary: WorkflowSummary = {
           flowCount: flows.length,
           jobCount: flows.reduce((sum, flow) => sum + (flow.jobs?.length ?? 0), 0),
           remoteSignals: summarizeSignals(flows),
+          hasRepairLoop: detectRepairLoop(flows),
         };
         setWorkflowState({
           data: summary,
@@ -508,17 +497,10 @@ export function HarnessGovernanceLoopGraph({
 
   const graph = useMemo(
     () => buildGraph({
-      repoLabel,
-      selectedTier,
-      hookSummary,
-      workflowSummary,
       instructionSummary,
-      fitnessFileCount,
-      dimensionCount,
-      metricCount,
-      hardGateCount,
+      workflowSummary,
     }),
-    [dimensionCount, fitnessFileCount, hardGateCount, hookSummary, instructionSummary, metricCount, repoLabel, selectedTier, workflowSummary],
+    [instructionSummary, workflowSummary],
   );
 
   const graphIssues = [specsError, planError, hookState.error, workflowState.error, instructionsState.error].filter(Boolean);
@@ -578,23 +560,23 @@ export function HarnessGovernanceLoopGraph({
 
           <div className="relative overflow-hidden rounded-2xl border border-desktop-border bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))]">
             <div className="pointer-events-none absolute inset-0">
-              <div className="absolute left-[36px] top-[8px] h-[492px] w-[1080px] rounded-[999px] border-2 border-dashed border-sky-300/60 bg-slate-100/25" />
-              <div className="absolute left-[80px] top-[34px] h-[466px] w-[640px] rounded-[999px] border-[3px] border-sky-500/80 bg-[radial-gradient(circle_at_center,rgba(253,224,71,0.30),rgba(245,158,11,0.18))]" />
-              <div className="absolute left-[122px] top-[140px] h-[214px] w-[360px] rounded-[999px] border-2 border-dashed border-sky-400/75 bg-sky-100/20" />
+              <div className="absolute left-[34px] top-[10px] h-[540px] w-[1180px] rounded-[999px] border-2 border-dashed border-sky-300/60 bg-slate-100/25" />
+              <div className="absolute left-[180px] top-[92px] h-[390px] w-[920px] rounded-[999px] border-[3px] border-sky-500/80 bg-[radial-gradient(circle_at_center,rgba(253,224,71,0.30),rgba(245,158,11,0.18))]" />
+              <div className="absolute left-[164px] top-[142px] h-[236px] w-[540px] rounded-[999px] border-2 border-dashed border-sky-400/75 bg-sky-100/20" />
 
-              <div className="absolute left-[48px] top-[20px] rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 shadow-sm">
-                <div className="text-[18px] font-bold text-slate-900">外部反馈环</div>
-                <div className="text-[13px] font-semibold text-slate-600">Agent + DevOps</div>
+              <div className="absolute left-[54px] top-[276px] max-w-[126px] text-left text-slate-600">
+                <div className="text-[11px] font-semibold tracking-[0.06em]">外部反馈环</div>
+                <div className="text-[9px] font-medium text-slate-500">GitHub Actions + remote evidence</div>
               </div>
 
-              <div className="absolute left-[164px] top-[58px] rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 shadow-sm">
-                <div className="text-[18px] font-bold text-slate-900">提交反馈环</div>
-                <div className="text-[13px] font-semibold text-slate-600">Agent + Hook 工具</div>
+              <div className="absolute left-[640px] top-[104px] max-w-[220px] text-left text-slate-600">
+                <div className="text-[11px] font-semibold tracking-[0.06em]">提交反馈环</div>
+                <div className="text-[9px] font-medium text-slate-500">Hook Runtime + Fitness + Execution Plan</div>
               </div>
 
-              <div className="absolute left-[140px] top-[252px] rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 shadow-sm">
-                <div className="text-[18px] font-bold text-slate-900">内部反馈环</div>
-                <div className="text-[13px] font-semibold text-slate-600">Agent + IDE</div>
+              <div className="absolute left-[342px] top-[332px] max-w-[180px] text-left text-slate-600">
+                <div className="text-[11px] font-semibold tracking-[0.06em]">内部反馈环</div>
+                <div className="text-[9px] font-medium text-slate-500">CLAUDE.md + Fitness Files</div>
               </div>
             </div>
             <div style={{ height: graph.minHeight }}>
