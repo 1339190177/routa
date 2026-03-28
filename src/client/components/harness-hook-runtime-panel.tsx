@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CodeViewer } from "@/client/components/codemirror/code-viewer";
 
 type HookProfileName = string;
 type RuntimePhase = string;
@@ -60,6 +59,18 @@ type HooksState = {
   data: HooksResponse | null;
 };
 
+const GIT_HOOK_CATALOG = [
+  "pre-commit",
+  "prepare-commit-msg",
+  "commit-msg",
+  "post-commit",
+  "pre-rebase",
+  "post-checkout",
+  "post-merge",
+  "pre-push",
+  "post-rewrite",
+] as const;
+
 function formatTokenLabel(value: string): string {
   return value
     .split(/[-_]/u)
@@ -79,7 +90,7 @@ export function HarnessHookRuntimePanel({
     error: null,
     data: null,
   });
-  const [selectedProfileName, setSelectedProfileName] = useState<HookProfileName | null>(null);
+  const [selectedHookName, setSelectedHookName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId || !codebaseId || !repoPath) {
@@ -169,40 +180,52 @@ export function HarnessHookRuntimePanel({
       .map(({ profile }) => profile);
   }, [hooksState.data?.hookFiles, hooksState.data?.profiles]);
 
-  const defaultSelectableProfile = useMemo(
-    () => orderedProfiles.find((profile) => profile.hooks.length > 0) ?? orderedProfiles[0] ?? null,
-    [orderedProfiles],
+  const hookEntries = useMemo(() => {
+    const hookFilesByName = new Map((hooksState.data?.hookFiles ?? []).map((hook) => [hook.name, hook]));
+    const profilesByName = new Map(orderedProfiles.map((profile) => [profile.name, profile]));
+
+    return GIT_HOOK_CATALOG.map((hookName) => {
+      const hookFile = hookFilesByName.get(hookName) ?? null;
+      const runtimeProfile = hookFile?.runtimeProfileName
+        ? profilesByName.get(hookFile.runtimeProfileName) ?? null
+        : null;
+      return {
+        hookName,
+        hookFile,
+        runtimeProfile,
+        isConfigured: Boolean(hookFile && runtimeProfile),
+      };
+    });
+  }, [hooksState.data?.hookFiles, orderedProfiles]);
+
+  const defaultSelectableHook = useMemo(
+    () => hookEntries.find((entry) => entry.isConfigured) ?? null,
+    [hookEntries],
   );
 
-  const activeProfileName = useMemo(() => {
-    if (!defaultSelectableProfile) {
-      return selectedProfileName ?? "";
+  const activeHookName = useMemo(() => {
+    if (!defaultSelectableHook) {
+      return selectedHookName ?? "";
     }
 
-    const selectedProfile = orderedProfiles.find((profile) => profile.name === selectedProfileName);
-    if (selectedProfile?.hooks.length) {
-      return selectedProfile.name;
+    const selectedEntry = hookEntries.find((entry) => entry.hookName === selectedHookName && entry.isConfigured);
+    if (selectedEntry) {
+      return selectedEntry.hookName;
     }
 
-    return defaultSelectableProfile.name;
-  }, [defaultSelectableProfile, orderedProfiles, selectedProfileName]);
+    return defaultSelectableHook.hookName;
+  }, [defaultSelectableHook, hookEntries, selectedHookName]);
 
-  const runtimeProfile = useMemo(
-    () => orderedProfiles.find((profile) => profile.name === activeProfileName) ?? orderedProfiles[0] ?? null,
-    [activeProfileName, orderedProfiles],
+  const activeHookEntry = useMemo(
+    () => hookEntries.find((entry) => entry.hookName === activeHookName) ?? defaultSelectableHook ?? null,
+    [activeHookName, defaultSelectableHook, hookEntries],
   );
 
-  const boundHooks = useMemo(() => {
-    if (!runtimeProfile) {
-      return [];
-    }
-    return (hooksState.data?.hookFiles ?? []).filter((hook) => hook.runtimeProfileName === runtimeProfile.name);
-  }, [hooksState.data?.hookFiles, runtimeProfile]);
+  const runtimeProfile = activeHookEntry?.runtimeProfile ?? null;
 
   const hookCount = hooksState.data?.hookFiles.length ?? 0;
   const profileCount = hooksState.data?.profiles.length ?? 0;
   const metricCount = hooksState.data?.profiles.reduce((sum, profile) => sum + profile.metrics.length, 0) ?? 0;
-  const configFile = hooksState.data?.configFile ?? null;
 
   return (
     <section className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm">
@@ -248,145 +271,75 @@ export function HarnessHookRuntimePanel({
         </div>
       ) : null}
 
-      {configFile ? (
-        <div className="mt-4 rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Config source</div>
-              <h4 className="mt-1 text-sm font-semibold text-desktop-text-primary">{configFile.relativePath}</h4>
-              <div className="mt-2 text-[11px] leading-5 text-desktop-text-secondary">
-                Hook runtime profiles are now assembled from checked-in YAML, then resolved into phases and fitness metrics.
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 text-[10px]">
-              {configFile.schema ? (
-                <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-desktop-text-secondary">
-                  {configFile.schema}
-                </span>
-              ) : null}
-              <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-desktop-text-secondary">
-                {profileCount} profiles
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-            <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-3">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">YAML source</div>
-              <CodeViewer
-                code={configFile.source}
-                filename="hooks.yaml"
-                language="yaml"
-                maxHeight="320px"
-                showHeader={false}
-                wordWrap
-              />
-            </div>
-
-            <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Resolved profiles</div>
-              <div className="mt-3 space-y-3">
-                {orderedProfiles.map((profile) => (
-                  <div key={`config-${profile.name}`} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-[12px] font-semibold text-desktop-text-primary">{profile.name}</div>
-                      <div className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-                        {profile.fallbackMetrics.length} metrics
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-desktop-text-secondary">
-                      {profile.phases.map((phase, index) => (
-                        <span key={`${profile.name}-${phase}`} className="flex items-center gap-2">
-                          {index > 0 ? <span>{"->"}</span> : null}
-                          <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">
-                            {formatTokenLabel(phase)}
-                          </span>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] text-desktop-text-secondary">
-                      {profile.fallbackMetrics.map((metric) => (
-                        <span key={`${profile.name}-${metric}`} className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2 py-0.5">
-                          {metric}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {!hooksState.loading && !hooksState.error && !hooksState.data?.profiles.length ? (
         <div className="mt-4 rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-5 text-[11px] text-desktop-text-secondary">
           No hook profiles found for the selected repository.
         </div>
       ) : null}
 
-      {hooksState.data?.profiles.length ? (
+      {hooksState.data ? (
         <div className="mt-4 grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
           <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Profiles</div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Git hooks</div>
                 <h4 className="mt-1 text-sm font-semibold text-desktop-text-primary">Configured profiles</h4>
               </div>
               <div className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-                {hooksState.data.profiles.length} profiles
+                {hookEntries.length} hooks
               </div>
             </div>
 
-            <div className="mt-4 space-y-2">
-              {orderedProfiles.map((profile) => {
-                const isUnbound = profile.hooks.length === 0;
+            <div className="mt-4 space-y-1.5">
+              {hookEntries.map((entry) => {
+                const isSelected = activeHookEntry?.hookName === entry.hookName;
+                const profile = entry.runtimeProfile;
                 return (
                   <button
-                    key={profile.name}
+                    key={entry.hookName}
                     type="button"
-                    disabled={isUnbound}
+                    disabled={!entry.isConfigured}
                     onClick={() => {
-                      setSelectedProfileName(profile.name);
+                      if (!entry.isConfigured) {
+                        return;
+                      }
+                      setSelectedHookName(entry.hookName);
                     }}
-                    className={`w-full rounded-xl border px-3 py-3 text-left transition-colors ${
-                      runtimeProfile?.name === profile.name
+                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                      isSelected
                         ? "border-desktop-accent bg-desktop-bg-secondary text-desktop-text-primary"
-                        : isUnbound
-                          ? "cursor-not-allowed border-desktop-border bg-desktop-bg-primary/45 text-desktop-text-secondary/55"
+                        : !entry.isConfigured
+                          ? "cursor-not-allowed border-desktop-border bg-desktop-bg-primary/50 text-desktop-text-secondary/55"
                           : "border-desktop-border bg-desktop-bg-primary/80 text-desktop-text-secondary hover:bg-desktop-bg-secondary"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-[12px] font-semibold">{profile.name}</div>
-                        <div className="mt-1 text-[10px]">{profile.phases.length} phases · {profile.fallbackMetrics.length} metrics</div>
+                        <div className="text-[12px] font-semibold">{entry.hookName}</div>
+                        <div className="mt-1 text-[10px]">
+                          {profile ? `${profile.name} · ${profile.metrics.length} metrics` : "Not configured"}
+                        </div>
                       </div>
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] ${
-                        isUnbound
-                          ? "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary/60"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        entry.isConfigured
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : entry.hookFile
+                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                            : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary/60"
                       }`}>
-                        {isUnbound ? "unbound" : `${profile.hooks.length} hooks`}
+                        {entry.isConfigured ? "active" : entry.hookFile ? "unmapped" : "missing"}
                       </span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-desktop-text-secondary">
-                      {profile.phases.map((phase) => (
-                        <span
-                          key={`${profile.name}-${phase}`}
-                          className={`rounded-full border px-2 py-0.5 ${
-                            isUnbound
-                              ? "border-desktop-border bg-desktop-bg-primary/60 text-desktop-text-secondary/60"
-                              : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary"
-                          }`}
-                        >
-                          {formatTokenLabel(phase)}
-                        </span>
-                      ))}
-                    </div>
-                    {isUnbound ? (
-                      <div className="mt-2 text-[10px] text-desktop-text-secondary/60">
-                        Configured in `hooks.yaml`, but not wired by any checked-in git hook file.
+                    {profile ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-desktop-text-secondary">
+                        {profile.phases.slice(0, 3).map((phase) => (
+                          <span
+                            key={`${entry.hookName}-${phase}`}
+                            className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-0.5"
+                          >
+                            {formatTokenLabel(phase)}
+                          </span>
+                        ))}
                       </div>
                     ) : null}
                   </button>
@@ -402,11 +355,13 @@ export function HarnessHookRuntimePanel({
                   <div>
                     <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Selected profile</div>
                     <h4 className="mt-1 text-sm font-semibold text-desktop-text-primary">{runtimeProfile.name}</h4>
-                    <div className="mt-2 text-[11px] leading-5 text-desktop-text-secondary">
-                      Profile assembly comes from `hooks.yaml`, while metrics resolve from fitness docs and git hooks stay as thin trigger bindings.
-                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2 text-[10px]">
+                    {activeHookEntry ? (
+                      <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-desktop-text-secondary">
+                        {activeHookEntry.hookName}
+                      </span>
+                    ) : null}
                     <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-desktop-text-secondary">
                       {runtimeProfile.phases.length} phases
                     </span>
@@ -417,50 +372,6 @@ export function HarnessHookRuntimePanel({
                 </div>
 
                 <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Git bindings</div>
-                  <div className="mt-3 space-y-2">
-                    {boundHooks.length > 0 ? boundHooks.map((hook) => (
-                      <div key={`${runtimeProfile.name}-${hook.name}`} className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <div className="text-[12px] font-semibold text-desktop-text-primary">{hook.name}</div>
-                            <div className="mt-1 font-mono text-[10px] text-desktop-text-secondary">{hook.relativePath}</div>
-                            <div className="mt-2 break-all font-mono text-[10px] text-desktop-text-secondary">{hook.triggerCommand}</div>
-                          </div>
-                          {hook.skipEnvVar ? (
-                            <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-                              skip {hook.skipEnvVar}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    )) : (
-                      <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-4 text-[11px] text-desktop-text-secondary">
-                        No checked-in git hook file currently binds to this profile.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-                  <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Phase contract</div>
-                      <div className="mt-3 space-y-2">
-                        {runtimeProfile.phases.map((phase, index) => (
-                          <div key={phase} className="flex items-center gap-3 rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-3 py-2 text-[11px]">
-                            <div className="flex h-6 w-6 items-center justify-center rounded-full border border-desktop-border bg-desktop-bg-secondary text-[10px] text-desktop-text-primary">
-                              {index + 1}
-                            </div>
-                            <div>
-                              <div className="font-semibold text-desktop-text-primary">{formatTokenLabel(phase)}</div>
-                              <div className="text-desktop-text-secondary">{phase}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                  <div className="rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Mapped metrics</div>
@@ -507,10 +418,13 @@ export function HarnessHookRuntimePanel({
                           </div>
                         ))}
                       </div>
-                  </div>
                 </div>
               </>
-            ) : null}
+            ) : (
+              <div className="rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-5 text-[11px] text-desktop-text-secondary">
+                No configured git hook currently maps to a selectable runtime profile.
+              </div>
+            )}
           </div>
         </div>
       ) : null}
