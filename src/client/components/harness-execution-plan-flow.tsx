@@ -110,10 +110,13 @@ function PlanNodeView({ data }: NodeProps<Node<PlanNodeData>>) {
   const tone = getStatusTone(data.status);
   const interactive = typeof data.onToggle === "function";
   const widthClass = data.kind === "metric"
-    ? "w-[208px]"
+    ? "w-[232px]"
     : data.kind === "dimension"
-      ? "w-[224px]"
-      : "w-[248px]";
+      ? "w-[252px]"
+      : "w-[292px]";
+  const visibleMeta = data.kind === "dimension" || data.kind === "metric"
+    ? data.meta ?? []
+    : [];
 
   return (
     <div className="relative">
@@ -135,7 +138,9 @@ function PlanNodeView({ data }: NodeProps<Node<PlanNodeData>>) {
             <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">{data.kind}</div>
             <div className="mt-1 text-[13px] font-semibold text-desktop-text-primary">{data.title}</div>
             {data.subtitle ? (
-              <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{data.subtitle}</div>
+              <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">
+                {data.subtitle}
+              </div>
             ) : null}
           </div>
           {data.status ? (
@@ -144,9 +149,9 @@ function PlanNodeView({ data }: NodeProps<Node<PlanNodeData>>) {
             </span>
           ) : null}
         </div>
-        {data.meta && data.meta.length > 0 ? (
+        {visibleMeta.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {data.meta.map((item) => (
+            {visibleMeta.map((item) => (
               <span key={item} className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2 py-0.5 text-[10px] text-desktop-text-secondary">
                 {item}
               </span>
@@ -188,8 +193,8 @@ function buildNode(id: string, x: number, y: number, data: PlanNodeData): Node<P
     type: "plan",
     position: { x, y },
     data,
-    draggable: false,
-    selectable: false,
+    draggable: true,
+    selectable: true,
     sourcePosition: data.kind === "metric" ? Position.Right : Position.Bottom,
     targetPosition: data.kind === "metric" ? Position.Left : Position.Top,
   };
@@ -206,11 +211,11 @@ function buildPlanGraph(
   const stageX = 420;
   const dimensionsTopY = 470;
   const dimensionsStartX = 72;
-  const dimensionColumnWidth = 272;
-  const dimensionColumns = 3;
+  const dimensionColumnWidth = 284;
+  const dimensionColumns = Math.max(plan.dimensions.length, 1);
   const dimensionRowHeight = 180;
-  const metricRowOffsetY = 72;
-  const metricSpacingX = 228;
+  const metricRowOffsetY = 92;
+  const metricSpacingX = 264;
   const rowContentHeight = 124;
   const dimensionPositions = new Map<string, { x: number; y: number }>();
 
@@ -259,6 +264,8 @@ function buildPlanGraph(
   let maxMetricRight = 0;
   let dimensionGridBottom = dimensionsTopY;
 
+  const activeDimensionName = plan.dimensions.find((dimension) => expandedDimensions.has(dimension.name))?.name ?? null;
+
   plan.dimensions.forEach((dimension, dimensionIndex) => {
     const dimensionColumn = dimensionIndex % dimensionColumns;
     const dimensionRow = Math.floor(dimensionIndex / dimensionColumns);
@@ -281,6 +288,10 @@ function buildPlanGraph(
       },
     }));
 
+    const dispatchEdgeStatus: EdgeStatus = dimension.name === activeDimensionName
+      ? (hasHardMetric ? "hard" : "pass")
+      : "flow";
+
     edges.push({
       id: `dispatch-${dimensionId}`,
       source: "dispatch",
@@ -288,8 +299,11 @@ function buildPlanGraph(
       type: "smoothstep",
       sourceHandle: "bottom",
       targetHandle: "top",
-      style: buildEdgeStyle(hasHardMetric ? "hard" : "pass"),
-      markerEnd: { type: MarkerType.ArrowClosed, color: hasHardMetric ? "#dc2626" : "#059669" },
+      style: buildEdgeStyle(dispatchEdgeStatus),
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: dispatchEdgeStatus === "hard" ? "#dc2626" : dispatchEdgeStatus === "pass" ? "#059669" : "#94a3b8",
+      },
     });
 
     dimensionGridBottom = Math.max(dimensionGridBottom, dimensionY + rowContentHeight);
@@ -330,12 +344,14 @@ function buildPlanGraph(
       maxMetricRight = Math.max(maxMetricRight, metricX + 208);
     });
 
-    currentMetricsY += rowContentHeight + 44;
+    currentMetricsY += rowContentHeight;
   }
 
-  const gatesY = currentMetricsY + 24;
-  const gatesX = 96;
-  const reportX = Math.max(420, Math.min((maxMetricRight || 920) - 120, 760));
+  const detailLaneY = currentMetricsY;
+  const gatesX = stageX;
+  const gatesY = detailLaneY + 24;
+  const reportX = stageX;
+  const reportY = gatesY + 148;
 
   nodes.push(
     buildNode("gates", gatesX, gatesY, {
@@ -345,7 +361,7 @@ function buildPlanGraph(
       meta: [`${plan.hardGateCount} hard`, "blocked on failure"],
       status: plan.hardGateCount > 0 ? "blocked" : "pass",
     }),
-    buildNode("report", reportX, gatesY, {
+    buildNode("report", reportX, reportY, {
       kind: "stage",
       title: "Report",
       subtitle: "Weighted dimension score and final state.",
@@ -359,8 +375,8 @@ function buildPlanGraph(
     source: "gates",
     target: "report",
     type: "smoothstep",
-    sourceHandle: "right",
-    targetHandle: "left",
+    sourceHandle: "bottom",
+    targetHandle: "top",
     style: buildEdgeStyle(plan.hardGateCount > 0 ? "blocked" : "pass"),
     markerEnd: { type: MarkerType.ArrowClosed, color: plan.hardGateCount > 0 ? "#64748b" : "#059669" },
   });
@@ -397,7 +413,7 @@ function buildPlanGraph(
   return {
     nodes,
     edges,
-    minHeight: Math.max(780, gatesY + 180),
+    minHeight: Math.max(920, reportY + 180),
   };
 }
 
@@ -523,9 +539,9 @@ export function HarnessExecutionPlanFlow({
                 nodes={graph.nodes}
                 edges={graph.edges}
                 nodeTypes={nodeTypes}
-                nodesDraggable={false}
+                nodesDraggable
                 nodesConnectable={false}
-                elementsSelectable={false}
+                elementsSelectable
                 zoomOnScroll
                 panOnDrag
                 minZoom={0.42}
