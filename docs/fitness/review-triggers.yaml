@@ -46,7 +46,7 @@ review_triggers:
     severity: high
     action: require_human_review
 
-  - name: cross_boundary_change_web_rust_tools
+  - name: cross_boundary_change_web_rust
     type: cross_boundary_change
     boundaries:
       web:
@@ -55,8 +55,6 @@ review_triggers:
       rust:
         - crates/**
         - apps/desktop/src-tauri/**
-      tools:
-        - tools/**
     min_boundaries: 2
     severity: medium
     action: require_human_review
