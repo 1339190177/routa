@@ -59,16 +59,27 @@ type FrontmatterMetric = {
   name?: string;
 };
 
-const DEFAULT_PROFILE_METRICS: Record<HookProfileName, readonly string[]> = {
-  "pre-push": ["eslint_pass", "ts_typecheck_pass", "ts_test_pass", "clippy_pass", "rust_test_pass"],
-  "pre-commit": ["eslint_pass"],
-  "local-validate": ["eslint_pass", "ts_typecheck_pass", "ts_test_pass", "clippy_pass", "rust_test_pass"],
+type HookRuntimeConfigFile = {
+  schema?: string;
+  profiles?: Record<string, {
+    phases?: unknown;
+    metrics?: unknown;
+  }>;
 };
 
-const DEFAULT_RUNTIME_PROFILES: Record<HookProfileName, RuntimePhase[]> = {
-  "pre-push": ["submodule", "fitness", "review"],
-  "pre-commit": ["fitness-fast"],
-  "local-validate": ["fitness", "review"],
+const DEFAULT_RUNTIME_PROFILES: Record<HookProfileName, { phases: RuntimePhase[]; metrics: string[] }> = {
+  "pre-push": {
+    phases: ["submodule", "fitness", "review"],
+    metrics: ["eslint_pass", "ts_typecheck_pass", "ts_test_pass", "clippy_pass", "rust_test_pass"],
+  },
+  "pre-commit": {
+    phases: ["fitness-fast"],
+    metrics: ["eslint_pass"],
+  },
+  "local-validate": {
+    phases: ["fitness", "review"],
+    metrics: ["eslint_pass", "ts_typecheck_pass", "ts_test_pass", "clippy_pass", "rust_test_pass"],
+  },
 };
 
 export const runtime = "nodejs";
@@ -103,6 +114,43 @@ function extractTriggerCommand(source: string): string {
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
   return commandLines.at(-1) ?? "(no command detected)";
+}
+
+function isRuntimePhase(value: unknown): value is RuntimePhase {
+  return value === "submodule" || value === "fitness" || value === "fitness-fast" || value === "review";
+}
+
+function normalizeStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
+}
+
+async function loadHookRuntimeProfiles(repoRoot: string): Promise<Record<HookProfileName, { phases: RuntimePhase[]; metrics: string[] }>> {
+  const configPath = path.join(repoRoot, "docs", "fitness", "runtime", "hooks.yaml");
+  if (!fs.existsSync(configPath)) {
+    return DEFAULT_RUNTIME_PROFILES;
+  }
+
+  const raw = await fsp.readFile(configPath, "utf-8");
+  const parsed = (yaml.load(raw) ?? {}) as HookRuntimeConfigFile;
+  const configuredProfiles = parsed.profiles ?? {};
+  const profiles = { ...DEFAULT_RUNTIME_PROFILES };
+
+  for (const profileName of Object.keys(DEFAULT_RUNTIME_PROFILES) as HookProfileName[]) {
+    const configured = configuredProfiles[profileName];
+    if (!configured) {
+      continue;
+    }
+
+    const phases = Array.isArray(configured.phases) ? configured.phases.filter(isRuntimePhase) : [];
+    const metrics = normalizeStringList(configured.metrics);
+
+    profiles[profileName] = {
+      phases: phases.length > 0 ? phases : [...DEFAULT_RUNTIME_PROFILES[profileName].phases],
+      metrics: metrics.length > 0 ? metrics : [...DEFAULT_RUNTIME_PROFILES[profileName].metrics],
+    };
+  }
+
+  return profiles;
 }
 
 async function loadMetricLookup(repoRoot: string): Promise<{
@@ -157,12 +205,13 @@ async function loadMetricLookup(repoRoot: string): Promise<{
 function buildProfileSummaries(
   hookFiles: HookFileSummary[],
   metricLookup: Map<string, Omit<HookMetricSummary, "resolved">>,
+  runtimeProfiles: Record<HookProfileName, { phases: RuntimePhase[]; metrics: string[] }>,
 ): HookRuntimeProfileSummary[] {
-  return (Object.keys(DEFAULT_RUNTIME_PROFILES) as HookProfileName[]).map((profileName) => {
-    const fallbackMetrics = [...DEFAULT_PROFILE_METRICS[profileName]];
+  return (Object.keys(runtimeProfiles) as HookProfileName[]).map((profileName) => {
+    const fallbackMetrics = [...runtimeProfiles[profileName].metrics];
     return {
       name: profileName,
-      phases: [...DEFAULT_RUNTIME_PROFILES[profileName]],
+      phases: [...runtimeProfiles[profileName].phases],
       fallbackMetrics,
       hooks: hookFiles
         .filter((hook) => hook.runtimeProfileName === profileName)
@@ -188,6 +237,7 @@ export async function GET(request: NextRequest) {
     const context = parseContext(request.nextUrl.searchParams);
     const repoRoot = await resolveRepoRoot(context);
     const hooksDir = path.join(repoRoot, ".husky");
+    const runtimeProfiles = await loadHookRuntimeProfiles(repoRoot);
     const warnings: string[] = [];
 
     if (!fs.existsSync(hooksDir) || !fs.statSync(hooksDir).isDirectory()) {
@@ -196,7 +246,7 @@ export async function GET(request: NextRequest) {
         repoRoot,
         hooksDir,
         hookFiles: [],
-        profiles: buildProfileSummaries([], new Map()),
+        profiles: buildProfileSummaries([], new Map(), runtimeProfiles),
         warnings: ['No ".husky" directory found for this repository.'],
       } satisfies HooksResponse);
     }
@@ -234,7 +284,7 @@ export async function GET(request: NextRequest) {
       repoRoot,
       hooksDir,
       hookFiles,
-      profiles: buildProfileSummaries(hookFiles, metricLookup.metrics),
+      profiles: buildProfileSummaries(hookFiles, metricLookup.metrics, runtimeProfiles),
       warnings,
     } satisfies HooksResponse);
   } catch (error) {

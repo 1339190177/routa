@@ -16,15 +16,12 @@ import { promptYesNo } from "./prompt.js";
 import { createHumanMetricReporter } from "./renderer.js";
 import { runMetrics } from "./scheduler.js";
 import {
-  HOOK_PROFILE_LOCAL_VALIDATE,
-  HOOK_PROFILE_PRE_COMMIT,
-  HOOK_PROFILE_PRE_PUSH,
-  resolveProfileDefaults,
+  resolveRuntimeProfileConfig,
   type HookProfileName,
+  type RuntimePhase,
 } from "./config.js";
 
 export type HookRuntimeOutputMode = "human" | "jsonl";
-export type RuntimePhase = "submodule" | "fitness" | "fitness-fast" | "review";
 
 export type HookRuntimeProfile = {
   name: HookProfileName;
@@ -113,24 +110,6 @@ export type RuntimeExecutionOverrides = {
   services?: Partial<RuntimeServices>;
 };
 
-const DEFAULT_RUNTIME_PROFILES = {
-  "pre-push": {
-    name: HOOK_PROFILE_PRE_PUSH,
-    phases: ["submodule", "fitness", "review"],
-    fallbackMetrics: resolveProfileDefaults(HOOK_PROFILE_PRE_PUSH),
-  },
-  "pre-commit": {
-    name: HOOK_PROFILE_PRE_COMMIT,
-    phases: ["fitness-fast"],
-    fallbackMetrics: resolveProfileDefaults(HOOK_PROFILE_PRE_COMMIT),
-  },
-  "local-validate": {
-    name: HOOK_PROFILE_LOCAL_VALIDATE,
-    phases: ["fitness", "review"],
-    fallbackMetrics: resolveProfileDefaults(HOOK_PROFILE_LOCAL_VALIDATE),
-  },
-} satisfies Record<HookProfileName, HookRuntimeProfile>;
-
 const ANSI_RESET = "\u001B[0m";
 const ANSI_GREEN = "\u001B[32m";
 const ANSI_RED = "\u001B[31m";
@@ -171,7 +150,12 @@ function statusColor(stream: NodeJS.WriteStream | undefined, value: number): str
 }
 
 export function resolveRuntimeProfile(profileName: HookProfileName): HookRuntimeProfile {
-  return DEFAULT_RUNTIME_PROFILES[profileName];
+  const profile = resolveRuntimeProfileConfig(profileName);
+  return {
+    name: profile.name,
+    phases: [...profile.phases],
+    fallbackMetrics: [...profile.fallbackMetrics],
+  } satisfies HookRuntimeProfile;
 }
 
 export async function runRuntime(
