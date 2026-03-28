@@ -19,6 +19,65 @@ export type SandboxCapability =
   | "networkAccess"
   | "linkedWorktreeRead";
 export type SandboxLinkedWorktreeMode = "disabled" | "all" | "explicit";
+export type SandboxMountAccess = "readOnly" | "readWrite";
+
+export interface SandboxMount {
+  hostPath: string;
+  containerPath: string;
+  access: SandboxMountAccess;
+  reason?: string;
+}
+
+export type SandboxCapabilityTier = "observation" | "action";
+
+export interface ResolvedSandboxCapability {
+  capability: SandboxCapability;
+  tier: SandboxCapabilityTier;
+  enabled: boolean;
+  reason: string;
+}
+
+export interface ResolvedSandboxLinkedWorktree {
+  id: string;
+  codebaseId: string;
+  branch: string;
+  hostPath: string;
+  containerPath: string;
+}
+
+export type SandboxEnvFileSource = "workspaceConfig" | "request";
+
+export interface ResolvedSandboxEnvFile {
+  path: string;
+  source: SandboxEnvFileSource;
+  keys?: string[];
+}
+
+export interface ResolvedSandboxWorkspaceConfig {
+  path: string;
+  trusted: boolean;
+  loaded: boolean;
+  reason: string;
+}
+
+export interface ResolvedSandboxPolicy {
+  workspaceId?: string;
+  codebaseId?: string;
+  scopeRoot: string;
+  hostWorkdir: string;
+  containerWorkdir: string;
+  readOnlyPaths?: string[];
+  readWritePaths?: string[];
+  networkMode: SandboxNetworkMode;
+  envMode: SandboxEnvMode;
+  envFiles?: ResolvedSandboxEnvFile[];
+  envAllowlist?: string[];
+  mounts: SandboxMount[];
+  capabilities?: ResolvedSandboxCapability[];
+  linkedWorktrees?: ResolvedSandboxLinkedWorktree[];
+  workspaceConfig?: ResolvedSandboxWorkspaceConfig;
+  notes?: string[];
+}
 
 export interface SandboxPolicyInput {
   workspaceId?: string;
@@ -48,6 +107,8 @@ export interface SandboxInfo {
   lang: string;
   /** Host port mapped to the in-sandbox server. */
   port?: number;
+  /** Effective policy resolved by the Rust sandbox API for policy-aware sandboxes. */
+  effectivePolicy?: ResolvedSandboxPolicy;
   /** ISO timestamp when the sandbox was created. */
   createdAt: string;
   /** ISO timestamp when the sandbox was last active. */
