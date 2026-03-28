@@ -10,6 +10,7 @@ import {
   type PlanResponse,
   type TierValue,
 } from "@/client/components/harness-execution-plan-flow";
+import { HarnessGovernanceLoopGraph } from "@/client/components/harness-governance-loop-graph";
 import { HarnessGitHubActionsFlowPanel } from "@/client/components/harness-github-actions-flow-panel";
 import { HarnessHookRuntimePanel } from "@/client/components/harness-hook-runtime-panel";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
@@ -335,6 +336,22 @@ export default function HarnessSettingsPage() {
               </div>
             </div>
           )}
+        />
+
+        <HarnessGovernanceLoopGraph
+          workspaceId={workspaceId}
+          codebaseId={activeCodebase?.id}
+          repoPath={activeCodebase?.repoPath}
+          repoLabel={selectedRepoLabel}
+          selectedTier={selectedTier}
+          specsLoading={specsState.loading}
+          specsError={specsState.error}
+          fitnessFileCount={specsState.files.length}
+          dimensionCount={dimensionSpecs.length}
+          planLoading={planState.loading}
+          planError={planState.error}
+          metricCount={planState.plan?.metricCount ?? 0}
+          hardGateCount={planState.plan?.hardGateCount ?? 0}
         />
 
         <HarnessHookRuntimePanel
