@@ -479,28 +479,6 @@ function buildPlanGraph(
       markerEnd: { type: MarkerType.ArrowClosed, color: activeDimensionHasHardMetric ? "#dc2626" : "#059669" },
     });
 
-    edges.push({
-      id: `${dimensionId}-gates`,
-      source: dimensionId,
-      target: "gates",
-      type: "smoothstep",
-      sourceHandle: "right",
-      targetHandle: "left",
-      style: activeDimensionHasHardMetric ? { ...buildEdgeStyle("hard"), strokeWidth: 2.2 } : buildEdgeStyle("pass"),
-      markerEnd: { type: MarkerType.ArrowClosed, color: activeDimensionHasHardMetric ? "#dc2626" : "#059669" },
-    });
-
-    edges.push({
-      id: `${dimensionId}-report`,
-      source: dimensionId,
-      target: "report",
-      type: "smoothstep",
-      sourceHandle: "right",
-      targetHandle: "left",
-      style: buildEdgeStyle(activeDimensionHasHardMetric ? "warn" : "pass"),
-      markerEnd: { type: MarkerType.ArrowClosed, color: activeDimensionHasHardMetric ? "#d97706" : "#059669" },
-    });
-
     contentBottom = detailLaneY + detailLaneHeight;
   }
 

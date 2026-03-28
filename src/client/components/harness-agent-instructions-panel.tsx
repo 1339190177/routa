@@ -275,8 +275,8 @@ export function HarnessAgentInstructionsPanel({
 
       {!instructionsState.loading && !instructionsState.error && instructionsState.data ? (
         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="flex h-[380px] min-h-0 flex-col overflow-hidden rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-3">
-            <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-desktop-border bg-desktop-bg-primary/80 px-2 py-2 harness-instructions-tree">
+          <div className="flex h-[380px] min-h-0 flex-col">
+            <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-2 py-2 harness-instructions-tree">
               <UncontrolledTreeEnvironment
                 dataProvider={treeDataProvider}
                 getItemTitle={(item) => item.data.title}
@@ -316,8 +316,8 @@ export function HarnessAgentInstructionsPanel({
             </div>
           </div>
 
-          <div className="flex h-[380px] min-h-0 flex-col overflow-hidden rounded-xl border border-desktop-border bg-desktop-bg-secondary/55 p-3">
-            <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
+          <div className="flex h-[380px] min-h-0 flex-col">
+            <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-3">
               <MarkdownViewer
                 content={selectedSection?.content ?? instructionsState.data.source}
                 className="text-[12px] leading-6 text-desktop-text-primary"
