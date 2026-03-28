@@ -271,7 +271,7 @@ export default function HarnessSettingsPage() {
   return (
     <SettingsRouteShell
       title="Harness"
-      description="Governance feedback loops for local gates, fitness evidence, and remote automation."
+      description="Governance 视图按研发阶段重构为内部反馈环、提交反馈环、外部反馈环。"
       badgeLabel="AI Health"
       workspaceId={workspaceId}
       workspaceTitle={activeWorkspaceTitle}
@@ -298,14 +298,14 @@ export default function HarnessSettingsPage() {
         </svg>
       )}
       summary={[
-        { label: "Order", value: "Hook -> fitness -> GitHub Actions" },
-        { label: "Focus", value: "Feedback loops and governance" },
+        { label: "Order", value: "Thinking -> Commit -> Delivery" },
+        { label: "Focus", value: "Stage-driven feedback loops" },
       ]}
     >
       <div className="space-y-6">
         <SettingsPageHeader
           title="Harness"
-          description="Follow the governance loop in user order: local hook runtime, fitness evidence, then remote GitHub Actions automation."
+          description="主视角改为研发阶段流转，技术组件退到注释层，仅作为规则、门禁和交付基础设施的支撑说明。"
           metadata={[
             { label: "fitness", value: specsState.loading ? "..." : `${dimensionSpecs.length} dimensions` },
             { label: "dispatch", value: planState.loading ? "..." : `${planState.plan?.metricCount ?? 0} metrics` },
