@@ -43,6 +43,11 @@ type HooksResponse = {
   generatedAt: string;
   repoRoot: string;
   hooksDir: string;
+  configFile: {
+    relativePath: string;
+    source: string;
+    schema?: string;
+  } | null;
   hookFiles: HookFileSummary[];
   profiles: HookRuntimeProfileSummary[];
   warnings: string[];
@@ -153,6 +158,22 @@ async function loadHookRuntimeProfiles(repoRoot: string): Promise<Record<HookPro
   return profiles;
 }
 
+async function loadHookRuntimeConfigSource(repoRoot: string): Promise<HooksResponse["configFile"]> {
+  const relativePath = path.posix.join("docs", "fitness", "runtime", "hooks.yaml");
+  const configPath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(configPath)) {
+    return null;
+  }
+
+  const source = await fsp.readFile(configPath, "utf-8");
+  const parsed = (yaml.load(source) ?? {}) as HookRuntimeConfigFile;
+  return {
+    relativePath,
+    source,
+    schema: typeof parsed.schema === "string" ? parsed.schema : undefined,
+  };
+}
+
 async function loadMetricLookup(repoRoot: string): Promise<{
   metrics: Map<string, Omit<HookMetricSummary, "resolved">>;
   warnings: string[];
@@ -238,6 +259,7 @@ export async function GET(request: NextRequest) {
     const repoRoot = await resolveRepoRoot(context);
     const hooksDir = path.join(repoRoot, ".husky");
     const runtimeProfiles = await loadHookRuntimeProfiles(repoRoot);
+    const configFile = await loadHookRuntimeConfigSource(repoRoot);
     const warnings: string[] = [];
 
     if (!fs.existsSync(hooksDir) || !fs.statSync(hooksDir).isDirectory()) {
@@ -245,6 +267,7 @@ export async function GET(request: NextRequest) {
         generatedAt: new Date().toISOString(),
         repoRoot,
         hooksDir,
+        configFile,
         hookFiles: [],
         profiles: buildProfileSummaries([], new Map(), runtimeProfiles),
         warnings: ['No ".husky" directory found for this repository.'],
@@ -283,6 +306,7 @@ export async function GET(request: NextRequest) {
       generatedAt: new Date().toISOString(),
       repoRoot,
       hooksDir,
+      configFile,
       hookFiles,
       profiles: buildProfileSummaries(hookFiles, metricLookup.metrics, runtimeProfiles),
       warnings,
