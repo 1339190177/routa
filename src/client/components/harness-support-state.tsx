@@ -3,7 +3,6 @@
 type MaybeMessage = string | null | undefined;
 
 type HarnessUnsupportedStateProps = {
-  repoLabel: string;
   className?: string;
 };
 
@@ -26,13 +25,11 @@ export function getHarnessUnsupportedRepoMessage(...messages: MaybeMessage[]): s
 }
 
 export function HarnessUnsupportedState({
-  repoLabel,
   className,
 }: HarnessUnsupportedStateProps) {
   return (
     <div className={className ?? "mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-[11px] text-amber-800"}>
-      <div className="font-medium text-amber-900">{repoLabel}</div>
-      <div className="mt-1 leading-5">
+      <div className="leading-5">
         当前仓库未接入 Routa Harness 所需的仓库结构，无法渲染该视图。
       </div>
     </div>
