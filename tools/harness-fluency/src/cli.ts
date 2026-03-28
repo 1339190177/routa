@@ -12,7 +12,7 @@ export function handleCliError(error: unknown): void {
 }
 
 export async function main(): Promise<void> {
-  await runCli(process.argv.slice(2));
+  process.exitCode = await runCli(process.argv.slice(2));
 }
 
 const modulePath = path.resolve(fileURLToPath(import.meta.url));

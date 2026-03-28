@@ -40,6 +40,10 @@ pub struct FluencyArgs {
     #[arg(long, value_enum, default_value_t = FluencyOutputFormat::Text)]
     pub format: FluencyOutputFormat,
 
+    /// Shortcut for `--format json` kept for legacy harness-fluency compatibility.
+    #[arg(long, default_value_t = false)]
+    pub json: bool,
+
     /// Compare against the last saved snapshot.
     #[arg(long, default_value_t = false)]
     pub compare_last: bool,
@@ -99,7 +103,7 @@ fn run_fluency(args: &FluencyArgs) -> Result<(), String> {
         save: !args.no_save,
     })?;
 
-    match args.format {
+    match resolved_output_format(args) {
         FluencyOutputFormat::Text => println!("{}", format_text_report(&report)),
         FluencyOutputFormat::Json => println!(
             "{}",
@@ -109,6 +113,14 @@ fn run_fluency(args: &FluencyArgs) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn resolved_output_format(args: &FluencyArgs) -> FluencyOutputFormat {
+    if args.json {
+        FluencyOutputFormat::Json
+    } else {
+        args.format
+    }
 }
 
 fn resolve_model_path(
@@ -235,7 +247,8 @@ fn resolve_workspace_root() -> Result<PathBuf, String> {
 mod tests {
     use super::{
         discover_git_toplevel, profile_snapshot_filename, resolve_requested_path,
-        resolve_workspace_root, validate_repo_root, FluencyProfile,
+        resolve_workspace_root, resolved_output_format, validate_repo_root, FluencyArgs,
+        FluencyOutputFormat, FluencyProfile,
     };
     use std::fs::File;
     use std::path::Path;
@@ -281,5 +294,21 @@ mod tests {
             profile_snapshot_filename(FluencyProfile::AgentOrchestrator),
             "docs/fitness/reports/harness-fluency-agent-orchestrator-latest.json"
         );
+    }
+
+    #[test]
+    fn json_shortcut_overrides_text_default() {
+        let args = FluencyArgs {
+            repo_root: None,
+            model: None,
+            snapshot_path: None,
+            profile: FluencyProfile::Generic,
+            format: FluencyOutputFormat::Text,
+            json: true,
+            compare_last: false,
+            no_save: false,
+        };
+
+        assert_eq!(resolved_output_format(&args), FluencyOutputFormat::Json);
     }
 }

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Harness Fluency evaluation CLI for Routa repositories",
+  "description": "Deprecated Harness Fluency wrapper that forwards to routa-cli",
   "scripts": {
     "start": "node --import tsx src/cli.ts"
   }
