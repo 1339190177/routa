@@ -233,7 +233,7 @@ export function HarnessGitHubActionsFlowPanel({
               </div>
             </div>
 
-            <div className="mt-3 overflow-x-auto pb-1">
+            <div className="desktop-scrollbar-thin mt-3 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "thin" }}>
               <div className="flex min-w-max gap-2">
                 {visibleFlows.map((flow) => (
                   <button

@@ -113,7 +113,16 @@ html.dark {
   height: 10px;
 }
 
+.desktop-scrollbar-thin::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
 .desktop-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.desktop-scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -124,13 +133,30 @@ html.dark {
   background-clip: padding-box;
 }
 
+.desktop-scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--dt-scrollbar-thumb);
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
 .desktop-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--dt-scrollbar-thumb-hover);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
+.desktop-scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--dt-scrollbar-thumb-hover);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
 .desktop-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.desktop-scrollbar-thin::-webkit-scrollbar-corner {
   background: transparent;
 }
 
