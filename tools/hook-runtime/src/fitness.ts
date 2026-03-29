@@ -99,6 +99,21 @@ function isLikelyFailureDetailLine(line: string): boolean {
     || /^\+\s*Received/i.test(line);
 }
 
+function isPathOnlyLine(line: string): boolean {
+  return /^(?:\/|\.{1,2}\/|[A-Za-z]:\\).+\.[A-Za-z0-9]+$/.test(line);
+}
+
+function isProblemSummaryLine(line: string): boolean {
+  return /^[\u2716\u00d7]\s+\d+\s+problem/.test(line);
+}
+
+function isDiagnosticDetailLine(line: string): boolean {
+  return /^\d+:\d+\s+error\b/i.test(line)
+    || /^\d+:\d+\s+warning\b/i.test(line)
+    || /^error\b/i.test(line)
+    || /^warning\b/i.test(line);
+}
+
 function collectVitestFailureBlock(lines: string[], startIndex: number): string[] {
   const block: string[] = [];
 
@@ -151,6 +166,41 @@ function extractLikelyTestFailureContext(lines: string[]): string[] {
   return [];
 }
 
+function extractDiagnosticContext(lines: string[]): string[] {
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isPathOnlyLine(lines[index])) {
+      continue;
+    }
+    const block = [lines[index]];
+    let sawDetail = false;
+
+    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+      const line = lines[cursor];
+      if (isPathOnlyLine(line) && sawDetail) {
+        break;
+      }
+      if (isProblemSummaryLine(line)) {
+        block.push(line);
+        break;
+      }
+      if (!isDiagnosticDetailLine(line) && !sawDetail) {
+        continue;
+      }
+      if (!isDiagnosticDetailLine(line) && sawDetail) {
+        break;
+      }
+      sawDetail = true;
+      block.push(line);
+    }
+
+    if (sawDetail) {
+      return block;
+    }
+  }
+
+  return [];
+}
+
 function extractVitestFailureContext(lines: string[]): string[] {
   const failedTestHeaderIndices = lines
     .map((line, index) => (/^FAIL\s+/.test(line) ? index : -1))
@@ -195,6 +245,11 @@ function extractFailureContext(rawOutput: string): string {
   const likelyTestFailureContext = extractLikelyTestFailureContext(lines);
   if (likelyTestFailureContext.length > 0) {
     return trimLinesToCharBudget(likelyTestFailureContext, 2500).trim();
+  }
+
+  const diagnosticContext = extractDiagnosticContext(lines);
+  if (diagnosticContext.length > 0) {
+    return trimLinesToCharBudget(diagnosticContext, 2500).trim();
   }
 
   const failureHints =

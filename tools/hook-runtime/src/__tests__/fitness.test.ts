@@ -182,4 +182,27 @@ describe("summarizeFailures", () => {
     expect(summary?.outputTail).toContain("at runWithTimeout");
     expect(summary?.outputTail).not.toContain("workflow orchestrator singleton prompt path");
   });
+
+  it("keeps the file path for eslint-style diagnostics", () => {
+    const results = [
+      {
+        durationMs: 25,
+        exitCode: 1,
+        metric: buildMetric({ name: "eslint_pass", command: "npm run lint 2>&1" }),
+        output: [
+          "/Users/phodal/ai/routa-js/src/client/components/fitness-analysis-charts.tsx",
+          "  215:0  error  Parsing error: '}' expected",
+          "",
+          "✖ 1 problem (1 error, 0 warnings)",
+        ].join("\n"),
+        passed: false,
+      },
+    ];
+
+    const [summary] = summarizeFailures(results);
+
+    expect(summary?.outputTail).toContain("/Users/phodal/ai/routa-js/src/client/components/fitness-analysis-charts.tsx");
+    expect(summary?.outputTail).toContain("215:0  error  Parsing error: '}' expected");
+    expect(summary?.outputTail).toContain("✖ 1 problem (1 error, 0 warnings)");
+  });
 });
