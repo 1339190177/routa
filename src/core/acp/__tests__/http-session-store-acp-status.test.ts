@@ -4,7 +4,7 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -16,9 +16,14 @@ import { LocalSessionProvider } from "../../storage/local-session-provider";
 import { getHttpSessionStore, consolidateMessageHistory } from "../http-session-store";
 import type { SessionUpdateNotification } from "../http-session-store";
 
+let tmpDir: string;
+let originalHome: string | undefined;
+
 describe("HttpSessionStore — ACP status", () => {
   beforeEach(async () => {
-    process.env.HOME = await fs.mkdtemp(path.join(os.tmpdir(), "http-session-store-"));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "http-session-store-"));
+    originalHome = process.env.HOME;
+    process.env.HOME = tmpDir;
   });
 
   beforeEach(() => {
@@ -27,6 +32,15 @@ describe("HttpSessionStore — ACP status", () => {
     for (const s of store.listSessions()) {
       store.deleteSession(s.sessionId);
     }
+  });
+
+  afterEach(async () => {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
   it("upsertSession stores acpStatus field", () => {

@@ -12,11 +12,12 @@ import { MigrationTool } from "../migration-tool";
 import type { SessionRecord } from "../types";
 
 let tmpDir: string;
-const originalHome = process.env.HOME;
+let originalHome: string | undefined;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "storage-test-"));
   // Override HOME so getSessionsDir/getTracesDir use our temp dir
+  originalHome = process.env.HOME;
   process.env.HOME = tmpDir;
 });
 

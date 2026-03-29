@@ -9,14 +9,21 @@ import * as os from "node:os";
 import { ToolCallContextWriter } from "../tool-call-context-writer";
 
 let tmpDir: string;
+let originalHome: string | undefined;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "tool-call-context-test-"));
   // Override HOME so getSessionsDir uses our temp dir
+  originalHome = process.env.HOME;
   process.env.HOME = tmpDir;
 });
 
 afterEach(async () => {
+  if (originalHome === undefined) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = originalHome;
+  }
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 

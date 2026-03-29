@@ -17,9 +17,11 @@ import {
 import { LocalSessionProvider } from "../../storage/local-session-provider";
 
 let tmpDir: string;
+let originalHome: string | undefined;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "session-db-persister-"));
+  originalHome = process.env.HOME;
   process.env.HOME = tmpDir;
 });
 
@@ -29,6 +31,11 @@ afterEach(async () => {
     store.deleteSession(session.sessionId);
   }
 
+  if (originalHome === undefined) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = originalHome;
+  }
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
