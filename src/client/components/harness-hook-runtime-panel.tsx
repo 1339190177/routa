@@ -275,7 +275,7 @@ export function HarnessHookRuntimePanel({
       ) : null}
 
       {!unsupportedMessage && resolvedHooksState.data ? (
-        <div className={`mt-4 grid gap-4 ${compactMode ? "grid-cols-1" : "xl:grid-cols-[300px_minmax(0,1fr)]"}`}>
+        <div className={`mt-4 grid gap-4 ${compactMode ? "grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(220px,0.95fr)]" : "xl:grid-cols-[300px_minmax(0,1fr)]"}`}>
           <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/60 p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
