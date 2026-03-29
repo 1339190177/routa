@@ -46,6 +46,15 @@ node --import tsx tools/harness-fluency/src/cli.ts --json
 # 并行执行（加速）
 entrix run --parallel
 
+# Harness specialist 手工验收（可重放：只验证输出是否可解析且为纯 JSON）
+set -a; source .env; set +a
+./target/debug/routa specialist run resources/specialists/tools/harness-build.yaml --provider claude -p "Read docs/harness/build.yml and output strict JSON."
+./target/debug/routa specialist run resources/specialists/tools/harness-test.yaml --provider claude -p "Read docs/harness/test.yml and output strict JSON."
+
+# 若先前 provider 不可用，可临时切换为 codex（若配置了 CODEX_API_KEY）
+./target/debug/routa specialist run resources/specialists/tools/harness-build.yaml --provider codex -p "Read docs/harness/build.yml and output strict JSON."
+./target/debug/routa specialist run resources/specialists/tools/harness-test.yaml --provider codex -p "Read docs/harness/test.yml and output strict JSON."
+
 # 仅查看会执行什么（不实际运行）
 entrix run --dry-run
 
