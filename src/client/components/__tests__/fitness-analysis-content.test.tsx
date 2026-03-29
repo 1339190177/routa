@@ -6,8 +6,9 @@ vi.mock("../terminal/terminal-bubble", () => ({
 }));
 
 import { FitnessAnalysisContent } from "../fitness-analysis-content";
+import type { FitnessReport } from "../fitness-analysis-types";
 
-const report = {
+const report: FitnessReport = {
   modelVersion: 2,
   modelPath: "/tmp/model.yaml",
   profile: "generic",
