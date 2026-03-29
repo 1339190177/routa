@@ -1094,3 +1094,83 @@ criteria:
     );
     assert!(!report.capability_groups.contains_key("workflow_automation"));
 }
+
+#[test]
+fn evaluates_all_of_detector() {
+    let repo = tempdir().unwrap();
+    let repo_root = repo.path();
+    create_dir_all(repo_root.join("docs/fitness")).unwrap();
+    write(repo_root.join("README.md"), "# repo\n").unwrap();
+    write_json(
+        &repo_root.join("package.json"),
+        json!({
+            "scripts": {
+                "lint": "eslint ."
+            }
+        }),
+    );
+
+    let model_path = repo_root.join("docs/fitness/model.yaml");
+    let snapshot_path = repo_root.join("docs/fitness/latest.json");
+    write(
+        &model_path,
+        r#"version: 1
+levels:
+  - id: awareness
+    name: Awareness
+dimensions:
+  - id: collaboration
+    name: Collaboration
+criteria:
+  - id: collaboration.awareness.composite
+    level: awareness
+    dimension: collaboration
+    weight: 1
+    critical: true
+    why_it_matters: all checks
+    recommended_action: all checks
+    evidence_hint: README.md + package.json scripts.lint
+    detector:
+      type: all_of
+      detectors:
+        - type: file_exists
+          path: README.md
+        - type: json_path_exists
+          path: package.json
+          jsonPath: [scripts, lint]
+  - id: collaboration.awareness.docs
+    level: awareness
+    dimension: collaboration
+    weight: 1
+    critical: false
+    why_it_matters: docs
+    recommended_action: docs
+    evidence_hint: README.md
+    detector:
+      type: file_exists
+      path: README.md
+"#,
+    )
+    .unwrap();
+
+    let report = evaluate_harness_fluency(&EvaluateOptions {
+        repo_root: repo_root.to_path_buf(),
+        model_path,
+        profile: "generic".to_string(),
+        mode: FluencyMode::Deterministic,
+        snapshot_path,
+        compare_last: false,
+        save: false,
+    })
+    .expect("report");
+
+    let criterion = report
+        .criteria
+        .iter()
+        .find(|criterion| criterion.id == "collaboration.awareness.composite")
+        .expect("composite criterion");
+    assert_eq!(criterion.status, CriterionStatus::Pass);
+    assert_eq!(criterion.detector_type, "all_of");
+    assert!(criterion.evidence.iter().any(|value| value == "README.md"));
+    assert!(criterion.evidence.iter().any(|value| value == "package.json"));
+}

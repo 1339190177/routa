@@ -13,15 +13,27 @@ levels:
 
 dimensions:
   - id: collaboration
-    name: Human-AI Collaboration
+    name: Task Delegation
   - id: sdlc
-    name: SDLC Coverage
+    name: Process Expansion
   - id: harness
-    name: AI Engineering Harness
+    name: Workflow Loop
   - id: governance
-    name: Governance & Quality
+    name: Verification & Guardrails
   - id: context
-    name: Context Engineering
+    name: Context Readiness
+
+capability_groups:
+  - id: collaboration
+    name: Task Delegation & Collaboration
+  - id: sdlc
+    name: Process Expansion & Follow-through
+  - id: harness
+    name: Workflow Loop & Runtime Surface
+  - id: governance
+    name: Verification & Guardrails
+  - id: context
+    name: Context Readiness & Memory
 
 criteria:
   - id: collaboration.awareness.contract_surface
@@ -708,31 +720,45 @@ criteria:
     dimension: governance
     weight: 2
     critical: true
-    why_it_matters: Agent-first governance requires machine-readable guardrails that can shape execution automatically.
-    recommended_action: Add review triggers, ownership rules, or dependency automation configs.
-    evidence_hint: docs/fitness/review-triggers.yaml, CODEOWNERS, or dependabot/renovate
+    why_it_matters: Agent-first governance should combine repository-native review triggers with separate machine-readable ownership or dependency controls.
+    recommended_action: Pair review-trigger rules with CODEOWNERS, Dependabot, or Renovate so the guardrail surface is not concentrated in one file.
+    evidence_hint: docs/fitness/review-triggers.yaml plus CODEOWNERS / dependabot / renovate
     detector:
-      type: any_file_exists
-      paths:
-        - docs/fitness/review-triggers.yaml
-        - .github/CODEOWNERS
-        - renovate.json
-        - .github/dependabot.yml
+      type: all_of
+      detectors:
+        - type: file_exists
+          path: docs/fitness/review-triggers.yaml
+        - type: any_of
+          detectors:
+            - type: file_exists
+              path: .github/CODEOWNERS
+            - type: file_exists
+              path: renovate.json
+            - type: file_exists
+              path: .github/dependabot.yml
   - id: governance.agent_first.governance_history
     level: agent_first
     dimension: governance
     weight: 1
     critical: false
-    why_it_matters: High-maturity governance leaves behind a sizable checked-in history of issues, plans, and design decisions.
-    recommended_action: Keep a durable governance history in docs.
-    evidence_hint: docs/issues, docs/exec-plans, or docs/design-docs
+    why_it_matters: High-maturity governance needs breadth across incidents, plans, and design records rather than one oversized issue log.
+    recommended_action: Balance the governance corpus across issues, execution plans, and design docs.
+    evidence_hint: docs/issues/*.md + docs/exec-plans/**/*.md + docs/design-docs/**/*.md
     detector:
-      type: glob_count
-      patterns:
-        - docs/issues/*.md
-        - docs/exec-plans/**/*.md
-        - docs/design-docs/**/*.md
-      min: 5
+      type: all_of
+      detectors:
+        - type: glob_count
+          patterns:
+            - docs/issues/*.md
+          min: 20
+        - type: glob_count
+          patterns:
+            - docs/exec-plans/**/*.md
+          min: 8
+        - type: glob_count
+          patterns:
+            - docs/design-docs/**/*.md
+          min: 5
 
   - id: context.awareness.readme_or_docs
     level: awareness
@@ -861,29 +887,52 @@ criteria:
     dimension: context
     weight: 2
     critical: true
-    why_it_matters: Agent-first context engineering needs both reference material and operational runbooks.
-    recommended_action: Keep references, fitness docs, issues, and execution plans checked in.
-    evidence_hint: docs/references, docs/fitness, docs/issues, or docs/exec-plans
+    why_it_matters: Agent-first context needs layered runbooks, not just a large documentation folder with one or two anchor areas.
+    recommended_action: Maintain references, fitness docs, issues, and execution plans as distinct context layers, with more than a token reference corpus.
+    evidence_hint: docs/references/**/*.md + docs/fitness/*.md + docs/issues/*.md + docs/exec-plans/**/*.md
     detector:
-      type: any_file_exists
-      paths:
-        - docs/references
-        - docs/fitness
-        - docs/issues
-        - docs/exec-plans
+      type: all_of
+      detectors:
+        - type: glob_count
+          patterns:
+            - docs/references/**/*.md
+          min: 3
+        - type: glob_count
+          patterns:
+            - docs/fitness/*.md
+          min: 5
+        - type: glob_count
+          patterns:
+            - docs/issues/*.md
+          min: 10
+        - type: glob_count
+          patterns:
+            - docs/exec-plans/**/*.md
+          min: 6
   - id: context.agent_first.operational_history
     level: agent_first
     dimension: context
     weight: 1
     critical: false
-    why_it_matters: Operational history helps high-autonomy systems preserve learning over time.
-    recommended_action: Keep a sizable history of issues, plans, design docs, or references.
-    evidence_hint: docs/issues, docs/exec-plans, docs/design-docs, or docs/references
+    why_it_matters: Operational history should reflect repeated execution across multiple documentation layers, not only issue accumulation.
+    recommended_action: Grow the operational history across plans, design docs, and references in addition to issue logs.
+    evidence_hint: docs/issues/*.md + docs/exec-plans/**/*.md + docs/design-docs/**/*.md + docs/references/**/*.md
     detector:
-      type: glob_count
-      patterns:
-        - docs/issues/*.md
-        - docs/exec-plans/**/*.md
-        - docs/design-docs/**/*.md
-        - docs/references/**/*.md
-      min: 10
+      type: all_of
+      detectors:
+        - type: glob_count
+          patterns:
+            - docs/issues/*.md
+          min: 30
+        - type: glob_count
+          patterns:
+            - docs/exec-plans/**/*.md
+          min: 8
+        - type: glob_count
+          patterns:
+            - docs/design-docs/**/*.md
+          min: 5
+        - type: glob_count
+          patterns:
+            - docs/references/**/*.md
+          min: 3

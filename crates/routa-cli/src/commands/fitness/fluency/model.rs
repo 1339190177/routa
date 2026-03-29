@@ -525,6 +525,24 @@ fn parse_detector(value: &JsonValue, label: &str) -> Result<DetectorDefinition, 
                 flags,
             })
         }
+        "all_of" => {
+            let nested = expect_array(
+                get_required(detector, "detectors", &format!("{label}.detectors"))?,
+                &format!("{label}.detectors"),
+            )?;
+            if nested.is_empty() {
+                return Err(format!("{label}.detectors must be a non-empty array"));
+            }
+            Ok(DetectorDefinition::AllOf {
+                detectors: nested
+                    .iter()
+                    .enumerate()
+                    .map(|(index, item)| {
+                        parse_detector(item, &format!("{label}.detectors[{index}]"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            })
+        }
         "any_of" => {
             let nested = expect_array(
                 get_required(detector, "detectors", &format!("{label}.detectors"))?,

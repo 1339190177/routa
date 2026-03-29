@@ -81,6 +81,9 @@ pub(super) enum DetectorDefinition {
         pattern: String,
         flags: String,
     },
+    AllOf {
+        detectors: Vec<DetectorDefinition>,
+    },
     AnyOf {
         detectors: Vec<DetectorDefinition>,
     },
@@ -127,6 +130,7 @@ impl DetectorDefinition {
         match self {
             Self::FileExists { .. } => "file_exists",
             Self::FileContainsRegex { .. } => "file_contains_regex",
+            Self::AllOf { .. } => "all_of",
             Self::AnyOf { .. } => "any_of",
             Self::AnyFileExists { .. } => "any_file_exists",
             Self::GlobCount { .. } => "glob_count",
@@ -358,7 +362,7 @@ impl DetectorDefinition {
             | Self::YamlPathExists { .. } => EvidenceMode::Static,
             Self::CommandExitCode { .. } | Self::CommandOutputRegex { .. } => EvidenceMode::Runtime,
             Self::ManualAttestation { .. } => EvidenceMode::Manual,
-            Self::AnyOf { .. } => EvidenceMode::Hybrid,
+            Self::AllOf { .. } | Self::AnyOf { .. } => EvidenceMode::Hybrid,
         }
     }
 }

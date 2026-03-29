@@ -302,6 +302,52 @@ fn evaluate_detector(
                 evidence: Vec::new(),
             }),
         },
+        DetectorDefinition::AllOf { detectors } => {
+            let mut evidence = Vec::new();
+            let mut skipped_count = 0;
+
+            for nested in detectors {
+                let result = evaluate_detector(nested, context)?;
+                match result.status {
+                    CriterionStatus::Pass => {
+                        evidence.extend(result.evidence);
+                    }
+                    CriterionStatus::Fail => {
+                        return Ok(DetectorResult {
+                            status: CriterionStatus::Fail,
+                            detail: format!("required {} failed: {}", nested.detector_type(), result.detail),
+                            evidence,
+                        });
+                    }
+                    CriterionStatus::Skipped => {
+                        skipped_count += 1;
+                    }
+                }
+            }
+
+            if skipped_count == detectors.len() {
+                return Ok(DetectorResult {
+                    status: CriterionStatus::Skipped,
+                    detail: "all required checks were skipped".to_string(),
+                    evidence: Vec::new(),
+                });
+            }
+
+            if skipped_count > 0 {
+                return Ok(DetectorResult {
+                    status: CriterionStatus::Skipped,
+                    detail: "some required checks were skipped".to_string(),
+                    evidence,
+                });
+            }
+
+            evidence.truncate(10);
+            Ok(DetectorResult {
+                status: CriterionStatus::Pass,
+                detail: format!("all {} required checks passed", detectors.len()),
+                evidence,
+            })
+        }
         DetectorDefinition::AnyOf { detectors } => {
             let mut failures = Vec::new();
             let mut skipped_count = 0;
