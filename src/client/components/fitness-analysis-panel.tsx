@@ -167,8 +167,8 @@ function CapabilityPin({ x, y, color, size = 22 }: { x: number; y: number; color
 
 function FitnessMatrix({ selectedReport }: { selectedReport?: { dimensions?: Record<string, { level?: string | null }> } | undefined }) {
   const matrixWidth = 1400;
-  const matrixHeight = 360;
-  const margin = { top: 58, right: 16, bottom: 20, left: 160 };
+  const matrixHeight = 320;
+  const margin = { top: 52, right: 14, bottom: 16, left: 152 };
   const plotX = margin.left;
   const plotY = margin.top;
   const plotW = matrixWidth - margin.left - margin.right;
@@ -204,7 +204,7 @@ function FitnessMatrix({ selectedReport }: { selectedReport?: { dimensions?: Rec
 
   return (
     <div className="mt-1 overflow-x-auto">
-      <div className="min-w-[560px]">
+      <div className="min-w-[520px]">
         <svg
           viewBox={`0 0 ${matrixWidth} ${matrixHeight}`}
           className="h-auto w-full"
@@ -256,7 +256,7 @@ function FitnessMatrix({ selectedReport }: { selectedReport?: { dimensions?: Rec
                   x={cx}
                   y={34}
                   lines={column.title}
-                  fontSize={13}
+                  fontSize={12}
                   fontWeight={700}
                   fill={column.color}
                   textAnchor="middle"
@@ -266,7 +266,7 @@ function FitnessMatrix({ selectedReport }: { selectedReport?: { dimensions?: Rec
                     x={cx}
                     y={49}
                     fill={column.color}
-                    fontSize={11}
+                    fontSize={10}
                     fontWeight={700}
                     textAnchor="middle"
                     fontFamily="Inter, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif"
@@ -285,9 +285,9 @@ function FitnessMatrix({ selectedReport }: { selectedReport?: { dimensions?: Rec
               <g key={row.title.join("-")}>
                 <SvgMultilineText
                   x={labelX}
-                  y={cy - (row.title.length - 1) * 8 - 2}
+                  y={cy - (row.title.length - 1) * 7 - 2}
                   lines={row.title}
-                  fontSize={13}
+                  fontSize={12}
                   fontWeight={600}
                   fill="#111"
                   textAnchor="end"
@@ -295,9 +295,9 @@ function FitnessMatrix({ selectedReport }: { selectedReport?: { dimensions?: Rec
                 {row.subtitle ? (
                   <text
                     x={labelX}
-                    y={cy + 19}
+                    y={cy + 17}
                     fill="#A1A1A1"
-                    fontSize={9.5}
+                    fontSize={8.5}
                     fontWeight={500}
                     textAnchor="end"
                     fontFamily="Inter, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif"
@@ -322,7 +322,7 @@ function FitnessMatrix({ selectedReport }: { selectedReport?: { dimensions?: Rec
           ) : null}
 
           {points.map((point) => (
-            <CapabilityPin key={`${point.x}-${point.y}`} x={toX(point.x)} y={toY(point.y)} color={point.color} size={21} />
+            <CapabilityPin key={`${point.x}-${point.y}`} x={toX(point.x)} y={toY(point.y)} color={point.color} size={20} />
           ))}
 
         </svg>
