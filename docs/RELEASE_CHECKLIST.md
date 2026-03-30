@@ -8,7 +8,7 @@ Quick checklist for releasing Routa CLI.
 - [ ] No uncommitted changes
 - [ ] On `main` branch with latest code
 - [ ] GitHub secrets configured:
-  - `CARGO_REGISTRY_TOKEN` (from crates.io)
+  - `CRATE_TOKEN` (from crates.io - note: NOT `CARGO_REGISTRY_TOKEN`)
   - `NPM_TOKEN` (from npmjs.com)
 
 ## Release Steps
@@ -46,13 +46,24 @@ git push origin main --tags
 ## Post-Release
 
 - [ ] Monitor [GitHub Actions](https://github.com/phodal/routa/actions)
-- [ ] Verify [crates.io publish](https://crates.io/crates/routa-cli)
-- [ ] Verify [npm publish](https://www.npmjs.com/package/routa-cli)
-- [ ] Verify [GitHub Release](https://github.com/phodal/routa/releases)
+- [ ] Verify crates.io publish (all 5 crates):
+  - [ ] [routa-core](https://crates.io/crates/routa-core)
+  - [ ] [routa-rpc](https://crates.io/crates/routa-rpc)
+  - [ ] [routa-scanner](https://crates.io/crates/routa-scanner)
+  - [ ] [routa-server](https://crates.io/crates/routa-server)
+  - [ ] [routa-cli](https://crates.io/crates/routa-cli)
+- [ ] Verify npm publish (all 5 packages):
+  - [ ] [routa-cli](https://www.npmjs.com/package/routa-cli) (main package)
+  - [ ] [routa-cli-linux-x64](https://www.npmjs.com/package/routa-cli-linux-x64)
+  - [ ] [routa-cli-darwin-arm64](https://www.npmjs.com/package/routa-cli-darwin-arm64)
+  - [ ] [routa-cli-darwin-x64](https://www.npmjs.com/package/routa-cli-darwin-x64)
+  - [ ] [routa-cli-windows-x64](https://www.npmjs.com/package/routa-cli-windows-x64)
+- [ ] Verify [GitHub Release](https://github.com/phodal/routa/releases) (Desktop installers)
 - [ ] Test installation:
   ```bash
-  cargo install routa-cli@0.2.5
-  npm install -g routa-cli@0.2.5
+  cargo install routa-cli@0.2.9
+  npm install -g routa-cli@0.2.9
+  routa --version  # Should show the new version
   ```
 
 ## Rollback

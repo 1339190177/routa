@@ -12,6 +12,8 @@
 - `docs/fitness/`: Executable quality, testing, API contract, and verification rulebook consumed by `entrix`.
 - `docs/REFACTOR.md`: Refactor playbook for long-file triage, test-first extraction, and concept-based clustering.
 - `docs/references/`: LLM-friendly reference material and distilled external docs for high-frequency dependencies.
+- `docs/release-guide.md`: Comprehensive release guide for CLI (npm + crates.io), Desktop (Tauri), and multi-platform distribution.
+- `docs/RELEASE_CHECKLIST.md`: Quick release checklist for version publishing.
 - `tools/entrix/docs/adr/README.md`: Entrix-specific ADRs, including long-file analysis heuristics.
 
 ## Documentation Rules

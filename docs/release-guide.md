@@ -16,7 +16,7 @@ The release process publishes to three channels simultaneously:
 
 Ensure these GitHub secrets are configured:
 
-- `CARGO_REGISTRY_TOKEN` - Get from [crates.io/me](https://crates.io/me) → API Tokens
+- `CRATE_TOKEN` - Get from [crates.io/me](https://crates.io/me) → API Tokens (Note: The workflow uses `CRATE_TOKEN`, not `CARGO_REGISTRY_TOKEN`)
 - `NPM_TOKEN` - Get from [npmjs.com](https://www.npmjs.com/) → Access Tokens → Generate New Token → Automation
 - `GITHUB_TOKEN` - Automatically provided by GitHub Actions
 
@@ -117,8 +117,21 @@ Then publishes to npm as:
 ### 3. Desktop Release (`.github/workflows/tauri-release.yml`)
 
 Creates GitHub Release with:
-- Tauri desktop app installers
+- Tauri desktop app installers for macOS, Linux, and Windows
 - Release notes with CLI install instructions
+- Automatic code signing for macOS (if configured)
+
+**Platform Matrix**:
+- `macos-latest` - Builds `.dmg` and `.app` for both Intel and Apple Silicon
+- `ubuntu-22.04` - Builds `.deb` and `.AppImage` for Linux
+- `windows-latest` - Builds `.msi` and `.exe` for Windows
+
+**Important**: Desktop release requires all version fields to be synchronized:
+- `apps/desktop/package.json`
+- `apps/desktop/src-tauri/Cargo.toml`
+- `apps/desktop/src-tauri/tauri.conf.json`
+
+If Tauri fails with `version must be a semver string`, check that all three files have matching versions.
 
 ## Verification
 
@@ -154,12 +167,45 @@ Check that `NPM_TOKEN` is valid:
 - Token must not be expired
 - You must be a maintainer of the `routa-cli` npm organization
 
+**Known Issue**: The main `routa-cli` package may not be published even when platform packages succeed. If this happens:
+
+1. Manually update `packages/routa-cli/package.json` optionalDependencies to the new version
+2. Publish manually:
+   ```bash
+   cd packages/routa-cli
+   npm publish --access public
+   ```
+
+**Root Cause**: The `stage-routa-cli-npm.mjs` script was missing main package staging logic (fixed in v0.2.9+).
+
 ### Cargo Publish Fails
 
 Common issues:
 - **Missing dependency version**: Ensure all workspace crates use the same version
 - **API token expired**: Regenerate token at [crates.io/settings/tokens](https://crates.io/settings/tokens)
 - **Network timeout**: Re-run the workflow
+- **Wrong secret name**: The workflow expects `CRATE_TOKEN`, not `CARGO_REGISTRY_TOKEN`
+
+**Known Issue**: Cargo crates may not be published automatically. If this happens:
+
+1. Manually update all `crates/*/Cargo.toml` versions:
+   ```bash
+   for crate in crates/routa-core crates/routa-rpc crates/routa-scanner crates/routa-server crates/routa-cli; do
+     sed -i '' 's/version = "OLD_VERSION"/version = "NEW_VERSION"/g' "$crate/Cargo.toml"
+   done
+   ```
+
+2. Publish in dependency order:
+   ```bash
+   cargo login YOUR_CRATE_TOKEN
+   cd crates/routa-core && cargo publish --no-verify
+   cd ../routa-rpc && cargo publish --no-verify
+   cd ../routa-scanner && cargo publish --no-verify
+   cd ../routa-server && cargo publish --no-verify
+   cd ../routa-cli && cargo publish --no-verify
+   ```
+
+**Root Cause**: The `sync-release-version.mjs` script doesn't sync Rust crate versions (only Desktop Tauri and npm packages).
 
 ## Version Bump Types
 
@@ -185,10 +231,54 @@ git push origin :refs/tags/v0.2.5
 cargo yank routa-cli@0.2.5
 ```
 
+## Known Issues & Gotchas
+
+### 1. Main Release Workflow Doesn't Trigger Cargo Publish
+
+**Issue**: `.github/workflows/release.yml` doesn't call `cargo-release.yml`, so Rust crates won't be published automatically.
+
+**Workaround**: Manually trigger the Cargo release workflow or publish locally as described in "Troubleshooting > Cargo Publish Fails".
+
+**Permanent Fix**: Add Cargo release job to main release workflow.
+
+### 2. Version Sync Script Incomplete
+
+**Issue**: `scripts/release/sync-release-version.mjs` only syncs:
+- Desktop: `apps/desktop/package.json`, `apps/desktop/src-tauri/Cargo.toml`, `apps/desktop/src-tauri/tauri.conf.json`
+- CLI npm: `packages/routa-cli/package.json`
+
+It does **not** sync:
+- Rust crates: `crates/*/Cargo.toml`
+- CLI npm optionalDependencies versions
+
+**Workaround**: Manually update Rust crate versions and npm optionalDependencies as described in "Troubleshooting".
+
+**Permanent Fix**: Extend `sync-release-version.mjs` to handle all version fields.
+
+### 3. CLI Artifact Naming Convention
+
+**Issue**: Build jobs must use consistent artifact names (without version strings) so the staging job can find them.
+
+**Fixed in**: v0.2.9 - artifact names standardized to `routa-cli-{platform}` format.
+
+### 4. Windows PowerShell vs Bash
+
+**Issue**: Windows runners default to PowerShell, which doesn't handle `${RELEASE_VERSION}` environment variables the same way as bash, causing version parsing errors.
+
+**Fixed in**: v0.2.9 - all version sync steps now explicitly use `shell: bash`.
+
+### 5. macOS Bash 3 Compatibility
+
+**Issue**: macOS runners use Bash 3.x which doesn't support `mapfile` command.
+
+**Fixed in**: v0.2.9 - replaced `mapfile` with `while read` loops.
+
 ## Related Documentation
 
 - [Cargo.toml workspace config](../../Cargo.toml)
 - [NPM package structure](../../packages/routa-cli/package.json)
 - [CLI Release workflow](../../.github/workflows/cli-release.yml)
 - [Cargo Release workflow](../../.github/workflows/cargo-release.yml)
+- [Desktop Release workflow](../../.github/workflows/tauri-release.yml)
+- [Release Checklist](./RELEASE_CHECKLIST.md)
 
