@@ -292,12 +292,16 @@ function detectOpenSpec(repoRoot: string): SpecSource[] {
 
   // changes/<change>/(proposal.md|design.md|tasks.md)
   const changesDir = path.join(openspecRoot, "changes");
+  let hasArchive = false;
+  let hasNonArchiveChanges = false;
   if (dirExists(changesDir)) {
     for (const change of listDirs(changesDir)) {
       if (change === "archive") {
+        hasArchive = true;
         evidence.push("openspec/changes/archive/ (archived)");
         continue;
       }
+      hasNonArchiveChanges = true;
       const changeDir = path.join(changesDir, change);
       const files = listFiles(changeDir);
       for (const file of files) {
@@ -328,7 +332,11 @@ function detectOpenSpec(repoRoot: string): SpecSource[] {
 
   const hasHighEvidence = artifacts.some((a) => a.type !== "config");
   const confidence: SpecConfidence = hasHighEvidence ? "high" : "medium";
-  const status: SpecStatus = hasHighEvidence ? "artifacts-present" : "installed-only";
+  let status: SpecStatus = hasHighEvidence ? "artifacts-present" : "installed-only";
+  // If only archive exists (no active changes, no specs), mark as archived
+  if (hasArchive && !hasNonArchiveChanges && artifacts.length === 0) {
+    status = "archived";
+  }
 
   sources.push({
     kind: "framework",
@@ -390,17 +398,29 @@ function detectSpecKit(repoRoot: string): SpecSource[] {
     for (const feature of listDirs(specsRoot)) {
       const featureDir = path.join(specsRoot, feature);
       const files = listFiles(featureDir);
+      const contractsDir = path.join(featureDir, "contracts");
       const specKitFiles = files.filter((f) =>
         /^(spec|plan|tasks|data-model|research|quickstart)\.md$/i.test(f)
-        || f === "contracts",
       );
-      if (specKitFiles.length > 0 || dirExists(path.join(featureDir, "contracts"))) {
+      if (specKitFiles.length > 0 || dirExists(contractsDir)) {
+        // Collect artifacts from feature dir
         for (const file of files) {
           if (file.endsWith(".md")) {
             artifacts.push({
               type: inferArtifactType(file),
               path: relPath(repoRoot, path.join(featureDir, file)),
             });
+          }
+        }
+        // Also collect artifacts from contracts/ subdirectory
+        if (dirExists(contractsDir)) {
+          for (const file of listFiles(contractsDir)) {
+            if (file.endsWith(".md")) {
+              artifacts.push({
+                type: inferArtifactType(file),
+                path: relPath(repoRoot, path.join(contractsDir, file)),
+              });
+            }
           }
         }
         evidence.push(`specs/${feature}/`);

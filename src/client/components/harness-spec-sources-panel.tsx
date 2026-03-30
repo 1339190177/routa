@@ -307,7 +307,10 @@ export function HarnessSpecSourcesPanel({
   const { nativeTools, frameworks, integrations, legacy } = groupSourcesByCategory(sources);
 
   const totalSpecs = sources.reduce((sum, s) => {
-    if (s.features && s.features.length > 0) return sum + s.features.length;
+    if (s.features && s.features.length > 0) {
+      // For Kiro features, count total documents across all features
+      return sum + s.features.reduce((docSum, f) => docSum + f.documents.length, 0);
+    }
     return sum + s.children.length;
   }, 0);
   const highConfidenceCount = sources.filter((s) => s.confidence === "high").length;
@@ -434,8 +437,8 @@ export function HarnessSpecSourcesPanel({
 
         {data?.warnings && data.warnings.length > 0 && (
           <div className="mt-3 space-y-1">
-            {data.warnings.map((warning) => (
-              <div key={warning} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700">
+            {data.warnings.map((warning, index) => (
+              <div key={`warning-${index}`} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700">
                 {warning}
               </div>
             ))}
