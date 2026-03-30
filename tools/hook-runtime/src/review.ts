@@ -1,30 +1,14 @@
-import { isAiAgent, isInteractive } from "./ai.js";
 import { runCommand } from "./process.js";
-import { promptYesNo } from "./prompt.js";
 import path from "node:path";
+import {
+  runReviewTriggerSpecialist,
+  type ReviewReportPayload,
+  type ReviewTrigger,
+} from "./specialist-review.js";
 
 const REVIEW_UNAVAILABLE_BYPASS_ENV = "ROUTA_ALLOW_REVIEW_UNAVAILABLE";
 
-type ReviewTrigger = {
-  action: string;
-  name: string;
-  reasons?: string[];
-  severity: string;
-};
-
-type ReviewReport = {
-  base?: string;
-  triggers?: ReviewTrigger[];
-  changed_files?: string[];
-  committed_files?: string[];
-  working_tree_files?: string[];
-  untracked_files?: string[];
-  diff_stats?: {
-    file_count?: number;
-    added_lines?: number;
-    deleted_lines?: number;
-  };
-};
+type ReviewReport = ReviewReportPayload;
 
 export type ReviewPhaseResult = {
   base: string;
@@ -186,13 +170,12 @@ function buildResultBase(
   };
 }
 
-async function parseDecision(report: ReviewReport, base: string, outputMode: "human" | "jsonl"): Promise<ReviewPhaseResult> {
-  if (isAiAgent()) {
-    const message =
-      "Review-trigger matched. Human review is required before push. Rerun with ROUTA_ALLOW_REVIEW_TRIGGER_PUSH=1 after review if you intentionally want to bypass this gate.";
-    return buildResultBase(base, report, "blocked", false, false, message);
-  }
-
+async function parseDecision(
+  report: ReviewReport,
+  base: string,
+  reviewRoot: string,
+  outputMode: "human" | "jsonl",
+): Promise<ReviewPhaseResult> {
   if (process.env.ROUTA_ALLOW_REVIEW_TRIGGER_PUSH === "1") {
     const message = "ROUTA_ALLOW_REVIEW_TRIGGER_PUSH=1 set, bypassing review gate.";
     if (outputMode === "human") {
@@ -202,24 +185,53 @@ async function parseDecision(report: ReviewReport, base: string, outputMode: "hu
     return buildResultBase(base, report, "passed", true, true, message);
   }
 
-  if (!isInteractive()) {
+  try {
+    const decision = await runReviewTriggerSpecialist({
+      reviewRoot,
+      base,
+      report,
+    });
+    const message = decision.summary;
+    if (outputMode === "human") {
+      console.log(message);
+      if (decision.findings.length > 0) {
+        for (const finding of decision.findings) {
+          const severity = finding.severity?.toUpperCase() ?? "INFO";
+          const title = finding.title?.trim() || "Unnamed finding";
+          const reason = finding.reason?.trim();
+          const location = finding.location?.trim();
+          console.log(`- [${severity}] ${title}${location ? ` (${location})` : ""}`);
+          if (reason) {
+            console.log(`  ${reason}`);
+          }
+        }
+      }
+      console.log("");
+    }
+    return buildResultBase(
+      base,
+      report,
+      decision.allowed ? "passed" : "blocked",
+      decision.allowed,
+      false,
+      message,
+    );
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (shouldBypassUnavailableReviewGate()) {
+      const message = `${REVIEW_UNAVAILABLE_BYPASS_ENV}=1 set, bypassing automatic specialist review failure. ${detail}`;
+      if (outputMode === "human") {
+        console.log(message);
+        console.log("");
+      }
+      return buildResultBase(base, report, "unavailable", true, true, message);
+    }
+
     const message =
-      "Review-trigger matched in a non-interactive push. Complete human review first, then rerun with ROUTA_ALLOW_REVIEW_TRIGGER_PUSH=1 to confirm.";
-    return buildResultBase(base, report, "blocked", false, false, message);
+      `Automatic review specialist failed, so the push is blocked. ${detail} ` +
+      `Fix the review environment and rerun, or set ${REVIEW_UNAVAILABLE_BYPASS_ENV}=1 to bypass intentionally.`;
+    return buildResultBase(base, report, "unavailable", false, false, message);
   }
-
-  const confirmed = await promptYesNo("These changes need human review. Confirm review is complete and continue push? [y/N]");
-  if (!confirmed) {
-    const message = "Push aborted. Complete review, then push again.";
-    return buildResultBase(base, report, "blocked", false, false, message);
-  }
-
-  const message = "Human review acknowledged. Continuing push.";
-  if (outputMode === "human") {
-    console.log(message);
-    console.log("");
-  }
-  return buildResultBase(base, report, "passed", true, false, message);
 }
 
 function shouldBypassUnavailableReviewGate(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -342,5 +354,5 @@ export async function runReviewTriggerPhase(outputMode: "human" | "jsonl" = "hum
     printReviewReport(report);
   }
 
-  return parseDecision(report, reviewBase, outputMode);
+  return parseDecision(report, reviewBase, reviewRoot, outputMode);
 }

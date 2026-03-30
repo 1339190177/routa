@@ -1,21 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const isAiAgentMock = vi.hoisted(() => vi.fn<() => boolean>(() => false));
-const isInteractiveMock = vi.hoisted(() => vi.fn<() => boolean>(() => false));
 const runCommandMock = vi.hoisted(() => vi.fn());
-const promptYesNoMock = vi.hoisted(() => vi.fn());
-
-vi.mock("../ai.js", () => ({
-  isAiAgent: isAiAgentMock,
-  isInteractive: isInteractiveMock,
-}));
+const runReviewTriggerSpecialistMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../process.js", () => ({
   runCommand: runCommandMock,
 }));
 
-vi.mock("../prompt.js", () => ({
-  promptYesNo: promptYesNoMock,
+vi.mock("../specialist-review.js", () => ({
+  runReviewTriggerSpecialist: runReviewTriggerSpecialistMock,
 }));
 
 import { runReviewTriggerPhase } from "../review.js";
@@ -93,7 +86,7 @@ describe("runReviewTriggerPhase", () => {
     expect(result.triggers).toEqual([]);
   });
 
-  it("blocks a matched review trigger in non-interactive mode", async () => {
+  it("blocks a matched review trigger when the specialist rejects it", async () => {
     delete process.env.ROUTA_ALLOW_REVIEW_TRIGGER_PUSH;
     runCommandMock
       .mockResolvedValueOnce({
@@ -139,6 +132,12 @@ describe("runReviewTriggerPhase", () => {
           diff_stats: { file_count: 1, added_lines: 10, deleted_lines: 2 },
         }),
       });
+    runReviewTriggerSpecialistMock.mockResolvedValueOnce({
+      allowed: false,
+      summary: "Automatic review specialist found a regression risk.",
+      findings: [{ severity: "high", title: "Regression risk", reason: "Control flow changed without safeguards." }],
+      raw: "{\"verdict\":\"fail\"}",
+    });
 
     const result = await runReviewTriggerPhase("jsonl");
 
@@ -148,7 +147,7 @@ describe("runReviewTriggerPhase", () => {
     expect(result.committedFiles).toEqual(["tools/hook-runtime/src/review.ts"]);
     expect(result.workingTreeFiles).toEqual(["tools/hook-runtime/src/runtime.ts"]);
     expect(result.untrackedFiles).toEqual(["tmp/debug.txt"]);
-    expect(result.message).toContain("non-interactive push");
+    expect(result.message).toContain("regression risk");
   });
 
   it("allows matched review trigger when bypass env var is set", async () => {
@@ -203,6 +202,7 @@ describe("runReviewTriggerPhase", () => {
     expect(result.bypassed).toBe(true);
     expect(result.triggers).toHaveLength(1);
     expect(result.message).toContain("ROUTA_ALLOW_REVIEW_TRIGGER_PUSH=1 set");
+    expect(runReviewTriggerSpecialistMock).not.toHaveBeenCalled();
   });
 
   it("falls back to legacy changed_files payloads", async () => {
@@ -248,11 +248,18 @@ describe("runReviewTriggerPhase", () => {
           diff_stats: { file_count: 1, added_lines: 10, deleted_lines: 2 },
         }),
       });
+    runReviewTriggerSpecialistMock.mockResolvedValueOnce({
+      allowed: true,
+      summary: "Automatic review specialist approved the push.",
+      findings: [],
+      raw: "{\"verdict\":\"pass\"}",
+    });
 
     const result = await runReviewTriggerPhase("jsonl");
 
     expect(result.changedFiles).toEqual(["tools/hook-runtime/src/review.ts"]);
     expect(result.committedFiles).toEqual(["tools/hook-runtime/src/review.ts"]);
+    expect(result.allowed).toBe(true);
   });
 
   it("passes without invoking entrix when push scope has no committed files", async () => {
