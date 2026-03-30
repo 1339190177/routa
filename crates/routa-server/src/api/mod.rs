@@ -8,6 +8,7 @@ pub mod agents;
 pub mod background_tasks;
 pub mod clone;
 pub mod clone_branches;
+pub mod clone_local;
 pub mod clone_progress;
 pub mod codebases;
 pub mod debug;
@@ -84,6 +85,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/background-tasks", background_tasks::router())
         .nest("/api/test-mcp", test_mcp::router())
         .nest("/api/clone", clone::router())
+        .nest("/api/clone/local", clone_local::router())
         .nest("/api/clone/progress", clone_progress::router())
         .nest("/api/clone/branches", clone_branches::router())
         .nest("/api/files", files::router())

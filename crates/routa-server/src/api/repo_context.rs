@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::error::ServerError;
+use crate::git;
 use crate::state::AppState;
 
 #[derive(Debug, Default, Deserialize)]
@@ -19,6 +20,55 @@ pub fn normalize_context_value(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
+}
+
+pub fn normalize_local_repo_path(value: &str) -> PathBuf {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return PathBuf::new();
+    }
+
+    if trimmed == "~" {
+        if let Some(home) = dirs::home_dir() {
+            return home;
+        }
+    }
+
+    if let Some(suffix) = trimmed
+        .strip_prefix("~/")
+        .or_else(|| trimmed.strip_prefix("~\\"))
+    {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(suffix);
+        }
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if candidate.is_absolute() {
+        candidate
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(candidate)
+    }
+}
+
+pub fn validate_local_git_repo_path(candidate: &Path) -> Result<(), ServerError> {
+    if !candidate.exists() || !candidate.is_dir() {
+        return Err(ServerError::BadRequest(format!(
+            "Path does not exist or is not a directory: {}",
+            candidate.display()
+        )));
+    }
+
+    if !git::is_git_repository(&candidate.to_string_lossy()) {
+        return Err(ServerError::BadRequest(format!(
+            "Directory exists but is not a git repository: {}",
+            candidate.display()
+        )));
+    }
+
+    Ok(())
 }
 
 pub fn is_routa_repo_root(repo_root: &Path) -> bool {

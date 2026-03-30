@@ -2926,6 +2926,41 @@ paths:
           content:
             text/event-stream: {}
 
+  /api/clone/local:
+    post:
+      operationId: loadLocalRepo
+      summary: Load an existing local git repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+      responses:
+        "200":
+          description: Loaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  name:
+                    type: string
+                  path:
+                    type: string
+                  branch:
+                    type: string
+                  branches:
+                    type: array
+                    items:
+                      type: string
+
   /api/clone/branches:
     get:
       operationId: getBranches
