@@ -236,26 +236,26 @@ function MiniDagPreview({ flow }: { flow: GitHubActionsFlow }) {
 
   return (
     <div className="overflow-x-auto">
-      <div className="flex min-w-max items-start gap-2.5">
-        <div className="w-20 shrink-0 rounded-[14px] border border-sky-200/80 bg-sky-50/80 px-2 py-2">
+      <div className="flex min-w-max items-start gap-2">
+        <div className="w-[4.5rem] shrink-0 rounded-[14px] border border-sky-200/80 bg-sky-50/80 px-2 py-1.5">
           <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-sky-700">Trigger</div>
-          <div className="mt-1 text-[10px] font-semibold leading-4 text-slate-900">
+          <div className="mt-0.5 text-[10px] font-semibold leading-4 text-slate-900">
             {humanizeToken(normalizeGitHubWorkflowEventTokens(flow.event)[0] ?? flow.event)}
           </div>
         </div>
 
         {visibleLanes.map((laneJobs, laneIndex) => (
-          <div key={`${flow.id}:lane:${laneIndex}`} className="flex items-start gap-2">
-            <div className="flex h-8 items-center text-slate-300">
+          <div key={`${flow.id}:lane:${laneIndex}`} className="flex items-start gap-1.5">
+            <div className="flex h-7 items-center text-slate-300">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m0 0-4-4m4 4-4 4" />
               </svg>
             </div>
-            <div className="w-28 shrink-0 space-y-1">
+            <div className="w-24 shrink-0 space-y-0.5">
               {laneJobs.slice(0, 1).map((job) => (
-                <div key={job.id} className="rounded-[14px] border border-slate-200/80 bg-slate-50/75 px-2 py-1.5">
+                <div key={job.id} className="rounded-[14px] border border-slate-200/80 bg-slate-50/75 px-2 py-1">
                   <div className="truncate text-[10px] font-semibold text-slate-900">{job.name}</div>
-                  <div className="mt-1 flex items-center justify-between gap-2">
+                  <div className="mt-0.5 flex items-center justify-between gap-2">
                     <span className="truncate text-[9px] text-slate-500">{job.runner}</span>
                     <span className={cx("rounded-full border px-1.5 py-0.5 text-[8px]", JOB_KIND_STYLES[job.kind])}>{job.kind}</span>
                   </div>
@@ -271,13 +271,13 @@ function MiniDagPreview({ flow }: { flow: GitHubActionsFlow }) {
         ))}
 
         {hiddenLaneCount > 0 ? (
-          <div className="flex items-start gap-2">
-            <div className="flex h-8 items-center text-slate-300">
+          <div className="flex items-start gap-1.5">
+            <div className="flex h-7 items-center text-slate-300">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m0 0-4-4m4 4-4 4" />
               </svg>
             </div>
-            <div className="w-20 shrink-0 rounded-[14px] border border-dashed border-slate-200/80 bg-white/70 px-2 py-2 text-[9px] text-slate-500">
+            <div className="w-[4.5rem] shrink-0 rounded-[14px] border border-dashed border-slate-200/80 bg-white/70 px-2 py-1.5 text-[9px] text-slate-500">
               +{hiddenLaneCount} more stages
             </div>
           </div>
@@ -311,7 +311,7 @@ function WorkflowCard({
       type="button"
       onClick={onSelect}
       className={cx(
-        "w-full rounded-[22px] border px-3 py-3 text-left transition-all",
+        "w-full rounded-[22px] border px-3 py-2.5 text-left transition-all",
         selected
           ? "border-sky-300 bg-[linear-gradient(180deg,rgba(250,252,255,0.98),rgba(238,246,255,0.98))] shadow-[0_18px_44px_rgba(59,130,246,0.08)]"
           : "border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,248,252,0.95))] shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-300 hover:shadow-[0_16px_40px_rgba(15,23,42,0.06)]",
@@ -326,7 +326,7 @@ function WorkflowCard({
         ) : null}
       </div>
 
-      <div className="mt-2 overflow-x-auto">
+      <div className="mt-1.5 overflow-x-auto">
         <div className="flex min-w-max items-center gap-1.5 whitespace-nowrap pr-1">
           {visibleTokens.map((token) => (
             <span key={`${flow.id}:${token}`} className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-medium text-violet-700">
@@ -346,12 +346,8 @@ function WorkflowCard({
         </div>
       </div>
 
-      <div className="mt-2.5 rounded-[18px] bg-white/55 px-2.5 py-2">
+      <div className="mt-2 rounded-[16px] bg-white/55 px-2 py-1.5">
         <MiniDagPreview flow={flow} />
-      </div>
-
-      <div className="mt-2 text-[10px] text-slate-500">
-        Click to inspect the full pipeline.
       </div>
     </button>
   );
@@ -725,7 +721,7 @@ export function HarnessGitHubActionsFlowGallery({
       </div>
 
       {(activeCategory?.flows.length ?? 0) > 0 ? (
-        <div className={cx("mt-3 grid gap-2.5", compactMode ? "grid-cols-1" : "xl:grid-cols-2")}>
+        <div className={cx("mt-2.5 grid gap-2", compactMode ? "grid-cols-1" : "xl:grid-cols-2")}>
           {activeCategory?.flows.map((flow) => (
             <WorkflowCard
               key={flow.id}
