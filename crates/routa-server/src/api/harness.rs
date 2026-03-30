@@ -51,13 +51,50 @@ async fn get_agent_hooks(
         "Failed to read agent hooks",
     ))?;
 
-    let (hooks, config_file, warnings) = load_agent_hook_config(&repo_root);
+    let mut all_hooks = Vec::new();
+    let mut config_files: Vec<Value> = Vec::new();
+    let mut warnings = Vec::new();
+
+    /* 1. Scan standard hook config files (Claude Code, Qoder, Codex) */
+    let standard_locations = [
+        (".claude/settings.json", "claude-code"),
+        (".claude/settings.local.json", "claude-code"),
+        (".qoder/settings.json", "qoder"),
+        (".qoder/settings.local.json", "qoder"),
+        (".codex/hooks.json", "codex"),
+    ];
+    for (rel_path, provider) in &standard_locations {
+        let full_path = repo_root.join(rel_path);
+        if !full_path.exists() {
+            continue;
+        }
+        if let Ok(raw) = std::fs::read_to_string(&full_path) {
+            let (hooks, cf) = parse_standard_hooks_config(&raw, rel_path, provider, &mut warnings);
+            all_hooks.extend(hooks);
+            config_files.push(cf);
+        }
+    }
+
+    /* 2. Scan custom YAML config (routa-specific) */
+    let (yaml_hooks, yaml_cf, yaml_warnings) = load_agent_hook_config(&repo_root);
+    all_hooks.extend(yaml_hooks);
+    if yaml_cf != Value::Null {
+        config_files.push(yaml_cf);
+    }
+    warnings.extend(yaml_warnings);
+
+    if all_hooks.is_empty() && config_files.is_empty() {
+        warnings.push("No agent hook configuration found.".to_string());
+    }
+
+    let primary_config = config_files.first().cloned().unwrap_or(Value::Null);
 
     Ok(Json(json!({
         "generatedAt": chrono::Utc::now().to_rfc3339(),
         "repoRoot": repo_root,
-        "configFile": config_file,
-        "hooks": hooks,
+        "configFile": primary_config,
+        "configFiles": config_files,
+        "hooks": all_hooks,
         "warnings": warnings,
     })))
 }
@@ -908,9 +945,99 @@ const KNOWN_AGENT_EVENTS: &[&str] = &[
     "Stop",
 ];
 
-const BLOCKABLE_AGENT_EVENTS: &[&str] = &["PreToolUse", "UserPromptSubmit"];
+const BLOCKABLE_AGENT_EVENTS: &[&str] = &["PreToolUse", "UserPromptSubmit", "PermissionRequest"];
 
-const KNOWN_AGENT_HOOK_TYPES: &[&str] = &["command", "http", "prompt"];
+const KNOWN_AGENT_HOOK_TYPES: &[&str] = &["command", "http", "prompt", "agent"];
+
+/// Parse standard hooks config files (Claude Code / Qoder / Codex format)
+fn parse_standard_hooks_config(
+    raw: &str,
+    rel_path: &str,
+    provider: &str,
+    warnings: &mut Vec<String>,
+) -> (Vec<Value>, Value) {
+    let parsed: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
+        Err(_) => {
+            warnings.push(format!("Failed to parse {rel_path} as JSON."));
+            return (Vec::new(), json!({ "relativePath": rel_path, "source": raw, "provider": provider }));
+        }
+    };
+
+    let hooks_map = match parsed.get("hooks").and_then(|v| v.as_object()) {
+        Some(m) => m,
+        None => {
+            return (Vec::new(), json!({ "relativePath": rel_path, "source": raw, "provider": provider }));
+        }
+    };
+
+    let blockable: HashSet<&str> = BLOCKABLE_AGENT_EVENTS.iter().copied().collect();
+    let mut hooks = Vec::new();
+
+    for (event_name, groups) in hooks_map {
+        let groups_arr = match groups.as_array() {
+            Some(a) => a,
+            None => continue,
+        };
+
+        for group in groups_arr {
+            let matcher = group
+                .get("matcher")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty());
+
+            let hook_entries = match group.get("hooks").and_then(|v| v.as_array()) {
+                Some(a) => a,
+                None => continue,
+            };
+
+            for entry in hook_entries {
+                let hook_type = entry
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("command");
+                let blocking = blockable.contains(event_name.as_str());
+                let timeout = entry
+                    .get("timeout")
+                    .and_then(|v| v.as_i64())
+                    .filter(|t| *t > 0)
+                    .unwrap_or(10);
+
+                let mut hook = json!({
+                    "event": event_name,
+                    "type": hook_type,
+                    "timeout": timeout,
+                    "blocking": blocking,
+                    "source": format!("{provider}:{rel_path}"),
+                });
+
+                if let Some(m) = matcher {
+                    hook["matcher"] = json!(m);
+                }
+                if let Some(c) = entry.get("command").and_then(|v| v.as_str()) {
+                    hook["command"] = json!(c);
+                }
+                if let Some(u) = entry.get("url").and_then(|v| v.as_str()) {
+                    hook["url"] = json!(u);
+                }
+                if let Some(p) = entry.get("prompt").and_then(|v| v.as_str()) {
+                    hook["prompt"] = json!(p);
+                }
+
+                hooks.push(hook);
+            }
+        }
+    }
+
+    let config_file = json!({
+        "relativePath": rel_path,
+        "source": raw,
+        "provider": provider,
+    });
+
+    (hooks, config_file)
+}
 
 fn load_agent_hook_config(repo_root: &Path) -> (Vec<Value>, Value, Vec<String>) {
     let config_path = repo_root.join("docs/fitness/runtime/agent-hooks.yaml");
@@ -1015,6 +1142,7 @@ fn load_agent_hook_config(repo_root: &Path) -> (Vec<Value>, Value, Vec<String>) 
             "type": hook_type,
             "timeout": timeout,
             "blocking": blocking,
+            "source": "routa:docs/fitness/runtime/agent-hooks.yaml",
         });
 
         if let Some(m) = matcher {

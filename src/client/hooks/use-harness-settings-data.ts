@@ -149,6 +149,7 @@ export type AgentHookConfigSummary = {
   timeout: number;
   blocking: boolean;
   description?: string;
+  source?: string;
 };
 
 export type AgentHooksResponse = {
@@ -159,6 +160,12 @@ export type AgentHooksResponse = {
     source: string;
     schema?: string;
   } | null;
+  configFiles?: Array<{
+    relativePath: string;
+    source: string;
+    schema?: string;
+    provider?: string;
+  }>;
   hooks: AgentHookConfigSummary[];
   warnings: string[];
 };
