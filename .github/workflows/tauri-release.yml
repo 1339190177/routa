@@ -42,6 +42,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Sync release version
+        shell: bash
         env:
           RELEASE_VERSION: ${{ inputs.version || github.event.inputs.version }}
         run: node scripts/release/sync-release-version.mjs --version "${RELEASE_VERSION}"

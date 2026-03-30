@@ -60,6 +60,7 @@ jobs:
 
       - name: Sync release version
         if: ${{ inputs.version || github.event.inputs.version }}
+        shell: bash
         env:
           RELEASE_VERSION: ${{ inputs.version || github.event.inputs.version }}
         run: node scripts/release/sync-release-version.mjs --version "${RELEASE_VERSION}"
