@@ -29,15 +29,28 @@ type HookRuntimeProfileSummary = {
   hooks: string[];
 };
 
+type ReviewTriggerBoundarySummary = {
+  name: string;
+  paths: string[];
+};
+
 type ReviewTriggerRuleSummary = {
   name: string;
   type: string;
   severity: string;
   action: string;
+  paths: string[];
+  evidencePaths: string[];
+  boundaries: ReviewTriggerBoundarySummary[];
+  directories: string[];
   pathCount: number;
   evidencePathCount: number;
   boundaryCount: number;
   directoryCount: number;
+  minBoundaries: number | null;
+  maxFiles: number | null;
+  maxAddedLines: number | null;
+  maxDeletedLines: number | null;
 };
 
 type ReviewTriggerConfigSummary = {
@@ -144,6 +157,17 @@ function normalizeStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
 }
 
+function normalizeInteger(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 async function loadHookRuntimeProfiles(repoRoot: string): Promise<{
   profiles: HookRuntimeProfileConfig[];
   warnings: string[];
@@ -219,18 +243,34 @@ async function loadReviewTriggerConfigSource(repoRoot: string): Promise<HooksRes
   const rawRules = Array.isArray(parsed.review_triggers) ? parsed.review_triggers : [];
   const rules = rawRules.map((rule) => {
     const boundaries = rule.boundaries && typeof rule.boundaries === "object"
-      ? Object.keys(rule.boundaries as Record<string, unknown>)
+      ? Object.entries(rule.boundaries as Record<string, unknown>)
+        .filter(([boundaryName]) => typeof boundaryName === "string" && boundaryName.trim().length > 0)
+        .map(([boundaryName, value]) => ({
+          name: boundaryName,
+          paths: normalizeStringList(value),
+        }))
       : [];
+    const paths = normalizeStringList(rule.paths);
+    const evidencePaths = normalizeStringList(rule.evidence_paths);
+    const directories = normalizeStringList(rule.directories);
 
     return {
       name: typeof rule.name === "string" && rule.name.trim().length > 0 ? rule.name : "unknown",
       type: typeof rule.type === "string" && rule.type.trim().length > 0 ? rule.type : "unknown",
       severity: typeof rule.severity === "string" && rule.severity.trim().length > 0 ? rule.severity : "medium",
       action: typeof rule.action === "string" && rule.action.trim().length > 0 ? rule.action : "require_human_review",
-      pathCount: normalizeStringList(rule.paths).length,
-      evidencePathCount: normalizeStringList(rule.evidence_paths).length,
+      paths,
+      evidencePaths,
+      boundaries,
+      directories,
+      pathCount: paths.length,
+      evidencePathCount: evidencePaths.length,
       boundaryCount: boundaries.length,
-      directoryCount: normalizeStringList(rule.directories).length,
+      directoryCount: directories.length,
+      minBoundaries: normalizeInteger(rule.min_boundaries),
+      maxFiles: normalizeInteger(rule.max_files),
+      maxAddedLines: normalizeInteger(rule.max_added_lines),
+      maxDeletedLines: normalizeInteger(rule.max_deleted_lines),
     } satisfies ReviewTriggerRuleSummary;
   });
 

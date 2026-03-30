@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
-import type { HooksResponse, ReviewTriggerRuleSummary } from "@/client/hooks/use-harness-settings-data";
+import type {
+  HookFileSummary,
+  HooksResponse,
+  ReviewTriggerBoundarySummary,
+  ReviewTriggerRuleSummary,
+} from "@/client/hooks/use-harness-settings-data";
 
 type ReviewTriggersPanelProps = {
   repoLabel: string;
@@ -15,20 +20,21 @@ type ReviewTriggersPanelProps = {
 
 type ReviewDimensionTone = "danger" | "warning" | "info" | "success";
 
+type ReviewRoutingDetails = {
+  actions: string[];
+  profiles: HooksResponse["profiles"];
+  hookFiles: HookFileSummary[];
+};
+
 type ReviewDimensionCard = {
   key: "risk" | "confidence" | "complexity" | "routing";
   title: string;
   value: string;
   subtitle: string;
-  barLabel: string;
   barValue: number;
   tone: ReviewDimensionTone;
-  tags: string[];
   rules: ReviewTriggerRuleSummary[];
-  metaDetails: Array<{
-    label: string;
-    value: string;
-  }>;
+  routingDetails?: ReviewRoutingDetails;
 };
 
 const RISK_RULE_NAMES = new Set([
@@ -50,13 +56,16 @@ const COMPLEXITY_RULE_TYPES = new Set([
   "diff_size",
 ]);
 
-const TONE_STYLES: Record<ReviewDimensionTone, {
-  pill: string;
-  bar: string;
-  border: string;
-  surface: string;
-  tag: string;
-}> = {
+const TONE_STYLES: Record<
+  ReviewDimensionTone,
+  {
+    pill: string;
+    bar: string;
+    border: string;
+    surface: string;
+    tag: string;
+  }
+> = {
   danger: {
     pill: "bg-rose-600 text-white",
     bar: "bg-rose-600",
@@ -99,6 +108,14 @@ function formatTokenLabel(value: string): string {
     .join(" ");
 }
 
+function formatRuleLabel(ruleName: string): string {
+  return formatTokenLabel(ruleName);
+}
+
+function formatCount(value: number, singular: string, plural = `${singular}s`): string {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
 function scoreSeverity(severity: string): number {
   if (severity === "high") return 3;
   if (severity === "medium") return 2;
@@ -117,26 +134,6 @@ function confidenceTone(score: number): ReviewDimensionTone {
   return "danger";
 }
 
-function formatRuleLabel(ruleName: string): string {
-  return formatTokenLabel(ruleName);
-}
-
-function formatRuleList(ruleNames: string[], emptyText: string): string {
-  return ruleNames.length ? ruleNames.map(formatRuleLabel).join(", ") : emptyText;
-}
-
-function buildRuleBadges(rule: ReviewTriggerRuleSummary): string[] {
-  return [
-    formatTokenLabel(rule.type),
-    rule.severity,
-    formatTokenLabel(rule.action),
-    rule.pathCount > 0 ? `${rule.pathCount} paths` : "",
-    rule.evidencePathCount > 0 ? `${rule.evidencePathCount} evidence` : "",
-    rule.boundaryCount > 0 ? `${rule.boundaryCount} boundaries` : "",
-    rule.directoryCount > 0 ? `${rule.directoryCount} directories` : "",
-  ].filter(Boolean);
-}
-
 function uniqueLabels(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
@@ -144,11 +141,11 @@ function uniqueLabels(values: string[]): string[] {
 function containerClass(compactMode: boolean): string {
   return compactMode
     ? "rounded-2xl border border-amber-200 bg-amber-50/60 p-3"
-    : "rounded-2xl border border-amber-200 bg-amber-50/45 p-4 shadow-sm";
+    : "rounded-2xl border border-amber-200 bg-amber-50/45 p-3.5 shadow-sm";
 }
 
 function cardGridClass(compactMode: boolean): string {
-  return compactMode ? "mt-3 grid grid-cols-1 gap-3" : "mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4";
+  return compactMode ? "mt-2.5 grid grid-cols-1 gap-2.5" : "mt-2.5 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4";
 }
 
 function isRiskRule(rule: ReviewTriggerRuleSummary): boolean {
@@ -178,10 +175,20 @@ function isComplexityRule(rule: ReviewTriggerRuleSummary): boolean {
   return /boundary|oversized|diff|file_count/i.test(rule.name);
 }
 
+function buildThresholdTokens(rule: ReviewTriggerRuleSummary): string[] {
+  return [
+    rule.minBoundaries ? `min ${rule.minBoundaries} boundaries` : "",
+    rule.maxFiles ? `max ${rule.maxFiles} files` : "",
+    rule.maxAddedLines ? `+${rule.maxAddedLines} lines` : "",
+    rule.maxDeletedLines ? `-${rule.maxDeletedLines} lines` : "",
+  ].filter(Boolean);
+}
+
 function buildReviewDimensionCards(
   rules: ReviewTriggerRuleSummary[],
   reviewProfiles: HooksResponse["profiles"],
   reviewHooks: string[],
+  hookFiles: HookFileSummary[],
 ): ReviewDimensionCard[] {
   const riskRules = rules.filter(isRiskRule);
   const confidenceRules = rules.filter(isConfidenceRule);
@@ -190,129 +197,250 @@ function buildReviewDimensionCards(
   const riskScore = riskRules.length
     ? clamp(riskRules.reduce((sum, rule) => sum + scoreSeverity(rule.severity), 0) / (riskRules.length * 3))
     : 0;
-  const riskTags = riskRules.length
-    ? riskRules.map((rule) => formatRuleLabel(rule.name)).slice(0, 3)
-    : ["No dedicated risk policy"];
 
   const evidencePathCount = confidenceRules.reduce((sum, rule) => sum + rule.evidencePathCount, 0);
   const confidenceScore = confidenceRules.length
     ? clamp((confidenceRules.length * 2 + Math.min(evidencePathCount, 8)) / 10)
     : 0;
-  const confidenceTags = confidenceRules.length
-    ? confidenceRules.map((rule) => formatRuleLabel(rule.name)).slice(0, 3)
-    : ["No evidence-gap policy"];
 
   const complexityBoundaryCount = complexityRules.reduce((sum, rule) => sum + rule.boundaryCount, 0);
   const complexityDirectoryCount = complexityRules.reduce((sum, rule) => sum + rule.directoryCount, 0);
   const complexityScore = complexityRules.length
     ? clamp(
-      (
-        complexityRules.reduce((sum, rule) => sum + scoreSeverity(rule.severity), 0) +
-        complexityBoundaryCount +
-        complexityDirectoryCount
-      ) / Math.max(complexityRules.length * 3 + 2, 5),
-    )
+        (
+          complexityRules.reduce((sum, rule) => sum + scoreSeverity(rule.severity), 0) +
+          complexityBoundaryCount +
+          complexityDirectoryCount
+        ) / Math.max(complexityRules.length * 3 + 2, 5),
+      )
     : 0;
-  const complexityTags = uniqueLabels([
-    ...complexityRules.map((rule) => formatRuleLabel(rule.name)).slice(0, 2),
-    complexityBoundaryCount > 0 ? `${complexityBoundaryCount} boundaries` : "",
-    complexityDirectoryCount > 0 ? `${complexityDirectoryCount} directories` : "",
-  ]);
 
   const actionLabels = uniqueLabels(rules.map((rule) => formatTokenLabel(rule.action)));
-  const profileLabels = uniqueLabels(reviewProfiles.map((profile) => formatTokenLabel(profile.name)));
-  const hookLabels = uniqueLabels(reviewHooks.map((hook) => formatTokenLabel(hook)));
-  const routingReady = actionLabels.length > 0 && profileLabels.length > 0;
-  const routingTone: ReviewDimensionTone = routingReady ? "success" : "warning";
-  const routingTags = uniqueLabels([
-    ...profileLabels.slice(0, 2),
-    ...hookLabels.slice(0, 1),
-    ...actionLabels.slice(0, 1),
-  ]);
+  const routingProfiles = reviewProfiles.filter((profile) => profile.phases.includes("review"));
+  const routingHooks = uniqueLabels(reviewHooks);
+  const routingHookFiles = hookFiles.filter((file) => routingHooks.includes(file.name));
+  const routingReady = actionLabels.length > 0 && routingProfiles.length > 0;
   const routingScore = clamp(
     (actionLabels.length > 0 ? 0.4 : 0) +
-      (profileLabels.length > 0 ? 0.35 : 0) +
-      Math.min(hookLabels.length, 2) * 0.125,
+      (routingProfiles.length > 0 ? 0.35 : 0) +
+      Math.min(routingHooks.length, 2) * 0.125,
   );
 
   return [
     {
       key: "risk",
       title: "Risk",
-      value: riskRules.length ? `${riskRules.length} rules` : "No risk gates",
+      value: riskRules.length ? formatCount(riskRules.length, "rule") : "No rules",
       subtitle: riskRules.length
-        ? "核心目录、治理文件和敏感契约的变更会优先升级人工评审。"
-        : "当前没有针对高影响面目录或契约的专门升级规则。",
-      barLabel: "Impact and blast radius",
+        ? "Core engine paths and governance files escalate directly to human review."
+        : "No high-risk path or governance triggers are configured.",
       barValue: riskScore,
       tone: toneFromScore(riskScore),
-      tags: riskTags,
       rules: riskRules,
-      metaDetails: [
-        { label: "Rules", value: formatRuleList(riskRules.map((rule) => rule.name), "No dedicated risk policy") },
-        { label: "Severity", value: `${riskRules.filter((rule) => rule.severity === "high").length} high / ${riskRules.filter((rule) => rule.severity === "medium").length} medium` },
-        { label: "Path scope", value: `${riskRules.reduce((sum, rule) => sum + rule.pathCount, 0)} guarded paths` },
-      ],
     },
     {
       key: "confidence",
       title: "Confidence",
-      value: confidenceRules.length ? `${evidencePathCount} evidence paths` : "No evidence gates",
+      value: confidenceRules.length ? formatCount(confidenceRules.length, "rule") : "No rules",
       subtitle: confidenceRules.length
-        ? "证据缺口会触发 review，避免核心改动在缺少 fitness 或 contract 佐证时直接流过。"
-        : "当前没有把证据不足单独建模为 review trigger。",
-      barLabel: "Evidence coverage",
+        ? "Core paths and API contracts need matching evidence before review can clear."
+        : "No evidence-gap triggers are configured.",
       barValue: confidenceScore,
       tone: confidenceTone(confidenceScore),
-      tags: confidenceTags,
       rules: confidenceRules,
-      metaDetails: [
-        { label: "Rules", value: formatRuleList(confidenceRules.map((rule) => rule.name), "No evidence-gap policy") },
-        { label: "Evidence", value: `${evidencePathCount} evidence paths` },
-        { label: "Protected scope", value: `${confidenceRules.reduce((sum, rule) => sum + rule.pathCount, 0)} guarded paths` },
-      ],
     },
     {
       key: "complexity",
       title: "Complexity",
-      value: complexityRules.length ? `${complexityRules.length} guards` : "No load gates",
+      value: complexityRules.length ? formatCount(complexityRules.length, "rule") : "No rules",
       subtitle: complexityRules.length
-        ? "跨边界、目录膨胀和 diff 体量共同定义这次 review 的认知负荷。"
-        : "当前没有针对跨边界或变更规模的独立复杂度门槛。",
-      barLabel: "Cross-boundary and scale pressure",
+        ? "Cross-boundary or oversized changes are treated as heavier review work."
+        : "No change-size or boundary triggers are configured.",
       barValue: complexityScore,
       tone: toneFromScore(complexityScore),
-      tags: complexityTags.length ? complexityTags : ["No complexity signal"],
       rules: complexityRules,
-      metaDetails: [
-        { label: "Rules", value: formatRuleList(complexityRules.map((rule) => rule.name), "No complexity signal") },
-        { label: "Boundaries", value: `${complexityBoundaryCount} boundaries` },
-        { label: "Directories", value: `${complexityDirectoryCount} directories` },
-      ],
     },
     {
       key: "routing",
       title: "Routing",
-      value: routingReady ? actionLabels[0] ?? "Review gate ready" : "Route incomplete",
+      value: routingProfiles.length ? formatCount(routingProfiles.length, "profile") : "No route",
       subtitle: routingReady
-        ? "系统会把这些触发器收敛到 review phase，并路由到明确的人审动作。"
-        : "规则存在，但 review phase 或动作绑定还不够完整。",
-      barLabel: "Human review routing",
+        ? "Matched rules enter the review phase through configured profiles and hooks."
+        : "Rules exist, but review-phase routing is still incomplete.",
       barValue: routingScore,
-      tone: routingTone,
-      tags: routingTags.length ? routingTags : ["No review phase binding"],
+      tone: routingReady ? "success" : "warning",
       rules: [],
-      metaDetails: [
-        { label: "Action", value: actionLabels.join(", ") || "No review action" },
-        { label: "Profiles", value: profileLabels.join(", ") || "No review profile" },
-        { label: "Hooks", value: hookLabels.join(", ") || "No hook binding" },
-      ],
+      routingDetails: {
+        actions: actionLabels,
+        profiles: routingProfiles,
+        hookFiles: routingHookFiles,
+      },
     },
   ];
 }
 
+function DetailLabel({ children }: { children: string }) {
+  return (
+    <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+      {children}
+    </div>
+  );
+}
+
+function CodeTokens({
+  items,
+  tone,
+}: {
+  items: string[];
+  tone: ReviewDimensionTone;
+}) {
+  if (!items.length) {
+    return null;
+  }
+
+  const styles = TONE_STYLES[tone];
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <span
+          key={item}
+          className={`rounded-md border px-2 py-1 font-mono text-[10px] leading-4 break-all ${styles.tag}`}
+        >
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function DetailGroup({
+  label,
+  items,
+  tone,
+}: {
+  label: string;
+  items: string[];
+  tone: ReviewDimensionTone;
+}) {
+  if (!items.length) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2">
+      <DetailLabel>{label}</DetailLabel>
+      <CodeTokens items={items} tone={tone} />
+    </div>
+  );
+}
+
+function BoundaryGroup({
+  boundaries,
+  tone,
+}: {
+  boundaries: ReviewTriggerBoundarySummary[];
+  tone: ReviewDimensionTone;
+}) {
+  if (!boundaries.length) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2">
+      <DetailLabel>Boundaries</DetailLabel>
+      <div className="mt-1.5 grid gap-1.5">
+        {boundaries.map((boundary) => (
+          <div key={boundary.name} className="rounded-lg border border-black/8 bg-white/70 px-2.5 py-2">
+            <div className="text-[10px] font-medium text-desktop-text-primary">
+              {formatTokenLabel(boundary.name)}
+            </div>
+            <CodeTokens items={boundary.paths} tone={tone} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RuleDetailCard({
+  rule,
+  tone,
+}: {
+  rule: ReviewTriggerRuleSummary;
+  tone: ReviewDimensionTone;
+}) {
+  const styles = TONE_STYLES[tone];
+  const thresholdTokens = buildThresholdTokens(rule);
+
+  return (
+    <div className="rounded-xl border border-black/8 bg-white/78 px-3 py-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="text-[11px] font-semibold text-desktop-text-primary">{formatRuleLabel(rule.name)}</div>
+        <div className="flex flex-wrap gap-1">
+          <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${styles.pill}`}>
+            {rule.severity}
+          </span>
+          <span className="rounded-full border border-black/8 bg-white px-2 py-0.5 text-[9px] text-desktop-text-secondary">
+            {formatTokenLabel(rule.type)}
+          </span>
+        </div>
+      </div>
+
+      <DetailGroup label="Watch paths" items={rule.paths} tone={tone} />
+      <DetailGroup label="Evidence paths" items={rule.evidencePaths} tone={tone} />
+      <BoundaryGroup boundaries={rule.boundaries} tone={tone} />
+      <DetailGroup label="Directories" items={rule.directories} tone={tone} />
+      <DetailGroup label="Thresholds" items={thresholdTokens} tone={tone} />
+    </div>
+  );
+}
+
+function RoutingDetailCard({
+  details,
+  tone,
+}: {
+  details: ReviewRoutingDetails;
+  tone: ReviewDimensionTone;
+}) {
+  return (
+    <div className="grid gap-2">
+      <DetailGroup label="Review actions" items={details.actions} tone={tone} />
+
+      {details.profiles.length ? (
+        <div className="grid gap-2">
+          {details.profiles.map((profile) => (
+            <div key={profile.name} className="rounded-xl border border-black/8 bg-white/78 px-3 py-2.5">
+              <div className="text-[11px] font-semibold text-desktop-text-primary">
+                {formatTokenLabel(profile.name)}
+              </div>
+              <DetailGroup label="Phases" items={profile.phases.map(formatTokenLabel)} tone={tone} />
+              <DetailGroup label="Hooks" items={profile.hooks} tone={tone} />
+              <DetailGroup
+                label="Fallback metrics"
+                items={profile.fallbackMetrics}
+                tone={tone}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {details.hookFiles.length ? (
+        <div className="grid gap-2">
+          {details.hookFiles.map((file) => (
+            <div key={file.relativePath} className="rounded-xl border border-black/8 bg-white/78 px-3 py-2.5">
+              <div className="text-[11px] font-semibold text-desktop-text-primary">{file.relativePath}</div>
+              <DetailGroup label="Trigger command" items={[file.triggerCommand]} tone={tone} />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function HarnessReviewTriggersPanel({
-  repoLabel,
+  repoLabel: _repoLabel,
   unsupportedMessage,
   data,
   loading = false,
@@ -321,37 +449,21 @@ export function HarnessReviewTriggersPanel({
 }: ReviewTriggersPanelProps) {
   const reviewTriggerFile = data?.reviewTriggerFile ?? null;
   const profiles = data?.profiles ?? [];
+  const hookFiles = data?.hookFiles ?? [];
   const reviewProfiles = profiles.filter((profile) => profile.phases.includes("review"));
   const reviewHooks = uniqueLabels(reviewProfiles.flatMap((profile) => profile.hooks));
   const [expandedCardKey, setExpandedCardKey] = useState<ReviewDimensionCard["key"] | null>(null);
   const compactMode = variant === "compact";
   const cards = reviewTriggerFile
-    ? buildReviewDimensionCards(reviewTriggerFile.rules, reviewProfiles, reviewHooks)
+    ? buildReviewDimensionCards(reviewTriggerFile.rules, reviewProfiles, reviewHooks, hookFiles)
     : [];
-  const highSeverityCount = reviewTriggerFile?.rules.filter((rule) => rule.severity === "high").length ?? 0;
 
   return (
     <section className={containerClass(compactMode)}>
-      <div className="flex flex-wrap items-start justify-between gap-2.5">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-800">Review triggers</div>
-        </div>
-
-        <div className="flex flex-wrap gap-2 text-[10px]">
-          <span className="rounded-full border border-amber-200 bg-white/90 px-2.5 py-1 text-amber-800">
-            {repoLabel}
-          </span>
-          <span className="rounded-full border border-amber-200 bg-white/90 px-2.5 py-1 text-amber-800">
-            {reviewTriggerFile?.ruleCount ?? 0} rules
-          </span>
-          <span className="rounded-full border border-amber-200 bg-white/90 px-2.5 py-1 text-amber-800">
-            {highSeverityCount} high severity
-          </span>
-        </div>
-      </div>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-800">Review triggers</div>
 
       {loading ? (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-white/90 px-4 py-4 text-[11px] text-amber-900/75">
+        <div className="mt-2.5 rounded-xl border border-amber-200 bg-white/90 px-4 py-4 text-[11px] text-amber-900/75">
           Loading review trigger policies...
         </div>
       ) : null}
@@ -359,19 +471,19 @@ export function HarnessReviewTriggersPanel({
       {unsupportedMessage ? <HarnessUnsupportedState /> : null}
 
       {error && !unsupportedMessage ? (
-        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-[11px] text-red-700">
+        <div className="mt-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-[11px] text-red-700">
           {error}
         </div>
       ) : null}
 
       {!loading && !error && !unsupportedMessage && !reviewTriggerFile ? (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-white/90 px-4 py-4 text-[11px] text-amber-900/75">
+        <div className="mt-2.5 rounded-xl border border-amber-200 bg-white/90 px-4 py-4 text-[11px] text-amber-900/75">
           No `docs/fitness/review-triggers.yaml` file was found for the selected repository.
         </div>
       ) : null}
 
       {!loading && !error && !unsupportedMessage && reviewTriggerFile && !reviewTriggerFile.rules.length ? (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-white/90 px-4 py-4 text-[11px] text-amber-900/75">
+        <div className="mt-2.5 rounded-xl border border-amber-200 bg-white/90 px-4 py-4 text-[11px] text-amber-900/75">
           The YAML file loaded successfully, but no `review_triggers` entries were parsed.
         </div>
       ) : null}
@@ -384,95 +496,47 @@ export function HarnessReviewTriggersPanel({
             return (
               <article
                 key={card.key}
-                className={`rounded-2xl border px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)] ${styles.border} ${styles.surface}`}
+                className={`rounded-2xl border px-3.5 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)] ${styles.border} ${styles.surface}`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
-                      {card.key}
-                    </div>
-                    <h4 className="mt-0.5 text-[15px] font-semibold text-desktop-text-primary">{card.title}</h4>
-                  </div>
+                  <h4 className="text-[14px] font-semibold text-desktop-text-primary">{card.title}</h4>
                   <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${styles.pill}`}>
                     {card.value}
                   </span>
                 </div>
 
-                <p className="mt-2 min-h-[44px] text-[10px] leading-4 text-desktop-text-secondary">
-                  {card.subtitle}
-                </p>
+                <p className="mt-1.5 text-[11px] leading-4 text-desktop-text-secondary">{card.subtitle}</p>
 
-                <div className="mt-3 text-[10px] font-medium text-desktop-text-secondary">
-                  {card.barLabel}
-                </div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/85">
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/85">
                   <div
                     className={`h-full rounded-full transition-[width] duration-300 ${styles.bar}`}
-                    style={{ width: `${Math.max(8, card.barValue * 100)}%` }}
+                    style={{ width: `${Math.max(12, card.barValue * 100)}%` }}
                   />
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {card.tags.map((tag) => (
-                    <span
-                      key={`${card.key}-${tag}`}
-                      className={`rounded-full border px-2 py-0.5 text-[10px] ${styles.tag}`}
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="mt-3">
+                <div className="mt-2.5">
                   <button
                     type="button"
                     onClick={() => setExpandedCardKey(expanded ? null : card.key)}
                     aria-expanded={expanded}
                     className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white/80 px-2.5 py-1 text-[10px] font-medium text-desktop-text-secondary transition-colors hover:bg-white"
                   >
-                    <span>{expanded ? "Hide details" : "Show details"}</span>
+                    <span>{expanded ? "Hide" : "Details"}</span>
                     <span className={`transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}>›</span>
                   </button>
                 </div>
 
                 {expanded ? (
-                  <div className="mt-3 border-t border-black/8 pt-3">
-                    <div className="grid gap-2">
-                      {card.rules.map((rule) => (
-                        <div
-                          key={`${card.key}-${rule.name}`}
-                          className="rounded-xl border border-black/8 bg-white/70 px-3 py-2"
-                        >
-                          <div className="text-[10px] font-semibold text-desktop-text-primary">
-                            {formatRuleLabel(rule.name)}
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {buildRuleBadges(rule).map((badge) => (
-                              <span
-                                key={`${rule.name}-${badge}`}
-                                className="rounded-full border border-black/8 bg-white px-2 py-0.5 text-[9px] text-desktop-text-secondary"
-                              >
-                                {badge}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-
-                      {card.metaDetails.map((detail) => (
-                        <div
-                          key={`${card.key}-${detail.label}`}
-                          className="rounded-xl border border-black/8 bg-white/70 px-3 py-2"
-                        >
-                          <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
-                            {detail.label}
-                          </div>
-                          <div className="mt-1 text-[10px] leading-4 text-desktop-text-primary">
-                            {detail.value}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="mt-2.5 border-t border-black/8 pt-2.5">
+                    {card.key === "routing" && card.routingDetails ? (
+                      <RoutingDetailCard details={card.routingDetails} tone={card.tone} />
+                    ) : (
+                      <div className="grid gap-2">
+                        {card.rules.map((rule) => (
+                          <RuleDetailCard key={`${card.key}-${rule.name}`} rule={rule} tone={card.tone} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </article>

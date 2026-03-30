@@ -60,15 +60,28 @@ export type HookRuntimeProfileSummary = {
   hooks: string[];
 };
 
+export type ReviewTriggerBoundarySummary = {
+  name: string;
+  paths: string[];
+};
+
 export type ReviewTriggerRuleSummary = {
   name: string;
   type: string;
   severity: string;
   action: string;
+  paths: string[];
+  evidencePaths: string[];
+  boundaries: ReviewTriggerBoundarySummary[];
+  directories: string[];
   pathCount: number;
   evidencePathCount: number;
   boundaryCount: number;
   directoryCount: number;
+  minBoundaries: number | null;
+  maxFiles: number | null;
+  maxAddedLines: number | null;
+  maxDeletedLines: number | null;
 };
 
 export type HookFileSummary = {

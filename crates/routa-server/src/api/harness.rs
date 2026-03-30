@@ -43,10 +43,9 @@ async fn get_harness_repo_signals(
     .await?;
 
     let report = detect_repo_signals(&repo_root).map_err(ServerError::Internal)?;
-    Ok(Json(
-        serde_json::to_value(report)
-            .map_err(|error| ServerError::Internal(format!("Failed to serialize report: {error}")))?,
-    ))
+    Ok(Json(serde_json::to_value(report).map_err(|error| {
+        ServerError::Internal(format!("Failed to serialize report: {error}"))
+    })?))
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -130,7 +129,10 @@ async fn get_harness_hooks(
         "缺少 harness 上下文，请提供 workspaceId / codebaseId / repoPath 之一",
     )
     .await
-    .map_err(map_context_error("Harness hooks 上下文无效", "读取 Hook Runtime 失败"))?;
+    .map_err(map_context_error(
+        "Harness hooks 上下文无效",
+        "读取 Hook Runtime 失败",
+    ))?;
 
     let hooks_dir = repo_root.join(".husky");
     let (runtime_profiles, mut warnings) = load_hook_runtime_profiles(&repo_root);
@@ -158,8 +160,7 @@ async fn get_harness_hooks(
     }
 
     let profile_regex = Regex::new(r"--profile(?:=|\s+)([A-Za-z0-9_-]+)\b").unwrap();
-    let entries =
-        std::fs::read_dir(&hooks_dir).map_err(map_io_error("读取 Hook Runtime 失败"))?;
+    let entries = std::fs::read_dir(&hooks_dir).map_err(map_io_error("读取 Hook Runtime 失败"))?;
     let mut hook_files = Vec::new();
 
     for entry in entries.flatten() {
@@ -208,7 +209,8 @@ async fn get_harness_hooks(
         }));
     }
 
-    let profiles = build_profile_summaries(&repo_root, &hook_files, &runtime_profiles, &mut warnings);
+    let profiles =
+        build_profile_summaries(&repo_root, &hook_files, &runtime_profiles, &mut warnings);
     Ok(Json(json!({
         "generatedAt": chrono::Utc::now().to_rfc3339(),
         "repoRoot": repo_root,
@@ -320,8 +322,8 @@ async fn get_harness_instructions(
     for file_name in ["CLAUDE.md", "AGENTS.md"] {
         let absolute_path = repo_root.join(file_name);
         if absolute_path.is_file() {
-            let source =
-                read_to_string(&absolute_path).map_err(map_internal_error("读取 Harness 指导文档失败"))?;
+            let source = read_to_string(&absolute_path)
+                .map_err(map_internal_error("读取 Harness 指导文档失败"))?;
             let relative_path = absolute_path
                 .strip_prefix(&repo_root)
                 .unwrap_or(&absolute_path)
@@ -349,7 +351,8 @@ async fn get_harness_instructions(
 
 fn parse_workflow_flow(repo_root: &Path, path: &Path) -> Result<Option<Value>, String> {
     let source = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
-    let parsed = serde_yaml::from_str::<serde_yaml::Value>(&source).map_err(|error| error.to_string())?;
+    let parsed =
+        serde_yaml::from_str::<serde_yaml::Value>(&source).map_err(|error| error.to_string())?;
     let trigger = parsed.get("on").or_else(|| parsed.get("true"));
     let event = summarize_event(trigger);
     let jobs = parsed
@@ -418,14 +421,12 @@ fn load_hook_runtime_profiles(repo_root: &Path) -> (Vec<Value>, Vec<String>) {
                 .filter_map(|(name, configured)| {
                     let name = name.as_str()?;
                     let configured = configured.as_mapping()?;
-                    let phases =
-                        normalize_yaml_string_list(configured.get(serde_yaml::Value::String(
-                            "phases".to_string(),
-                        )));
-                    let metrics =
-                        normalize_yaml_string_list(configured.get(serde_yaml::Value::String(
-                            "metrics".to_string(),
-                        )));
+                    let phases = normalize_yaml_string_list(
+                        configured.get(serde_yaml::Value::String("phases".to_string())),
+                    );
+                    let metrics = normalize_yaml_string_list(
+                        configured.get(serde_yaml::Value::String("metrics".to_string())),
+                    );
                     if phases.is_empty() {
                         warnings.push(format!(
                             "Profile \"{name}\" has no configured phases in hooks.yaml."
@@ -485,17 +486,51 @@ fn load_review_trigger_config_source(repo_root: &Path) -> Value {
                     let boundaries = rule
                         .get(serde_yaml::Value::String("boundaries".to_string()))
                         .and_then(serde_yaml::Value::as_mapping)
-                        .map(|mapping| mapping.len())
-                        .unwrap_or(0);
+                        .map(|mapping| {
+                            mapping
+                                .iter()
+                                .filter_map(|(name, paths)| {
+                                    let name = name.as_str()?.trim();
+                                    if name.is_empty() {
+                                        return None;
+                                    }
+                                    Some(json!({
+                                        "name": name,
+                                        "paths": normalize_yaml_string_list(Some(paths)),
+                                    }))
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    let paths =
+                        normalize_yaml_string_list(rule.get(serde_yaml::Value::String("paths".to_string())));
+                    let evidence_paths = normalize_yaml_string_list(
+                        rule.get(serde_yaml::Value::String("evidence_paths".to_string())),
+                    );
+                    let directories = normalize_yaml_string_list(
+                        rule.get(serde_yaml::Value::String("directories".to_string())),
+                    );
+                    let path_count = paths.len();
+                    let evidence_path_count = evidence_paths.len();
+                    let boundary_count = boundaries.len();
+                    let directory_count = directories.len();
                     json!({
                         "name": yaml_str(rule.get(serde_yaml::Value::String("name".to_string()))).unwrap_or("unknown"),
                         "type": yaml_str(rule.get(serde_yaml::Value::String("type".to_string()))).unwrap_or("unknown"),
                         "severity": yaml_str(rule.get(serde_yaml::Value::String("severity".to_string()))).unwrap_or("medium"),
                         "action": yaml_str(rule.get(serde_yaml::Value::String("action".to_string()))).unwrap_or("require_human_review"),
-                        "pathCount": normalize_yaml_string_list(rule.get(serde_yaml::Value::String("paths".to_string()))).len(),
-                        "evidencePathCount": normalize_yaml_string_list(rule.get(serde_yaml::Value::String("evidence_paths".to_string()))).len(),
-                        "boundaryCount": boundaries,
-                        "directoryCount": normalize_yaml_string_list(rule.get(serde_yaml::Value::String("directories".to_string()))).len(),
+                        "paths": paths,
+                        "evidencePaths": evidence_paths,
+                        "boundaries": boundaries,
+                        "directories": directories,
+                        "pathCount": path_count,
+                        "evidencePathCount": evidence_path_count,
+                        "boundaryCount": boundary_count,
+                        "directoryCount": directory_count,
+                        "minBoundaries": yaml_i64(rule.get(serde_yaml::Value::String("min_boundaries".to_string()))),
+                        "maxFiles": yaml_i64(rule.get(serde_yaml::Value::String("max_files".to_string()))),
+                        "maxAddedLines": yaml_i64(rule.get(serde_yaml::Value::String("max_added_lines".to_string()))),
+                        "maxDeletedLines": yaml_i64(rule.get(serde_yaml::Value::String("max_deleted_lines".to_string()))),
                     })
                 })
                 .collect::<Vec<_>>()
@@ -559,7 +594,8 @@ fn load_metric_lookup(repo_root: &Path, warnings: &mut Vec<String>) -> HashMap<S
     let manifest_path = repo_root.join("docs/fitness/manifest.yaml");
     if !manifest_path.exists() {
         warnings.push(
-            "Missing docs/fitness/manifest.yaml, so hook metrics could not be resolved.".to_string(),
+            "Missing docs/fitness/manifest.yaml, so hook metrics could not be resolved."
+                .to_string(),
         );
         return lookup;
     }
@@ -582,7 +618,9 @@ fn load_metric_lookup(repo_root: &Path, warnings: &mut Vec<String>) -> HashMap<S
             continue;
         }
         let Ok(raw) = std::fs::read_to_string(&absolute_file) else {
-            warnings.push(format!("Failed to read metric source file: {relative_file}"));
+            warnings.push(format!(
+                "Failed to read metric source file: {relative_file}"
+            ));
             continue;
         };
         let Some((frontmatter, _)) = extract_frontmatter(&raw) else {
@@ -591,14 +629,18 @@ fn load_metric_lookup(repo_root: &Path, warnings: &mut Vec<String>) -> HashMap<S
         let Ok(parsed) = serde_yaml::from_str::<serde_yaml::Value>(&frontmatter) else {
             continue;
         };
-        let Some(metrics) = parsed.get("metrics").and_then(serde_yaml::Value::as_sequence) else {
+        let Some(metrics) = parsed
+            .get("metrics")
+            .and_then(serde_yaml::Value::as_sequence)
+        else {
             continue;
         };
         for metric in metrics {
             let Some(metric) = metric.as_mapping() else {
                 continue;
             };
-            let Some(name) = yaml_str(metric.get(serde_yaml::Value::String("name".to_string()))) else {
+            let Some(name) = yaml_str(metric.get(serde_yaml::Value::String("name".to_string())))
+            else {
                 continue;
             };
             let Some(command) =
@@ -671,7 +713,10 @@ fn to_phase_results(events: &[Value]) -> Vec<Value> {
     events
         .iter()
         .filter_map(|event| {
-            let kind = event.get("event").and_then(Value::as_str).unwrap_or_default();
+            let kind = event
+                .get("event")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if kind != "phase.complete" && kind != "phase.skip" {
                 return None;
             }
@@ -694,7 +739,11 @@ fn to_phase_results(events: &[Value]) -> Vec<Value> {
 fn to_metric_results(events: &[Value]) -> Vec<Value> {
     let mut results = Vec::new();
     for event in events {
-        match event.get("event").and_then(Value::as_str).unwrap_or_default() {
+        match event
+            .get("event")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+        {
             "metric.complete" => {
                 if let Some(name) = event.get("name").and_then(Value::as_str) {
                     results.push(json!({
@@ -726,7 +775,9 @@ fn to_metric_results(events: &[Value]) -> Vec<Value> {
 
 fn summarize_runner(value: Option<&serde_yaml::Value>) -> String {
     match value {
-        Some(serde_yaml::Value::String(value)) if !value.trim().is_empty() => value.trim().to_string(),
+        Some(serde_yaml::Value::String(value)) if !value.trim().is_empty() => {
+            value.trim().to_string()
+        }
         Some(serde_yaml::Value::Sequence(values)) => {
             let parts = values
                 .iter()
@@ -795,14 +846,23 @@ fn yaml_str(value: Option<&serde_yaml::Value>) -> Option<&str> {
     value.and_then(serde_yaml::Value::as_str)
 }
 
+fn yaml_i64(value: Option<&serde_yaml::Value>) -> Option<i64> {
+    match value {
+        Some(serde_yaml::Value::Number(number)) => number.as_i64(),
+        Some(serde_yaml::Value::String(value)) => value.trim().parse::<i64>().ok(),
+        _ => None,
+    }
+}
+
 fn map_context_error(
     public_error: &'static str,
     internal_error: &'static str,
 ) -> impl Fn(ServerError) -> (StatusCode, Json<Value>) + Clone {
     move |error| match error {
-        ServerError::BadRequest(details) => {
-            (StatusCode::BAD_REQUEST, Json(json_error(public_error, details)))
-        }
+        ServerError::BadRequest(details) => (
+            StatusCode::BAD_REQUEST,
+            Json(json_error(public_error, details)),
+        ),
         other => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json_error(internal_error, other.to_string())),
