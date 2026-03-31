@@ -66,7 +66,7 @@ describe("HarnessGovernanceLoopGraph", () => {
       name: /内部反馈环 设计决策，ADR \/ 设计取舍，当前不可用：暂未接入 ADR \/ 设计决策来源/i,
     });
     expect(designDecisionNode.getAttribute("aria-disabled")).toBe("true");
-    expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("未接入").length).toBeGreaterThan(0);
   });
 
   it("keeps available stages selectable through the governance flow", () => {

@@ -216,8 +216,8 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
               {data.title}
             </div>
           </div>
-          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${data.active ? tone.badge : "border-slate-200 bg-slate-50 text-slate-400"}`}>
-            {unavailable ? "Unavailable" : "阶段"}
+          <span className={`shrink-0 whitespace-nowrap rounded-full border px-1.5 py-[1px] text-[9px] font-medium leading-none ${data.active ? tone.badge : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+            {unavailable ? "未接入" : "阶段"}
           </span>
         </div>
         {data.note ? (
