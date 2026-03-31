@@ -56,7 +56,11 @@ describe("buildReviewAnalysisPayload", () => {
       head: "HEAD",
     });
 
-    expect(payload.repoRoot).toBe(fs.realpathSync(repoDir));
+    // Verify repoRoot exists and points to the same canonical directory.
+    // This avoids false negatives where equivalent paths differ in presentation
+    // (e.g. /var vs /private/var on macOS, 8.3 aliases on Windows).
+    expect(fs.existsSync(payload.repoRoot)).toBe(true);
+    expect(fs.realpathSync.native(payload.repoRoot)).toBe(fs.realpathSync.native(repoDir));
     expect(payload.changedFiles).toContain("example.ts");
     expect(payload.diff).toContain("-export const value = 1;");
     expect(payload.diff).toContain("+export const value = 2;");
