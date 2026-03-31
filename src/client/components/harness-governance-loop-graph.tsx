@@ -806,12 +806,12 @@ export function HarnessGovernanceLoopGraph({
       {hasContext && !unsupportedMessage ? (
         <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="relative overflow-hidden rounded-2xl border border-desktop-border bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))]">
-                <div className="pointer-events-none absolute right-3 top-2 z-10 rounded-xl border border-desktop-border bg-white/90 px-2.5 py-1.5 text-[10px] text-slate-700 shadow-sm">
+              <div className="pointer-events-none absolute right-3 top-2 z-10 rounded-xl border border-desktop-border bg-white/90 px-2.5 py-1.5 text-[10px] text-slate-700 shadow-sm">
                 <div className="flex items-center gap-3">
                   <span className="shrink-0 text-desktop-text-secondary">图注:</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-800" />内部</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-violet-800" />推送</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-800" />外部</span>
+                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2 w-2 rounded-full bg-sky-100" />内部</span>
+                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2 w-2 rounded-full bg-violet-100" />推送</span>
+                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2 w-2 rounded-full bg-amber-100" />外部</span>
                 </div>
               </div>
               <div style={{ height: graph.minHeight }}>
