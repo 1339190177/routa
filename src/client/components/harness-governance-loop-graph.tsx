@@ -164,6 +164,7 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
   };
   const interactive = typeof data.onSelect === "function";
   const unavailable = !interactive && Boolean(data.unavailableReason);
+  const unavailableReasonId = data.unavailableReason ? `governance-unavailable-reason-${data.nodeId}` : undefined;
   const selectedClasses = data.selected
     ? "ring-2 ring-desktop-accent/70 ring-offset-2 ring-offset-white"
     : "";
@@ -183,7 +184,8 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
         data-governance-node-id={data.nodeId}
         aria-pressed={data.selected}
         aria-disabled={!interactive}
-        aria-label={`${layerLabel[data.layer]} ${data.title}${data.note ? `，${data.note}` : ""}${data.unavailableReason ? `，当前不可用：${data.unavailableReason}` : ""}`}
+        aria-label={`${layerLabel[data.layer]} ${data.title}${data.note ? `, ${data.note}` : ""}`}
+        aria-describedby={unavailableReasonId}
         onClick={(event) => {
           if (!interactive) {
             return;
@@ -239,6 +241,7 @@ function LoopNodeView({ data }: NodeProps<Node<LoopNodeData>>) {
         ) : null}
         {data.unavailableReason ? (
           <div
+            id={unavailableReasonId}
             className="mt-2 min-h-[16px] max-w-[168px] rounded-xl border border-dashed border-slate-200 bg-white/70 px-2.5 py-2 text-[10px] leading-4 text-slate-500 truncate"
             title={data.unavailableReason}
           >
@@ -708,7 +711,7 @@ function buildDetailSections(args: {
       ] satisfies LoopDetailSection[];
     default:
       return [
-        { title: "Current page signals", items: ["亮色节点可点击，Unavailable 节点会直接说明缺失的信号或面板", "点击 `编码实现`、`本地验证`、`变更门禁`、`代码评审`、`持续交付` 或 `制品发布` 查看上下文"] },
+        { title: "Current page signals", items: ["Highlighted nodes are clickable. Unavailable nodes explain missing signals directly.", "Select a node (coding, local verification, change gate, review, delivery, release) to preview the matching context panel."] },
         { title: "Connected panels", items: ["Instruction file - CLAUDE.md", "Entrix Fitness", "Review triggers", "CI/CD", "Repo signals"] },
       ] satisfies LoopDetailSection[];
   }
@@ -842,10 +845,10 @@ export function HarnessGovernanceLoopGraph({
             <div className="relative overflow-hidden rounded-2xl border border-desktop-border bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))]">
               <div className="pointer-events-none absolute right-3 top-2 z-10 rounded-xl border border-desktop-border bg-white/90 px-2.5 py-1.5 text-[10px] text-slate-700 shadow-sm">
                 <div className="flex items-center gap-3">
-                  <span className="shrink-0 text-desktop-text-secondary">图注:</span>
-                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-sky-300 bg-sky-100" />内部</span>
-                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-violet-300 bg-violet-100" />推送</span>
-                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-amber-300 bg-amber-100" />外部</span>
+                  <span className="shrink-0 text-desktop-text-secondary">Legend:</span>
+                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-sky-300 bg-sky-100" />Internal</span>
+                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-violet-300 bg-violet-100" />Push</span>
+                  <span className="flex items-center gap-1.5 text-[10px]"><span className="h-2.5 w-2.5 rounded-[3px] border border-amber-300 bg-amber-100" />External</span>
                 </div>
               </div>
               <div style={{ height: graph.minHeight }}>

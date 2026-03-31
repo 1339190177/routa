@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useTranslation } from "@/i18n";
 
 export type HarnessNavSection = {
   id: string;
@@ -13,6 +14,7 @@ type HarnessFloatingNavProps = {
 };
 
 export function HarnessFloatingNav({ sections }: HarnessFloatingNavProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -94,7 +96,7 @@ export function HarnessFloatingNav({ sections }: HarnessFloatingNavProps) {
           <div className="max-h-[60vh] min-w-55 overflow-y-auto p-2">
             <div className="mb-2 px-3 py-2">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
-                Quick Navigation
+                {t.settings.harness.quickNavigation}
               </div>
             </div>
             <div className="space-y-0.5">
@@ -128,7 +130,7 @@ export function HarnessFloatingNav({ sections }: HarnessFloatingNavProps) {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="flex h-12 w-12 items-center justify-center rounded-full border border-desktop-border bg-white shadow-lg transition-all hover:scale-105 hover:shadow-xl dark:bg-[#1a1d2e]"
-        aria-label="Toggle navigation menu"
+        aria-label={isOpen ? t.settings.harness.collapseNavigation : t.settings.harness.expandNavigation}
       >
         <svg
           className={`h-5 w-5 text-desktop-text-primary transition-transform ${
