@@ -30,6 +30,7 @@ type AgentHookWorkbenchProps = {
   data: AgentHooksResponse;
   unsupportedMessage?: string | null;
   variant?: "full" | "compact";
+  embedded?: boolean;
 };
 
 type WorkbenchState = {
@@ -435,6 +436,7 @@ export function HarnessAgentHookWorkbench({
   data,
   unsupportedMessage,
   variant = "full",
+  embedded = false,
 }: AgentHookWorkbenchProps) {
   const compactMode = variant === "compact";
   const entries = useMemo(() => buildAgentHookWorkbenchEntries(data), [data]);
@@ -476,21 +478,23 @@ export function HarnessAgentHookWorkbench({
 
   return (
     <WorkbenchContext.Provider value={contextValue}>
-      <section className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-3 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Hook systems</div>
-            <h3 className="mt-0.5 text-sm font-semibold text-desktop-text-primary">Hook Systems Workbench</h3>
+      <section className={embedded ? "space-y-0" : "rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-3 shadow-sm"}>
+        {!embedded ? (
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Hook systems</div>
+              <h3 className="mt-0.5 text-sm font-semibold text-desktop-text-primary">Hook Systems Workbench</h3>
+            </div>
+            <div className="flex gap-2">
+              <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
+                {entries.reduce((sum, entry) => sum + entry.stats.hookCount, 0)} hooks
+              </span>
+              <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
+                {entries.filter((entry) => entry.stats.hookCount > 0).length} / {entries.length} events
+              </span>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-              {entries.reduce((sum, entry) => sum + entry.stats.hookCount, 0)} hooks
-            </span>
-            <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
-              {entries.filter((entry) => entry.stats.hookCount > 0).length} / {entries.length} events
-            </span>
-          </div>
-        </div>
+        ) : null}
 
         <div className={`grid gap-3 ${compactMode ? "xl:grid-cols-[240px_minmax(0,1fr)]" : "2xl:grid-cols-[240px_minmax(0,1fr)_360px]"}`}>
           <AgentHookLifecycleRail />

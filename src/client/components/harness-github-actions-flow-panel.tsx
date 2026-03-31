@@ -196,7 +196,6 @@ export function HarnessGitHubActionsFlowPanel({
       <HarnessGitHubActionsFlowGallery
         key={initialCategory ?? "Validation"}
         flows={visibleFlows}
-        repoLabel={repoLabel}
         variant={variant}
         initialCategory={initialCategory}
       />

@@ -146,6 +146,7 @@ export function HarnessHookRuntimePanel({
         data={resolvedState.data}
         unsupportedMessage={unsupportedMessage}
         variant={variant}
+        embedded={embedded}
       />
     );
   };

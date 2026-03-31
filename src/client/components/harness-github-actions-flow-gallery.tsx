@@ -11,7 +11,6 @@ import {
 
 type HarnessGitHubActionsFlowGalleryProps = {
   flows: GitHubActionsFlow[];
-  repoLabel: string;
   variant?: "full" | "compact";
   initialCategory?: WorkflowCategoryKey;
 };
@@ -669,7 +668,6 @@ function WorkflowDetailDialog({
 
 export function HarnessGitHubActionsFlowGallery({
   flows,
-  repoLabel,
   variant = "full",
   initialCategory,
 }: HarnessGitHubActionsFlowGalleryProps) {
@@ -693,14 +691,7 @@ export function HarnessGitHubActionsFlowGallery({
 
   const cardsSection = (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-[10px]">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Actions</span>
-          <span className="rounded-full border border-slate-200 bg-white/90 px-2 py-1 font-medium text-slate-700">
-            {repoLabel}
-          </span>
-          <span className="text-slate-500">{activeCategory?.flows.length ?? 0} flows in {activeCategory?.key}</span>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
         <div className="flex flex-wrap gap-1.5">
           <MetricCard label="Workflows" value={summary.workflowCount} />
           <MetricCard label="Triggers" value={summary.triggerTypeCount} />

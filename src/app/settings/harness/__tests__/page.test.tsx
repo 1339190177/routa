@@ -197,7 +197,7 @@ vi.mock("@/client/components/harness-governance-loop-graph", () => ({
     onSelectedNodeChange,
   }: {
     contextPanel?: ReactNode;
-    selectedNodeId?: string;
+    selectedNodeId?: string | null;
     onSelectedNodeChange?: (nodeId: string) => void;
   }) => (
     <div data-testid="governance-loop-graph">
@@ -289,17 +289,17 @@ describe("HarnessSettingsPage", () => {
     };
   });
 
-  it("shows compact instruction panel in the governance loop build context", async () => {
+  it("defaults the governance loop to overview mode without rendering a compact context panel", async () => {
     const { findByTestId } = render(<HarnessSettingsPage />);
 
     // Wait for initial node selection to resolve
     await findByTestId("selected-node-id");
 
-    expect(screen.getByTestId("selected-node-id").textContent).toBe("build");
-    expect(screen.getByTestId("context-panel-state").textContent).toBe("present");
-    expect(screen.getAllByText("Instruction file - CLAUDE.md")).toHaveLength(2);
+    expect(screen.getByTestId("selected-node-id").textContent).toBe("");
+    expect(screen.getByTestId("context-panel-state").textContent).toBe("absent");
+    expect(screen.getAllByText("Instruction file - CLAUDE.md")).toHaveLength(1);
     expect(screen.getByTestId("instruction-panel-full")).not.toBeNull();
-    expect(screen.getByTestId("instruction-panel-compact")).not.toBeNull();
+    expect(screen.queryByTestId("instruction-panel-compact")).toBeNull();
   });
 
   it("wires the instruction audit rerun action to harness data reload", () => {
@@ -348,6 +348,12 @@ describe("HarnessSettingsPage", () => {
     expect(screen.getByTestId("selected-node-id").textContent).toBe("thinking");
     expect(within(screen.getByTestId("governance-loop-graph")).getByTestId("spec-sources-compact")).not.toBeNull();
     expect(screen.getByTestId("spec-sources-full")).not.toBeNull();
+  });
+
+  it("renders the test feedback loop panel in the main layout", () => {
+    render(<HarnessSettingsPage />);
+
+    expect(screen.getByTestId("repo-signals-panel")).not.toBeNull();
   });
 
   it("defaults the fitness source view to README when no spec is selected", () => {

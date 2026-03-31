@@ -34,6 +34,7 @@ type HookWorkbenchProps = {
   data: HooksResponse;
   unsupportedMessage?: string | null;
   variant?: "full" | "compact";
+  embedded?: boolean;
 };
 
 type WorkbenchState = {
@@ -637,6 +638,7 @@ export function HarnessHookWorkbench({
   data,
   unsupportedMessage,
   variant = "full",
+  embedded = false,
 }: HookWorkbenchProps) {
   const entries = useMemo(
     () => buildHookWorkbenchEntries(data).filter((entry) => entry.lifecycleGroup === "commit" || entry.lifecycleGroup === "push"),
@@ -676,9 +678,12 @@ export function HarnessHookWorkbench({
 
   return (
     <WorkbenchContext.Provider value={contextValue}>
-      <section className={compactMode
-        ? "rounded-[30px] border border-desktop-border bg-[linear-gradient(180deg,rgba(251,253,255,0.95),rgba(241,246,255,0.92))] p-4"
-        : "rounded-[30px] border border-desktop-border bg-[linear-gradient(180deg,rgba(251,253,255,0.98),rgba(238,244,255,0.94))] p-5 shadow-sm"}
+      <section
+        className={embedded
+          ? "space-y-0"
+          : compactMode
+            ? "rounded-[30px] border border-desktop-border bg-[linear-gradient(180deg,rgba(251,253,255,0.95),rgba(241,246,255,0.92))] p-4"
+            : "rounded-[30px] border border-desktop-border bg-[linear-gradient(180deg,rgba(251,253,255,0.98),rgba(238,244,255,0.94))] p-5 shadow-sm"}
       >
         {unsupportedMessage ? (
           <HarnessUnsupportedState className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-[11px] text-amber-800" />

@@ -129,6 +129,7 @@ export function HarnessAgentHookPanel({
         data={resolvedState.data}
         unsupportedMessage={unsupportedMessage}
         variant={variant}
+        embedded={embedded}
       />
     );
   };

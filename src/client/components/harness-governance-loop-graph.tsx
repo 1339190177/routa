@@ -65,7 +65,7 @@ type HarnessGovernanceLoopGraphProps = {
   instructionsData?: InstructionsResponse | null;
   instructionsError?: string | null;
   fitnessFiles?: FitnessSpecSummary[];
-  selectedNodeId?: string;
+  selectedNodeId?: string | null;
   onSelectedNodeChange?: (nodeId: string) => void;
   contextPanel?: ReactNode;
 };
@@ -85,6 +85,14 @@ type LoopNodeData = {
   onSelect?: () => void;
   onNavigate?: (direction: "up" | "down" | "left" | "right") => void;
 };
+
+const LOOP_EDGE_COLORS = {
+  neutral: "#64748b",
+  internal: "#0ea5e9",
+  commit: "#8b5cf6",
+  external: "#f59e0b",
+  feedback: "#059669",
+} as const;
 
 const PHASE_LABELS: Record<HookPhase, string> = {
   submodule: "submodule",
@@ -340,7 +348,7 @@ function buildGraph(args: {
   workflowSummary: WorkflowSummary | null;
   metricCount: number;
   hardGateCount: number;
-  selectedNodeId: string;
+  selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 }) {
   const {
@@ -532,20 +540,20 @@ function buildGraph(args: {
   ];
 
   const edges: Edge[] = [
-    buildEdge("thinking-coding", "thinking", "coding", "source-right", "target-left", "澄清", "#64748b"),
-    buildEdge("coding-build", "coding", "build", "source-right", "target-left", "实现", "#0ea5e9"),
-    buildEdge("build-test", "build", "test", "source-right", "target-left", "验证", "#10b981"),
+    buildEdge("thinking-coding", "thinking", "coding", "source-right", "target-left", "澄清", LOOP_EDGE_COLORS.neutral),
+    buildEdge("coding-build", "coding", "build", "source-right", "target-left", "实现", LOOP_EDGE_COLORS.internal),
+    buildEdge("build-test", "build", "test", "source-right", "target-left", "验证", LOOP_EDGE_COLORS.internal),
 
-    buildEdge("precommit-review", "precommit", "review", "source-left", "target-right", "送审", "#0ea5e9"),
-    buildEdge("review-commit", "review", "commit", "source-left", "target-right", "集成", "#64748b"),
-    buildEdge("commit-post-commit", "commit", "post-commit", "source-left", "target-right", "交付", "#8b5cf6"),
+    buildEdge("precommit-review", "precommit", "review", "source-left", "target-right", "送审", LOOP_EDGE_COLORS.internal),
+    buildEdge("review-commit", "review", "commit", "source-left", "target-right", "集成", LOOP_EDGE_COLORS.neutral),
+    buildEdge("commit-post-commit", "commit", "post-commit", "source-left", "target-right", "交付", LOOP_EDGE_COLORS.commit),
 
-    buildEdge("release-staging", "release", "staging", "source-right", "target-left", "预发", "#8b5cf6"),
-    buildEdge("staging-production", "staging", "production", "source-right", "target-left", "上线", "#f59e0b"),
-    buildEdge("production-metrics", "production", "metrics", "source-right", "target-left", "演进", "#059669"),
+    buildEdge("release-staging", "release", "staging", "source-right", "target-left", "预发", LOOP_EDGE_COLORS.commit),
+    buildEdge("staging-production", "staging", "production", "source-right", "target-left", "上线", LOOP_EDGE_COLORS.external),
+    buildEdge("production-metrics", "production", "metrics", "source-right", "target-left", "演进", LOOP_EDGE_COLORS.feedback),
 
-    buildEdge("test-precommit", "test", "precommit", "source-bottom", "target-top", "", "#0ea5e9", "6 4"),
-    buildEdge("post-commit-release", "post-commit", "release", "source-bottom", "target-top", "", "#8b5cf6", "6 4"),
+    buildEdge("test-precommit", "test", "precommit", "source-bottom", "target-top", "", LOOP_EDGE_COLORS.internal, "6 4"),
+    buildEdge("post-commit-release", "post-commit", "release", "source-bottom", "target-top", "", LOOP_EDGE_COLORS.commit, "6 4"),
     {
       id: "metrics-thinking",
       source: "metrics",
@@ -554,13 +562,13 @@ function buildGraph(args: {
       targetHandle: "target-left",
       type: "simplebezier",
       style: {
-        stroke: "#059669",
+        stroke: LOOP_EDGE_COLORS.feedback,
         strokeWidth: 1.8,
         strokeDasharray: "6 4",
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: "#059669",
+        color: LOOP_EDGE_COLORS.feedback,
       },
     } satisfies Edge,
 
@@ -575,13 +583,13 @@ function buildGraph(args: {
           type: "smoothstep",
           label: "自动修复重试",
           style: {
-            stroke: "#7c3aed",
+            stroke: LOOP_EDGE_COLORS.commit,
             strokeWidth: 1.8,
             strokeDasharray: "6 4",
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: "#7c3aed",
+            color: LOOP_EDGE_COLORS.commit,
           },
           labelStyle: {
             fontSize: 10,
@@ -604,7 +612,7 @@ function buildGraph(args: {
 }
 
 function buildDetailSections(args: {
-  selectedNodeId: string;
+  selectedNodeId: string | null;
   hooksData: HooksResponse | null;
   workflowData: GitHubActionsFlowsResponse | null;
   instructionSummary: InstructionSummary | null;
@@ -704,7 +712,7 @@ export function HarnessGovernanceLoopGraph({
 }: HarnessGovernanceLoopGraphProps) {
   const hasContext = Boolean(repoPath);
   const [internalSelectedNodeId, setInternalSelectedNodeId] = useState("build");
-  const activeSelectedNodeId = selectedNodeId ?? internalSelectedNodeId;
+  const activeSelectedNodeId = selectedNodeId !== undefined ? selectedNodeId : internalSelectedNodeId;
   const hookSummary = useMemo(() => {
     if (!hooksData) {
       return null;

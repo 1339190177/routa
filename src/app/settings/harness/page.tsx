@@ -50,7 +50,7 @@ export default function HarnessSettingsPage() {
   });
   const [selectedTier, setSelectedTier] = useState<TierValue>("normal");
   const [selectedSpecName, setSelectedSpecName] = useState("");
-  const [selectedGovernanceNodeId, setSelectedGovernanceNodeId] = useState<string | null>("build");
+  const [selectedGovernanceNodeId, setSelectedGovernanceNodeId] = useState<string | null>(null);
 
   const persistedRepoSelection = useMemo(
     () => loadRepoSelection("harness", workspaceId),
@@ -388,7 +388,7 @@ export default function HarnessSettingsPage() {
           instructionsData={instructionsState.data}
           instructionsError={instructionsState.error}
           fitnessFiles={specFiles}
-          selectedNodeId={selectedGovernanceNodeId ?? "build"}
+          selectedNodeId={selectedGovernanceNodeId}
           onSelectedNodeChange={setSelectedGovernanceNodeId}
           contextPanel={governanceContextPanel}
         />
@@ -413,34 +413,61 @@ export default function HarnessSettingsPage() {
           onAuditRerun={reloadInstructions}
         />
 
+        <HarnessRepoSignalsPanel
+          workspaceId={workspaceId}
+          codebaseId={activeRepoCodebaseId}
+          repoPath={activeRepoPath}
+          repoLabel={selectedRepoLabel}
+          mode="test"
+          unsupportedMessage={unsupportedRepoMessage}
+        />
+
         <HarnessSectionCard
           title="Hook systems"
           description="Runtime hook and agent hook surfaces for repository lifecycle automation."
           variant="full"
         >
-          <HarnessHookRuntimePanel
-            workspaceId={workspaceId}
-            codebaseId={activeRepoCodebaseId}
-            repoPath={activeRepoPath}
-            repoLabel={selectedRepoLabel}
-            unsupportedMessage={unsupportedRepoMessage}
-            data={hooksState.data}
-            loading={hooksState.loading}
-            error={hooksState.error}
-            embedded
-          />
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-desktop-border bg-desktop-bg-secondary/45 px-3 py-2.5">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Runtime hooks</div>
+                  <div className="mt-1 text-[12px] text-desktop-text-secondary">Local lifecycle hooks for commit and push workflows.</div>
+                </div>
+              </div>
+              <HarnessHookRuntimePanel
+                workspaceId={workspaceId}
+                codebaseId={activeRepoCodebaseId}
+                repoPath={activeRepoPath}
+                repoLabel={selectedRepoLabel}
+                unsupportedMessage={unsupportedRepoMessage}
+                data={hooksState.data}
+                loading={hooksState.loading}
+                error={hooksState.error}
+                embedded
+              />
+            </div>
 
-          <HarnessAgentHookPanel
-            workspaceId={workspaceId}
-            codebaseId={activeRepoCodebaseId}
-            repoPath={activeRepoPath}
-            repoLabel={selectedRepoLabel}
-            unsupportedMessage={unsupportedRepoMessage}
-            data={agentHooksState.data}
-            loading={agentHooksState.loading}
-            error={agentHooksState.error}
-            embedded
-          />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-desktop-border bg-desktop-bg-secondary/45 px-3 py-2.5">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Agent hooks</div>
+                  <div className="mt-1 text-[12px] text-desktop-text-secondary">Policy-driven hook events that shape agent runtime behavior.</div>
+                </div>
+              </div>
+              <HarnessAgentHookPanel
+                workspaceId={workspaceId}
+                codebaseId={activeRepoCodebaseId}
+                repoPath={activeRepoPath}
+                repoLabel={selectedRepoLabel}
+                unsupportedMessage={unsupportedRepoMessage}
+                data={agentHooksState.data}
+                loading={agentHooksState.loading}
+                error={agentHooksState.error}
+                embedded
+              />
+            </div>
+          </div>
         </HarnessSectionCard>
 
         <HarnessReviewTriggersPanel
