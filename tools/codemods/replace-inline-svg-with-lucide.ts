@@ -411,7 +411,9 @@ function collectIdentifiers(sourceFile: ts.SourceFile): Set<string> {
       return;
     }
     for (const element of binding.elements) {
-      addBindingName(element.name);
+      if (ts.isBindingElement(element)) {
+        addBindingName(element.name);
+      }
     }
   };
 
