@@ -522,7 +522,7 @@ export function HomeInput({
             return (
               <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
                 <span className="flex h-2 w-2 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-                  <svg className="w-1 h-1 text-amber-500" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" /></svg>
+                  <span className="h-1 w-1 rounded-full bg-amber-500" />
                 </span>
                 <span className="font-medium text-amber-600 dark:text-amber-400">{spec?.name}</span>
                 {spec?.role && <><span className="text-slate-300 dark:text-slate-700">·</span><span className="font-mono text-[9px]">{spec.role}</span></>}
@@ -532,18 +532,14 @@ export function HomeInput({
         ) : footerMetaMode === "default" && selectedRole === "ROUTA" ? (
           <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
             <span className="w-2 h-2 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <svg className="w-1 h-1 text-amber-500" fill="currentColor" viewBox="0 0 8 8">
-                <circle cx="4" cy="4" r="3" />
-              </svg>
+              <span className="h-1 w-1 rounded-full bg-amber-500" />
             </span>
             <span>{t.home.multiAgentDesc}</span>
           </div>
         ) : footerMetaMode === "default" ? (
           <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
             <span className="flex h-2 w-2 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800">
-              <svg className="w-1 h-1 text-slate-500" fill="currentColor" viewBox="0 0 8 8">
-                <circle cx="4" cy="4" r="3" />
-              </svg>
+              <span className="h-1 w-1 rounded-full bg-slate-500" />
             </span>
             <span>{t.home.directDesc}</span>
           </div>
