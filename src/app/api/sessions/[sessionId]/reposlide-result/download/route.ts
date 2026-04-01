@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -5,7 +7,7 @@ import {
   proxyRunnerOwnedSessionRequest,
 } from "@/core/acp/runner-routing";
 import {
-  buildRepoSlideDownloadPath,
+  REPOSLIDE_PPTX_CONTENT_TYPE,
   resolveRepoSlideDeckArtifact,
 } from "@/core/reposlide/deck-artifact";
 import { loadRepoSlideSessionResult } from "@/core/reposlide/session-result";
@@ -19,7 +21,7 @@ export async function GET(
   const { sessionId } = await params;
   const proxied = await proxyRunnerOwnedSessionRequest(request, {
     sessionId,
-    path: `/api/sessions/${encodeURIComponent(sessionId)}/reposlide-result`,
+    path: `/api/sessions/${encodeURIComponent(sessionId)}/reposlide-result/download`,
   });
   if (proxied) {
     return proxied;
@@ -30,22 +32,22 @@ export async function GET(
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
 
-  const { transcript, result: baseResult } = await loadRepoSlideSessionResult(sessionId);
-  const artifact = await resolveRepoSlideDeckArtifact(session.cwd, baseResult.deckPath);
-  const result = artifact
-    ? {
-        ...baseResult,
-        downloadUrl: buildRepoSlideDownloadPath(sessionId),
-      }
-    : baseResult;
+  const { result } = await loadRepoSlideSessionResult(sessionId);
+  const artifact = await resolveRepoSlideDeckArtifact(session.cwd, result.deckPath);
+  if (!artifact) {
+    return NextResponse.json(
+      { error: "RepoSlide deck is not available for download" },
+      { status: 404 },
+    );
+  }
 
-  return NextResponse.json(
-    {
-      sessionId,
-      result,
-      latestEventKind: transcript.latestEventKind,
-      source: transcript.source,
+  const fileBuffer = await fs.readFile(artifact.absolutePath);
+  return new NextResponse(fileBuffer, {
+    status: 200,
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Disposition": `attachment; filename="${artifact.fileName}"`,
+      "Content-Type": REPOSLIDE_PPTX_CONTENT_TYPE,
     },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  });
 }

@@ -63,7 +63,9 @@ export function RepoSlideSessionPanel({
   const previewText = useMemo(() => result.summary ?? "", [result.summary]);
 
   const statusLabel = result.deckPath
-    ? "Deck path detected"
+    ? result.downloadUrl
+      ? "Deck ready for download"
+      : "Deck path detected"
     : result.latestAssistantMessage
       ? "Waiting for explicit PPTX path"
       : latestEventKind === "agent_message_chunk" || latestEventKind === "agent_message"
@@ -158,6 +160,19 @@ export function RepoSlideSessionPanel({
                 >
                   {copied ? "Copied" : "Copy path"}
                 </button>
+                {result.downloadUrl ? (
+                  <a
+                    href={result.downloadUrl}
+                    download
+                    className="mt-2 ml-2 inline-flex rounded-md border border-[var(--dt-border)] px-2.5 py-1 text-xs text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)]"
+                  >
+                    Download PPTX
+                  </a>
+                ) : (
+                  <div className="mt-2 text-xs text-[var(--dt-text-secondary)]">
+                    Deck path was detected, but the file is not downloadable from this session context.
+                  </div>
+                )}
               </>
             ) : (
               <div className="mt-2 text-xs text-[var(--dt-text-secondary)]">

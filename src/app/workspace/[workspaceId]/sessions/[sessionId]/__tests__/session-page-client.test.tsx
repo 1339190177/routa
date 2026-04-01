@@ -322,6 +322,7 @@ describe("SessionPageClient", () => {
             result: {
               status: "completed",
               deckPath: "/tmp/repo-slide-output/demo-deck.pptx",
+              downloadUrl: "/api/sessions/session-1/reposlide-result/download",
               latestAssistantMessage: "Saved PPTX to /tmp/repo-slide-output/demo-deck.pptx\nSlide outline:\n- Intro\n- Architecture",
               summary: "Saved PPTX to /tmp/repo-slide-output/demo-deck.pptx\nSlide outline:\n- Intro\n- Architecture",
               updatedAt: "2026-04-01T03:00:00.000Z",
@@ -336,8 +337,11 @@ describe("SessionPageClient", () => {
     render(<SessionPageClient />);
 
     expect(await screen.findByText("RepoSlide Run")).toBeTruthy();
-    expect(await screen.findByText("Deck path detected")).toBeTruthy();
+    expect(await screen.findByText("Deck ready for download")).toBeTruthy();
     expect(await screen.findByText("/tmp/repo-slide-output/demo-deck.pptx")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Download PPTX" }).getAttribute("href")).toBe(
+      "/api/sessions/session-1/reposlide-result/download",
+    );
     expect(screen.getByRole("link", { name: "Back to RepoSlide" }).getAttribute("href")).toBe(
       "/workspace/default/codebases/cb-1/reposlide",
     );

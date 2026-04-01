@@ -7,6 +7,7 @@ export interface RepoSlideTranscriptMessage {
 export interface RepoSlideSessionResult {
   status: "running" | "completed";
   deckPath?: string;
+  downloadUrl?: string;
   latestAssistantMessage?: string;
   summary?: string;
   updatedAt?: string;
