@@ -288,6 +288,37 @@ pub(super) async fn execute(
             Ok(result) => tool_result_json(&result),
             Err(error) => tool_result_error(&error),
         },
+        "request_previous_lane_handoff" => match rpc_tool_result(
+            state,
+            "kanban.requestPreviousLaneHandoff",
+            serde_json::json!({
+                "taskId": args.get("taskId").and_then(|v| v.as_str()).unwrap_or(""),
+                "requestType": args.get("requestType").and_then(|v| v.as_str()).unwrap_or(""),
+                "request": args.get("request").and_then(|v| v.as_str()).unwrap_or(""),
+                "sessionId": args.get("sessionId").and_then(|v| v.as_str()).unwrap_or(""),
+            }),
+        )
+        .await
+        {
+            Ok(result) => tool_result_json(&result),
+            Err(error) => tool_result_error(&error),
+        },
+        "submit_lane_handoff" => match rpc_tool_result(
+            state,
+            "kanban.submitLaneHandoff",
+            serde_json::json!({
+                "taskId": args.get("taskId").and_then(|v| v.as_str()).unwrap_or(""),
+                "handoffId": args.get("handoffId").and_then(|v| v.as_str()).unwrap_or(""),
+                "status": args.get("status").and_then(|v| v.as_str()).unwrap_or(""),
+                "summary": args.get("summary").and_then(|v| v.as_str()).unwrap_or(""),
+                "sessionId": args.get("sessionId").and_then(|v| v.as_str()).unwrap_or(""),
+            }),
+        )
+        .await
+        {
+            Ok(result) => tool_result_json(&result),
+            Err(error) => tool_result_error(&error),
+        },
         _ => return None,
     };
 
