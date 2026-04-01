@@ -115,7 +115,7 @@ export function DesktopSidebar({
       id: "harness",
       label: t.nav.harness,
       href: settingsHarnessHref,
-      icon: <HarnessMark className="h-5 w-5" />,
+      icon: <HarnessMark className="h-5 w-5" title="" />,
     },
     {
       id: "fluency",
