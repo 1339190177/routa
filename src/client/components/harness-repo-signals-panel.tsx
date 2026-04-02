@@ -167,7 +167,7 @@ export function HarnessRepoSignalsPanel({
       {!state.loading && !state.error && !unsupportedMessage && state.data ? (
         <div className={`mt-4 ${mode === "test" ? "grid gap-3 md:grid-cols-2" : "space-y-4"}`}>
           {mode === "build" ? (
-            <div className="overflow-hidden rounded-2xl border border-desktop-border bg-desktop-bg-primary/80">
+            <div className="overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary/80">
               <div className="border-b border-desktop-border/70 px-4 py-3">
                 <div className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.title}`}>Overview</div>
               </div>
@@ -198,7 +198,7 @@ export function HarnessRepoSignalsPanel({
             </div>
           ) : null}
 
-          <div className={`overflow-hidden rounded-2xl border border-desktop-border bg-desktop-bg-primary/80 ${mode === "test" ? "md:col-span-2" : ""}`}>
+          <div className={`overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary/80 ${mode === "test" ? "md:col-span-2" : ""}`}>
             <div className="border-b border-desktop-border/70 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>

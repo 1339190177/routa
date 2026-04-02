@@ -68,35 +68,35 @@ function toneStyles(tone: HookFlowNodeTone) {
       return {
         border: "border-emerald-200",
         badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
-        glow: "shadow-emerald-100/70",
+        glow: "",
         line: "#059669",
       };
     case "warning":
       return {
         border: "border-amber-200",
         badge: "border-amber-200 bg-amber-50 text-amber-800",
-        glow: "shadow-amber-100/70",
+        glow: "",
         line: "#d97706",
       };
     case "danger":
       return {
         border: "border-red-200",
         badge: "border-red-200 bg-red-50 text-red-700",
-        glow: "shadow-red-100/70",
+        glow: "",
         line: "#dc2626",
       };
     case "accent":
       return {
         border: "border-sky-200",
         badge: "border-sky-200 bg-sky-50 text-sky-700",
-        glow: "shadow-sky-100/70",
+        glow: "",
         line: "#0284c7",
       };
     default:
       return {
         border: "border-desktop-border",
         badge: "border-desktop-border bg-desktop-bg-secondary text-desktop-text-secondary",
-        glow: "shadow-black/5",
+        glow: "",
         line: "#94a3b8",
       };
   }
@@ -164,7 +164,7 @@ function FlowNodeView({ data }: NodeProps<Node<FlowNodeData>>) {
     <div className="relative">
       <Handle id="left" type="target" position={Position.Left} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
       <Handle id="right" type="source" position={Position.Right} className="!h-2.5 !w-2.5 !border-0 !bg-desktop-border" />
-      <div className={`${widthClass} ${heightClass} rounded-2xl border bg-desktop-bg-primary/95 px-4 py-3 shadow-sm ${tone.border} ${tone.glow}`}>
+      <div className={`${widthClass} ${heightClass} rounded-sm border bg-desktop-bg-primary px-4 py-3 ${tone.border} ${tone.glow}`}>
         <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">{data.kind}</div>
         <div className="mt-1 text-[15px] font-semibold leading-6 text-desktop-text-primary">{data.title}</div>
         {data.subtitle ? (
@@ -192,7 +192,7 @@ function HookLifecycleRail() {
   const { activeEntry, dispatch, groupedEntries } = useWorkbenchContext();
 
   return (
-    <aside className="rounded-[28px] border border-desktop-border bg-[radial-gradient(circle_at_top,#ffffff,rgba(255,255,255,0.78)_24%,rgba(240,246,255,0.82)_100%)] p-4 shadow-sm">
+    <aside className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">Lifecycle</div>
@@ -231,11 +231,11 @@ function HookLifecycleRail() {
                       }
                       dispatch({ type: "select-hook", hookName: entry.name });
                     }}
-                    className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
+                    className={`w-full rounded-sm border px-3 py-3 text-left transition ${
                       dimmed
                         ? "cursor-not-allowed border-slate-200 bg-slate-50/90 text-slate-500 opacity-80"
                         : selected
-                        ? "border-sky-300 bg-sky-50/80 shadow-sm"
+                        ? "border-sky-300 bg-sky-50/80"
                         : "border-desktop-border bg-white/85 hover:bg-desktop-bg-primary"
                     }`}
                   >
@@ -339,7 +339,7 @@ function HookFlowCanvas() {
   }, [activeEntry, flowHeight]);
 
   return (
-    <section className="rounded-[28px] border border-desktop-border bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(243,247,255,0.92))] p-4 shadow-sm">
+    <section className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">Pipeline</div>
@@ -366,7 +366,7 @@ function HookFlowCanvas() {
       </div>
 
       {activeEntry ? (
-        <div className="mt-4 overflow-hidden rounded-3xl border border-desktop-border bg-white/75" style={{ height: flowHeight }}>
+        <div className="mt-4 overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary/80" style={{ height: flowHeight }}>
           <ReactFlow
             nodes={flow.nodes}
             edges={flow.edges}
@@ -387,7 +387,7 @@ function HookFlowCanvas() {
           </ReactFlow>
         </div>
       ) : (
-        <div className="mt-4 rounded-2xl border border-desktop-border bg-white/80 px-4 py-8 text-[12px] text-desktop-text-secondary">
+        <div className="mt-4 rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-4 py-8 text-[12px] text-desktop-text-secondary">
           No hook selected.
         </div>
       )}
@@ -429,9 +429,9 @@ function HookInspector() {
 
   if (!activeEntry) {
     return (
-      <section className="rounded-[28px] border border-desktop-border bg-desktop-bg-primary/70 p-4 shadow-sm">
+      <section className="rounded-sm border border-desktop-border bg-desktop-bg-primary/70 p-4">
         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">Inspector</div>
-        <div className="mt-3 rounded-2xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-6 text-[12px] text-desktop-text-secondary">
+        <div className="mt-3 rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-4 py-6 text-[12px] text-desktop-text-secondary">
           No hook selected.
         </div>
       </section>
@@ -439,7 +439,7 @@ function HookInspector() {
   }
 
   return (
-    <section className="rounded-[28px] border border-desktop-border bg-desktop-bg-primary/70 p-4 shadow-sm">
+    <section className="rounded-sm border border-desktop-border bg-desktop-bg-primary/70 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">Inspector</div>
@@ -487,13 +487,13 @@ function HookInspector() {
               ["Bypass", activeEntry.bypassabilityLabel],
               ["Source path", activeEntry.hookFile?.relativePath ?? "No hook file"],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3">
+              <div key={label} className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-3 py-3">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">{label}</div>
                 <div className="mt-1 text-[12px] leading-5 text-desktop-text-primary">{value}</div>
               </div>
             ))}
           </div>
-          <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
+          <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Command</div>
             <div className="mt-1 break-all font-mono text-[11px] text-desktop-text-primary">
               {activeEntry.hookFile?.triggerCommand ?? "No command detected"}
@@ -503,7 +503,7 @@ function HookInspector() {
             </div>
           </div>
           {activeEntry.phases.length ? (
-            <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
+            <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Runtime phases</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {activeEntry.phases.map((phase) => (
@@ -523,7 +523,7 @@ function HookInspector() {
 
       {state.inspectorTab === "inputs" ? (
         <div className="mt-4 space-y-3">
-          <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
+          <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Argv template</div>
             <div className="mt-2 flex flex-wrap gap-2">
               {activeEntry.argvTemplate.length ? activeEntry.argvTemplate.map((value) => (
@@ -535,13 +535,13 @@ function HookInspector() {
               )}
             </div>
           </div>
-          <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
+          <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">stdin template</div>
             <div className="mt-1 font-mono text-[11px] text-desktop-text-primary">
               {activeEntry.stdinTemplate ?? "No stdin payload."}
             </div>
           </div>
-          <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
+          <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">Environment</div>
             <div className="mt-2 flex flex-wrap gap-2">
               {activeEntry.envKeys.map((key) => (
@@ -557,7 +557,7 @@ function HookInspector() {
       {state.inspectorTab === "tasks" ? (
         <div className="mt-4 space-y-3">
           {activeEntry.tasks.length ? activeEntry.tasks.map((task) => (
-            <div key={task.id} className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
+            <div key={task.id} className="rounded-sm border border-desktop-border bg-desktop-bg-primary/85 px-4 py-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[12px] font-semibold text-desktop-text-primary">{task.name}</div>
@@ -591,7 +591,7 @@ function HookInspector() {
               ) : null}
             </div>
           )) : (
-            <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/85 px-4 py-5 text-[12px] text-desktop-text-secondary">
+            <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/85 px-4 py-5 text-[12px] text-desktop-text-secondary">
               This hook does not expose runtime metrics yet. Use the raw script tab to inspect the executable logic.
             </div>
           )}
@@ -627,7 +627,7 @@ function HookInspector() {
             language={previewSource.language}
             showHeader={false}
             maxHeight="420px"
-            className="rounded-2xl"
+            className="rounded-sm"
           />
         </div>
       ) : null}
@@ -684,17 +684,17 @@ export function HarnessHookWorkbench({
         className={embedded
           ? "space-y-0"
           : compactMode
-            ? "rounded-[30px] border border-desktop-border bg-[linear-gradient(180deg,rgba(251,253,255,0.95),rgba(241,246,255,0.92))] p-4"
-            : "rounded-[30px] border border-desktop-border bg-[linear-gradient(180deg,rgba(251,253,255,0.98),rgba(238,244,255,0.94))] p-5 shadow-sm"}
+            ? "rounded-sm border border-desktop-border bg-desktop-bg-primary/70 p-4"
+            : "rounded-sm border border-desktop-border bg-desktop-bg-secondary/40 p-5"}
       >
         {unsupportedMessage ? (
-          <HarnessUnsupportedState className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-[11px] text-amber-800" />
+          <HarnessUnsupportedState className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-4 text-[11px] text-amber-800" />
         ) : null}
 
         {!unsupportedMessage && data.warnings.length ? (
           <div className="grid gap-2">
             {data.warnings.map((warning) => (
-              <div key={warning} className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
+              <div key={warning} className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
                 {warning}
               </div>
             ))}
@@ -702,7 +702,7 @@ export function HarnessHookWorkbench({
         ) : null}
 
         {!unsupportedMessage && entries.length === 0 ? (
-          <div className="rounded-2xl border border-desktop-border bg-desktop-bg-primary/80 px-4 py-6 text-[12px] text-desktop-text-secondary">
+          <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-4 py-6 text-[12px] text-desktop-text-secondary">
             No hook metadata found for the selected repository.
           </div>
         ) : null}

@@ -532,7 +532,7 @@ export function HarnessReviewTriggersPanel({
         canToggleDetails && reviewTriggerFile && reviewTriggerFile.rules.length ? (
           <button
             type="button"
-            className="rounded-full border border-desktop-border bg-desktop-bg-primary/65 px-2.5 py-1 text-[10px] font-semibold text-desktop-text-primary transition-colors hover:bg-desktop-bg-primary"
+            className="rounded-sm border border-desktop-border bg-desktop-bg-primary/65 px-2.5 py-1 text-[10px] font-semibold text-desktop-text-primary transition-colors hover:bg-desktop-bg-primary"
             onClick={() => setShowDetails((current) => !current)}
           >
             {detailsVisible ? "Hide details" : "Show details"}
@@ -545,7 +545,7 @@ export function HarnessReviewTriggersPanel({
       ) : null}
 
       {unsupportedMessage ? (
-        <HarnessUnsupportedState className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-[11px] text-amber-800" />
+        <HarnessUnsupportedState className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-5 text-[11px] text-amber-800" />
       ) : null}
 
       {error && !unsupportedMessage ? (
@@ -571,11 +571,11 @@ export function HarnessReviewTriggersPanel({
             return (
               <article
                 key={card.key}
-                className={`rounded-2xl border bg-desktop-bg-primary/80 px-3.5 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.04)] ${styles.border}`}
+                className={`rounded-sm border bg-desktop-bg-primary/80 px-3.5 py-3 ${styles.border}`}
               >
-                <div className={`mb-3 h-1 rounded-full ${styles.accent}`} aria-hidden="true">
+                <div className={`mb-3 h-1 rounded-sm ${styles.accent}`} aria-hidden="true">
                   <div
-                    className={`h-full rounded-full transition-[width] duration-300 ${styles.bar}`}
+                    className={`h-full rounded-sm transition-[width] duration-300 ${styles.bar}`}
                     style={{ width: `${Math.max(12, card.barValue * 100)}%` }}
                   />
                 </div>

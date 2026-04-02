@@ -344,7 +344,7 @@ function DimensionCard({
   const visibleRules = shouldCompactDrift && !showAllDriftRules ? card.rules.slice(0, driftLimit) : card.rules;
 
   return (
-    <div className={`rounded-2xl border p-3 ${styles.border} bg-desktop-bg-secondary/70`}>
+    <div className={`rounded-sm border p-3 ${styles.border} bg-desktop-bg-secondary/70`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
@@ -359,9 +359,9 @@ function DimensionCard({
         </div>
       </div>
 
-      <div className={`mt-2.5 h-1 w-full overflow-hidden rounded-full ${styles.accent}`}>
+      <div className={`mt-2.5 h-1 w-full overflow-hidden rounded-sm ${styles.accent}`}>
         <div
-          className={`h-full rounded-full ${styles.bar} transition-all`}
+          className={`h-full rounded-sm ${styles.bar} transition-all`}
           style={{ width: `${Math.round(card.barValue * 100)}%` }}
         />
       </div>
@@ -378,7 +378,7 @@ function DimensionCard({
         <div className="mt-2">
           <button
             type="button"
-            className="rounded-full border border-desktop-border bg-desktop-bg-primary/65 px-2.5 py-1 text-[10px] font-semibold text-desktop-text-primary"
+            className="rounded-sm border border-desktop-border bg-desktop-bg-primary/65 px-2.5 py-1 text-[10px] font-semibold text-desktop-text-primary"
             onClick={() => setShowAllDriftRules(true)}
           >
             Show all {card.rules.length} rules

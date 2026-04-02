@@ -78,9 +78,9 @@ export function HarnessLifecycleView({
   }, [designDecisionNodeEnabled]);
 
   return (
-    <div className="rounded-2xl border border-desktop-border bg-desktop-bg-secondary/55 p-4 shadow-sm">
+    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/40 p-3">
       <div className="space-y-4">
-        <div className="min-w-0 rounded-xl border border-desktop-border bg-white p-4">
+        <div className="min-w-0 rounded-sm border border-desktop-border bg-desktop-bg-primary p-3">
           <div className="relative overflow-x-auto">
             {/* Base SVG */}
             <div className="relative" style={{ minWidth: "800px", maxWidth: "100%" }}>
@@ -133,4 +133,3 @@ export function HarnessLifecycleView({
     </div>
   );
 }
-

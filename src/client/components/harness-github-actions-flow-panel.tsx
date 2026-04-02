@@ -153,7 +153,7 @@ export function HarnessGitHubActionsFlowPanel({
         actions={stateBadge}
         variant={variant}
       >
-        <HarnessUnsupportedState className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-[11px] text-amber-800" />
+        <HarnessUnsupportedState className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-4 text-[11px] text-amber-800" />
       </HarnessSectionCard>
     );
   }

@@ -82,7 +82,7 @@ export function HarnessCodeownersPanel({
       ) : null}
 
       {unsupportedMessage ? (
-        <HarnessUnsupportedState className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-[11px] text-amber-800" />
+        <HarnessUnsupportedState className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-5 text-[11px] text-amber-800" />
       ) : null}
 
       {error && !unsupportedMessage ? (
@@ -110,7 +110,7 @@ export function HarnessCodeownersPanel({
           </div>
 
           {data.warnings.length > 0 ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900">
+            <div className="rounded-sm border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900">
               <div className="font-semibold">Warnings</div>
               <ul className="mt-1 list-inside list-disc space-y-0.5">
                 {data.warnings.map((w) => (

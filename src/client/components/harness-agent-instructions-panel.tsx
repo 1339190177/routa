@@ -523,7 +523,7 @@ export function HarnessAgentInstructionsPanel({
       ) : null}
 
       {unsupportedMessage ? (
-        <HarnessUnsupportedState className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-[11px] text-amber-800" />
+        <HarnessUnsupportedState className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-5 text-[11px] text-amber-800" />
       ) : null}
 
       {resolvedInstructionsState.error && !unsupportedMessage ? (
