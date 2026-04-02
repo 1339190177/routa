@@ -27,7 +27,6 @@ import { HarnessReleaseTriggersPanel } from "@/client/components/harness-release
 import { HarnessSpecSourcesPanel } from "@/client/components/harness-spec-sources-panel";
 import { HarnessUnsupportedState, getHarnessUnsupportedRepoMessage } from "@/client/components/harness-support-state";
 import { HarnessFloatingNav, type HarnessNavSection } from "@/client/components/harness-floating-nav";
-import { HarnessQuickStartCard } from "@/client/components/harness-quick-start-card";
 import { useHarnessSettingsData } from "@/client/hooks/use-harness-settings-data";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { loadRepoSelection, saveRepoSelection } from "@/client/utils/repo-selection-storage";
@@ -194,20 +193,6 @@ export default function HarnessSettingsPage() {
     () => githubActionsState.data?.flows?.length ?? 0,
     [githubActionsState.data?.flows?.length],
   );
-
-  const scrollToSection = (sectionId: string) => {
-    const element = document.getElementById(sectionId);
-    const scrollContainer = document.querySelector("main.overflow-y-auto");
-
-    if (element && scrollContainer) {
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const elementRect = element.getBoundingClientRect();
-      const scrollTop = scrollContainer.scrollTop;
-
-      const targetScrollTop = elementRect.top - containerRect.top + scrollTop - 80;
-      scrollContainer.scrollTo({ top: targetScrollTop, behavior: "smooth" });
-    }
-  };
 
   const governanceContextPanel = useMemo(() => {
     if (selectedGovernanceNodeId === null) {
@@ -483,15 +468,6 @@ export default function HarnessSettingsPage() {
               </div>
             </div>
           )}
-        />
-
-        <HarnessQuickStartCard
-          dimensionCount={dimensionSpecs.length}
-          metricCount={planState.data?.metricCount ?? 0}
-          hardGateCount={planState.data?.hardGateCount ?? 0}
-          hookCount={hookCount}
-          workflowCount={workflowCount}
-          onNavigateToSection={scrollToSection}
         />
 
         <div id="governance-loop">
