@@ -167,12 +167,9 @@ function AgentHookLifecycleRail() {
   const { activeEntry, dispatch, groupedEntries } = useWorkbenchContext();
 
   return (
-    <aside className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">Lifecycle</div>
-          <h3 className="mt-1 text-sm font-semibold text-desktop-text-primary">Agent hook map</h3>
-        </div>
+    <aside className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-3">
+      <div className="flex items-center justify-between gap-3 border-b border-desktop-border pb-2">
+        <div className="text-[12px] font-semibold text-desktop-text-primary">Agent hooks</div>
         <div className="rounded-full border border-desktop-border bg-white/80 px-2.5 py-1 text-[10px] text-desktop-text-secondary">
           {groupedEntries.reduce((sum, group) => sum + group.entries.length, 0)} events
         </div>
@@ -291,11 +288,10 @@ function AgentHookFlowCanvas() {
   }, [activeEntry, flowHeight]);
 
   return (
-    <section className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">Pipeline</div>
-          <h3 className="mt-1 text-sm font-semibold text-desktop-text-primary">Event → Hook → Outcome</h3>
+    <section className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-desktop-border pb-2">
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold text-desktop-text-primary">Event → Hook → Outcome</div>
           <div className="mt-1 text-[11px] text-desktop-text-secondary">
             {activeEntry
               ? `${activeEntry.lifecycleLabel} lifecycle · ${activeEntry.hint}`
@@ -357,10 +353,9 @@ function AgentHookInspector() {
   }, [activeEntry]);
 
   return (
-    <aside className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-4">
-      <div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">Inspector</div>
-        <h3 className="mt-1 text-sm font-semibold text-desktop-text-primary">
+    <aside className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-3">
+      <div className="border-b border-desktop-border pb-2">
+        <h3 className="text-[12px] font-semibold text-desktop-text-primary">
           {activeEntry?.event ?? "Event details"}
         </h3>
       </div>

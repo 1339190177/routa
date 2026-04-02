@@ -438,14 +438,13 @@ export default function HarnessConsolePage() {
 
   function renderFitnessDetailArea() {
     return (
-      <div className="desktop-panel overflow-hidden">
-        <div className="desktop-panel-header">
-          <span>Fitness Sources</span>
-          <span className="text-desktop-text-secondary">{specFiles.length} discovered</span>
-        </div>
+      <div className="overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary">
         <div className="grid gap-0 xl:grid-cols-[280px_minmax(0,1fr)]">
           <div className="min-w-0 border-r border-desktop-border bg-desktop-bg-secondary/40 p-3">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Discovery</div>
+            <div className="mb-2 flex items-center justify-between gap-2 text-[11px]">
+              <div className="font-semibold text-desktop-text-primary">Sources</div>
+              <div className="text-desktop-text-secondary">{specFiles.length}</div>
+            </div>
             <div className="space-y-1.5">
               {specsState.loading ? <div className="text-[10px] text-desktop-text-secondary">Loading fitness files...</div> : null}
               {unsupportedRepoMessage ? <HarnessUnsupportedState className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300" /> : null}
@@ -496,10 +495,7 @@ export default function HarnessConsolePage() {
 
           <div className="min-w-0 p-3">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Source View</div>
-                <div className="mt-1 text-sm font-semibold text-desktop-text-primary">{visibleSpec?.name ?? "Select a file"}</div>
-              </div>
+              <div className="text-sm font-semibold text-desktop-text-primary">{visibleSpec?.name ?? "Select a file"}</div>
               {visibleSpec?.kind === "dimension" ? (
                 <div className="flex flex-wrap gap-1.5 text-[9px]">
                   <span className="desktop-badge">w:{visibleSpec.weight ?? 0}</span>
@@ -604,10 +600,7 @@ export default function HarnessConsolePage() {
   function renderOverview() {
     return (
       <div className="space-y-3">
-        <div className="flex items-center justify-between border-b border-desktop-border pb-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
-            {governanceView === "lifecycle" ? "Lifecycle View" : "Governance Loop"}
-          </div>
+        <div className="flex items-center justify-end border-b border-desktop-border pb-2">
           <div className="inline-flex items-center gap-0.5 rounded border border-desktop-border bg-desktop-bg-primary p-0.5 normal-case tracking-normal">
             {(["lifecycle", "loop"] as const).map((view) => (
               <button
@@ -677,7 +670,7 @@ export default function HarnessConsolePage() {
       case "repo-signals":
         return <HarnessRepoSignalsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} mode="test" hideHeader />;
       case "automations":
-        return <HarnessAutomationPanel {...sharedProps} data={automationsState.data} loading={automationsState.loading} error={automationsState.error} />;
+        return <HarnessAutomationPanel {...sharedProps} data={automationsState.data} loading={automationsState.loading} error={automationsState.error} hideHeader />;
       case "hook-systems":
         return (
           <div className="space-y-4">
