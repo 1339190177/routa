@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
+import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import {
   HarnessExecutionPlanFlow,
   type TierValue,
@@ -20,14 +21,13 @@ import { HarnessCodeownersPanel } from "@/client/components/harness-codeowners-p
 import { HarnessReviewTriggersPanel } from "@/client/components/harness-review-triggers-panel";
 import { HarnessReleaseTriggersPanel } from "@/client/components/harness-release-triggers-panel";
 import { HarnessSpecSourcesPanel } from "@/client/components/harness-spec-sources-panel";
-import { HarnessUnsupportedState, getHarnessUnsupportedRepoMessage } from "@/client/components/harness-support-state";
+import {
+  HarnessUnsupportedState,
+  getHarnessUnsupportedRepoMessage,
+} from "@/client/components/harness-support-state";
 import { useHarnessSettingsData } from "@/client/hooks/use-harness-settings-data";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { loadRepoSelection, saveRepoSelection } from "@/client/utils/repo-selection-storage";
-
-/* ------------------------------------------------------------------ */
-/*  Types                                                             */
-/* ------------------------------------------------------------------ */
 
 type SectionId =
   | "overview"
@@ -46,26 +46,36 @@ interface SectionDef {
   id: SectionId;
   label: string;
   shortLabel: string;
-  icon: string;
+  code: string;
 }
 
 const SECTIONS: SectionDef[] = [
-  { id: "overview", label: "Overview · Lifecycle", shortLabel: "Overview", icon: "◎" },
-  { id: "spec-sources", label: "Spec Sources", shortLabel: "Specs", icon: "◇" },
-  { id: "agent-instructions", label: "Agent Instructions", shortLabel: "Instructions", icon: "▤" },
-  { id: "design-decisions", label: "Design Decisions", shortLabel: "ADR", icon: "△" },
-  { id: "repo-signals", label: "Repository Signals", shortLabel: "Signals", icon: "◈" },
-  { id: "hook-systems", label: "Hook Systems", shortLabel: "Hooks", icon: "⚡" },
-  { id: "review-triggers", label: "Review Triggers", shortLabel: "Review", icon: "◐" },
-  { id: "release-triggers", label: "Release Triggers", shortLabel: "Release", icon: "◑" },
-  { id: "codeowners", label: "Codeowners", shortLabel: "Owners", icon: "◻" },
-  { id: "entrix-fitness", label: "Entrix Fitness", shortLabel: "Fitness", icon: "◆" },
-  { id: "ci-cd", label: "CI / CD", shortLabel: "CI/CD", icon: "⟳" },
+  { id: "overview", label: "Overview", shortLabel: "Overview", code: "OV" },
+  { id: "spec-sources", label: "Spec Sources", shortLabel: "Specs", code: "SP" },
+  { id: "agent-instructions", label: "Agent Instructions", shortLabel: "Instructions", code: "AI" },
+  { id: "design-decisions", label: "Design Decisions", shortLabel: "ADR", code: "DD" },
+  { id: "repo-signals", label: "Repository Signals", shortLabel: "Signals", code: "RS" },
+  { id: "hook-systems", label: "Hook Systems", shortLabel: "Hooks", code: "HK" },
+  { id: "review-triggers", label: "Review Triggers", shortLabel: "Review", code: "RV" },
+  { id: "release-triggers", label: "Release Triggers", shortLabel: "Release", code: "RL" },
+  { id: "codeowners", label: "Codeowners", shortLabel: "Owners", code: "CO" },
+  { id: "entrix-fitness", label: "Entrix Fitness", shortLabel: "Fitness", code: "FT" },
+  { id: "ci-cd", label: "CI / CD", shortLabel: "CI/CD", code: "CI" },
 ];
 
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                           */
-/* ------------------------------------------------------------------ */
+const GOVERNANCE_NODE_SECTION_MAP: Partial<Record<string, SectionId>> = {
+  thinking: "spec-sources",
+  coding: "design-decisions",
+  build: "agent-instructions",
+  test: "repo-signals",
+  lint: "entrix-fitness",
+  precommit: "entrix-fitness",
+  "agent-hook": "hook-systems",
+  review: "review-triggers",
+  release: "ci-cd",
+  commit: "ci-cd",
+  "post-commit": "ci-cd",
+};
 
 function extractMarkdownCodeBlocks(source: string) {
   const matches = [...source.matchAll(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g)];
@@ -76,14 +86,22 @@ function extractMarkdownCodeBlocks(source: string) {
   })).filter((block) => block.code.length > 0);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Main page                                                         */
-/* ------------------------------------------------------------------ */
+function sectionBadgeClass(active: boolean) {
+  return active
+    ? "desktop-badge desktop-badge-accent"
+    : "desktop-badge";
+}
+
+function statValue(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+  return String(value);
+}
 
 export default function HarnessConsolePage() {
-  /* ── workspace & repo selection ────────────────────────────────── */
   const workspacesHook = useWorkspaces();
-  const [selectedWorkspaceId, _setSelectedWorkspaceId] = useState("");
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const workspaceId = selectedWorkspaceId || workspacesHook.workspaces[0]?.id || "";
   const { codebases } = useCodebases(workspaceId);
   const [selectedCodebaseId, setSelectedCodebaseId] = useState("");
@@ -93,6 +111,7 @@ export default function HarnessConsolePage() {
   }>({ workspaceId: "", selection: null });
   const [selectedTier, setSelectedTier] = useState<TierValue>("normal");
   const [selectedSpecName, setSelectedSpecName] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
 
   const persistedRepoSelection = useMemo(
     () => loadRepoSelection("harness", workspaceId),
@@ -104,29 +123,35 @@ export default function HarnessConsolePage() {
   const effectiveRepoOverride = selectedRepoOverride ?? persistedRepoSelection;
 
   const activeWorkspaceTitle = useMemo(() => {
-    return workspacesHook.workspaces.find((w) => w.id === workspaceId)?.title
+    return workspacesHook.workspaces.find((workspace) => workspace.id === workspaceId)?.title
       ?? workspacesHook.workspaces[0]?.title
       ?? undefined;
   }, [workspaceId, workspacesHook.workspaces]);
 
   const activeCodebase = useMemo(() => {
-    const effectiveCodebaseId = codebases.some((c) => c.id === selectedCodebaseId)
+    const effectiveCodebaseId = codebases.some((codebase) => codebase.id === selectedCodebaseId)
       ? selectedCodebaseId
-      : (codebases.find((c) => c.isDefault)?.id ?? codebases[0]?.id ?? "");
-    return codebases.find((c) => c.id === effectiveCodebaseId) ?? null;
+      : (codebases.find((codebase) => codebase.isDefault)?.id ?? codebases[0]?.id ?? "");
+    return codebases.find((codebase) => codebase.id === effectiveCodebaseId) ?? null;
   }, [codebases, selectedCodebaseId]);
 
   const matchedSelectedCodebase = useMemo(() => {
-    if (!effectiveRepoOverride) return activeCodebase;
-    return codebases.find((c) => (
-      c.repoPath === effectiveRepoOverride.path
-      && (effectiveRepoOverride.branch ? (c.branch ?? "") === effectiveRepoOverride.branch : true)
-    )) ?? codebases.find((c) => c.repoPath === effectiveRepoOverride.path) ?? null;
+    if (!effectiveRepoOverride) {
+      return activeCodebase;
+    }
+    return codebases.find((codebase) => (
+      codebase.repoPath === effectiveRepoOverride.path
+      && (effectiveRepoOverride.branch ? (codebase.branch ?? "") === effectiveRepoOverride.branch : true)
+    )) ?? codebases.find((codebase) => codebase.repoPath === effectiveRepoOverride.path) ?? null;
   }, [activeCodebase, codebases, effectiveRepoOverride]);
 
   const activeRepoSelection = useMemo(() => {
-    if (effectiveRepoOverride) return effectiveRepoOverride;
-    if (!activeCodebase) return null;
+    if (effectiveRepoOverride) {
+      return effectiveRepoOverride;
+    }
+    if (!activeCodebase) {
+      return null;
+    }
     return {
       name: activeCodebase.label ?? activeCodebase.repoPath.split("/").pop() ?? activeCodebase.repoPath,
       path: activeCodebase.repoPath,
@@ -137,7 +162,6 @@ export default function HarnessConsolePage() {
   const activeRepoPath = activeRepoSelection?.path;
   const activeRepoCodebaseId = matchedSelectedCodebase?.id;
 
-  /* ── data hooks ────────────────────────────────────────────────── */
   const {
     specsState,
     planState,
@@ -163,18 +187,25 @@ export default function HarnessConsolePage() {
   const specFiles = useMemo(() => specsState.data?.files ?? [], [specsState.data?.files]);
 
   const visibleSpec = useMemo(() => {
-    if (specFiles.length === 0) return null;
-    return specFiles.find((f) => f.name === selectedSpecName)
-      ?? specFiles.find((f) => f.name.toLowerCase() === "readme.md")
-      ?? specFiles.find((f) => f.kind === "dimension")
-      ?? specFiles[0] ?? null;
+    if (specFiles.length === 0) {
+      return null;
+    }
+    return specFiles.find((file) => file.name === selectedSpecName)
+      ?? specFiles.find((file) => file.name.toLowerCase() === "readme.md")
+      ?? specFiles.find((file) => file.kind === "dimension")
+      ?? specFiles[0]
+      ?? null;
   }, [selectedSpecName, specFiles]);
 
-  const dimensionSpecs = specFiles.filter((f) => f.kind === "dimension");
-  const primaryFiles = specFiles.filter((f) => f.kind === "rulebook" || f.kind === "manifest" || f.kind === "dimension");
-  const auxiliaryFiles = specFiles.filter((f) => !primaryFiles.includes(f));
+  const dimensionSpecs = specFiles.filter((file) => file.kind === "dimension");
+  const primaryFiles = specFiles.filter((file) => file.kind === "rulebook" || file.kind === "manifest" || file.kind === "dimension");
+  const auxiliaryFiles = specFiles.filter((file) => !primaryFiles.includes(file));
   const selectedRepoLabel = activeRepoSelection?.name ?? "None";
-  const unsupportedRepoMessage = getHarnessUnsupportedRepoMessage(specsState.error, planState.error, designDecisionsState.error);
+  const unsupportedRepoMessage = getHarnessUnsupportedRepoMessage(
+    specsState.error,
+    planState.error,
+    designDecisionsState.error,
+  );
   const hasArchitectureOrAdrSignal = useMemo(
     () => (designDecisionsState.data?.sources.length ?? 0) > 0,
     [designDecisionsState.data],
@@ -196,7 +227,6 @@ export default function HarnessConsolePage() {
     saveRepoSelection("harness", workspaceId, activeRepoSelection);
   }, [activeRepoSelection, workspaceId]);
 
-  /* ── IDE layout state ──────────────────────────────────────────── */
   const [activeSection, setActiveSection] = useState<SectionId>("overview");
   const [openTabs, setOpenTabs] = useState<SectionId[]>(["overview"]);
   const [governanceView, setGovernanceView] = useState<"lifecycle" | "loop">("lifecycle");
@@ -204,64 +234,89 @@ export default function HarnessConsolePage() {
   const [bottomPanelTab, setBottomPanelTab] = useState<"context" | "plan" | "fitness">("context");
   const [showBottomPanel, setShowBottomPanel] = useState(false);
 
-  const openSection = useCallback((id: SectionId) => {
-    setOpenTabs((prev) => prev.includes(id) ? prev : [...prev, id]);
+  function openSection(id: SectionId) {
+    setOpenTabs((current) => (current.includes(id) ? current : [...current, id]));
     setActiveSection(id);
-  }, []);
+  }
 
-  const closeTab = useCallback((id: SectionId) => {
-    setOpenTabs((prev) => {
-      const next = prev.filter((t) => t !== id);
-      if (next.length === 0) return ["overview"];
-      return next;
-    });
+  function closeTab(id: SectionId) {
+    const remaining: SectionId[] = openTabs.filter((tabId): tabId is SectionId => tabId !== id);
+    const nextTabs: SectionId[] = remaining.length > 0 ? remaining : ["overview"];
+    setOpenTabs(nextTabs);
     if (activeSection === id) {
-      const remaining = openTabs.filter((t) => t !== id);
-      setActiveSection(remaining.length > 0 ? remaining[remaining.length - 1] : "overview");
+      setActiveSection(nextTabs[nextTabs.length - 1] ?? "overview");
     }
-  }, [activeSection, openTabs]);
+  }
 
-  const handleGovernanceNodeClick = (nodeId: string) => {
-    setSelectedGovernanceNodeId(nodeId);
+  function openBottomPanel(tab: "context" | "plan" | "fitness") {
+    setBottomPanelTab(tab);
     setShowBottomPanel(true);
-    setBottomPanelTab("context");
-  };
+  }
 
-  /* ── section badges for sidebar ────────────────────────────────── */
+  function handleGovernanceNodeClick(nodeId: string) {
+    setSelectedGovernanceNodeId(nodeId);
+    openBottomPanel("context");
+  }
+
+  const visibleSections = useMemo(() => {
+    const normalizedFilter = sectionFilter.trim().toLowerCase();
+    if (!normalizedFilter) {
+      return SECTIONS;
+    }
+    return SECTIONS.filter((section) => [section.label, section.shortLabel, section.code]
+      .some((value) => value.toLowerCase().includes(normalizedFilter)));
+  }, [sectionFilter]);
+
   const sectionBadges = useMemo((): Map<SectionId, string | null> => {
-    const m = new Map<SectionId, string | null>();
-    m.set("spec-sources", specSourcesState.data ? `${specSourcesState.data.sources?.length ?? 0}` : null);
-    m.set("agent-instructions", instructionsState.data ? "1" : null);
-    m.set("design-decisions", designDecisionsState.data ? `${designDecisionsState.data.sources?.length ?? 0}` : null);
-    m.set("hook-systems", hookCount > 0 ? `${hookCount}` : null);
-    m.set("review-triggers", hooksState.data?.hookFiles ? `${hooksState.data.hookFiles.length}` : null);
-    m.set("release-triggers", hooksState.data?.hookFiles ? `${hooksState.data.hookFiles.length}` : null);
-    m.set("codeowners", resolvedCodeownersState.data ? "✓" : null);
-    m.set("entrix-fitness", specFiles.length > 0 ? `${dimensionSpecs.length}d/${planState.data?.metricCount ?? 0}m` : null);
-    m.set("ci-cd", workflowCount > 0 ? `${workflowCount}` : null);
-    return m;
-  }, [specSourcesState.data, instructionsState.data, designDecisionsState.data, hookCount, hooksState.data, resolvedCodeownersState.data, specFiles.length, dimensionSpecs.length, planState.data?.metricCount, workflowCount]);
+    const map = new Map<SectionId, string | null>();
+    map.set("spec-sources", specSourcesState.data ? `${specSourcesState.data.sources?.length ?? 0}` : null);
+    map.set("agent-instructions", instructionsState.data ? "1" : null);
+    map.set("design-decisions", designDecisionsState.data ? `${designDecisionsState.data.sources?.length ?? 0}` : null);
+    map.set("hook-systems", hookCount > 0 ? `${hookCount}` : null);
+    map.set("review-triggers", hooksState.data?.hookFiles ? `${hooksState.data.hookFiles.length}` : null);
+    map.set("release-triggers", hooksState.data?.hookFiles ? `${hooksState.data.hookFiles.length}` : null);
+    map.set("codeowners", resolvedCodeownersState.data ? "OK" : null);
+    map.set("entrix-fitness", specFiles.length > 0 ? `${dimensionSpecs.length}d/${planState.data?.metricCount ?? 0}m` : null);
+    map.set("ci-cd", workflowCount > 0 ? `${workflowCount}` : null);
+    return map;
+  }, [
+    specSourcesState.data,
+    instructionsState.data,
+    designDecisionsState.data,
+    hookCount,
+    hooksState.data,
+    resolvedCodeownersState.data,
+    specFiles.length,
+    dimensionSpecs.length,
+    planState.data?.metricCount,
+    workflowCount,
+  ]);
 
-  /* ── governance context panel (compact, for bottom panel) ──────── */
+  const selectedGovernanceSection = selectedGovernanceNodeId
+    ? (GOVERNANCE_NODE_SECTION_MAP[selectedGovernanceNodeId] ?? null)
+    : null;
+
   const governanceContextPanel = useMemo(() => {
-    if (selectedGovernanceNodeId === null) return null;
+    if (selectedGovernanceNodeId === null) {
+      return null;
+    }
     const props = { repoLabel: selectedRepoLabel, unsupportedMessage: unsupportedRepoMessage };
     switch (selectedGovernanceNodeId) {
       case "thinking":
-        return (<HarnessSpecSourcesPanel {...props} data={specSourcesState.data} loading={specSourcesState.loading} error={specSourcesState.error} variant="compact" />);
+        return <HarnessSpecSourcesPanel {...props} data={specSourcesState.data} loading={specSourcesState.loading} error={specSourcesState.error} variant="compact" />;
       case "coding":
-        return (<HarnessDesignDecisionPanel {...props} data={designDecisionsState.data} loading={designDecisionsState.loading} error={designDecisionsState.error} variant="compact" />);
+        return <HarnessDesignDecisionPanel {...props} data={designDecisionsState.data} loading={designDecisionsState.loading} error={designDecisionsState.error} variant="compact" />;
       case "build":
-        return (<HarnessAgentInstructionsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={instructionsState.data} loading={instructionsState.loading} error={instructionsState.error} onAuditRerun={reloadInstructions} variant="compact" />);
+        return <HarnessAgentInstructionsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={instructionsState.data} loading={instructionsState.loading} error={instructionsState.error} onAuditRerun={reloadInstructions} variant="compact" />;
       case "agent-hook":
-        return (<HarnessAgentHookPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={agentHooksState.data} loading={agentHooksState.loading} error={agentHooksState.error} variant="compact" embedded />);
+        return <HarnessAgentHookPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={agentHooksState.data} loading={agentHooksState.loading} error={agentHooksState.error} variant="compact" embedded />;
       case "lint":
       case "precommit":
-        return (<HarnessExecutionPlanFlow loading={planState.loading} error={planState.error} plan={planState.data} repoLabel={selectedRepoLabel} selectedTier={selectedTier} onTierChange={setSelectedTier} unsupportedMessage={unsupportedRepoMessage} variant="compact" />);
+        return <HarnessExecutionPlanFlow loading={planState.loading} error={planState.error} plan={planState.data} repoLabel={selectedRepoLabel} selectedTier={selectedTier} onTierChange={setSelectedTier} unsupportedMessage={unsupportedRepoMessage} variant="compact" />;
       case "test":
-        return (<HarnessRepoSignalsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} mode="test" variant="compact" />);
+        return <HarnessRepoSignalsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} mode="test" variant="compact" />;
       case "release":
-        return (<HarnessGitHubActionsFlowPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={githubActionsState.data} loading={githubActionsState.loading} error={githubActionsState.error} variant="compact" initialCategory="Release" />);
+        return <HarnessGitHubActionsFlowPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={githubActionsState.data} loading={githubActionsState.loading} error={githubActionsState.error} variant="compact" initialCategory="Release" />;
       case "review":
         return (
           <div className="space-y-3">
@@ -272,34 +327,227 @@ export default function HarnessConsolePage() {
         );
       case "commit":
       case "post-commit":
-        return (<HarnessGitHubActionsFlowPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={githubActionsState.data} loading={githubActionsState.loading} error={githubActionsState.error} variant="compact" />);
+        return <HarnessGitHubActionsFlowPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...props} data={githubActionsState.data} loading={githubActionsState.loading} error={githubActionsState.error} variant="compact" />;
       default:
-        return (<div className="p-3 text-[11px] text-slate-500">选择 Lifecycle 节点查看对应组件的上下文视图。</div>);
+        return <div className="p-3 text-[11px] text-desktop-text-secondary">选择 Lifecycle 节点查看对应组件的上下文视图。</div>;
     }
-  }, [selectedGovernanceNodeId, selectedRepoLabel, unsupportedRepoMessage, specSourcesState, designDecisionsState, instructionsState, agentHooksState, planState, hooksState, githubActionsState, resolvedCodeownersState, workspaceId, activeRepoCodebaseId, activeRepoPath, reloadInstructions, selectedTier]);
+  }, [
+    activeRepoCodebaseId,
+    activeRepoPath,
+    agentHooksState.data,
+    agentHooksState.error,
+    agentHooksState.loading,
+    designDecisionsState.data,
+    designDecisionsState.error,
+    designDecisionsState.loading,
+    githubActionsState.data,
+    githubActionsState.error,
+    githubActionsState.loading,
+    hooksState.data,
+    hooksState.error,
+    hooksState.loading,
+    instructionsState.data,
+    instructionsState.error,
+    instructionsState.loading,
+    planState.data,
+    planState.error,
+    planState.loading,
+    reloadInstructions,
+    resolvedCodeownersState.data,
+    resolvedCodeownersState.error,
+    resolvedCodeownersState.loading,
+    selectedGovernanceNodeId,
+    selectedRepoLabel,
+    selectedTier,
+    specSourcesState.data,
+    specSourcesState.error,
+    specSourcesState.loading,
+    unsupportedRepoMessage,
+    workspaceId,
+  ]);
 
-  /* ── render active section content ─────────────────────────────── */
-  function renderSectionContent(sectionId: SectionId) {
-    const sharedProps = { repoLabel: selectedRepoLabel, unsupportedMessage: unsupportedRepoMessage };
+  function renderFitnessDetailArea() {
+    return (
+      <div className="desktop-panel overflow-hidden">
+        <div className="desktop-panel-header">
+          <span>Fitness Sources</span>
+          <span className="text-desktop-text-secondary">{specFiles.length} discovered</span>
+        </div>
+        <div className="grid gap-0 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="min-w-0 border-r border-desktop-border bg-desktop-bg-secondary/40 p-3">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Discovery</div>
+            <div className="space-y-1.5">
+              {specsState.loading ? <div className="text-[10px] text-desktop-text-secondary">Loading fitness files...</div> : null}
+              {unsupportedRepoMessage ? <HarnessUnsupportedState className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300" /> : null}
+              {specsState.error && !unsupportedRepoMessage ? <div className="text-[10px] text-red-600 dark:text-red-400">{specsState.error}</div> : null}
+              {!specsState.loading && !specsState.error && !unsupportedRepoMessage && specFiles.length === 0 ? <div className="text-[10px] text-desktop-text-secondary">No fitness files found.</div> : null}
+              {!unsupportedRepoMessage ? primaryFiles.map((file) => (
+                <button
+                  key={file.name}
+                  type="button"
+                  onClick={() => setSelectedSpecName(file.name)}
+                  className={`w-full rounded-md border px-2.5 py-2 text-left transition-colors ${
+                    visibleSpec?.name === file.name
+                      ? "border-desktop-accent bg-desktop-bg-active text-desktop-text-primary"
+                      : "border-transparent bg-desktop-bg-primary text-desktop-text-secondary hover:border-desktop-border hover:bg-desktop-bg-primary/80 hover:text-desktop-text-primary"
+                  }`}
+                >
+                  <div className="text-[11px] font-medium">{file.name}</div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[9px] text-current/75">
+                    <span>{file.kind === "dimension" ? (file.dimension ?? "dimension") : file.kind}</span>
+                    <span className="font-mono">{file.language}</span>
+                    {file.metricCount > 0 ? <span className="ml-auto">{file.metricCount} metrics</span> : null}
+                  </div>
+                </button>
+              )) : null}
+              {!unsupportedRepoMessage && auxiliaryFiles.length > 0 ? (
+                <details className="rounded-md border border-desktop-border bg-desktop-bg-primary/60 px-2.5 py-2">
+                  <summary className="cursor-pointer text-[9px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Auxiliary ({auxiliaryFiles.length})</summary>
+                  <div className="mt-2 space-y-1">
+                    {auxiliaryFiles.map((file) => (
+                      <button
+                        key={file.name}
+                        type="button"
+                        onClick={() => setSelectedSpecName(file.name)}
+                        className={`w-full rounded px-2 py-1 text-left text-[10px] transition-colors ${
+                          visibleSpec?.name === file.name
+                            ? "bg-desktop-bg-active text-desktop-text-primary"
+                            : "text-desktop-text-secondary hover:bg-desktop-bg-primary hover:text-desktop-text-primary"
+                        }`}
+                      >
+                        {file.name}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+            </div>
+          </div>
 
-    switch (sectionId) {
-      case "overview":
-        return (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="text-[14px] font-semibold text-slate-200">
-                  {governanceView === "lifecycle" ? "Lifecycle View" : "Governance Loop"}
-                </h3>
-                <p className="mt-0.5 text-[11px] text-slate-500">
-                  {governanceView === "lifecycle" ? "从需求到交付的完整生命周期治理视图" : "治理拓扑与反馈网络视图"}
-                </p>
+          <div className="min-w-0 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Source View</div>
+                <div className="mt-1 text-sm font-semibold text-desktop-text-primary">{visibleSpec?.name ?? "Select a file"}</div>
               </div>
-              <div className="inline-flex items-center rounded border border-slate-700 bg-[#1e2030] p-0.5">
+              {visibleSpec?.kind === "dimension" ? (
+                <div className="flex flex-wrap gap-1.5 text-[9px]">
+                  <span className="desktop-badge">w:{visibleSpec.weight ?? 0}</span>
+                  <span className="desktop-badge desktop-badge-success">pass:{visibleSpec.thresholdPass ?? 90}</span>
+                  <span className="desktop-badge desktop-badge-warning">warn:{visibleSpec.thresholdWarn ?? 80}</span>
+                </div>
+              ) : null}
+            </div>
+
+            {unsupportedRepoMessage ? (
+              <div className="mt-3">
+                <HarnessUnsupportedState />
+              </div>
+            ) : visibleSpec ? (
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-desktop-text-secondary">
+                  <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2 py-0.5">{visibleSpec.kind}</span>
+                  <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2 py-0.5">{visibleSpec.language}</span>
+                  <span className="font-mono text-desktop-text-primary">{visibleSpec.relativePath}</span>
+                </div>
+
+                {visibleSpec.kind === "dimension" && visibleSpec.frontmatterSource ? (
+                  <details className="rounded-md border border-desktop-border bg-desktop-bg-secondary/50 p-2.5">
+                    <summary className="cursor-pointer text-[9px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Frontmatter</summary>
+                    <div className="mt-2">
+                      <CodeViewer
+                        code={visibleSpec.frontmatterSource}
+                        filename={`${visibleSpec.name}.frontmatter.yaml`}
+                        language="yaml"
+                        maxHeight="200px"
+                        showHeader={false}
+                        wordWrap
+                      />
+                    </div>
+                  </details>
+                ) : null}
+
+                {visibleSpec.language === "yaml" ? (
+                  <CodeViewer
+                    code={visibleSpec.source}
+                    filename={visibleSpec.name}
+                    language="yaml"
+                    maxHeight="320px"
+                    showHeader={false}
+                    wordWrap
+                  />
+                ) : null}
+
+                {visibleSpec.language === "markdown" && visibleSpec.kind !== "dimension" ? (
+                  visibleSpecCodeBlocks.length > 0 ? (
+                    <div className="space-y-2">
+                      {visibleSpecCodeBlocks.map((block) => (
+                        <CodeViewer
+                          key={block.id}
+                          code={block.code}
+                          filename={`${visibleSpec.name}.${block.language || "txt"}`}
+                          maxHeight="200px"
+                          showHeader={false}
+                          wordWrap
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-desktop-text-secondary">No command blocks found in this markdown file.</div>
+                  )
+                ) : null}
+
+                {visibleSpec.kind === "dimension" ? (
+                  <div className="overflow-hidden rounded-md border border-desktop-border">
+                    <div className="grid grid-cols-[minmax(0,1.5fr)_auto] gap-2 border-b border-desktop-border bg-desktop-bg-secondary px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
+                      <div>Metric</div>
+                      <div>Dispatch</div>
+                    </div>
+                    {visibleSpec.metrics.map((metric) => (
+                      <div key={metric.name} className="grid grid-cols-[minmax(0,1.5fr)_auto] gap-2 border-t border-desktop-border px-3 py-2.5 first:border-t-0">
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-semibold text-desktop-text-primary">{metric.name}</div>
+                          <div className="mt-1 break-all font-mono text-[9px] text-desktop-text-secondary">{metric.command || "No command"}</div>
+                          {metric.description ? <div className="mt-1 text-[10px] text-desktop-text-secondary">{metric.description}</div> : null}
+                        </div>
+                        <div className="flex flex-wrap content-start justify-end gap-1 text-[9px]">
+                          <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2 py-0.5 text-desktop-text-secondary">{metric.runner}</span>
+                          <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2 py-0.5 text-desktop-text-secondary">{metric.tier}</span>
+                          <span className={`rounded-full border px-2 py-0.5 ${metric.hardGate ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400" : "border-desktop-border bg-desktop-bg-secondary text-desktop-text-secondary"}`}>
+                            {metric.gate}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mt-3 text-[11px] text-desktop-text-secondary">Select a fitness file to inspect.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderOverview() {
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="desktop-panel overflow-hidden">
+            <div className="desktop-panel-header">
+              <span>{governanceView === "lifecycle" ? "Lifecycle View" : "Governance Loop"}</span>
+              <div className="inline-flex items-center gap-0.5 rounded border border-desktop-border bg-desktop-bg-primary p-0.5 normal-case tracking-normal">
                 {(["lifecycle", "loop"] as const).map((view) => (
-                  <button key={view} type="button" onClick={() => setGovernanceView(view)}
-                    className={`rounded px-2.5 py-1 text-[10px] font-semibold transition-all ${
-                      governanceView === view ? "bg-blue-600 text-white" : "text-slate-500 hover:text-slate-300"
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => setGovernanceView(view)}
+                    className={`rounded px-2.5 py-1 text-[10px] font-medium ${
+                      governanceView === view
+                        ? "bg-desktop-accent text-desktop-accent-text"
+                        : "text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary"
                     }`}
                   >
                     {view === "lifecycle" ? "Lifecycle" : "Loop"}
@@ -307,58 +555,102 @@ export default function HarnessConsolePage() {
                 ))}
               </div>
             </div>
-            {governanceView === "lifecycle" ? (
-              <HarnessLifecycleView
-                selectedNodeId={selectedGovernanceNodeId}
-                onSelectedNodeChange={handleGovernanceNodeClick}
-                contextPanel={null}
-                designDecisionNodeEnabled={hasArchitectureOrAdrSignal}
-                dimensionCount={dimensionSpecs.length}
-                metricCount={planState.data?.metricCount ?? 0}
-                hardGateCount={planState.data?.hardGateCount ?? 0}
-                hookCount={hookCount}
-                workflowCount={workflowCount}
-              />
-            ) : (
-              <HarnessGovernanceLoopGraph
-                repoPath={activeRepoPath}
-                selectedTier={selectedTier}
-                specsError={specsState.error}
-                dimensionCount={dimensionSpecs.length}
-                planError={planState.error}
-                metricCount={planState.data?.metricCount ?? 0}
-                hardGateCount={planState.data?.hardGateCount ?? 0}
-                unsupportedMessage={unsupportedRepoMessage}
-                hooksData={hooksState.data}
-                hooksError={hooksState.error}
-                agentHooksData={agentHooksState.data}
-                agentHooksError={agentHooksState.error}
-                workflowData={githubActionsState.data}
-                workflowError={githubActionsState.error}
-                instructionsData={instructionsState.data}
-                instructionsError={instructionsState.error}
-                fitnessFiles={specFiles}
-                designDecisionNodeEnabled={hasArchitectureOrAdrSignal}
-                selectedNodeId={selectedGovernanceNodeId}
-                onSelectedNodeChange={handleGovernanceNodeClick}
-                contextPanel={null}
-              />
-            )}
+            <div className="p-3">
+              <div className="mb-3 flex flex-wrap gap-2 text-[10px] text-desktop-text-secondary">
+                <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">repo: {selectedRepoLabel}</span>
+                <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">dimensions: {dimensionSpecs.length}</span>
+                <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">metrics: {planState.data?.metricCount ?? 0}</span>
+                <span className="rounded-full border border-desktop-border bg-desktop-bg-secondary px-2.5 py-1">hard gates: {planState.data?.hardGateCount ?? 0}</span>
+              </div>
+              {governanceView === "lifecycle" ? (
+                <HarnessLifecycleView
+                  selectedNodeId={selectedGovernanceNodeId}
+                  onSelectedNodeChange={handleGovernanceNodeClick}
+                  contextPanel={null}
+                  designDecisionNodeEnabled={hasArchitectureOrAdrSignal}
+                  dimensionCount={dimensionSpecs.length}
+                  metricCount={planState.data?.metricCount ?? 0}
+                  hardGateCount={planState.data?.hardGateCount ?? 0}
+                  hookCount={hookCount}
+                  workflowCount={workflowCount}
+                />
+              ) : (
+                <HarnessGovernanceLoopGraph
+                  repoPath={activeRepoPath}
+                  selectedTier={selectedTier}
+                  specsError={specsState.error}
+                  dimensionCount={dimensionSpecs.length}
+                  planError={planState.error}
+                  metricCount={planState.data?.metricCount ?? 0}
+                  hardGateCount={planState.data?.hardGateCount ?? 0}
+                  unsupportedMessage={unsupportedRepoMessage}
+                  hooksData={hooksState.data}
+                  hooksError={hooksState.error}
+                  agentHooksData={agentHooksState.data}
+                  agentHooksError={agentHooksState.error}
+                  workflowData={githubActionsState.data}
+                  workflowError={githubActionsState.error}
+                  instructionsData={instructionsState.data}
+                  instructionsError={instructionsState.error}
+                  fitnessFiles={specFiles}
+                  designDecisionNodeEnabled={hasArchitectureOrAdrSignal}
+                  selectedNodeId={selectedGovernanceNodeId}
+                  onSelectedNodeChange={handleGovernanceNodeClick}
+                  contextPanel={null}
+                />
+              )}
+            </div>
           </div>
-        );
 
+          <div className="space-y-3">
+            <div className="desktop-panel overflow-hidden">
+              <div className="desktop-panel-header">
+                <span>Workbench Context</span>
+                <span className="text-desktop-text-secondary">{selectedTier}</span>
+              </div>
+              <div className="space-y-2 p-3 text-[11px] text-desktop-text-secondary">
+                <div className="flex items-center justify-between gap-3"><span>Instructions</span><span className="desktop-badge">{sectionBadges.get("agent-instructions") ?? "-"}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>Spec sources</span><span className="desktop-badge">{sectionBadges.get("spec-sources") ?? "-"}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>Design docs</span><span className="desktop-badge">{sectionBadges.get("design-decisions") ?? "-"}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>Hooks</span><span className="desktop-badge">{hookCount}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>Workflows</span><span className="desktop-badge">{workflowCount}</span></div>
+              </div>
+            </div>
+
+            <div className="desktop-panel overflow-hidden">
+              <div className="desktop-panel-header">
+                <span>Quick Actions</span>
+                <span className="text-desktop-text-secondary">panel</span>
+              </div>
+              <div className="flex flex-wrap gap-2 p-3">
+                <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("context")}>Open context</button>
+                <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("plan")}>Execution plan</button>
+                <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("fitness")}>Fitness</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderSectionContent(sectionId: SectionId) {
+    const sharedProps = {
+      repoLabel: selectedRepoLabel,
+      unsupportedMessage: unsupportedRepoMessage,
+    };
+
+    switch (sectionId) {
+      case "overview":
+        return renderOverview();
       case "spec-sources":
-        return (<HarnessSpecSourcesPanel {...sharedProps} data={specSourcesState.data} loading={specSourcesState.loading} error={specSourcesState.error} />);
-
+        return <HarnessSpecSourcesPanel {...sharedProps} data={specSourcesState.data} loading={specSourcesState.loading} error={specSourcesState.error} />;
       case "agent-instructions":
-        return (<HarnessAgentInstructionsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={instructionsState.data} loading={instructionsState.loading} error={instructionsState.error} onAuditRerun={reloadInstructions} />);
-
+        return <HarnessAgentInstructionsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={instructionsState.data} loading={instructionsState.loading} error={instructionsState.error} onAuditRerun={reloadInstructions} />;
       case "design-decisions":
-        return (<HarnessDesignDecisionPanel {...sharedProps} data={designDecisionsState.data} loading={designDecisionsState.loading} error={designDecisionsState.error} />);
-
+        return <HarnessDesignDecisionPanel {...sharedProps} data={designDecisionsState.data} loading={designDecisionsState.loading} error={designDecisionsState.error} />;
       case "repo-signals":
-        return (<HarnessRepoSignalsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} mode="test" />);
-
+        return <HarnessRepoSignalsPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} mode="test" />;
       case "hook-systems":
         return (
           <div className="space-y-4">
@@ -366,386 +658,306 @@ export default function HarnessConsolePage() {
             <HarnessAgentHookPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={agentHooksState.data} loading={agentHooksState.loading} error={agentHooksState.error} embedded />
           </div>
         );
-
       case "review-triggers":
-        return (<HarnessReviewTriggersPanel {...sharedProps} data={hooksState.data} loading={hooksState.loading} error={hooksState.error} />);
-
+        return <HarnessReviewTriggersPanel {...sharedProps} data={hooksState.data} loading={hooksState.loading} error={hooksState.error} />;
       case "release-triggers":
-        return (<HarnessReleaseTriggersPanel {...sharedProps} data={hooksState.data} loading={hooksState.loading} error={hooksState.error} />);
-
+        return <HarnessReleaseTriggersPanel {...sharedProps} data={hooksState.data} loading={hooksState.loading} error={hooksState.error} />;
       case "codeowners":
-        return (<HarnessCodeownersPanel {...sharedProps} data={resolvedCodeownersState.data} loading={resolvedCodeownersState.loading} error={resolvedCodeownersState.error} />);
-
+        return <HarnessCodeownersPanel {...sharedProps} data={resolvedCodeownersState.data} loading={resolvedCodeownersState.loading} error={resolvedCodeownersState.error} />;
       case "entrix-fitness":
         return (
           <div className="space-y-4">
-            <HarnessFitnessFilesDashboard specFiles={specFiles} selectedSpec={visibleSpec} loading={specsState.loading} error={specsState.error} unsupportedMessage={unsupportedRepoMessage} embedded />
-
-            {/* Spec file list + source viewer */}
-            <div className="rounded-lg border border-slate-700/60 bg-[#1e2030]/80">
-              <div className="grid gap-0 xl:grid-cols-[260px_minmax(0,1fr)]">
-                {/* Discovery list */}
-                <div className="min-w-0 border-r border-slate-700/40 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Discovery</span>
-                    <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] text-slate-500">{specFiles.length}</span>
-                  </div>
-                  <div className="mt-2.5 space-y-1">
-                    {specsState.loading && <div className="text-[10px] text-slate-600">Loading…</div>}
-                    {unsupportedRepoMessage && <HarnessUnsupportedState className="text-[10px] text-amber-400" />}
-                    {specsState.error && !unsupportedRepoMessage && <div className="text-[10px] text-red-400">{specsState.error}</div>}
-                    {!specsState.loading && !specsState.error && !unsupportedRepoMessage && specFiles.length === 0 && (
-                      <div className="text-[10px] text-slate-600">No fitness files found.</div>
-                    )}
-                    {!unsupportedRepoMessage && primaryFiles.map((file) => (
-                      <button
-                        key={file.name} type="button"
-                        onClick={() => setSelectedSpecName(file.name)}
-                        className={`w-full rounded px-2 py-1.5 text-left transition-colors ${
-                          visibleSpec?.name === file.name
-                            ? "bg-blue-600/15 text-slate-200 ring-1 ring-blue-500/40"
-                            : "text-slate-400 hover:bg-slate-700/30 hover:text-slate-300"
-                        }`}
-                      >
-                        <div className="text-[11px] font-medium">{file.name}</div>
-                        <div className="mt-0.5 flex items-center gap-1.5 text-[9px] opacity-70">
-                          <span>{file.kind === "dimension" ? (file.dimension ?? "dimension") : file.kind}</span>
-                          <span className="font-mono">{file.language}</span>
-                          {file.metricCount > 0 && <span className="ml-auto">{file.metricCount} metrics</span>}
-                        </div>
-                      </button>
-                    ))}
-                    {!unsupportedRepoMessage && auxiliaryFiles.length > 0 && (
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-[9px] uppercase tracking-wider text-slate-600 hover:text-slate-400">
-                          Auxiliary ({auxiliaryFiles.length})
-                        </summary>
-                        <div className="mt-1 space-y-1">
-                          {auxiliaryFiles.map((file) => (
-                            <button
-                              key={file.name} type="button"
-                              onClick={() => setSelectedSpecName(file.name)}
-                              className={`w-full rounded px-2 py-1 text-left text-[10px] transition-colors ${
-                                visibleSpec?.name === file.name
-                                  ? "bg-blue-600/15 text-slate-200 ring-1 ring-blue-500/40"
-                                  : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-400"
-                              }`}
-                            >
-                              {file.name}
-                            </button>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                  </div>
-                </div>
-
-                {/* Source viewer */}
-                <div className="min-w-0 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Source</div>
-                      <div className="mt-0.5 text-[12px] font-semibold text-slate-300">{visibleSpec?.name ?? "Select a file"}</div>
-                    </div>
-                    {visibleSpec?.kind === "dimension" && (
-                      <div className="flex gap-1.5 text-[9px]">
-                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-slate-500">w:{visibleSpec.weight ?? 0}</span>
-                        <span className="rounded bg-emerald-900/30 px-1.5 py-0.5 text-emerald-400">pass:{visibleSpec.thresholdPass ?? 90}</span>
-                        <span className="rounded bg-yellow-900/30 px-1.5 py-0.5 text-yellow-400">warn:{visibleSpec.thresholdWarn ?? 80}</span>
-                      </div>
-                    )}
-                  </div>
-                  {unsupportedRepoMessage ? (
-                    <HarnessUnsupportedState />
-                  ) : visibleSpec ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500">
-                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5">{visibleSpec.kind}</span>
-                        <span className="rounded bg-slate-700/50 px-1.5 py-0.5">{visibleSpec.language}</span>
-                        <span className="font-mono text-slate-400">{visibleSpec.relativePath}</span>
-                      </div>
-                      {visibleSpec.kind === "dimension" && visibleSpec.frontmatterSource && (
-                        <details className="rounded border border-slate-700/40 p-2">
-                          <summary className="cursor-pointer text-[9px] uppercase tracking-wider text-slate-600">Frontmatter</summary>
-                          <div className="mt-2">
-                            <CodeViewer code={visibleSpec.frontmatterSource} filename={`${visibleSpec.name}.frontmatter.yaml`} language="yaml" maxHeight="200px" showHeader={false} wordWrap />
-                          </div>
-                        </details>
-                      )}
-                      {visibleSpec.language === "yaml" && (
-                        <CodeViewer code={visibleSpec.source} filename={visibleSpec.name} language="yaml" maxHeight="320px" showHeader={false} wordWrap />
-                      )}
-                      {visibleSpec.language === "markdown" && visibleSpec.kind !== "dimension" && visibleSpecCodeBlocks.length > 0 && (
-                        <div className="space-y-2">
-                          {visibleSpecCodeBlocks.map((block) => (
-                            <CodeViewer key={block.id} code={block.code} filename={`${visibleSpec.name}.${block.language || "txt"}`} maxHeight="200px" showHeader={false} wordWrap />
-                          ))}
-                        </div>
-                      )}
-                      {visibleSpec.kind === "dimension" && (
-                        <div className="rounded border border-slate-700/40">
-                          <div className="grid grid-cols-[minmax(0,1.5fr)_auto] gap-2 border-b border-slate-700/40 px-2.5 py-1.5 text-[9px] uppercase tracking-wider text-slate-600">
-                            <div>Metric</div><div>Dispatch</div>
-                          </div>
-                          {visibleSpec.metrics.map((metric) => (
-                            <div key={metric.name} className="grid grid-cols-[minmax(0,1.5fr)_auto] gap-2 border-t border-slate-800/40 px-2.5 py-2 first:border-t-0">
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-medium text-slate-300">{metric.name}</div>
-                                <div className="mt-0.5 break-all font-mono text-[9px] text-slate-500">{metric.command || "—"}</div>
-                                {metric.description && <div className="mt-0.5 text-[9px] text-slate-600">{metric.description}</div>}
-                              </div>
-                              <div className="flex flex-wrap content-start justify-end gap-1 text-[9px]">
-                                <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-slate-500">{metric.runner}</span>
-                                <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-slate-500">{metric.tier}</span>
-                                <span className={`rounded px-1.5 py-0.5 ${metric.hardGate ? "bg-red-900/30 text-red-400" : "bg-slate-700/50 text-slate-500"}`}>
-                                  {metric.gate}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="mt-3 text-[11px] text-slate-600">Select a fitness file to inspect.</div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <HarnessExecutionPlanFlow loading={planState.loading} error={planState.error} plan={planState.data} repoLabel={selectedRepoLabel} selectedTier={selectedTier} onTierChange={setSelectedTier} unsupportedMessage={unsupportedRepoMessage} embedded />
+            <HarnessFitnessFilesDashboard
+              specFiles={specFiles}
+              selectedSpec={visibleSpec}
+              loading={specsState.loading}
+              error={specsState.error}
+              unsupportedMessage={unsupportedRepoMessage}
+              embedded
+            />
+            {renderFitnessDetailArea()}
+            <HarnessExecutionPlanFlow
+              loading={planState.loading}
+              error={planState.error}
+              plan={planState.data}
+              repoLabel={selectedRepoLabel}
+              selectedTier={selectedTier}
+              onTierChange={setSelectedTier}
+              unsupportedMessage={unsupportedRepoMessage}
+              embedded
+            />
           </div>
         );
-
       case "ci-cd":
-        return (<HarnessGitHubActionsFlowPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={githubActionsState.data} loading={githubActionsState.loading} error={githubActionsState.error} />);
-
+        return <HarnessGitHubActionsFlowPanel workspaceId={workspaceId} codebaseId={activeRepoCodebaseId} repoPath={activeRepoPath} {...sharedProps} data={githubActionsState.data} loading={githubActionsState.loading} error={githubActionsState.error} />;
       default:
         return null;
     }
   }
 
-  /* ================================================================ */
-  /*  RENDER                                                          */
-  /* ================================================================ */
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#0f1117]">
-
-      {/* ── Title Bar ─────────────────────────────────────────────── */}
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-slate-700/60 bg-[#14161f] px-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex gap-1.5">
+    <div className="desktop-theme flex h-screen flex-col overflow-hidden bg-desktop-bg-primary text-desktop-text-primary" data-testid="harness-console-root">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-desktop-border bg-desktop-bg-tertiary px-3">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 pr-1">
             <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
             <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
             <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
           </div>
-          <span className="text-[12px] font-semibold tracking-wide text-slate-400">Harness Console</span>
-        </div>
-        <div className="flex items-center gap-4 text-[10px] text-slate-500">
-          <span>workspace: <span className="text-slate-400">{activeWorkspaceTitle ?? "—"}</span></span>
-          <span>repo: <span className="text-blue-400">{selectedRepoLabel}</span></span>
-          <div className="flex items-center gap-1.5">
-            <RepoPicker
-              value={activeRepoSelection}
-              onChange={(selection) => {
-                setSelectedRepoOverrideState({ workspaceId, selection });
-                if (!selection) { setSelectedCodebaseId(""); return; }
-                const matched = codebases.find((c) => c.repoPath === selection.path && (selection.branch ? (c.branch ?? "") === selection.branch : true))
-                  ?? codebases.find((c) => c.repoPath === selection.path)
-                  ?? codebases.find((c) => (c.label ?? c.repoPath.split("/").pop() ?? c.repoPath) === selection.name);
-                setSelectedCodebaseId(matched?.id ?? "");
-              }}
-              pathDisplay="hidden"
-              additionalRepos={codebases.map((c) => ({
-                name: c.label ?? c.repoPath.split("/").pop() ?? c.repoPath,
-                path: c.repoPath,
-                branch: c.branch ?? "",
-              }))}
-            />
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold text-desktop-text-primary">Harness Console</div>
+            <div className="text-[10px] text-desktop-text-secondary">Embedded agent engineering workbench</div>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <WorkspaceSwitcher
+            workspaces={workspacesHook.workspaces}
+            activeWorkspaceId={workspaceId || null}
+            activeWorkspaceTitle={activeWorkspaceTitle}
+            onSelect={(nextWorkspaceId) => {
+              setSelectedWorkspaceId(nextWorkspaceId);
+              setSelectedRepoOverrideState({ workspaceId: nextWorkspaceId, selection: null });
+              setSelectedCodebaseId("");
+            }}
+            onCreate={async (title) => {
+              const workspace = await workspacesHook.createWorkspace(title);
+              if (workspace) {
+                setSelectedWorkspaceId(workspace.id);
+                setSelectedRepoOverrideState({ workspaceId: workspace.id, selection: null });
+                setSelectedCodebaseId("");
+              }
+            }}
+            loading={workspacesHook.loading}
+            compact
+            desktop
+          />
+
+          <RepoPicker
+            value={activeRepoSelection}
+            onChange={(selection) => {
+              setSelectedRepoOverrideState({ workspaceId, selection });
+              if (!selection) {
+                setSelectedCodebaseId("");
+                return;
+              }
+              const matchedCodebase = codebases.find((codebase) => (
+                codebase.repoPath === selection.path
+                && (selection.branch ? (codebase.branch ?? "") === selection.branch : true)
+              )) ?? codebases.find((codebase) => codebase.repoPath === selection.path)
+                ?? codebases.find((codebase) => (
+                  (codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath) === selection.name
+                ));
+              setSelectedCodebaseId(matchedCodebase?.id ?? "");
+            }}
+            pathDisplay="hidden"
+            additionalRepos={codebases.map((codebase) => ({
+              name: codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath,
+              path: codebase.repoPath,
+              branch: codebase.branch ?? "",
+            }))}
+          />
+
+          <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("plan")}>Plan</button>
+          <button type="button" className="desktop-btn desktop-btn-secondary" onClick={() => openBottomPanel("fitness")}>Fitness</button>
         </div>
       </div>
 
-      {/* ── Main body ─────────────────────────────────────────────── */}
       <div className="flex min-h-0 flex-1">
-
-        {/* ── Activity Bar ────────────────────────────────────────── */}
-        <div className="flex w-11 shrink-0 flex-col items-center gap-0.5 border-r border-slate-700/50 bg-[#14161f] py-2">
-          {SECTIONS.slice(0, 6).map((sec) => (
-            <button
-              key={sec.id} type="button"
-              onClick={() => openSection(sec.id)}
-              title={sec.label}
-              className={`flex h-9 w-9 items-center justify-center rounded text-[13px] transition-colors ${
-                activeSection === sec.id
-                  ? "bg-blue-600/20 text-blue-400 shadow-[inset_2px_0_0_0_#3b82f6]"
-                  : "text-slate-600 hover:text-slate-400"
-              }`}
-            >
-              {sec.icon}
-            </button>
-          ))}
-          <div className="my-1 h-px w-5 bg-slate-700/40" />
-          {SECTIONS.slice(6).map((sec) => (
-            <button
-              key={sec.id} type="button"
-              onClick={() => openSection(sec.id)}
-              title={sec.label}
-              className={`flex h-9 w-9 items-center justify-center rounded text-[13px] transition-colors ${
-                activeSection === sec.id
-                  ? "bg-blue-600/20 text-blue-400 shadow-[inset_2px_0_0_0_#3b82f6]"
-                  : "text-slate-600 hover:text-slate-400"
-              }`}
-            >
-              {sec.icon}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Side Bar ────────────────────────────────────────────── */}
-        <div className="flex w-56 shrink-0 flex-col border-r border-slate-700/50 bg-[#181a26] overflow-y-auto desktop-scrollbar-thin">
-          <div className="border-b border-slate-700/40 px-3 py-2">
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Harness</div>
-            <div className="mt-0.5 text-[10px] text-slate-600">Section Explorer</div>
-          </div>
-          <div className="flex-1 px-1.5 py-1.5">
-            {SECTIONS.map((sec) => {
-              const badge = sectionBadges.get(sec.id) ?? null;
-              const isActive = activeSection === sec.id;
-              return (
-                <button
-                  key={sec.id} type="button"
-                  onClick={() => openSection(sec.id)}
-                  className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors ${
-                    isActive
-                      ? "bg-blue-600/15 text-slate-200"
-                      : "text-slate-500 hover:bg-slate-700/30 hover:text-slate-400"
-                  }`}
-                >
-                  <span className="w-4 shrink-0 text-center text-[11px]">{sec.icon}</span>
-                  <span className="min-w-0 flex-1 truncate text-[11px]">{sec.label}</span>
-                  {badge && (
-                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] ${
-                      isActive ? "bg-blue-500/20 text-blue-300" : "bg-slate-700/50 text-slate-500"
-                    }`}>
-                      {badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Summary stats */}
-          <div className="border-t border-slate-700/40 px-3 py-2.5 text-[10px] text-slate-600">
-            <div className="space-y-1">
-              <div className="flex justify-between"><span>Dimensions</span><span className="text-slate-400">{specsState.loading ? "…" : dimensionSpecs.length}</span></div>
-              <div className="flex justify-between"><span>Metrics</span><span className="text-slate-400">{planState.loading ? "…" : (planState.data?.metricCount ?? 0)}</span></div>
-              <div className="flex justify-between"><span>Hard gates</span><span className="text-slate-400">{planState.loading ? "…" : (planState.data?.hardGateCount ?? 0)}</span></div>
-              <div className="flex justify-between"><span>Hooks</span><span className="text-slate-400">{hookCount}</span></div>
-              <div className="flex justify-between"><span>Workflows</span><span className="text-slate-400">{workflowCount}</span></div>
+        <aside className="flex w-72 shrink-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary" data-testid="harness-console-explorer">
+          <div className="border-b border-desktop-border px-3 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Explorer</div>
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-desktop-text-secondary">
+              <span className="truncate">{selectedRepoLabel}</span>
+              <span className="desktop-badge">{selectedTier}</span>
             </div>
           </div>
-        </div>
 
-        {/* ── Center: Tabs + Editor + Bottom Panel ────────────────── */}
-        <div className="flex min-w-0 flex-1 flex-col">
-
-          {/* ── Editor Tabs ───────────────────────────────────────── */}
-          <div className="flex h-9 shrink-0 items-center border-b border-slate-700/50 bg-[#14161f] overflow-x-auto desktop-scrollbar-thin">
-            {openTabs.map((tabId) => {
-              const sec = SECTIONS.find((s) => s.id === tabId);
-              if (!sec) return null;
-              const isActive = activeSection === tabId;
-              return (
-                <div
-                  key={tabId}
-                  className={`group flex h-full shrink-0 items-center border-r border-slate-700/30 ${
-                    isActive ? "bg-[#191b28]" : "bg-[#14161f] hover:bg-[#181a24]"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection(tabId)}
-                    className={`px-3 text-[11px] font-medium ${
-                      isActive
-                        ? "text-slate-200 shadow-[inset_0_-1px_0_0_#3b82f6]"
-                        : "text-slate-500 hover:text-slate-400"
-                    }`}
-                  >
-                    {sec.shortLabel}
-                  </button>
-                  {tabId !== "overview" && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); closeTab(tabId); }}
-                      className="mr-1 rounded p-0.5 text-[10px] text-slate-600 opacity-0 transition-opacity hover:bg-slate-700/50 hover:text-slate-400 group-hover:opacity-100"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+          <div className="border-b border-desktop-border px-3 py-2">
+            <input
+              value={sectionFilter}
+              onChange={(event) => setSectionFilter(event.target.value)}
+              placeholder="Search sections"
+              className="desktop-input w-full"
+            />
           </div>
 
-          {/* ── Editor Content ────────────────────────────────────── */}
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[#191b28] p-4 desktop-scrollbar">
+          <div className="flex-1 overflow-y-auto px-2 py-2 desktop-scrollbar-thin">
+            <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Harness Workbench</div>
+            <div className="space-y-1">
+              {visibleSections.map((section) => {
+                const isActive = activeSection === section.id;
+                const badge = sectionBadges.get(section.id) ?? null;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => openSection(section.id)}
+                    className={`desktop-list-item w-full rounded-md border text-left ${
+                      isActive
+                        ? "active border-desktop-border"
+                        : "border-transparent"
+                    }`}
+                  >
+                    <span className={`mr-3 inline-flex h-6 w-8 shrink-0 items-center justify-center rounded-sm border text-[10px] font-semibold ${
+                      isActive
+                        ? "border-desktop-accent bg-desktop-bg-active text-desktop-accent"
+                        : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary"
+                    }`}>{section.code}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-medium text-desktop-text-primary">{section.label}</span>
+                      <span className="block truncate text-[10px] text-desktop-text-secondary">{section.shortLabel}</span>
+                    </span>
+                    {badge ? <span className={sectionBadgeClass(isActive)}>{badge}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="border-t border-desktop-border p-3">
+            <div className="desktop-panel overflow-hidden">
+              <div className="desktop-panel-header">
+                <span>Summary</span>
+                <span className="text-desktop-text-secondary">live</span>
+              </div>
+              <div className="space-y-1.5 p-3 text-[11px] text-desktop-text-secondary">
+                <div className="flex items-center justify-between gap-3"><span>Dimensions</span><span className="text-desktop-text-primary">{statValue(specsState.loading ? "..." : dimensionSpecs.length)}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>Metrics</span><span className="text-desktop-text-primary">{statValue(planState.loading ? "..." : planState.data?.metricCount)}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>Hard gates</span><span className="text-desktop-text-primary">{statValue(planState.loading ? "..." : planState.data?.hardGateCount)}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>Hooks</span><span className="text-desktop-text-primary">{hookCount}</span></div>
+                <div className="flex items-center justify-between gap-3"><span>Workflows</span><span className="text-desktop-text-primary">{workflowCount}</span></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-desktop-border bg-desktop-bg-secondary px-2">
+            <div className="flex h-full items-center overflow-x-auto desktop-scrollbar-thin" data-testid="harness-console-tabs">
+              {openTabs.map((tabId) => {
+                const section = SECTIONS.find((item) => item.id === tabId);
+                if (!section) {
+                  return null;
+                }
+                const isActive = activeSection === tabId;
+                return (
+                  <div key={tabId} className={`group flex h-full shrink-0 items-center border-r border-desktop-border ${isActive ? "bg-desktop-bg-primary" : "bg-desktop-bg-secondary"}`}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSection(tabId)}
+                      className={`h-full border-b-2 px-3 text-[11px] font-medium ${isActive ? "border-desktop-accent text-desktop-text-primary" : "border-transparent text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"}`}
+                    >
+                      {section.shortLabel}
+                    </button>
+                    {tabId !== "overview" ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          closeTab(tabId);
+                        }}
+                        className="mr-1 rounded px-1 py-0.5 text-[10px] text-desktop-text-secondary opacity-0 transition-opacity hover:bg-desktop-bg-active hover:text-desktop-text-primary group-hover:opacity-100"
+                      >
+                        x
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden items-center gap-2 text-[10px] text-desktop-text-secondary lg:flex">
+              <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-1">workspace: {activeWorkspaceTitle ?? "-"}</span>
+              <span className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2 py-1">repo: {selectedRepoLabel}</span>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-desktop-bg-primary p-4 desktop-scrollbar">
             {renderSectionContent(activeSection)}
           </div>
 
-          {/* ── Bottom Panel ──────────────────────────────────────── */}
-          {showBottomPanel && (
-            <div className="flex h-60 shrink-0 flex-col border-t border-slate-700/50 bg-[#14161f]">
-              <div className="flex h-8 items-center justify-between border-b border-slate-700/40 px-3">
-                <div className="flex items-center gap-0.5">
+          {showBottomPanel ? (
+            <div className="flex h-64 shrink-0 flex-col border-t border-desktop-border bg-desktop-bg-secondary" data-testid="harness-console-bottom-panel">
+              <div className="flex h-9 items-center justify-between border-b border-desktop-border px-3">
+                <div className="flex items-center gap-1">
                   {(["context", "plan", "fitness"] as const).map((tab) => (
                     <button
-                      key={tab} type="button"
+                      key={tab}
+                      type="button"
                       onClick={() => setBottomPanelTab(tab)}
-                      className={`px-2.5 py-1.5 text-[10px] font-medium transition-colors ${
+                      className={`rounded px-2.5 py-1 text-[10px] font-medium ${
                         bottomPanelTab === tab
-                          ? "border-b border-blue-500 text-slate-200"
-                          : "text-slate-600 hover:text-slate-400"
+                          ? "bg-desktop-accent text-desktop-accent-text"
+                          : "text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary"
                       }`}
                     >
                       {tab === "context" ? "Context" : tab === "plan" ? "Execution Plan" : "Fitness"}
                     </button>
                   ))}
                 </div>
-                <button type="button" onClick={() => setShowBottomPanel(false)}
-                  className="rounded p-1 text-[10px] text-slate-600 hover:bg-slate-700/40 hover:text-slate-400"
-                >
-                  ✕
-                </button>
+
+                <div className="flex items-center gap-2 text-[10px] text-desktop-text-secondary">
+                  {selectedGovernanceNodeId ? <span>node: {selectedGovernanceNodeId}</span> : null}
+                  {selectedGovernanceSection ? (
+                    <button
+                      type="button"
+                      className="desktop-btn desktop-btn-secondary"
+                      onClick={() => openSection(selectedGovernanceSection)}
+                    >
+                      Open full view
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="desktop-btn desktop-btn-secondary"
+                    onClick={() => setShowBottomPanel(false)}
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
+
               <div className="min-h-0 flex-1 overflow-y-auto p-3 desktop-scrollbar-thin">
-                {bottomPanelTab === "context" && governanceContextPanel}
-                {bottomPanelTab === "plan" && (
-                  <HarnessExecutionPlanFlow loading={planState.loading} error={planState.error} plan={planState.data} repoLabel={selectedRepoLabel} selectedTier={selectedTier} onTierChange={setSelectedTier} unsupportedMessage={unsupportedRepoMessage} variant="compact" />
-                )}
-                {bottomPanelTab === "fitness" && (
-                  <HarnessFitnessFilesDashboard specFiles={specFiles} selectedSpec={visibleSpec} loading={specsState.loading} error={specsState.error} unsupportedMessage={unsupportedRepoMessage} embedded />
-                )}
+                {bottomPanelTab === "context" ? governanceContextPanel : null}
+                {bottomPanelTab === "plan" ? (
+                  <HarnessExecutionPlanFlow
+                    loading={planState.loading}
+                    error={planState.error}
+                    plan={planState.data}
+                    repoLabel={selectedRepoLabel}
+                    selectedTier={selectedTier}
+                    onTierChange={setSelectedTier}
+                    unsupportedMessage={unsupportedRepoMessage}
+                    variant="compact"
+                  />
+                ) : null}
+                {bottomPanelTab === "fitness" ? (
+                  <HarnessFitnessFilesDashboard
+                    specFiles={specFiles}
+                    selectedSpec={visibleSpec}
+                    loading={specsState.loading}
+                    error={specsState.error}
+                    unsupportedMessage={unsupportedRepoMessage}
+                    embedded
+                  />
+                ) : null}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {/* ── Status Bar ────────────────────────────────────────── */}
-          <div className="flex h-6 shrink-0 items-center justify-between border-t border-slate-700/50 bg-[#007acc] px-3 text-[10px] text-white/90">
+          <div className="flex h-6 shrink-0 items-center justify-between bg-desktop-accent px-3 text-[10px] text-desktop-accent-text">
             <div className="flex items-center gap-3">
-              <span>{activeWorkspaceTitle ?? "—"}</span>
-              <span className="opacity-50">·</span>
+              <span>{activeWorkspaceTitle ?? "-"}</span>
+              <span className="opacity-60">/</span>
               <span>{selectedRepoLabel}</span>
-              <span className="opacity-50">·</span>
+              <span className="opacity-60">/</span>
               <span>{dimensionSpecs.length} dimensions</span>
-              <span className="opacity-50">·</span>
+              <span className="opacity-60">/</span>
               <span>{planState.data?.metricCount ?? 0} metrics</span>
             </div>
             <div className="flex items-center gap-3">
-              {(planState.data?.hardGateCount ?? 0) > 0 && (
-                <span className="text-yellow-200">{planState.data?.hardGateCount} hard gates</span>
-              )}
+              <span>{planState.data?.hardGateCount ?? 0} hard gates</span>
               <span>{hookCount} hooks</span>
               <span>{workflowCount} workflows</span>
             </div>
