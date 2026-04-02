@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { desktopAwareFetch } from "../utils/diagnostics";
 import { Select } from "./select";
 import { useTranslation } from "@/i18n";
@@ -78,6 +78,8 @@ interface SpecialistForm {
 
 export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
   const { t } = useTranslation();
+  const requiresPostgresMessage = t.specialists.requiresPostgres;
+  const failedToLoadMessage = t.specialists.failedToLoad;
   const [specialists, setSpecialists] = useState<SpecialistConfig[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,34 +101,34 @@ export function SpecialistManager({ open, onClose }: SpecialistManagerProps) {
     model: "",
   });
 
-  // Load specialists on open
-  useEffect(() => {
-    if (open) {
-      loadSpecialists();
-    }
-  }, [open]);
-
-  const loadSpecialists = async () => {
+  const loadSpecialists = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await desktopAwareFetch("/api/specialists");
       if (!response.ok) {
         if (response.status === 501) {
-          setError(t.specialists.requiresPostgres);
+          setError(requiresPostgresMessage);
         } else {
-          throw new Error(t.specialists.failedToLoad);
+          throw new Error(failedToLoadMessage);
         }
         return;
       }
       const data = await response.json();
       setSpecialists(data.specialists || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.specialists.failedToLoad);
+      setError(err instanceof Error ? err.message : failedToLoadMessage);
     } finally {
       setLoading(false);
     }
-  };
+  }, [failedToLoadMessage, requiresPostgresMessage]);
+
+  // Load specialists on open
+  useEffect(() => {
+    if (open) {
+      void loadSpecialists();
+    }
+  }, [open, loadSpecialists]);
 
   const handleSync = async () => {
     setSyncing(true);

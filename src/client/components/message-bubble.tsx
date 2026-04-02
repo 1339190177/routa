@@ -593,6 +593,7 @@ function TaskBubble({
 
 function PlanBubble({content, entries}: { content: string; entries?: PlanEntry[] }) {
     const { t } = useTranslation();
+    const priorityLabel = t.messageBubble.priority;
     // Convert PlanEntry[] to TaskInfo[] for TaskProgressBar
     const tasks: TaskInfo[] = useMemo(() => {
         if (!entries || entries.length === 0) return [];
@@ -603,9 +604,9 @@ function PlanBubble({content, entries}: { content: string; entries?: PlanEntry[]
                 : entry.status === "in_progress" ? "running"
                 : "pending",
             // Include priority as description suffix
-            description: entry.priority ? `${t.messageBubble.priority}: ${entry.priority}` : undefined,
+            description: entry.priority ? `${priorityLabel}: ${entry.priority}` : undefined,
         }));
-    }, [entries]);
+    }, [entries, priorityLabel]);
 
     // If we have structured entries, use TaskProgressBar
     if (entries && entries.length > 0) {

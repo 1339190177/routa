@@ -870,15 +870,16 @@ function SkillUploadModal({
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { t } = useTranslation();
+  const selectZipFileMessage = t.skills.selectZipFile;
 
   const handleFileSelect = useCallback((file: File) => {
     if (!file.name.endsWith(".zip")) {
-      setError(t.skills.selectZipFile + " (.zip)");
+      setError(selectZipFileMessage + " (.zip)");
       return;
     }
     setError(null);
     setSelectedFile(file);
-  }, []);
+  }, [selectZipFileMessage]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {

@@ -25,7 +25,7 @@ export function TracesViewTabs({ activeTab, onTabChange, className }: TracesView
         className="inline-flex items-center rounded-md border border-desktop-border bg-desktop-bg-secondary p-0.5"
         data-testid="traces-view-tabs"
       >
-        {TAB_DEFINITIONS.map(({ key, label, color }) => (
+        {TAB_DEFINITIONS.map(({ key, label: _label, color }) => (
           <Button
             key={key}
             type="button"

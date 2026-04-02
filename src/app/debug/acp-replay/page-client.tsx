@@ -13,6 +13,9 @@ type ReplayEvent = {
 
 export function AcpReplayDebugPageClient() {
   const { t } = useTranslation();
+  const loadHistoryFailedMessage = t.debug.loadHistoryFailed;
+  const parseSseFailedMessage = t.debug.parseSseFailed;
+  const eventSourceDisconnectedMessage = t.debug.eventSourceDisconnected;
   const searchParams = useSearchParams();
   const initialSessionId = searchParams.get("sessionId") ?? "";
   const initialLastEventId = searchParams.get("lastEventId") ?? "";
@@ -46,7 +49,7 @@ export function AcpReplayDebugPageClient() {
       })
       .catch((fetchError: unknown) => {
         if (!closed) {
-          setError(fetchError instanceof Error ? fetchError.message : t.debug.loadHistoryFailed);
+          setError(fetchError instanceof Error ? fetchError.message : loadHistoryFailedMessage);
         }
       });
 
@@ -59,12 +62,12 @@ export function AcpReplayDebugPageClient() {
         setStatus("streaming");
         setEvents((current) => [...current, nextEvent]);
       } catch (parseError) {
-        setError(parseError instanceof Error ? parseError.message : t.debug.parseSseFailed);
+        setError(parseError instanceof Error ? parseError.message : parseSseFailedMessage);
       }
     };
     source.onerror = () => {
       setStatus("error");
-      setError(t.debug.eventSourceDisconnected);
+      setError(eventSourceDisconnectedMessage);
       source.close();
     };
 
@@ -73,7 +76,14 @@ export function AcpReplayDebugPageClient() {
       controller.abort();
       source.close();
     };
-  }, [sessionId, lastEventId, refreshKey]);
+  }, [
+    sessionId,
+    lastEventId,
+    refreshKey,
+    loadHistoryFailedMessage,
+    parseSseFailedMessage,
+    eventSourceDisconnectedMessage,
+  ]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
