@@ -320,6 +320,10 @@ export function HarnessSpecSourcesPanel({
           <HarnessSectionStateFrame tone="error">{error}</HarnessSectionStateFrame>
         ) : null}
 
+        {showLoading && !unsupportedMessage && !error ? (
+          <HarnessSectionStateFrame>Scanning for spec sources...</HarnessSectionStateFrame>
+        ) : null}
+
         {unsupportedMessage ? <HarnessSectionStateFrame tone="warning">{unsupportedMessage}</HarnessSectionStateFrame> : null}
 
         {showEmptyState ? (
