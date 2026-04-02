@@ -153,16 +153,24 @@ export interface TranslationDictionary {
       summaryFocusValue: string;
       pageDescription: string;
       repositoryLabel: string;
+      overview: string;
       governanceLoop: string;
       specSources: string;
       agentInstructions: string;
+      designDecisions: string;
       repositorySignals: string;
+      automations: string;
       hookSystems: string;
       reviewTriggers: string;
       releaseTriggers: string;
       codeowners: string;
       entrixFitness: string;
       ciCd: string;
+      sectionGroups: {
+        readability: string;
+        guardrails: string;
+        feedback: string;
+      };
       quickNavigation: string;
       expandNavigation: string;
       collapseNavigation: string;

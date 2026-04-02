@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "@/i18n";
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { CodeViewer } from "@/client/components/codemirror/code-viewer";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
@@ -50,6 +51,7 @@ interface SectionDef {
   label: string;
   shortLabel: string;
   code: string;
+  group?: "readability" | "guardrails" | "feedback";
 }
 
 type SectionStatusTone = "neutral" | "success" | "warning";
@@ -58,21 +60,6 @@ type SectionStatus = {
   label: string;
   tone?: SectionStatusTone;
 };
-
-const SECTIONS: SectionDef[] = [
-  { id: "overview", label: "Overview", shortLabel: "Overview", code: "OV" },
-  { id: "spec-sources", label: "Spec Sources", shortLabel: "Specs", code: "SP" },
-  { id: "agent-instructions", label: "Agent Instructions", shortLabel: "Instructions", code: "AI" },
-  { id: "design-decisions", label: "Design Decisions", shortLabel: "ADR", code: "DD" },
-  { id: "repo-signals", label: "Test Feedback", shortLabel: "Feedback", code: "RS" },
-  { id: "automations", label: "Automations", shortLabel: "Automation", code: "AT" },
-  { id: "hook-systems", label: "Hook Systems", shortLabel: "Hooks", code: "HK" },
-  { id: "review-triggers", label: "Review Triggers", shortLabel: "Review", code: "RV" },
-  { id: "release-triggers", label: "Release Triggers", shortLabel: "Release", code: "RL" },
-  { id: "codeowners", label: "Codeowners", shortLabel: "Owners", code: "CO" },
-  { id: "entrix-fitness", label: "Entrix Fitness", shortLabel: "Fitness", code: "FT" },
-  { id: "ci-cd", label: "CI / CD", shortLabel: "CI/CD", code: "CI" },
-];
 
 const GOVERNANCE_NODE_SECTION_MAP: Partial<Record<string, SectionId>> = {
   thinking: "spec-sources",
@@ -119,6 +106,7 @@ function sectionStatusClass(tone: SectionStatusTone = "neutral") {
 }
 
 export default function HarnessConsolePage() {
+  const { t } = useTranslation();
   const workspacesHook = useWorkspaces();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const workspaceId = selectedWorkspaceId || workspacesHook.workspaces[0]?.id || "";
@@ -348,6 +336,35 @@ export default function HarnessConsolePage() {
     specSourcesState.data,
     workflowCount,
   ]);
+
+  const sections = useMemo((): SectionDef[] => [
+    { id: "overview", label: t.settings.harness.overview, shortLabel: "Overview", code: "OV" },
+    { id: "spec-sources", label: t.settings.harness.specSources, shortLabel: "Specs", code: "SP", group: "readability" },
+    { id: "agent-instructions", label: t.settings.harness.agentInstructions, shortLabel: "Instructions", code: "AI", group: "readability" },
+    { id: "design-decisions", label: t.settings.harness.designDecisions, shortLabel: "ADR", code: "DD", group: "readability" },
+    { id: "repo-signals", label: t.settings.harness.repositorySignals, shortLabel: "Feedback", code: "RS", group: "feedback" },
+    { id: "automations", label: t.settings.harness.automations, shortLabel: "Automation", code: "AT", group: "feedback" },
+    { id: "hook-systems", label: t.settings.harness.hookSystems, shortLabel: "Hooks", code: "HK", group: "guardrails" },
+    { id: "review-triggers", label: t.settings.harness.reviewTriggers, shortLabel: "Review", code: "RV", group: "guardrails" },
+    { id: "release-triggers", label: t.settings.harness.releaseTriggers, shortLabel: "Release", code: "RL", group: "guardrails" },
+    { id: "codeowners", label: t.settings.harness.codeowners, shortLabel: "Owners", code: "CO", group: "guardrails" },
+    { id: "entrix-fitness", label: t.settings.harness.entrixFitness, shortLabel: "Fitness", code: "FT", group: "guardrails" },
+    { id: "ci-cd", label: t.settings.harness.ciCd, shortLabel: "CI/CD", code: "CI", group: "feedback" },
+  ], [t]);
+
+  const groupedSections = useMemo(() => {
+    const groupOrder = ["readability", "guardrails", "feedback"] as const;
+    const groupLabels = {
+      readability: t.settings.harness.sectionGroups.readability,
+      guardrails: t.settings.harness.sectionGroups.guardrails,
+      feedback: t.settings.harness.sectionGroups.feedback,
+    } as const;
+    return groupOrder.map((groupId) => ({
+      id: groupId,
+      label: groupLabels[groupId],
+      sections: sections.filter((section) => section.group === groupId),
+    })).filter((group) => group.sections.length > 0);
+  }, [sections, t]);
 
   const selectedGovernanceSection = selectedGovernanceNodeId
     ? (GOVERNANCE_NODE_SECTION_MAP[selectedGovernanceNodeId] ?? null)
@@ -704,6 +721,30 @@ export default function HarnessConsolePage() {
     }
   }
 
+  function renderExplorerSectionButton(section: SectionDef) {
+    const isActive = activeSection === section.id;
+    const status = sectionStatuses.get(section.id) ?? null;
+    return (
+      <button
+        key={section.id}
+        type="button"
+        onClick={() => openSection(section.id)}
+        className={`desktop-list-item w-full rounded-md border text-left ${
+          isActive
+            ? "active border-desktop-border"
+            : "border-transparent"
+        }`}
+      >
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-desktop-text-primary">{section.label}</span>
+        {status ? (
+          <span className={`ml-2 shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-medium ${sectionStatusClass(status.tone)}`}>
+            {status.label}
+          </span>
+        ) : null}
+      </button>
+    );
+  }
+
   const titleBarRight = (
     <div className="flex items-center gap-2">
       <RepoPicker
@@ -779,30 +820,18 @@ export default function HarnessConsolePage() {
 
           <div className="flex-1 overflow-y-auto px-2 py-2 desktop-scrollbar-thin">
             <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">Sections</div>
-            <div className="space-y-1">
-              {SECTIONS.map((section) => {
-                const isActive = activeSection === section.id;
-                const status = sectionStatuses.get(section.id) ?? null;
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => openSection(section.id)}
-                    className={`desktop-list-item w-full rounded-md border text-left ${
-                      isActive
-                        ? "active border-desktop-border"
-                        : "border-transparent"
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-desktop-text-primary">{section.label}</span>
-                    {status ? (
-                      <span className={`ml-2 shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-medium ${sectionStatusClass(status.tone)}`}>
-                        {status.label}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
+              <div className="space-y-3">
+                <div className="space-y-1">
+                {renderExplorerSectionButton(sections[0] as SectionDef)}
+                </div>
+                {groupedSections.map((group) => (
+                <div key={group.id} className="space-y-1">
+                  <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
+                    {group.label}
+                  </div>
+                  {group.sections.map((section) => renderExplorerSectionButton(section))}
+                </div>
+              ))}
             </div>
           </div>
         </aside>
@@ -819,7 +848,7 @@ export default function HarnessConsolePage() {
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-desktop-border bg-desktop-bg-secondary px-2">
             <div className="flex h-full items-center overflow-x-auto desktop-scrollbar-thin" data-testid="harness-console-tabs">
               {openTabs.map((tabId) => {
-                const section = SECTIONS.find((item) => item.id === tabId);
+                const section = sections.find((item) => item.id === tabId);
                 if (!section) {
                   return null;
                 }

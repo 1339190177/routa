@@ -369,6 +369,11 @@ describe("HarnessSettingsPage", () => {
     expect(screen.queryByText("dimensions: 1")).toBeNull();
     expect(screen.queryByText("metrics: 2")).toBeNull();
     expect(screen.queryByText("hard gates: 1")).toBeNull();
+    expect(screen.getAllByText("Overview").length).toBeGreaterThan(0);
+    expect(screen.getByText("Readability")).not.toBeNull();
+    expect(screen.getByText("Guardrails")).not.toBeNull();
+    expect(screen.getByText("Feedback")).not.toBeNull();
+    expect(screen.getByText("Test Feedback")).not.toBeNull();
   });
 
   it("opens the bottom panel with compact context when clicking a lifecycle node", () => {
