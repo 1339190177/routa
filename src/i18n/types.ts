@@ -641,6 +641,7 @@ export interface TranslationDictionary {
     acpRegistryTitle: string;
     unknownPlatform: string;
     viewRepository: string;
+    platformRegistry: string;
   };
 
   specialists: {
@@ -1056,6 +1057,14 @@ export interface TranslationDictionary {
       canonicalDocs: string;
       decisionRecords: string;
       showingCompact: string;
+      statusCanonical: string;
+      statusAccepted: string;
+      statusSuperseded: string;
+      statusDeprecated: string;
+      statusUnknown: string;
+      confidenceHigh: string;
+      confidenceMedium: string;
+      confidenceLow: string;
     };
     agentHook: {
       loadingHooks: string;
@@ -1074,6 +1083,33 @@ export interface TranslationDictionary {
       frameworks: string;
       integrations: string;
       legacy: string;
+      kindNativeTool: string;
+      kindFramework: string;
+      kindIntegration: string;
+      statusHasSpecs: string;
+      statusInstalledOnly: string;
+      statusArchived: string;
+      statusLegacyLabel: string;
+      typeRequirements: string;
+      typeDesign: string;
+      typeTasks: string;
+      typeBugfix: string;
+      typeSpec: string;
+      typeProposal: string;
+      typePlan: string;
+      typePrd: string;
+      typeArchitecture: string;
+      typeEpic: string;
+      typeStory: string;
+      typeContext: string;
+      typeConfig: string;
+      typeOther: string;
+      docsCount: string;
+      docsSingular: string;
+      specCount: string;
+      specSingular: string;
+      qoderIntegration: string;
+      integrationDetected: string;
     };
     repoSignals: {
       loadingSignals: string;
@@ -1081,11 +1117,16 @@ export interface TranslationDictionary {
       overview: string;
       entrypoints: string;
       noMatchingScripts: string;
+      noVariants: string;
+      moreSuffix: string;
     };
     githubActions: {
       loadingWorkflows: string;
       loading: string;
       noWorkflowsFound: string;
+      unsupported: string;
+      fetchError: string;
+      noRepo: string;
       workflow: string;
       workflows: string;
       workflowOrchestrationDesc: string;
@@ -1155,6 +1196,10 @@ export interface TranslationDictionary {
       legendHard: string;
       legendBlocked: string;
       buildingTopology: string;
+      passLabel: string;
+      tierFast: string;
+      tierNormal: string;
+      tierDeep: string;
     };
     fitnessFiles: {
       loadingFiles: string;
@@ -1252,6 +1297,15 @@ export interface TranslationDictionary {
       routeIncomplete: string;
       rulesCount: string;
       profilesCount: string;
+      compactHooks: string;
+      compactRouting: string;
+      compactWatchPaths: string;
+      compactEvidencePaths: string;
+      compactBoundaries: string;
+      compactThresholds: string;
+      compactDirectories: string;
+      detailFallbackMetrics: string;
+      detailTriggerCommand: string;
     };
     governanceLoop: {
       graph: {
@@ -1271,6 +1325,16 @@ export interface TranslationDictionary {
           productionUnavailable: string;
           metricsUnavailable: string;
           releaseUnavailable: string;
+        };
+        detailChips: {
+          tier: string;
+          metricsAndGates: string;
+          prePushPhases: string;
+          flowsAndJobs: string;
+          releaseFlows: string;
+          dimensions: string;
+          metricsLabel: string;
+          hardGatesLabel: string;
         };
         detailSections: {
           fitness: {
@@ -1609,6 +1673,7 @@ export interface TranslationDictionary {
     up: string;
     visibleOnBoard: string;
     wide: string;
+    cancel: string;
   };
 
   // Kanban card detail
@@ -1993,6 +2058,14 @@ export interface TranslationDictionary {
     sessionInfo: string;
     step: string;
     task: string;
+    // Session page labels
+    toolModeTitle: string;
+    mcpTools: string;
+    tracesLabel: string;
+    craftersLabel: string;
+    concurrencyLabel: string;
+    installAgents: string;
+    openInNewTab: string;
   };
 
   // MCP Servers
@@ -2154,7 +2227,9 @@ export interface TranslationDictionary {
     completed: string;
     failed: string;
     fileChanges: string;
+    change: string;
     files: string;
+    file: string;
     planUpdated: string;
     result: string;
     runError: string;

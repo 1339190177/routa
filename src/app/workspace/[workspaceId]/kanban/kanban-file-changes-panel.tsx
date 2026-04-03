@@ -173,7 +173,7 @@ export function KanbanFileChangesPanel({
                                     onClick={() => setShowAllRepos((current) => ({ ...current, [repo.codebaseId]: !showAll }))}
                                     className="w-full rounded-xl border border-slate-200 px-3 py-2 text-[11px] font-medium text-slate-600 transition hover:bg-white dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#12141c]"
                                   >
-                                    {showAll ? t.kanban.showLess : `Show all ${repo.files.length} files`}
+                                    {showAll ? t.kanban.showLess : t.kanban.showAllFiles.replace('{count}', String(repo.files.length))}
                                   </button>
                                 )}
                               </div>

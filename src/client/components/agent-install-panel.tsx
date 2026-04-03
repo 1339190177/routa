@@ -376,7 +376,9 @@ export function AgentInstallPanel({ embedded = false }: AgentInstallPanelProps) 
 
       {!embedded && (
         <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400 dark:border-slate-800">
-          Platform: {platform ?? t.agents.unknownPlatform} • Registry: cdn.agentclientprotocol.com
+          {t.agents.platformRegistry
+            .replace('{platform}', platform ?? t.agents.unknownPlatform)
+            .replace('{registry}', 'cdn.agentclientprotocol.com')}
         </div>
       )}
     </div>

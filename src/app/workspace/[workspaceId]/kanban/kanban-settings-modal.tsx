@@ -841,7 +841,7 @@ export function KanbanSettingsModal({
                       onClick={handleAddStage}
                       className="rounded-md border border-slate-300 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
                     >
-                      Add stage
+                      {t.kanban.addStage}
                     </button>
                   </div>
                   <div className="space-y-1">
@@ -940,7 +940,7 @@ export function KanbanSettingsModal({
                                 onClick={() => handleDeleteStage(column.id)}
                                 className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-500 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-rose-300 dark:hover:bg-rose-500/10"
                               >
-                                Del
+                                {t.kanban.del}
                               </button>
                             </div>
                           </div>
@@ -1022,7 +1022,7 @@ export function KanbanSettingsModal({
 
                   <div className="space-y-3">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                      Automation
+                      {t.kanban.automation}
                     </div>
                     <ColumnAutomationWorkspace
                       column={selectedColumn}
@@ -1117,7 +1117,7 @@ export function KanbanSettingsModal({
                   disabled={saving || clearingAll}
                   className="rounded-xl border border-slate-200 px-4 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#111722]"
                 >
-                  Cancel
+                  {t.kanban.cancel}
                 </button>
                 <button
                   onClick={() => void handleSave()}
@@ -1201,7 +1201,7 @@ function ColumnAutomationWorkspace({
                 onClick={applyDefaultAutomation}
                 className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#111722]"
               >
-                Defaults
+                {t.kanban.defaults}
               </button>
             </div>
             <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-6">
@@ -1535,7 +1535,7 @@ function ColumnAutomationWorkspace({
                         onClick={() => onUpdate(updateAutomationSteps(automation, (steps) => [...steps, createEmptyAutomationStep(steps.length)]))}
                         className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700 transition hover:border-slate-400 hover:bg-white dark:border-slate-700 dark:text-slate-200 dark:hover:bg-[#0b1119]"
                       >
-                        Add step
+                        {t.kanban.addStep}
                       </button>
                     </div>
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-3">

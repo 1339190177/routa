@@ -181,7 +181,7 @@ function ReadBlockCard({ event }: { event: WorkspaceAgentEvent & { type: "read_b
         <span className="text-[10px]">{color.icon}</span>
         <span className={`text-[11px] font-medium ${color.text}`}>{event.toolName}</span>
         <span className={`text-[10px] ${event.status === "completed" ? "text-emerald-600" : event.status === "failed" ? "text-red-600" : "text-amber-600"}`}>{statusIcon}</span>
-        <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-auto">{event.files.length} {t.trace.files}</span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-auto">{event.files.length} {event.files.length === 1 ? t.trace.file : t.trace.files}</span>
         <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (
@@ -212,7 +212,7 @@ function FileChangesCard({ event }: { event: WorkspaceAgentEvent & { type: "file
         <span className="text-[10px]">{color.icon}</span>
         <span className={`text-[11px] font-medium ${color.text}`}>{event.toolName}</span>
         <span className={`text-[10px] ${event.status === "completed" ? "text-emerald-600" : event.status === "failed" ? "text-red-600" : "text-amber-600"}`}>{statusIcon}</span>
-        <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-auto">{event.changes.length} {t.trace.fileChanges}</span>
+        <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-auto">{event.changes.length} {event.changes.length === 1 ? t.trace.change : t.trace.fileChanges}</span>
         <ChevronRight className={`w-3 h-3 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}/>
       </button>
       {expanded && (

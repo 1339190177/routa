@@ -142,9 +142,15 @@ export function HarnessGitHubActionsFlowPanel({
     : (hasContext && resolvedFlowState.loadedContextKey !== contextKey && !resolvedFlowState.error);
   const flowsSummary = isLoading
     ? t.harness.githubActions.loading
-    : visibleFlows.length === 0
-      ? t.harness.githubActions.noWorkflowsFound
-      : `${visibleFlows.length} ${visibleFlows.length !== 1 ? t.harness.githubActions.workflows : t.harness.githubActions.workflow}`;
+    : unsupportedMessage
+      ? t.harness.githubActions.unsupported
+      : resolvedFlowState.error
+        ? t.harness.githubActions.fetchError
+        : !hasContext
+          ? t.harness.githubActions.noRepo
+          : visibleFlows.length === 0
+            ? t.harness.githubActions.noWorkflowsFound
+            : `${visibleFlows.length} ${visibleFlows.length !== 1 ? t.harness.githubActions.workflows : t.harness.githubActions.workflow}`;
   const stateBadge = (
     <span className="text-[10px] text-desktop-text-secondary">
       {flowsSummary}

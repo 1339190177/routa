@@ -386,7 +386,7 @@ export function CraftersView({
             >
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusColor} ${agent.status === "running" ? "animate-pulse" : ""}`} />
               <span className="truncate max-w-30">
-                {agent.taskTitle || t.tasks.crafterNumber.replace('{index}', String(i + 1))}
+                {agent.taskTitle || t.tasks.crafterNumber.replace('{number}', String(i + 1))}
               </span>
             </button>
           );

@@ -40,15 +40,16 @@ function categoryTone(mode: HarnessSignalsMode) {
     };
 }
 
-function summarizeItems(items: string[], limit = 4) {
+function summarizeItems(items: string[], limit = 4, moreLabel?: string) {
   if (items.length <= limit) {
     return items;
   }
-  return [...items.slice(0, limit), `+${items.length - limit} more`];
+  const suffix = moreLabel ?? `+${items.length - limit} more`;
+  return [...items.slice(0, limit), suffix];
 }
 
-function summarizeScripts(items: HarnessScriptSignal[], limit = 2) {
-  return summarizeItems(items.map((item) => item.name), limit);
+function summarizeScripts(items: HarnessScriptSignal[], limit = 2, moreLabel?: string) {
+  return summarizeItems(items.map((item) => item.name), limit, moreLabel);
 }
 
 export function HarnessRepoSignalsPanel({
@@ -245,12 +246,12 @@ export function HarnessRepoSignalsPanel({
                           </td>
                           <td className="px-4 py-3 align-top">
                             <div className="flex flex-wrap gap-2">
-                              {variants.length > 0 ? summarizeScripts(variants, 3).map((value) => (
+                              {variants.length > 0 ? summarizeScripts(variants, 3, t.harness.repoSignals.moreSuffix.replace('{count}', `${variants.length - 3}`)).map((value) => (
                                 <span key={`${group.category}-${value}`} className="rounded-full border border-desktop-border bg-desktop-bg-primary px-2.5 py-1 text-[10px] text-desktop-text-secondary">
                                   {value}
                                 </span>
                               )) : (
-                                <span className="text-[11px] text-desktop-text-secondary">No variants</span>
+                                <span className="text-[11px] text-desktop-text-secondary">{t.harness.repoSignals.noVariants}</span>
                               )}
                             </div>
                           </td>

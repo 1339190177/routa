@@ -301,27 +301,27 @@ type CompactPreviewSection = {
   items: string[];
 };
 
-function buildCompactPreviewSections(card: ReviewDimensionCard): CompactPreviewSection[] {
+function buildCompactPreviewSections(card: ReviewDimensionCard, labels: { hooks: string; routing: string; watchPaths: string; evidencePaths: string; boundaries: string; thresholds: string; directories: string }): CompactPreviewSection[] {
   if (card.key === "routing" && card.routingDetails) {
     const hookFiles = takeLabels(card.routingDetails.hookFiles.map((file) => file.relativePath), 2);
     const profiles = takeLabels(card.routingDetails.profiles.map((profile) => formatTokenLabel(profile.name)), 2);
     const actions = takeLabels(card.routingDetails.actions, 2);
 
     return [
-      { label: "Hooks", items: hookFiles },
-      { label: "Routing", items: profiles.length ? profiles : actions },
+      { label: labels.hooks, items: hookFiles },
+      { label: labels.routing, items: profiles.length ? profiles : actions },
     ].filter((section) => section.items.length > 0);
   }
 
   if (card.key === "risk") {
-    return [{ label: "Watch paths", items: takeLabels(card.rules.flatMap((rule) => rule.paths), 3) }]
+    return [{ label: labels.watchPaths, items: takeLabels(card.rules.flatMap((rule) => rule.paths), 3) }]
       .filter((section) => section.items.length > 0);
   }
 
   if (card.key === "confidence") {
     return [
-      { label: "Watch paths", items: takeLabels(card.rules.flatMap((rule) => rule.paths), 2) },
-      { label: "Evidence paths", items: takeLabels(card.rules.flatMap((rule) => rule.evidencePaths), 2) },
+      { label: labels.watchPaths, items: takeLabels(card.rules.flatMap((rule) => rule.paths), 2) },
+      { label: labels.evidencePaths, items: takeLabels(card.rules.flatMap((rule) => rule.evidencePaths), 2) },
     ].filter((section) => section.items.length > 0);
   }
 
@@ -330,8 +330,8 @@ function buildCompactPreviewSections(card: ReviewDimensionCard): CompactPreviewS
   const directories = takeLabels(card.rules.flatMap((rule) => rule.directories), 2);
 
   return [
-    { label: "Boundaries", items: boundaries },
-    { label: "Thresholds", items: thresholds.length ? thresholds : directories },
+    { label: labels.boundaries, items: boundaries },
+    { label: labels.thresholds, items: thresholds.length ? thresholds : directories },
   ].filter((section) => section.items.length > 0);
 }
 
@@ -393,9 +393,11 @@ function DetailGroup({
 function BoundaryGroup({
   boundaries,
   tone,
+  label,
 }: {
   boundaries: ReviewTriggerBoundarySummary[];
   tone: ReviewDimensionTone;
+  label: string;
 }) {
   if (!boundaries.length) {
     return null;
@@ -403,7 +405,7 @@ function BoundaryGroup({
 
   return (
     <div className="mt-2">
-      <DetailLabel>Boundaries</DetailLabel>
+      <DetailLabel>{label}</DetailLabel>
       <div className="mt-1.5 grid gap-1.5">
         {boundaries.map((boundary) => (
           <div key={boundary.name} className="rounded-sm border border-desktop-border bg-desktop-bg-primary/80 px-2.5 py-2">
@@ -421,9 +423,11 @@ function BoundaryGroup({
 function RuleDetailCard({
   rule,
   tone,
+  labels,
 }: {
   rule: ReviewTriggerRuleSummary;
   tone: ReviewDimensionTone;
+  labels: { watchPaths: string; evidencePaths: string; boundaries: string; directories: string; thresholds: string };
 }) {
   const styles = TONE_STYLES[tone];
   const thresholdTokens = buildThresholdTokens(rule);
@@ -442,11 +446,11 @@ function RuleDetailCard({
         </div>
       </div>
 
-      <DetailGroup label="Watch paths" items={rule.paths} tone={tone} />
-      <DetailGroup label="Evidence paths" items={rule.evidencePaths} tone={tone} />
-      <BoundaryGroup boundaries={rule.boundaries} tone={tone} />
-      <DetailGroup label="Directories" items={rule.directories} tone={tone} />
-      <DetailGroup label="Thresholds" items={thresholdTokens} tone={tone} />
+      <DetailGroup label={labels.watchPaths} items={rule.paths} tone={tone} />
+      <DetailGroup label={labels.evidencePaths} items={rule.evidencePaths} tone={tone} />
+      <BoundaryGroup boundaries={rule.boundaries} tone={tone} label={labels.boundaries} />
+      <DetailGroup label={labels.directories} items={rule.directories} tone={tone} />
+      <DetailGroup label={labels.thresholds} items={thresholdTokens} tone={tone} />
     </div>
   );
 }
@@ -454,9 +458,11 @@ function RuleDetailCard({
 function RoutingDetailCard({
   details,
   tone,
+  labels,
 }: {
   details: ReviewRoutingDetails;
   tone: ReviewDimensionTone;
+  labels: { hooks: string; fallbackMetrics: string; triggerCommand: string };
 }) {
   return (
     <div className="grid gap-2">
@@ -470,9 +476,9 @@ function RoutingDetailCard({
                 {formatTokenLabel(profile.name)}
               </div>
               <DetailGroup label="Phases" items={profile.phases.map(formatTokenLabel)} tone={tone} />
-              <DetailGroup label="Hooks" items={profile.hooks} tone={tone} />
+              <DetailGroup label={labels.hooks} items={profile.hooks} tone={tone} />
               <DetailGroup
-                label="Fallback metrics"
+                label={labels.fallbackMetrics}
                 items={profile.fallbackMetrics}
                 tone={tone}
               />
@@ -486,7 +492,7 @@ function RoutingDetailCard({
           {details.hookFiles.map((file) => (
             <div key={file.relativePath} className={`rounded-sm border px-3 py-2.5 ${TONE_STYLES[tone].detailSurface}`}>
               <div className="text-[11px] font-semibold text-desktop-text-primary">{file.relativePath}</div>
-              <DetailGroup label="Trigger command" items={[file.triggerCommand]} tone={tone} />
+              <DetailGroup label={labels.triggerCommand} items={[file.triggerCommand]} tone={tone} />
             </div>
           ))}
         </div>
@@ -497,10 +503,12 @@ function RoutingDetailCard({
 
 function CompactPreview({
   card,
+  labels,
 }: {
   card: ReviewDimensionCard;
+  labels: { hooks: string; routing: string; watchPaths: string; evidencePaths: string; boundaries: string; thresholds: string; directories: string };
 }) {
-  const sections = buildCompactPreviewSections(card);
+  const sections = buildCompactPreviewSections(card, labels);
   if (!sections.length) {
     return null;
   }
@@ -613,17 +621,35 @@ export function HarnessReviewTriggersPanel({
                 {detailsVisible ? (
                   <div className="mt-2.5 border-t border-desktop-border pt-2.5">
                     {card.key === "routing" && card.routingDetails ? (
-                      <RoutingDetailCard details={card.routingDetails} tone={card.tone} />
+                      <RoutingDetailCard details={card.routingDetails} tone={card.tone} labels={{
+                        hooks: t.harness.reviewTriggers.compactHooks,
+                        fallbackMetrics: t.harness.reviewTriggers.detailFallbackMetrics,
+                        triggerCommand: t.harness.reviewTriggers.detailTriggerCommand,
+                      }} />
                     ) : (
                       <div className="grid gap-2">
                         {card.rules.map((rule) => (
-                          <RuleDetailCard key={`${card.key}-${rule.name}`} rule={rule} tone={card.tone} />
+                          <RuleDetailCard key={`${card.key}-${rule.name}`} rule={rule} tone={card.tone} labels={{
+                            watchPaths: t.harness.reviewTriggers.compactWatchPaths,
+                            evidencePaths: t.harness.reviewTriggers.compactEvidencePaths,
+                            boundaries: t.harness.reviewTriggers.compactBoundaries,
+                            directories: t.harness.reviewTriggers.compactDirectories,
+                            thresholds: t.harness.reviewTriggers.compactThresholds,
+                          }} />
                         ))}
                       </div>
                     )}
                   </div>
                 ) : (
-                  <CompactPreview card={card} />
+                  <CompactPreview card={card} labels={{
+                    hooks: t.harness.reviewTriggers.compactHooks,
+                    routing: t.harness.reviewTriggers.compactRouting,
+                    watchPaths: t.harness.reviewTriggers.compactWatchPaths,
+                    evidencePaths: t.harness.reviewTriggers.compactEvidencePaths,
+                    boundaries: t.harness.reviewTriggers.compactBoundaries,
+                    thresholds: t.harness.reviewTriggers.compactThresholds,
+                    directories: t.harness.reviewTriggers.compactDirectories,
+                  }} />
                 )}
               </article>
             );

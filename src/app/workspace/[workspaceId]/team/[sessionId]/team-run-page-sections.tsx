@@ -131,7 +131,7 @@ export function SessionTimelineSection({
           <div>
             <h2 className="text-base font-semibold text-desktop-text-primary">{t.team.sessionTimeline}</h2>
             <p className="mt-0.5 text-xs leading-5 text-desktop-text-secondary">
-              t.team.timelineDesc
+              {t.team.timelineDesc}
             </p>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-desktop-text-secondary">
@@ -187,7 +187,7 @@ export function TeamMembersSection({
       <div className="border-b border-desktop-border px-4 py-2.5">
         <h2 className="text-base font-semibold text-desktop-text-primary">{t.team.teamMembers}</h2>
         <p className="mt-0.5 text-xs leading-5 text-desktop-text-secondary">
-          t.team.watchWhoIsRunning
+          {t.team.watchWhoIsRunning}
         </p>
       </div>
 

@@ -481,9 +481,9 @@ function buildGraph(args: {
       title: g.nodeLabels.precommit,
       tone: getLayerTone("commit"),
       note: metricCount > 0
-        ? `${metricCount} metrics / ${hardGateCount} hard gates`
+        ? g.detailChips.metricsAndGates.replace("{metrics}", String(metricCount)).replace("{gates}", String(hardGateCount))
         : hookSummary
-          ? `pre-push / ${hookSummary.phaseCount} phases`
+          ? g.detailChips.prePushPhases.replace("{count}", String(hookSummary.phaseCount))
           : g.clues.precommitNote,
       active: true,
       ...buildSelectionState("precommit", true),
@@ -513,7 +513,7 @@ function buildGraph(args: {
       title: g.nodeLabels["post-commit"],
       tone: getLayerTone("commit"),
       note: workflowSummary
-        ? `${workflowSummary.flowCount} flows / ${workflowSummary.jobCount} jobs`
+        ? g.detailChips.flowsAndJobs.replace("{flows}", String(workflowSummary.flowCount)).replace("{jobs}", String(workflowSummary.jobCount))
         : g.clues.postCommitNote,
       active: true,
       ...buildSelectionState("post-commit", true),
@@ -524,7 +524,7 @@ function buildGraph(args: {
       title: g.nodeLabels.release,
       tone: getLayerTone("external"),
       note: workflowSummary && workflowSummary.releaseFlowCount > 0
-        ? `${workflowSummary.releaseFlowCount} release flows`
+        ? g.detailChips.releaseFlows.replace("{count}", String(workflowSummary.releaseFlowCount))
         : g.clues.releaseNote,
       active: Boolean(workflowSummary && workflowSummary.releaseFlowCount > 0),
       unavailableReason: workflowSummary && workflowSummary.releaseFlowCount > 0
@@ -674,7 +674,7 @@ function buildDetailSections(args: {
   switch (selectedNodeId) {
     case "precommit":
       return [
-        { title: g.detailSections.fitness.title, items: [`tier ${selectedTier}`, `${dimensionCount} dimensions`, `${metricCount} metrics`, `${hardGateCount} hard gates`] },
+        { title: g.detailSections.fitness.title, items: [g.detailChips.tier.replace("{tier}", String(selectedTier)), g.detailChips.dimensions.replace("{count}", String(dimensionCount)), g.detailChips.metricsLabel.replace("{count}", String(metricCount)), g.detailChips.hardGatesLabel.replace("{count}", String(hardGateCount))] },
         { title: g.detailSections.fitness.hookPhasesTitle, items: uniquePhases.length ? uniquePhases : [g.detailSections.fitness.noPhase] },
         { title: g.detailSections.fitness.relatedSurface, items: g.detailSections.fitness.relatedItems },
       ] satisfies LoopDetailSection[];
@@ -693,7 +693,7 @@ function buildDetailSections(args: {
     case "review":
     case "test":
       return [
-        { title: g.detailSections.fitness.title, items: [`tier ${selectedTier}`, `${dimensionCount} dimensions`, `${metricCount} metrics`, `${hardGateCount} hard gates`] },
+        { title: g.detailSections.fitness.title, items: [g.detailChips.tier.replace("{tier}", String(selectedTier)), g.detailChips.dimensions.replace("{count}", String(dimensionCount)), g.detailChips.metricsLabel.replace("{count}", String(metricCount)), g.detailChips.hardGatesLabel.replace("{count}", String(hardGateCount))] },
         { title: g.detailSections.test.hookPhasesTitle, items: uniquePhases.length ? uniquePhases : [g.detailSections.fitness.noPhase] },
         { title: g.detailSections.test.dimensionFilesTitle, items: dimensionFiles.length ? dimensionFiles.slice(0, 6) : [g.detailSections.test.noDimensionSpec] },
       ] satisfies LoopDetailSection[];

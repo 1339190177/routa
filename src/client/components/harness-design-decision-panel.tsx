@@ -35,19 +35,33 @@ const DECISION_STATUS_STYLES: Record<DesignDecisionStatus, { bg: string; text: s
 };
 
 function ConfidenceBadge({ confidence }: { confidence: DesignDecisionConfidence }) {
+  const { t } = useTranslation();
   const style = CONFIDENCE_STYLES[confidence];
+  const confidenceLabels: Record<DesignDecisionConfidence, string> = {
+    high: t.harness.designDecision.confidenceHigh,
+    medium: t.harness.designDecision.confidenceMedium,
+    low: t.harness.designDecision.confidenceLow,
+  };
   return (
     <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${style.bg} ${style.text}`}>
-      {confidence}
+      {confidenceLabels[confidence]}
     </span>
   );
 }
 
 function DecisionStatusBadge({ status }: { status: DesignDecisionStatus }) {
+  const { t } = useTranslation();
   const style = DECISION_STATUS_STYLES[status];
+  const statusLabelMap: Record<DesignDecisionStatus, string> = {
+    canonical: t.harness.designDecision.statusCanonical,
+    accepted: t.harness.designDecision.statusAccepted,
+    superseded: t.harness.designDecision.statusSuperseded,
+    deprecated: t.harness.designDecision.statusDeprecated,
+    unknown: t.harness.designDecision.statusUnknown,
+  };
   return (
     <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium ${style.bg} ${style.text}`}>
-      {style.label}
+      {statusLabelMap[status]}
     </span>
   );
 }

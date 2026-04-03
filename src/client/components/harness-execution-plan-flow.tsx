@@ -487,7 +487,7 @@ function buildPlanGraph(
         kind: "metric",
         title: metric.name,
         subtitle: metric.description || undefined,
-        meta: [metric.runner, metric.tier, metric.executionScope, metric.hardGate ? t.harness.executionPlan.hardGate : metric.gate || "pass"],
+        meta: [metric.runner, metric.tier, metric.executionScope, metric.hardGate ? t.harness.executionPlan.hardGate : metric.gate || t.harness.executionPlan.passLabel],
         status: metricStatus,
       }));
 
@@ -592,22 +592,29 @@ export function HarnessExecutionPlanFlow({
           <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">{t.settings.harness.entrixFitness}</div>
         ) : null}
         <div className="rounded-full border border-desktop-border bg-desktop-bg-primary p-0.5">
-          {(["fast", "normal", "deep"] as const).map((tier) => (
-            <button
-              key={tier}
-              type="button"
-              onClick={() => {
-                onTierChange(tier);
-              }}
-              className={`rounded-full px-2.5 py-1 text-[10px] transition-colors ${
-                selectedTier === tier
-                  ? "bg-desktop-accent text-desktop-accent-text"
-                  : "text-desktop-text-secondary hover:bg-desktop-bg-secondary"
-              }`}
-            >
-              {tier}
-            </button>
-          ))}
+          {(["fast", "normal", "deep"] as const).map((tier) => {
+            const tierLabels: Record<string, string> = {
+              fast: t.harness.executionPlan.tierFast,
+              normal: t.harness.executionPlan.tierNormal,
+              deep: t.harness.executionPlan.tierDeep,
+            };
+            return (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => {
+                  onTierChange(tier);
+                }}
+                className={`rounded-full px-2.5 py-1 text-[10px] transition-colors ${
+                  selectedTier === tier
+                    ? "bg-desktop-accent text-desktop-accent-text"
+                    : "text-desktop-text-secondary hover:bg-desktop-bg-secondary"
+                }`}
+              >
+                {tierLabels[tier] || tier}
+              </button>
+            );
+          })}
         </div>
         {!compactMode ? (
           <button

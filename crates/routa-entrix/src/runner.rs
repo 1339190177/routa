@@ -235,7 +235,6 @@ fn run_command_with_timeout(
         cmd.arg("/C").arg(command_str);
     }
     cmd.current_dir(project_root)
-        .current_dir(project_root)
         .envs(env)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

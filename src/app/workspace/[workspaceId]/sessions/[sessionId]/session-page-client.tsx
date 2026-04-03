@@ -676,7 +676,7 @@ export function SessionPageClient() {
         rightSlot={
           <>
             {/* Tool Mode Toggle */}
-            <label className="hidden md:flex items-center gap-1.5 cursor-pointer select-none" title={`Tool Mode: ${toolMode === "essential" ? "Essential (7 tools)" : "Full (34 tools)"}`}>
+            <label className="hidden md:flex items-center gap-1.5 cursor-pointer select-none" title={t.sessions.toolModeTitle.replace('{mode}', toolMode === "essential" ? "Essential (7 tools)" : "Full (34 tools)")}>
               <span className="text-[10px] text-[var(--dt-text-secondary)]">{t.common.full}</span>
               <div className="relative">
                 <input
@@ -691,10 +691,10 @@ export function SessionPageClient() {
               <span className="text-[10px] text-[var(--dt-accent)] font-medium">{t.common.essential}</span>
             </label>
             <a href="/mcp-tools" className="hidden md:inline-flex px-2.5 py-1 rounded-md bg-[var(--dt-bg-secondary)] text-[11px] font-medium text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)] transition-colors">
-              MCP Tools
+              {t.sessions.mcpTools}
             </a>
             <a href="/traces" className="hidden md:inline-flex px-2.5 py-1 rounded-md bg-[var(--dt-bg-secondary)] text-[11px] font-medium text-[var(--dt-text-primary)] hover:bg-[var(--dt-bg-active)] transition-colors">
-              Traces
+              {t.sessions.tracesLabel}
             </a>
           </>
         }
@@ -799,7 +799,7 @@ export function SessionPageClient() {
               <div className="px-3 py-2 border-b border-[var(--dt-border)] flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-[var(--dt-text-primary)]">
-                    CRAFTERs
+                    {t.sessions.craftersLabel}
                   </span>
                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--dt-bg-active)] text-[var(--dt-accent)]">
                     {crafterAgents.length}
@@ -808,7 +808,7 @@ export function SessionPageClient() {
                 {/* Concurrency control */}
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-medium text-[var(--dt-text-secondary)] uppercase tracking-wider">
-                    Concurrency
+                    {t.sessions.concurrencyLabel}
                   </span>
                   <div className="flex items-center rounded-md border border-[var(--dt-border)] overflow-hidden">
                     {[1, 2].map((n) => (
@@ -864,7 +864,7 @@ export function SessionPageClient() {
             <div className="h-11 px-4 border-b border-[var(--dt-border)] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div id="agent-install-title" className="text-sm font-semibold text-[var(--dt-text-primary)]">
-                  Install Agents
+                  {t.sessions.installAgents}
                 </div>
                 <a
                   href="/settings/agents"
@@ -872,7 +872,7 @@ export function SessionPageClient() {
                   rel="noopener noreferrer"
                   className="text-[11px] text-[var(--dt-text-secondary)] hover:text-[var(--dt-text-primary)] transition-colors"
                 >
-                  Open in new tab
+                  {t.sessions.openInNewTab}
                 </a>
               </div>
               <button
