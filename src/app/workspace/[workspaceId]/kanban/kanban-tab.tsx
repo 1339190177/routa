@@ -166,7 +166,7 @@ export function KanbanTab({
   // Delete codebase state
   const [showDeleteCodebaseConfirm, setShowDeleteCodebaseConfirm] = useState(false);
   const [deletingCodebase, setDeletingCodebase] = useState(false);
-  const [deletingWorktreeId, setDeletingWorktreeId] = useState<string | null>(null);
+  const [deletingWorktreeIds, setDeletingWorktreeIds] = useState<string[]>([]);
   const [worktreeActionError, setWorktreeActionError] = useState<string | null>(null);
   // Live branch info for selected codebase
   const [liveBranchInfo, setLiveBranchInfo] = useState<{ current: string; branches: string[] } | null>(null);
@@ -937,31 +937,44 @@ export function KanbanTab({
     } catch { /* ignore */ }
   }
 
-  const handleDeleteCodebaseWorktree = useCallback(async (worktree: WorktreeInfo) => {
-    setWorktreeActionError(null);
-    setDeletingWorktreeId(worktree.id);
-    try {
-      const linkedTasks = localTasks.filter((task) => task.worktreeId === worktree.id);
-      await Promise.all(linkedTasks.map((task) => patchTask(task.id, { worktreeId: null })));
+  const handleDeleteCodebaseWorktrees = useCallback(async (worktrees: WorktreeInfo[]) => {
+    if (worktrees.length === 0) return;
 
-      const response = await fetch(`/api/worktrees/${encodeURIComponent(worktree.id)}`, {
-        method: "DELETE",
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error((data as { error?: string }).error ?? "Failed to delete worktree");
+    const ids = [...new Set(worktrees.map((worktree) => worktree.id))];
+    const worktreeIdSet = new Set(ids);
+    setWorktreeActionError(null);
+    setDeletingWorktreeIds(ids);
+    try {
+      for (const worktree of worktrees) {
+        const linkedTasks = localTasks.filter((task) => task.worktreeId === worktree.id);
+        await Promise.all(linkedTasks.map((task) => patchTask(task.id, { worktreeId: null })));
+
+        const response = await fetch(`/api/worktrees/${encodeURIComponent(worktree.id)}`, {
+          method: "DELETE",
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error((data as { error?: string }).error ?? "Failed to delete worktree");
+        }
       }
 
-      setCodebaseWorktrees((current) => current.filter((item) => item.id !== worktree.id));
+      setLocalTasks((current) => current.map((task) => (
+        task.worktreeId && worktreeIdSet.has(task.worktreeId)
+          ? { ...task, worktreeId: undefined }
+          : task
+      )));
+      setCodebaseWorktrees((current) => current.filter((item) => !worktreeIdSet.has(item.id)));
       setWorktreeCache((current) => {
         const next = { ...current };
-        delete next[worktree.id];
+        for (const id of ids) {
+          delete next[id];
+        }
         return next;
       });
     } catch (error) {
       setWorktreeActionError(error instanceof Error ? error.message : "Failed to delete worktree");
     } finally {
-      setDeletingWorktreeId(null);
+      setDeletingWorktreeIds([]);
     }
   }, [localTasks, patchTask]);
 
@@ -1355,6 +1368,7 @@ export function KanbanTab({
 
       {/* Requirement 1: Codebase detail popup */}
       <KanbanCodebaseModal
+        key={selectedCodebase?.id ?? "no-codebase-selected"}
         selectedCodebase={selectedCodebase}
         editingCodebase={editingCodebase}
         codebases={codebases}
@@ -1369,8 +1383,8 @@ export function KanbanTab({
         codebaseWorktrees={codebaseWorktrees}
         worktreeActionError={worktreeActionError}
         localTasks={localTasks}
-        handleDeleteCodebaseWorktree={handleDeleteCodebaseWorktree}
-        deletingWorktreeId={deletingWorktreeId}
+        handleDeleteCodebaseWorktrees={handleDeleteCodebaseWorktrees}
+        deletingWorktreeIds={deletingWorktreeIds}
         liveBranchInfo={liveBranchInfo}
         handleReclone={handleReclone}
         recloning={recloning}

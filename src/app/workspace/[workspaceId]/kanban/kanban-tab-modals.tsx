@@ -1,6 +1,6 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
@@ -24,8 +24,8 @@ export interface KanbanCodebaseModalProps {
   codebaseWorktrees: WorktreeInfo[];
   worktreeActionError: string | null;
   localTasks: TaskInfo[];
-  handleDeleteCodebaseWorktree: (worktree: WorktreeInfo) => void | Promise<void>;
-  deletingWorktreeId: string | null;
+  handleDeleteCodebaseWorktrees: (worktrees: WorktreeInfo[]) => void | Promise<void>;
+  deletingWorktreeIds: string[];
   liveBranchInfo: { current: string; branches: string[] } | null;
   handleReclone: () => void | Promise<void>;
   recloning: boolean;
@@ -50,8 +50,8 @@ export function KanbanCodebaseModal({
   codebaseWorktrees,
   worktreeActionError,
   localTasks,
-  handleDeleteCodebaseWorktree,
-  deletingWorktreeId,
+  handleDeleteCodebaseWorktrees,
+  deletingWorktreeIds,
   liveBranchInfo,
   handleReclone,
   recloning,
@@ -61,6 +61,23 @@ export function KanbanCodebaseModal({
   onClose,
 }: KanbanCodebaseModalProps) {
   const { t } = useTranslation();
+  const [selectedWorktreeIds, setSelectedWorktreeIds] = useState<string[]>([]);
+
+  const sortedWorktrees = useMemo(
+    () => [...codebaseWorktrees].sort((left, right) => {
+      const rightTs = new Date(right.createdAt).getTime();
+      const leftTs = new Date(left.createdAt).getTime();
+      return rightTs - leftTs;
+    }),
+    [codebaseWorktrees]
+  );
+  const deletingWorktreeIdSet = useMemo(() => new Set(deletingWorktreeIds), [deletingWorktreeIds]);
+  const selectedWorktrees = useMemo(
+    () => sortedWorktrees.filter((worktree) => selectedWorktreeIds.includes(worktree.id)),
+    [selectedWorktreeIds, sortedWorktrees]
+  );
+  const allWorktreesSelected = sortedWorktrees.length > 0 && selectedWorktrees.length === sortedWorktrees.length;
+  const bulkActionBusy = deletingWorktreeIds.length > 0;
 
   if (!selectedCodebase) return null;
 
@@ -204,12 +221,57 @@ export function KanbanCodebaseModal({
                 <div className="text-xs text-slate-400 dark:text-slate-500">{t.kanbanModals.noWorktrees}</div>
               ) : (
                 <div className="space-y-2">
-                  {codebaseWorktrees.map((worktree) => {
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 dark:border-slate-800 dark:bg-[#171922]">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      {selectedWorktrees.length > 0
+                        ? t.kanbanModals.selectedWorktrees.replace("{count}", String(selectedWorktrees.length))
+                        : t.kanbanModals.selectWorktreesHint}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWorktreeIds(allWorktreesSelected ? [] : sortedWorktrees.map((worktree) => worktree.id))}
+                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-white dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#191c28]"
+                      >
+                        {allWorktreesSelected ? t.kanbanModals.clearSelection : t.tasks.selectAll}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteCodebaseWorktrees(selectedWorktrees)}
+                        disabled={selectedWorktrees.length === 0 || bulkActionBusy}
+                        className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/10"
+                      >
+                        {bulkActionBusy
+                          ? t.kanbanModals.removing
+                          : t.kanbanModals.removeSelected.replace("{count}", String(selectedWorktrees.length))}
+                      </button>
+                    </div>
+                  </div>
+                  {sortedWorktrees.map((worktree) => {
                     const linkedTasks = localTasks.filter((task) => task.worktreeId === worktree.id);
+                    const worktreeDeleting = deletingWorktreeIdSet.has(worktree.id);
                     return (
                       <div key={worktree.id} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex min-w-0 flex-1 gap-3">
+                            <label className="pt-0.5">
+                              <input
+                                type="checkbox"
+                                aria-label={`${t.tasks.selectAll} ${worktree.branch}`}
+                                checked={selectedWorktreeIds.includes(worktree.id)}
+                                disabled={bulkActionBusy}
+                                onChange={(event) => {
+                                  setSelectedWorktreeIds((current) => {
+                                    if (event.target.checked) {
+                                      return [...current, worktree.id];
+                                    }
+                                    return current.filter((id) => id !== worktree.id);
+                                  });
+                                }}
+                                className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500 dark:border-slate-600 dark:bg-[#0f1117]"
+                              />
+                            </label>
+                            <div className="min-w-0 flex-1 space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${worktree.status === "active"
                                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
@@ -224,6 +286,11 @@ export function KanbanCodebaseModal({
                                   {linkedTasks.length} {t.kanbanModals.linkedTasks}{linkedTasks.length > 1 ? "s" : ""}
                                 </span>
                               )}
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              <span>{t.kanbanModals.createdAtLabel} <time dateTime={worktree.createdAt}>{formatTimestamp(worktree.createdAt)}</time></span>
+                              <span>{t.kanbanModals.updatedAtLabel} <time dateTime={worktree.updatedAt}>{formatTimestamp(worktree.updatedAt)}</time></span>
+                              {worktree.label ? <span>{t.kanbanModals.labelLabel} {worktree.label}</span> : null}
                             </div>
                             <div className="break-all font-mono text-xs text-slate-400 dark:text-slate-500">{worktree.worktreePath}</div>
                             {linkedTasks.length > 0 && (
@@ -240,15 +307,16 @@ export function KanbanCodebaseModal({
                                 )}
                               </div>
                             )}
+                            </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2 self-end lg:self-start">
                             <button
                               type="button"
-                              onClick={() => void handleDeleteCodebaseWorktree(worktree)}
-                              disabled={deletingWorktreeId === worktree.id}
+                              onClick={() => void handleDeleteCodebaseWorktrees([worktree])}
+                              disabled={worktreeDeleting || bulkActionBusy}
                               className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/10"
                             >
-                              {deletingWorktreeId === worktree.id ? t.kanbanModals.removing : t.common.remove}
+                              {worktreeDeleting ? t.kanbanModals.removing : t.common.remove}
                             </button>
                           </div>
                         </div>
@@ -287,6 +355,11 @@ export function KanbanCodebaseModal({
       </div>
     </div>
   );
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
 }
 
 export function KanbanDeleteCodebaseModal({
