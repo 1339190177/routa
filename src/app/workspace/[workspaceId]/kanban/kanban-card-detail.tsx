@@ -117,6 +117,11 @@ function getPromptFailureMessage(task: TaskInfo, sessionInfo: SessionInfo | null
   return task.lastSyncError ?? null;
 }
 
+function isExpiredEmbeddedSessionFailure(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return message.includes("embedded ACP processes cannot be resumed on a different instance");
+}
+
 function formatAutomationStepSummary(
   step: KanbanAutomationStep,
   availableProviders: AcpProviderInfo[],
@@ -1060,10 +1065,15 @@ function ExecutionSection({
   const activeLaneSession = activeRunSessionId
     ? task.laneSessions?.find((entry) => entry.sessionId === activeRunSessionId)
     : undefined;
+  const failedRunProviderId = task.triggerSessionId
+    ? sessionInfo?.sessionId === task.triggerSessionId
+      ? sessionInfo.provider
+      : activeLaneSession?.provider ?? task.assignedProvider ?? effectiveAutomation.providerId
+    : task.assignedProvider ?? effectiveAutomation.providerId;
   const failedRunLabel = activeLaneSession?.transport === "a2a" || effectiveAutomation.transport === "a2a"
     ? "current A2A run"
     : getProviderName(
-      sessionInfo?.provider ?? task.assignedProvider ?? effectiveAutomation.providerId,
+      failedRunProviderId,
       availableProviders,
     );
   const lanePipeline = laneSteps.length > 0
@@ -1072,6 +1082,10 @@ function ExecutionSection({
   const hasRecordedRuns = getOrderedSessionIds(task).length > 0;
   const transitionArtifacts = resolveKanbanTransitionArtifacts(boardColumns, task.columnId);
   const overrideKey = `${task.id}:${task.assignedProvider ?? ""}:${task.assignedRole ?? ""}:${task.assignedSpecialistId ?? ""}:${task.assignedSpecialistName ?? ""}`;
+  const needsLiveRunRecovery = isExpiredEmbeddedSessionFailure(failureMessage);
+  const runActionLabel = needsLiveRunRecovery
+    ? t.kanbanDetail.recoverLiveRun
+    : hasRecordedRuns ? t.kanban.rerun : t.kanban.run;
 
   return (
     <DetailSection
@@ -1225,7 +1239,9 @@ function ExecutionSection({
           {" "}
           {effectiveAutomation.transport === "a2a"
             ? "Check the remote agent card URL, auth config, or A2A task status before rerunning."
-            : "Reset the override or switch providers before rerunning if this looks like a provider authorization or runtime issue."}
+            : needsLiveRunRecovery
+              ? t.kanbanDetail.recoverLiveRunHint
+              : "Reset the override or switch providers before rerunning if this looks like a provider authorization or runtime issue."}
         </div>
       )}
       {transitionArtifacts.nextRequiredArtifacts.length > 0 && (
@@ -1260,7 +1276,7 @@ function ExecutionSection({
             data-testid="kanban-detail-run"
             className={`rounded border border-emerald-500 bg-emerald-500/10 px-4 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 ${hasCardOverride ? "ml-auto" : ""} ${compact ? "py-2" : "py-2.5"}`}
           >
-            {hasRecordedRuns ? t.kanban.rerun : t.kanban.run}
+            {runActionLabel}
           </button>
         )}
       </div>

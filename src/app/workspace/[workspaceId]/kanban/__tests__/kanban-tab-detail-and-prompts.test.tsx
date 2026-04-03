@@ -183,6 +183,66 @@ describe("KanbanCardDetail repository health", () => {
     expect(screen.getByText(/403 Forbidden/i)).toBeTruthy();
   });
 
+  it("prefers the current override provider over a stale selected session when a rerun fails before session creation", () => {
+    render(
+      <KanbanCardDetail
+        task={{
+          ...createTask("task-stale", "Story Stale Provider"),
+          assignedProvider: "claude",
+          assignedRole: "CRAFTER",
+          lastSyncError: "Claude Code SDK not configured. Set ANTHROPIC_AUTH_TOKEN environment variable.",
+          laneSessions: [{
+            sessionId: "session-old-codex",
+            provider: "codex",
+            role: "DEVELOPER",
+            status: "failed",
+            startedAt: "2025-01-01T00:00:00.000Z",
+          }],
+        }}
+        boardColumns={board.columns}
+        availableProviders={[
+          {
+            id: "claude",
+            name: "Claude Code",
+            description: "Claude provider",
+            command: "claude",
+            status: "available",
+          },
+          {
+            id: "codex",
+            name: "Codex",
+            description: "Codex provider",
+            command: "codex-acp",
+            status: "available",
+          },
+        ]}
+        specialists={[]}
+        specialistLanguage="en"
+        codebases={[]}
+        allCodebaseIds={[]}
+        worktreeCache={{}}
+        sessionInfo={{
+          sessionId: "session-old-codex",
+          workspaceId: "workspace-1",
+          cwd: "/tmp/project",
+          provider: "codex",
+          role: "DEVELOPER",
+          createdAt: "2025-01-01T00:00:00.000Z",
+        }}
+        sessions={[]}
+        fullWidth
+        onPatchTask={vi.fn(async () => createTask("task-stale", "Story Stale Provider"))}
+        onRetryTrigger={vi.fn()}
+        onDelete={vi.fn()}
+        onRefresh={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Execution" }));
+    expect(screen.getByText(/Current run failed on Claude Code:/i)).toBeTruthy();
+    expect(screen.queryByText(/Current run failed on Codex:/i)).toBeNull();
+  });
+
   it("renders A2A lane targets and remote task metadata in the execution panel", () => {
     const a2aBoard: KanbanBoardInfo = {
       ...board,
