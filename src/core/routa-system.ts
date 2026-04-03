@@ -231,7 +231,10 @@ export function createSqliteSystem(): RoutaSystem {
   try {
     // better-sqlite3 is listed in serverExternalPackages (next.config.ts),
     // so webpack leaves the native addon as a runtime require.
-    const { getSqliteDatabase } = require("./db/sqlite") as typeof import("./db/sqlite");
+    const {
+      getSqliteDatabase,
+      ensureSqliteDefaultWorkspace,
+    } = require("./db/sqlite") as typeof import("./db/sqlite");
     const {
       SqliteAgentStore,
       SqliteConversationStore,
@@ -247,6 +250,7 @@ export function createSqliteSystem(): RoutaSystem {
     } = require("./db/sqlite-stores") as typeof import("./db/sqlite-stores");
 
     const db = getSqliteDatabase();
+    ensureSqliteDefaultWorkspace();
     agentStore = new SqliteAgentStore(db);
     conversationStore = new SqliteConversationStore(db);
     taskStore = new SqliteTaskStore(db);

@@ -11,6 +11,7 @@ import { drizzle, BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { sql } from "drizzle-orm";
 import BetterSqlite3 from "better-sqlite3";
 import * as schema from "./sqlite-schema";
+import { createWorkspace } from "../models/workspace";
 
 export type SqliteDatabase = BetterSQLite3Database<typeof schema>;
 
@@ -46,6 +47,39 @@ export function getSqliteDatabase(dbPath?: string): SqliteDatabase {
     g[GLOBAL_RAW_KEY] = sqlite;
   }
   return g[GLOBAL_KEY] as SqliteDatabase;
+}
+
+function getRawSqliteDatabase(): BetterSqlite3.Database {
+  const g = globalThis as Record<string, unknown>;
+  if (!g[GLOBAL_RAW_KEY]) {
+    getSqliteDatabase();
+  }
+  return g[GLOBAL_RAW_KEY] as BetterSqlite3.Database;
+}
+
+export function ensureSqliteDefaultWorkspace(rawDb?: BetterSqlite3.Database): void {
+  const sqlite = rawDb ?? getRawSqliteDatabase();
+  const existing = sqlite.prepare("SELECT 1 FROM workspaces WHERE id = ? LIMIT 1").get("default");
+  if (existing) {
+    return;
+  }
+
+  const workspace = createWorkspace({
+    id: "default",
+    title: "Default Workspace",
+  });
+
+  sqlite.prepare(`
+    INSERT INTO workspaces (id, title, status, metadata, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    workspace.id,
+    workspace.title,
+    workspace.status,
+    JSON.stringify(workspace.metadata),
+    workspace.createdAt.getTime(),
+    workspace.updatedAt.getTime(),
+  );
 }
 
 /**
