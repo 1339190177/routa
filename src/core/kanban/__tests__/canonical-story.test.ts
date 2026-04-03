@@ -71,6 +71,24 @@ Todo will add execution detail later.
     expect(result.story?.story.invest.independent.status).toBe("pass");
   });
 
+  it("allows depends_on to be an empty array", () => {
+    const result = parseCanonicalStory(
+      validMarkdown.replace("depends_on:\n      - none", "depends_on: []"),
+    );
+
+    expect(result.issues).toEqual([]);
+    expect(result.story?.story.dependencies_and_sequencing.depends_on).toEqual([]);
+  });
+
+  it("allows depends_on to be omitted", () => {
+    const result = parseCanonicalStory(
+      validMarkdown.replace("    depends_on:\n      - none\n", ""),
+    );
+
+    expect(result.issues).toEqual([]);
+    expect(result.story?.story.dependencies_and_sequencing.depends_on).toEqual([]);
+  });
+
   it("reports invalid YAML syntax", () => {
     const result = parseCanonicalStory("```yaml\nstory: [broken\n```");
 

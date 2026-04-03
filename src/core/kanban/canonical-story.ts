@@ -71,6 +71,25 @@ function readBoolean(value: unknown, path: string, issues: string[]): boolean {
 }
 
 function readStringArray(value: unknown, path: string, issues: string[]): string[] {
+  return readStringArrayWithOptions(value, path, issues);
+}
+
+function readStringArrayWithOptions(
+  value: unknown,
+  path: string,
+  issues: string[],
+  options?: {
+    optional?: boolean;
+    allowEmpty?: boolean;
+  },
+): string[] {
+  const optional = options?.optional ?? false;
+  const allowEmpty = options?.allowEmpty ?? false;
+
+  if ((value === undefined || value === null) && optional) {
+    return [];
+  }
+
   if (!Array.isArray(value)) {
     issues.push(`${path} must be an array of strings`);
     return [];
@@ -80,7 +99,7 @@ function readStringArray(value: unknown, path: string, issues: string[]): string
     .map((item, index) => readString(item, `${path}[${index}]`, issues))
     .filter(Boolean);
 
-  if (items.length === 0) {
+  if (!allowEmpty && items.length === 0) {
     issues.push(`${path} must contain at least one non-empty string`);
   }
 
@@ -219,7 +238,12 @@ export function parseCanonicalStory(content: string | null | undefined): Canonic
             ? dependencies.independent_story_check
             : "fail",
         depends_on: isRecord(dependencies)
-          ? readStringArray(dependencies.depends_on, "story.dependencies_and_sequencing.depends_on", issues)
+          ? readStringArrayWithOptions(
+              dependencies.depends_on,
+              "story.dependencies_and_sequencing.depends_on",
+              issues,
+              { optional: true, allowEmpty: true },
+            )
           : [],
         unblock_condition: isRecord(dependencies)
           ? readString(

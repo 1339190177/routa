@@ -556,7 +556,8 @@ struct CanonicalStoryInvestCheck {
 
 #[derive(Debug, Deserialize)]
 struct CanonicalStoryDependencies {
-    depends_on: Option<Vec<String>>,
+    #[serde(rename = "depends_on")]
+    _depends_on: Option<Vec<String>>,
     unblock_condition: Option<String>,
 }
 
@@ -802,10 +803,7 @@ pub fn build_task_story_readiness_checks(task: &Task) -> TaskStoryReadinessCheck
         .ok()
         .flatten()
         .and_then(|story| story.story.dependencies_and_sequencing)
-        .is_some_and(|dependencies| {
-            !normalize_text(dependencies.unblock_condition.as_deref()).is_empty()
-                && dependencies.depends_on.is_some()
-        });
+        .is_some_and(|dependencies| !normalize_text(dependencies.unblock_condition.as_deref()).is_empty());
     let objective = format!(
         "{}\n{}",
         normalize_text(Some(task.objective.as_str())),
@@ -922,5 +920,129 @@ pub fn task_lane_session_status_as_str(status: &TaskLaneSessionStatus) -> &'stat
         TaskLaneSessionStatus::Failed => "failed",
         TaskLaneSessionStatus::TimedOut => "timed_out",
         TaskLaneSessionStatus::Transitioned => "transitioned",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn build_task_with_objective(objective: &str) -> Task {
+        Task::new(
+            "task-1".to_string(),
+            "Test task".to_string(),
+            objective.to_string(),
+            "workspace-1".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn canonical_story_dependencies_declared_accepts_empty_depends_on() {
+        let task = build_task_with_objective(
+            r#"```yaml
+story:
+  version: 1
+  language: en
+  title: Example
+  problem_statement: Why this matters
+  user_value: Value delivered
+  acceptance_criteria:
+    - id: AC1
+      text: First criterion
+      testable: true
+    - id: AC2
+      text: Second criterion
+      testable: true
+  constraints_and_affected_areas:
+    - src/example.ts
+  dependencies_and_sequencing:
+    independent_story_check: pass
+    depends_on: []
+    unblock_condition: Ready to start now.
+  out_of_scope:
+    - None
+  invest:
+    independent:
+      status: pass
+      reason: why
+    negotiable:
+      status: pass
+      reason: why
+    valuable:
+      status: pass
+      reason: why
+    estimable:
+      status: pass
+      reason: why
+    small:
+      status: pass
+      reason: why
+    testable:
+      status: pass
+      reason: why
+```"#,
+        );
+
+        let checks = build_task_story_readiness_checks(&task);
+
+        assert!(checks.dependencies_declared);
+    }
+
+    #[test]
+    fn canonical_story_dependencies_declared_accepts_missing_depends_on() {
+        let task = build_task_with_objective(
+            r#"```yaml
+story:
+  version: 1
+  language: en
+  title: Example
+  problem_statement: Why this matters
+  user_value: Value delivered
+  acceptance_criteria:
+    - id: AC1
+      text: First criterion
+      testable: true
+    - id: AC2
+      text: Second criterion
+      testable: true
+  constraints_and_affected_areas:
+    - src/example.ts
+  dependencies_and_sequencing:
+    independent_story_check: pass
+    unblock_condition: Ready to start now.
+  out_of_scope:
+    - None
+  invest:
+    independent:
+      status: pass
+      reason: why
+    negotiable:
+      status: pass
+      reason: why
+    valuable:
+      status: pass
+      reason: why
+    estimable:
+      status: pass
+      reason: why
+    small:
+      status: pass
+      reason: why
+    testable:
+      status: pass
+      reason: why
+```"#,
+        );
+
+        let checks = build_task_story_readiness_checks(&task);
+
+        assert!(checks.dependencies_declared);
     }
 }

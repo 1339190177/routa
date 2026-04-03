@@ -114,8 +114,7 @@ story:
     - 受影响模块或文件
   dependencies_and_sequencing:
     independent_story_check: pass
-    depends_on:
-      - none
+    depends_on: []
     unblock_condition: 可立即开始 / 需要什么前置条件
   out_of_scope:
     - 明确不做什么
@@ -202,8 +201,7 @@ story:
     - impacted file or module
   dependencies_and_sequencing:
     independent_story_check: pass
-    depends_on:
-      - none
+    depends_on: []
     unblock_condition: Ready now / prerequisite required
   out_of_scope:
     - explicitly excluded work

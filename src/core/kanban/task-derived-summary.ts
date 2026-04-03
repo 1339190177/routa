@@ -177,8 +177,7 @@ export function buildTaskStoryReadinessChecks(task: Task): TaskStoryReadiness["c
   const objective = `${normalizeText(task.objective)}\n${normalizeText(task.comment)}`;
   const parseResult = parseCanonicalStory(task.objective);
   const hasCanonicalDependencies = Boolean(
-    parseResult.story?.story.dependencies_and_sequencing.unblock_condition.trim()
-      && parseResult.story.story.dependencies_and_sequencing.depends_on,
+    parseResult.story?.story.dependencies_and_sequencing.unblock_condition.trim(),
   );
   const scope = normalizeText(task.scope);
   const acceptanceCriteria = normalizeItems(task.acceptanceCriteria);
