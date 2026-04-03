@@ -350,6 +350,8 @@ mod tests {
     use std::path::Path;
     use std::sync::{Arc, Mutex};
 
+    type ProgressEvent = (String, String, Option<String>);
+
     #[test]
     fn test_dry_run() {
         let runner = ShellRunner::new(Path::new("/tmp"));
@@ -504,8 +506,7 @@ mod tests {
     fn test_run_batch_emits_progress_events() {
         let runner = ShellRunner::new(Path::new("/tmp"));
         let metrics = vec![Metric::new("a", "echo a"), Metric::new("b", "echo b")];
-        let events: Arc<Mutex<Vec<(String, String, Option<String>)>>> =
-            Arc::new(Mutex::new(Vec::new()));
+        let events: Arc<Mutex<Vec<ProgressEvent>>> = Arc::new(Mutex::new(Vec::new()));
 
         let events_clone = events.clone();
         let cb: ProgressCallback = Box::new(move |event, metric, result| {

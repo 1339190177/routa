@@ -575,12 +575,9 @@ fn normalize_items(values: Option<&Vec<String>>) -> Vec<String> {
 }
 
 fn summarize_statuses(statuses: &[TaskAnalysisStatus]) -> TaskAnalysisStatus {
-    if statuses.iter().any(|status| *status == TaskAnalysisStatus::Fail) {
+    if statuses.contains(&TaskAnalysisStatus::Fail) {
         TaskAnalysisStatus::Fail
-    } else if statuses
-        .iter()
-        .any(|status| *status == TaskAnalysisStatus::Warning)
-    {
+    } else if statuses.contains(&TaskAnalysisStatus::Warning) {
         TaskAnalysisStatus::Warning
     } else {
         TaskAnalysisStatus::Pass
