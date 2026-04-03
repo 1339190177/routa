@@ -67,9 +67,9 @@ metrics:
   - required: 创建/状态更新/不可变字段保护
   - evidence:
 - [ ] store: session
-  - status: `TODO`
-  - required: 任务归属、状态持久化、过期清理策略
-  - evidence:
+  - status: `VERIFIED`
+  - required: 任务归属、状态持久化、DB → local JSONL fallback、session transcript/history hydration
+  - evidence: `src/core/__tests__/session-history.test.ts`, `src/client/components/chat-panel/hooks/__tests__/use-chat-messages.test.tsx`, `src/app/api/acp/__tests__/route.test.ts`, `src/app/api/sessions/[sessionId]/history/__tests__/route.test.ts`
 - [ ] workflow/规则映射层
   - status: `TODO`
   - required: 列表/状态转换边界、冲突校验（如同 ID/非法状态）
@@ -146,3 +146,14 @@ metrics:
 - 新增：`crates/routa-server/tests/rust_api_end_to_end.rs`
 - 入口文件：`docs/fitness/rust-api-test.md`
 - 下一个批次：补 `acp / agents / sessions / polling` 用例与健康检查场景
+
+## Session Persistence / Recovery Characterization
+
+- `src/core/__tests__/session-history.test.ts`
+  - 锁定 session history 在 in-memory session metadata 缺失时，仍会使用本地 session 记录里的 `cwd` 去读取 DB / JSONL 历史。
+- `src/client/components/chat-panel/hooks/__tests__/use-chat-messages.test.tsx`
+  - 锁定 active session 首屏 transcript hydration 的重试行为，避免 live pane 因首轮空历史而停在空白态。
+- `src/app/api/acp/__tests__/route.test.ts`
+  - 锁定 `session/prompt` 在内存 store 丢失 session 时，仍能用本地持久化 metadata 重建 session。
+- `src/app/api/sessions/[sessionId]/history/__tests__/route.test.ts`
+  - 锁定 `/api/sessions/:id/history` 的 API fallback，确保 session metadata 与历史读取链路一致。
