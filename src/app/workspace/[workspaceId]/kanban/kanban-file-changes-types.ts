@@ -31,3 +31,9 @@ export interface KanbanRepoChanges {
   files: KanbanFileChangeItem[];
   error?: string;
 }
+
+export interface KanbanTaskChanges extends KanbanRepoChanges {
+  source: "worktree" | "repo";
+  worktreeId?: string;
+  worktreePath?: string;
+}

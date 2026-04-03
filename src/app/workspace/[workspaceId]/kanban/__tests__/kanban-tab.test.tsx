@@ -5,6 +5,18 @@ import { KanbanCardDetail } from "../kanban-card-detail";
 import type { KanbanBoardInfo, TaskInfo } from "../../types";
 import type { UseAcpActions, UseAcpState } from "@/client/hooks/use-acp";
 
+const { desktopAwareFetch } = vi.hoisted(() => ({
+  desktopAwareFetch: vi.fn(),
+}));
+
+vi.mock("@/client/utils/diagnostics", async () => {
+  const actual = await vi.importActual<typeof import("@/client/utils/diagnostics")>("@/client/utils/diagnostics");
+  return {
+    ...actual,
+    desktopAwareFetch,
+  };
+});
+
 vi.mock("@/client/components/repo-picker", () => ({
   RepoPicker: () => <div data-testid="repo-picker-mock" />,
 }));
@@ -43,6 +55,10 @@ function createTask(id: string, title: string, overrides: Partial<TaskInfo> = {}
     ...overrides,
   };
 }
+
+afterEach(() => {
+  desktopAwareFetch.mockReset();
+});
 
 describe("KanbanTab delete flow", () => {
   afterEach(() => {
@@ -201,6 +217,88 @@ describe("KanbanTab stale worktree recovery", () => {
     await waitFor(() => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("KanbanCardDetail changes tab", () => {
+  it("loads task-scoped worktree changes when the changes tab opens", async () => {
+    desktopAwareFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        changes: {
+          codebaseId: "codebase-1",
+          repoPath: "/tmp/repos/main",
+          label: "feature-worktree",
+          branch: "task/story-one",
+          status: {
+            clean: false,
+            ahead: 0,
+            behind: 0,
+            modified: 1,
+            untracked: 1,
+          },
+          files: [
+            { path: "src/app.tsx", status: "modified" },
+            { path: "notes/todo.md", status: "untracked" },
+          ],
+          source: "worktree",
+          worktreeId: "wt-1",
+          worktreePath: "/tmp/worktrees/story-one",
+        },
+      }),
+    } as Response);
+
+    render(
+      <KanbanCardDetail
+        task={createTask("task-1", "Story One", {
+          worktreeId: "wt-1",
+          codebaseIds: ["codebase-1"],
+        })}
+        availableProviders={[]}
+        specialists={[]}
+        specialistLanguage="en"
+        codebases={[{
+          id: "codebase-1",
+          workspaceId: "workspace-1",
+          repoPath: "/tmp/repos/main",
+          branch: "main",
+          isDefault: true,
+          sourceType: "github",
+          sourceUrl: "https://example.com/repo.git",
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        allCodebaseIds={["codebase-1"]}
+        worktreeCache={{
+          "wt-1": {
+            id: "wt-1",
+            codebaseId: "codebase-1",
+            workspaceId: "workspace-1",
+            worktreePath: "/tmp/worktrees/story-one",
+            branch: "task/story-one",
+            baseBranch: "main",
+            status: "active",
+            createdAt: "2025-01-01T00:00:00.000Z",
+            updatedAt: "2025-01-01T00:00:00.000Z",
+          },
+        }}
+        onPatchTask={vi.fn(async () => createTask("task-1", "Story One"))}
+        onRetryTrigger={vi.fn()}
+        onDelete={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+
+    await waitFor(() => {
+      expect(desktopAwareFetch).toHaveBeenCalledWith("/api/tasks/task-1/changes", { cache: "no-store" });
+    });
+
+    expect(await screen.findByText("feature-worktree")).toBeTruthy();
+    expect(screen.getByText("/tmp/worktrees/story-one")).toBeTruthy();
+    expect(screen.getByText("src/app.tsx")).toBeTruthy();
+    expect(screen.getByText("notes/todo.md")).toBeTruthy();
   });
 });
 

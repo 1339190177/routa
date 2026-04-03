@@ -28,6 +28,15 @@ use crate::state::AppState;
 
 const KANBAN_HAPPY_PATH_COLUMN_ORDER: [&str; 5] = ["backlog", "todo", "dev", "review", "done"];
 
+fn repo_label_from_path(repo_path: &str) -> String {
+    repo_path
+        .trim_end_matches(std::path::MAIN_SEPARATOR)
+        .rsplit(std::path::MAIN_SEPARATOR)
+        .find(|segment| !segment.is_empty())
+        .unwrap_or(repo_path)
+        .to_string()
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TaskArtifactSummary {
@@ -120,6 +129,7 @@ pub fn router() -> Router<AppState> {
             "/{id}/artifacts",
             get(list_task_artifacts).post(create_task_artifact),
         )
+        .route("/{id}/changes", get(get_task_changes))
         .route("/{id}/runs", get(list_task_runs))
         .route("/{id}/status", axum::routing::post(update_task_status))
         .route("/ready", get(find_ready_tasks))
@@ -192,6 +202,95 @@ async fn list_task_runs(
 
     Ok(Json(serde_json::json!({
         "runs": build_task_run_ledger(&state, &task).await?
+    })))
+}
+
+async fn get_task_changes(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, ServerError> {
+    let task = state
+        .task_store
+        .get(&id)
+        .await?
+        .ok_or_else(|| ServerError::NotFound(format!("Task {} not found", id)))?;
+
+    let worktree = match task.worktree_id.as_ref() {
+        Some(worktree_id) => state.worktree_store.get(worktree_id).await?,
+        None => None,
+    };
+    let codebase_id = worktree
+        .as_ref()
+        .map(|item| item.codebase_id.clone())
+        .or_else(|| task.codebase_ids.first().cloned())
+        .unwrap_or_default();
+    let codebase = if codebase_id.is_empty() {
+        None
+    } else {
+        state.codebase_store.get(&codebase_id).await?
+    };
+    let repo_path = worktree
+        .as_ref()
+        .map(|item| item.worktree_path.clone())
+        .or_else(|| codebase.as_ref().map(|item| item.repo_path.clone()))
+        .unwrap_or_default();
+    let label = codebase
+        .as_ref()
+        .and_then(|item| item.label.clone())
+        .unwrap_or_else(|| repo_label_from_path(if repo_path.is_empty() { "repo" } else { &repo_path }));
+    let branch = codebase
+        .as_ref()
+        .and_then(|item| item.branch.clone())
+        .unwrap_or_else(|| "unknown".to_string());
+    let source = if worktree.is_some() { "worktree" } else { "repo" };
+
+    if repo_path.is_empty() {
+        return Ok(Json(serde_json::json!({
+            "changes": {
+                "codebaseId": codebase_id,
+                "repoPath": "",
+                "label": label,
+                "branch": branch,
+                "status": { "clean": true, "ahead": 0, "behind": 0, "modified": 0, "untracked": 0 },
+                "files": [],
+                "source": source,
+                "worktreeId": worktree.as_ref().map(|item| item.id.clone()),
+                "worktreePath": worktree.as_ref().map(|item| item.worktree_path.clone()),
+                "error": "No repository or worktree linked to this task",
+            }
+        })));
+    }
+
+    if !crate::git::is_git_repository(&repo_path) {
+        return Ok(Json(serde_json::json!({
+            "changes": {
+                "codebaseId": codebase_id,
+                "repoPath": repo_path,
+                "label": label,
+                "branch": branch,
+                "status": { "clean": true, "ahead": 0, "behind": 0, "modified": 0, "untracked": 0 },
+                "files": [],
+                "source": source,
+                "worktreeId": worktree.as_ref().map(|item| item.id.clone()),
+                "worktreePath": worktree.as_ref().map(|item| item.worktree_path.clone()),
+                "error": "Repository is missing or not a git repository",
+            }
+        })));
+    }
+
+    let changes = crate::git::get_repo_changes(&repo_path);
+    Ok(Json(serde_json::json!({
+        "changes": {
+            "codebaseId": codebase_id,
+            "repoPath": repo_path,
+            "label": label,
+            "branch": changes.branch,
+            "status": changes.status,
+            "files": changes.files,
+            "source": source,
+            "worktreeId": worktree.as_ref().map(|item| item.id.clone()),
+            "worktreePath": worktree.as_ref().map(|item| item.worktree_path.clone()),
+        }
     })))
 }
 

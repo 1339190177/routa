@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
+import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import { Select } from "@/client/components/select";
 import {
   type EffectiveTaskAutomation,
@@ -15,6 +16,8 @@ import { getKanbanAutomationSteps, type KanbanAutomationStep } from "@/core/mode
 import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import { KanbanCardActivityPanel } from "./kanban-card-activity";
 import { KanbanDescriptionEditor } from "./kanban-description-editor";
+import { FileRow, formatChangeSummary } from "./kanban-file-changes-panel";
+import type { KanbanTaskChanges } from "./kanban-file-changes-types";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import { CanonicalStoryRenderer } from "@/client/components/markdown/canonical-story-renderer";
 import {
@@ -61,7 +64,7 @@ export interface KanbanCardDetailProps {
 }
 
 const ROLE_OPTIONS = ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"];
-type KanbanDetailTabId = "description" | "readiness" | "execution" | "evidence" | "runs";
+type KanbanDetailTabId = "description" | "readiness" | "execution" | "changes" | "evidence" | "runs";
 
 function getProviderName(providerId: string | undefined, availableProviders: AcpProviderInfo[]): string {
   if (!providerId) return "Workspace default";
@@ -170,6 +173,8 @@ export function KanbanCardDetail({
   const [isDescriptionEditing, setIsDescriptionEditing] = useState(false);
   const [isTestCasesEditing, setIsTestCasesEditing] = useState(false);
   const [tabSelections, setTabSelections] = useState<Partial<Record<string, KanbanDetailTabId>>>({});
+  const [taskChanges, setTaskChanges] = useState<KanbanTaskChanges | null>(null);
+  const [taskChangesLoading, setTaskChangesLoading] = useState(false);
   const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
   const testCasesInputRef = useRef<HTMLTextAreaElement | null>(null);
   const displayedTitle = isTitleEditing ? editTitle : task.title;
@@ -211,9 +216,61 @@ export function KanbanCardDetail({
     { id: "description" as const, label: t.kanbanDetail.description },
     { id: "readiness" as const, label: t.kanbanDetail.storyReadiness },
     { id: "execution" as const, label: t.kanbanDetail.execution },
+    { id: "changes" as const, label: t.kanbanDetail.changes },
     { id: "evidence" as const, label: t.kanbanDetail.evidenceBundle },
     ...(!splitMode ? [{ id: "runs" as const, label: t.kanbanDetail.runs }] : []),
   ];
+
+  useEffect(() => {
+    setTaskChanges(null);
+    setTaskChangesLoading(false);
+  }, [task.id]);
+
+  useEffect(() => {
+    if (activeTab !== "changes" || taskChanges) {
+      return;
+    }
+
+    let cancelled = false;
+    setTaskChangesLoading(true);
+
+    void (async () => {
+      try {
+        const response = await desktopAwareFetch(`/api/tasks/${encodeURIComponent(task.id)}/changes`, {
+          cache: "no-store",
+        });
+        const payload = await response.json() as { changes?: KanbanTaskChanges; error?: string };
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(payload.error ?? t.common.unavailable);
+        }
+        setTaskChanges(payload.changes ?? null);
+      } catch (error) {
+        if (!cancelled) {
+          setTaskChanges({
+            codebaseId: "",
+            repoPath: "",
+            label: t.kanbanDetail.repo,
+            branch: "unknown",
+            status: { clean: true, ahead: 0, behind: 0, modified: 0, untracked: 0 },
+            files: [],
+            source: "repo",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setTaskChangesLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, task.id, taskChanges, t.common.unavailable, t.kanbanDetail.repo]);
 
   return (
     <div className="h-full w-full overflow-y-auto">
@@ -452,6 +509,20 @@ export function KanbanCardDetail({
                 compact={compactMode}
               />
             </>
+          )}
+
+          {activeTab === "changes" && (
+            <DetailSection
+              title={t.kanbanDetail.changes}
+              description={compactMode ? undefined : t.kanbanDetail.changesHint}
+              compact={compactMode}
+            >
+              <TaskChangesPanel
+                changes={taskChanges}
+                loading={taskChangesLoading}
+                compact={compactMode}
+              />
+            </DetailSection>
           )}
 
           {activeTab === "evidence" && (
@@ -774,6 +845,96 @@ function EvidenceBundlePanel({
           compact={compact}
         />
       </div>
+    </div>
+  );
+}
+
+function TaskChangesPanel({
+  changes,
+  loading = false,
+  compact = false,
+}: {
+  changes: KanbanTaskChanges | null;
+  loading?: boolean;
+  compact?: boolean;
+}) {
+  const { t } = useTranslation();
+
+  if (loading) {
+    return (
+      <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
+        {t.kanbanDetail.loadingChanges}
+      </div>
+    );
+  }
+
+  if (!changes) {
+    return (
+      <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
+        {t.kanbanDetail.noRepoChanges}
+      </div>
+    );
+  }
+
+  const sourceLabel = changes.source === "worktree" ? t.kanbanDetail.worktreeSource : t.kanbanDetail.repoSource;
+  const stateLabel = changes.error
+    ? t.common.unavailable
+    : changes.status.clean
+      ? t.kanbanDetail.clean
+      : t.kanbanDetail.dirty;
+  const scopePath = changes.worktreePath ?? changes.repoPath;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {changes.label}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="rounded-full border border-slate-200 px-2 py-0.5 dark:border-slate-700">
+              {sourceLabel}
+            </span>
+            <span className="rounded-full border border-slate-200 px-2 py-0.5 dark:border-slate-700">
+              @{changes.branch}
+            </span>
+            <span>{formatChangeSummary(changes, t.kanban)}</span>
+          </div>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+          changes.error
+            ? "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+            : changes.status.clean
+              ? "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+        }`}>
+          {stateLabel}
+        </span>
+      </div>
+
+      {scopePath && (
+        <InlineSummary
+          label={sourceLabel}
+          value={scopePath}
+          compact={compact}
+        />
+      )}
+
+      {changes.error ? (
+        <div className="border-l-2 border-rose-400/80 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/70 dark:text-rose-300">
+          {changes.error}
+        </div>
+      ) : changes.files.length === 0 ? (
+        <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
+          {changes.repoPath ? t.kanbanDetail.noChanges : t.kanbanDetail.noRepoChanges}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {changes.files.map((file) => (
+            <FileRow key={`${changes.codebaseId}-${file.path}-${file.status}`} file={file} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

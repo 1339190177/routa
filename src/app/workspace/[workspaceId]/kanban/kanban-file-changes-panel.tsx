@@ -14,8 +14,18 @@ interface KanbanFileChangesPanelProps {
 }
 
 const PREVIEW_FILE_LIMIT = 4;
+type ChangeSummaryCopy = Pick<
+  Record<"unavailable" | "clean" | "modifiedCount" | "untrackedCount", string>,
+  "unavailable" | "clean" | "modifiedCount" | "untrackedCount"
+>;
+const DEFAULT_CHANGE_SUMMARY_COPY: ChangeSummaryCopy = {
+  unavailable: "Unavailable",
+  clean: "Clean",
+  modifiedCount: "{count} modified",
+  untrackedCount: "{count} untracked",
+};
 
-const STATUS_BADGE: Record<KanbanFileChangeStatus, { short: string; className: string }> = {
+export const STATUS_BADGE: Record<KanbanFileChangeStatus, { short: string; className: string }> = {
   modified: { short: "M", className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" },
   added: { short: "A", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" },
   deleted: { short: "D", className: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300" },
@@ -26,12 +36,15 @@ const STATUS_BADGE: Record<KanbanFileChangeStatus, { short: string; className: s
   conflicted: { short: "U", className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
 };
 
-function formatChangeSummary(repo: KanbanRepoChanges, t: Record<string, string>): string {
-  if (repo.error) return t.unavailable;
-  if (repo.status.clean) return t.clean;
+export function formatChangeSummary(
+  repo: KanbanRepoChanges,
+  copy: ChangeSummaryCopy = DEFAULT_CHANGE_SUMMARY_COPY,
+): string {
+  if (repo.error) return copy.unavailable;
+  if (repo.status.clean) return copy.clean;
   const segments: string[] = [];
-  if (repo.status.modified > 0) segments.push(t.modifiedCount.replace("{count}", String(repo.status.modified)));
-  if (repo.status.untracked > 0) segments.push(t.untrackedCount.replace("{count}", String(repo.status.untracked)));
+  if (repo.status.modified > 0) segments.push(copy.modifiedCount.replace("{count}", String(repo.status.modified)));
+  if (repo.status.untracked > 0) segments.push(copy.untrackedCount.replace("{count}", String(repo.status.untracked)));
   return segments.join(" · ");
 }
 
@@ -41,7 +54,8 @@ export function getKanbanFileChangesSummary(repos: KanbanRepoChanges[]) {
   return { changedRepos, changedFiles };
 }
 
-function FileRow({ file }: { file: KanbanFileChangeItem }) {
+export function FileRow({ file }: { file: KanbanFileChangeItem }) {
+  const { t } = useTranslation();
   const badge = STATUS_BADGE[file.status];
 
   return (
@@ -55,7 +69,7 @@ function FileRow({ file }: { file: KanbanFileChangeItem }) {
         </div>
         {file.previousPath && (
           <div className="truncate text-[10px] text-slate-400 dark:text-slate-500" title={file.previousPath}>
-            from {file.previousPath}
+            {t.kanban.fromPath} {file.previousPath}
           </div>
         )}
       </div>
@@ -105,7 +119,7 @@ export function KanbanFileChangesPanel({
                   onClick={onClose}
                   className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-[#191c28]"
                 >
-                  Hide
+                  {t.kanban.hide}
                 </button>
               </div>
             </div>
