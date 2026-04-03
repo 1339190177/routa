@@ -181,6 +181,7 @@ export interface TaskInfo {
   githubState?: string;
   githubSyncedAt?: string;
   lastSyncError?: string;
+  isPullRequest?: boolean;
   sessionId?: string;
   dependencies?: string[];
   parallelGroup?: string;
@@ -233,6 +234,22 @@ export interface GitHubIssueListItemInfo {
   labels: string[];
   assignees: string[];
   updatedAt?: string;
+}
+
+export interface GitHubPRListItemInfo {
+  id: string;
+  number: number;
+  title: string;
+  body?: string;
+  url: string;
+  state: "open" | "closed";
+  labels: string[];
+  assignees: string[];
+  updatedAt?: string;
+  draft: boolean;
+  mergedAt?: string;
+  headRef: string;
+  baseRef: string;
 }
 
 export interface KanbanColumnAutomationInfo {

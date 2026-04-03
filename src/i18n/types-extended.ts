@@ -1038,6 +1038,16 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     updatedAt: string;
     stateOpen: string;
     stateClosed: string;
+    tabIssues: string;
+    tabPulls: string;
+    loadingPulls: string;
+    loadPullsFailed: string;
+    noPulls: string;
+    pullsLoaded: string;
+    importPullsFailed: string;
+    draftBadge: string;
+    mergedBadge: string;
+    branchInfo: string;
   };
 
   // Kanban background agents

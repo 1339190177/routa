@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import { useTranslation } from "@/i18n";
-import type { GitHubIssueListItemInfo, TaskInfo } from "../types";
+import type { GitHubIssueListItemInfo, GitHubPRListItemInfo, TaskInfo } from "../types";
+
+type ImportTab = "issues" | "pulls";
 
 interface GitHubIssuesResponse {
   repo: string;
@@ -15,6 +17,15 @@ interface GitHubIssuesResponse {
   issues: GitHubIssueListItemInfo[];
 }
 
+interface GitHubPullsResponse {
+  repo: string;
+  codebase?: {
+    id: string;
+    label: string;
+  };
+  pulls: GitHubPRListItemInfo[];
+}
+
 interface KanbanGitHubImportModalProps {
   show: boolean;
   workspaceId: string;
@@ -22,6 +33,7 @@ interface KanbanGitHubImportModalProps {
   tasks: TaskInfo[];
   onClose: () => void;
   onImport: (codebaseId: string, issues: GitHubIssueListItemInfo[], repo: string) => Promise<void>;
+  onImportPulls: (codebaseId: string, pulls: GitHubPRListItemInfo[], repo: string) => Promise<void>;
 }
 
 function formatIssueTimestamp(value?: string): string | null {
@@ -38,10 +50,13 @@ export function KanbanGitHubImportModal({
   tasks,
   onClose,
   onImport,
+  onImportPulls,
 }: KanbanGitHubImportModalProps) {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<ImportTab>("issues");
   const [selectedCodebaseId, setSelectedCodebaseId] = useState<string>("");
-  const [payload, setPayload] = useState<GitHubIssuesResponse | null>(null);
+  const [issuesPayload, setIssuesPayload] = useState<GitHubIssuesResponse | null>(null);
+  const [pullsPayload, setPullsPayload] = useState<GitHubPullsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
@@ -65,25 +80,41 @@ export function KanbanGitHubImportModal({
 
     void (async () => {
       try {
-        const response = await desktopAwareFetch(
-          `/api/github/issues?workspaceId=${encodeURIComponent(workspaceId)}&codebaseId=${encodeURIComponent(selectedCodebaseId)}`,
-          { cache: "no-store", signal: controller.signal },
-        );
-        const data = await response.json().catch(() => ({}));
-        if (controller.signal.aborted) return;
-        if (!response.ok) {
-          throw new Error(typeof data?.error === "string" ? data.error : t.kanbanImport.loadFailed);
+        if (activeTab === "issues") {
+          const response = await desktopAwareFetch(
+            `/api/github/issues?workspaceId=${encodeURIComponent(workspaceId)}&codebaseId=${encodeURIComponent(selectedCodebaseId)}`,
+            { cache: "no-store", signal: controller.signal },
+          );
+          const data = await response.json().catch(() => ({}));
+          if (controller.signal.aborted) return;
+          if (!response.ok) {
+            throw new Error(typeof data?.error === "string" ? data.error : t.kanbanImport.loadFailed);
+          }
+          setIssuesPayload({
+            repo: typeof data?.repo === "string" ? data.repo : "",
+            codebase: data?.codebase,
+            issues: Array.isArray(data?.issues) ? data.issues as GitHubIssueListItemInfo[] : [],
+          });
+        } else {
+          const response = await desktopAwareFetch(
+            `/api/github/pulls?workspaceId=${encodeURIComponent(workspaceId)}&codebaseId=${encodeURIComponent(selectedCodebaseId)}`,
+            { cache: "no-store", signal: controller.signal },
+          );
+          const data = await response.json().catch(() => ({}));
+          if (controller.signal.aborted) return;
+          if (!response.ok) {
+            throw new Error(typeof data?.error === "string" ? data.error : t.kanbanImport.loadPullsFailed);
+          }
+          setPullsPayload({
+            repo: typeof data?.repo === "string" ? data.repo : "",
+            codebase: data?.codebase,
+            pulls: Array.isArray(data?.pulls) ? data.pulls as GitHubPRListItemInfo[] : [],
+          });
         }
-        setPayload({
-          repo: typeof data?.repo === "string" ? data.repo : "",
-          codebase: data?.codebase,
-          issues: Array.isArray(data?.issues) ? data.issues as GitHubIssueListItemInfo[] : [],
-        });
         setSelectedIssueIds([]);
       } catch (fetchError) {
         if (controller.signal.aborted) return;
-        setPayload(null);
-        setError(fetchError instanceof Error ? fetchError.message : t.kanbanImport.loadFailed);
+        setError(fetchError instanceof Error ? fetchError.message : (activeTab === "issues" ? t.kanbanImport.loadFailed : t.kanbanImport.loadPullsFailed));
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -92,33 +123,68 @@ export function KanbanGitHubImportModal({
     })();
 
     return () => controller.abort();
-  }, [reloadNonce, selectedCodebaseId, show, t.kanbanImport.loadFailed, workspaceId]);
+  }, [activeTab, reloadNonce, selectedCodebaseId, show, t.kanbanImport.loadFailed, t.kanbanImport.loadPullsFailed, workspaceId]);
+
+  // Reset selection when tab changes
+  useEffect(() => {
+    setSelectedIssueIds([]);
+    setError(null);
+  }, [activeTab]);
 
   const importedIssueKeys = useMemo(
     () => new Set(
       tasks
-        .filter((task) => task.githubRepo && task.githubNumber !== undefined)
+        .filter((task) => task.githubRepo && task.githubNumber !== undefined && !task.isPullRequest)
+        .map((task) => `${task.githubRepo}#${task.githubNumber}`),
+    ),
+    [tasks],
+  );
+
+  const importedPRKeys = useMemo(
+    () => new Set(
+      tasks
+        .filter((task) => task.githubRepo && task.githubNumber !== undefined && task.isPullRequest)
         .map((task) => `${task.githubRepo}#${task.githubNumber}`),
     ),
     [tasks],
   );
 
   const selectableIssues = useMemo(() => {
-    const repo = payload?.repo ?? "";
-    return (payload?.issues ?? []).map((issue) => ({
+    const repo = issuesPayload?.repo ?? "";
+    return (issuesPayload?.issues ?? []).map((issue) => ({
       issue,
       imported: importedIssueKeys.has(`${repo}#${issue.number}`),
     }));
-  }, [importedIssueKeys, payload?.issues, payload?.repo]);
+  }, [importedIssueKeys, issuesPayload?.issues, issuesPayload?.repo]);
+
+  const selectablePulls = useMemo(() => {
+    const repo = pullsPayload?.repo ?? "";
+    return (pullsPayload?.pulls ?? []).map((pull) => ({
+      pull,
+      imported: importedPRKeys.has(`${repo}#${pull.number}`),
+    }));
+  }, [importedPRKeys, pullsPayload?.pulls, pullsPayload?.repo]);
 
   const selectableIssueIds = useMemo(
     () => selectableIssues.filter((item) => !item.imported).map((item) => item.issue.id),
     [selectableIssues],
   );
 
+  const selectablePullIds = useMemo(
+    () => selectablePulls.filter((item) => !item.imported).map((item) => item.pull.id),
+    [selectablePulls],
+  );
+
+  const currentRepo = activeTab === "issues" ? issuesPayload?.repo : pullsPayload?.repo;
+  const currentCount = activeTab === "issues" ? selectableIssues.length : selectablePulls.length;
+  const currentSelectableIds = activeTab === "issues" ? selectableIssueIds : selectablePullIds;
+  const currentLoadingText = activeTab === "issues" ? t.kanbanImport.loading : t.kanbanImport.loadingPulls;
+  const currentNoItemsText = activeTab === "issues" ? t.kanbanImport.noIssues : t.kanbanImport.noPulls;
+  const currentItemsLoadedText = activeTab === "issues" ? t.kanbanImport.issuesLoaded : t.kanbanImport.pullsLoaded;
+
   if (!show) return null;
 
-  const canImport = Boolean(selectedIssueIds.length > 0 && selectedCodebaseId && payload?.repo);
+  const canImport = Boolean(selectedIssueIds.length > 0 && selectedCodebaseId && currentRepo);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -130,6 +196,29 @@ export function KanbanGitHubImportModal({
           </div>
           <button onClick={onClose} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
             {t.common.close}
+          </button>
+        </div>
+
+        <div className="mb-4 flex gap-1 border-b border-slate-200 dark:border-slate-700">
+          <button
+            type="button"
+            onClick={() => setActiveTab("issues")}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === "issues"
+              ? "border-b-2 border-amber-500 text-amber-600 dark:text-amber-400"
+              : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            {t.kanbanImport.tabIssues}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("pulls")}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === "pulls"
+              ? "border-b-2 border-purple-500 text-purple-600 dark:text-purple-400"
+              : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            {t.kanbanImport.tabPulls}
           </button>
         </div>
 
@@ -148,9 +237,9 @@ export function KanbanGitHubImportModal({
               </option>
             ))}
           </select>
-          {payload?.repo && (
+          {currentRepo && (
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-[#191c28] dark:text-slate-300">
-              {payload.repo}
+              {currentRepo}
             </span>
           )}
           <button
@@ -164,13 +253,13 @@ export function KanbanGitHubImportModal({
 
         <div className="mb-3 flex items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
           <div>
-            {selectableIssues.length > 0 ? `${selectableIssues.length} ${t.kanbanImport.issuesLoaded}` : t.kanbanImport.noIssues}
+            {currentCount > 0 ? `${currentCount} ${currentItemsLoadedText}` : currentNoItemsText}
           </div>
-          {selectableIssueIds.length > 0 && (
+          {currentSelectableIds.length > 0 && (
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setSelectedIssueIds(selectableIssueIds)}
+                onClick={() => setSelectedIssueIds(currentSelectableIds)}
                 className="text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
               >
                 {t.kanbanImport.selectAll}
@@ -189,84 +278,176 @@ export function KanbanGitHubImportModal({
         <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700">
           {loading ? (
             <div className="flex h-40 items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-              {t.kanbanImport.loading}
+              {currentLoadingText}
             </div>
           ) : error ? (
             <div className="flex h-40 items-center justify-center px-6 text-center text-sm text-rose-600 dark:text-rose-400">
               {error}
             </div>
-          ) : selectableIssues.length === 0 ? (
-            <div className="flex h-40 items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400">
-              {t.kanbanImport.noIssues}
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-200 dark:divide-slate-700">
-              {selectableIssues.map(({ issue, imported }) => {
-                const checked = selectedIssueIds.includes(issue.id);
-                const updatedAtLabel = formatIssueTimestamp(issue.updatedAt);
-                return (
-                  <label
-                    key={issue.id}
-                    className={`flex gap-3 px-4 py-3 transition-colors ${imported
-                      ? "bg-slate-50/70 dark:bg-[#161925]"
-                      : "hover:bg-slate-50 dark:hover:bg-[#161925]"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={imported || submitting}
-                      onChange={(event) => {
-                        setSelectedIssueIds((current) => {
-                          if (event.target.checked) {
-                            return [...current, issue.id];
-                          }
-                          return current.filter((id) => id !== issue.id);
-                        });
-                      }}
-                      className="mt-1 h-4 w-4 rounded border-slate-300"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <a
-                          href={issue.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm font-medium text-slate-900 hover:text-amber-600 dark:text-slate-100 dark:hover:text-amber-300"
-                        >
-                          #{issue.number} {issue.title}
-                        </a>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${issue.state === "open"
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                          : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                        }`}>
-                          {issue.state === "open" ? t.kanbanImport.stateOpen : t.kanbanImport.stateClosed}
-                        </span>
-                        {imported && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
-                            {t.kanbanImport.alreadyImported}
+          ) : activeTab === "issues" ? (
+            selectableIssues.length === 0 ? (
+              <div className="flex h-40 items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                {t.kanbanImport.noIssues}
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                {selectableIssues.map(({ issue, imported }) => {
+                  const checked = selectedIssueIds.includes(issue.id);
+                  const updatedAtLabel = formatIssueTimestamp(issue.updatedAt);
+                  return (
+                    <label
+                      key={issue.id}
+                      className={`flex gap-3 px-4 py-3 transition-colors ${imported
+                        ? "bg-slate-50/70 dark:bg-[#161925]"
+                        : "hover:bg-slate-50 dark:hover:bg-[#161925]"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={imported || submitting}
+                        onChange={(event) => {
+                          setSelectedIssueIds((current) => {
+                            if (event.target.checked) {
+                              return [...current, issue.id];
+                            }
+                            return current.filter((id) => id !== issue.id);
+                          });
+                        }}
+                        className="mt-1 h-4 w-4 rounded border-slate-300"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <a
+                            href={issue.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-medium text-slate-900 hover:text-amber-600 dark:text-slate-100 dark:hover:text-amber-300"
+                          >
+                            #{issue.number} {issue.title}
+                          </a>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${issue.state === "open"
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                            : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          }`}>
+                            {issue.state === "open" ? t.kanbanImport.stateOpen : t.kanbanImport.stateClosed}
                           </span>
+                          {imported && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                              {t.kanbanImport.alreadyImported}
+                            </span>
+                          )}
+                        </div>
+                        {issue.body && (
+                          <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
+                            {issue.body}
+                          </p>
                         )}
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                          {issue.labels.map((label) => (
+                            <span key={label} className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-[#191c28]">
+                              {label}
+                            </span>
+                          ))}
+                          {issue.assignees.length > 0 && <span>{issue.assignees.join(", ")}</span>}
+                          {updatedAtLabel && <span>{t.kanbanImport.updatedAt} {updatedAtLabel}</span>}
+                        </div>
                       </div>
-                      {issue.body && (
-                        <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
-                          {issue.body}
-                        </p>
-                      )}
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                        {issue.labels.map((label) => (
-                          <span key={label} className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-[#191c28]">
-                            {label}
-                          </span>
-                        ))}
-                        {issue.assignees.length > 0 && <span>{issue.assignees.join(", ")}</span>}
-                        {updatedAtLabel && <span>{t.kanbanImport.updatedAt} {updatedAtLabel}</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            )
+          ) : (
+            selectablePulls.length === 0 ? (
+              <div className="flex h-40 items-center justify-center px-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                {t.kanbanImport.noPulls}
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                {selectablePulls.map(({ pull, imported }) => {
+                  const checked = selectedIssueIds.includes(pull.id);
+                  const updatedAtLabel = formatIssueTimestamp(pull.updatedAt);
+                  return (
+                    <label
+                      key={pull.id}
+                      className={`flex gap-3 px-4 py-3 transition-colors ${imported
+                        ? "bg-slate-50/70 dark:bg-[#161925]"
+                        : "hover:bg-slate-50 dark:hover:bg-[#161925]"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={imported || submitting}
+                        onChange={(event) => {
+                          setSelectedIssueIds((current) => {
+                            if (event.target.checked) {
+                              return [...current, pull.id];
+                            }
+                            return current.filter((id) => id !== pull.id);
+                          });
+                        }}
+                        className="mt-1 h-4 w-4 rounded border-slate-300"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <a
+                            href={pull.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-medium text-slate-900 hover:text-purple-600 dark:text-slate-100 dark:hover:text-purple-300"
+                          >
+                            #{pull.number} {pull.title}
+                          </a>
+                          {pull.draft && (
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                              {t.kanbanImport.draftBadge}
+                            </span>
+                          )}
+                          {pull.mergedAt ? (
+                            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700 dark:bg-purple-900/20 dark:text-purple-300">
+                              {t.kanbanImport.mergedBadge}
+                            </span>
+                          ) : (
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${pull.state === "open"
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                              : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            }`}>
+                              {pull.state === "open" ? t.kanbanImport.stateOpen : t.kanbanImport.stateClosed}
+                            </span>
+                          )}
+                          {imported && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                              {t.kanbanImport.alreadyImported}
+                            </span>
+                          )}
+                        </div>
+                        {pull.body && (
+                          <p className="mt-1 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
+                            {pull.body}
+                          </p>
+                        )}
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                          {pull.headRef && pull.baseRef && (
+                            <span className="font-mono">
+                              {pull.headRef} {t.kanbanImport.branchInfo} {pull.baseRef}
+                            </span>
+                          )}
+                          {pull.labels.map((label) => (
+                            <span key={label} className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-[#191c28]">
+                              {label}
+                            </span>
+                          ))}
+                          {pull.assignees.length > 0 && <span>{pull.assignees.join(", ")}</span>}
+                          {updatedAtLabel && <span>{t.kanbanImport.updatedAt} {updatedAtLabel}</span>}
+                        </div>
                       </div>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
 
@@ -280,23 +461,33 @@ export function KanbanGitHubImportModal({
           </button>
           <button
             onClick={async () => {
-              if (!canImport || !payload?.repo) return;
-              const issues = selectableIssues
-                .filter(({ issue, imported }) => !imported && selectedIssueIds.includes(issue.id))
-                .map(({ issue }) => issue);
+              if (!canImport || !currentRepo) return;
               setSubmitting(true);
               setError(null);
               try {
-                await onImport(selectedCodebaseId, issues, payload.repo);
+                if (activeTab === "issues") {
+                  const issues = selectableIssues
+                    .filter(({ issue, imported }) => !imported && selectedIssueIds.includes(issue.id))
+                    .map(({ issue }) => issue);
+                  await onImport(selectedCodebaseId, issues, currentRepo);
+                } else {
+                  const pulls = selectablePulls
+                    .filter(({ pull, imported }) => !imported && selectedIssueIds.includes(pull.id))
+                    .map(({ pull }) => pull);
+                  await onImportPulls(selectedCodebaseId, pulls, currentRepo);
+                }
                 onClose();
               } catch (importError) {
-                setError(importError instanceof Error ? importError.message : t.kanbanImport.importFailed);
+                setError(importError instanceof Error ? importError.message : (activeTab === "issues" ? t.kanbanImport.importFailed : t.kanbanImport.importPullsFailed));
               } finally {
                 setSubmitting(false);
               }
             }}
             disabled={!canImport || submitting}
-            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+            className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${activeTab === "pulls"
+              ? "bg-purple-500 hover:bg-purple-600"
+              : "bg-amber-500 hover:bg-amber-600"
+            }`}
           >
             {submitting ? t.kanbanImport.importing : t.kanbanImport.importSelected}
           </button>

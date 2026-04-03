@@ -1026,6 +1026,16 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     updatedAt: "Updated",
     stateOpen: "Open",
     stateClosed: "Closed",
+    tabIssues: "Issues",
+    tabPulls: "Pull Requests",
+    loadingPulls: "Loading GitHub pull requests…",
+    loadPullsFailed: "Failed to load GitHub pull requests.",
+    noPulls: "No pull requests available to import.",
+    pullsLoaded: "pull requests loaded",
+    importPullsFailed: "Failed to import GitHub pull requests.",
+    draftBadge: "Draft",
+    mergedBadge: "Merged",
+    branchInfo: "→",
   },
 
   kanbanBgAgent: {

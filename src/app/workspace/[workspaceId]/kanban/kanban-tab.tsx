@@ -9,6 +9,7 @@ import {
 } from "@/core/kanban/effective-task-automation";
 import type {
   GitHubIssueListItemInfo,
+  GitHubPRListItemInfo,
   KanbanAgentPromptHandler,
   KanbanBoardInfo,
   SessionInfo,
@@ -1061,6 +1062,59 @@ export function KanbanTab({
     }
   }
 
+  async function importGitHubPulls(
+    codebaseId: string,
+    pulls: GitHubPRListItemInfo[],
+    repo: string,
+  ) {
+    const importedTasks: TaskInfo[] = [];
+
+    for (const pull of pulls) {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          boardId: selectedBoardId ?? defaultBoardId,
+          columnId: "backlog",
+          title: pull.title,
+          objective: pull.body?.trim() || pull.title,
+          labels: pull.labels,
+          codebaseIds: [codebaseId],
+          githubId: pull.id,
+          githubNumber: pull.number,
+          githubUrl: pull.url,
+          githubRepo: repo,
+          githubState: pull.state,
+          isPullRequest: true,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          typeof data?.error === "string"
+            ? data.error
+            : `Failed to import GitHub pull request #${pull.number}`,
+        );
+      }
+      importedTasks.push(data.task as TaskInfo);
+    }
+
+    if (importedTasks.length > 0) {
+      setLocalTasks((current) => {
+        const next = [...current];
+        const existingIds = new Set(current.map((task) => task.id));
+        for (const task of importedTasks) {
+          if (!existingIds.has(task.id)) {
+            next.push(task);
+          }
+        }
+        return next;
+      });
+      onRefresh();
+    }
+  }
+
   async function retryTaskTrigger(taskId: string) {
     const updated = await patchTask(taskId, { retryTrigger: true });
     if (updated.triggerSessionId) {
@@ -1284,6 +1338,7 @@ export function KanbanTab({
         tasks={localTasks}
         onClose={() => setShowGitHubImportModal(false)}
         onImport={importGitHubIssues}
+        onImportPulls={importGitHubPulls}
       />
 
       <KanbanTaskDetailOverlay

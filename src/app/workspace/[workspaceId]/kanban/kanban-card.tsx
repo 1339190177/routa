@@ -284,9 +284,12 @@ export function KanbanCard({
                 target="_blank"
                 rel="noreferrer"
                 onClick={stopCardInteraction}
-                className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-200 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:ring-amber-900/40"
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset hover:opacity-80 ${task.isPullRequest
+                  ? "bg-purple-50 text-purple-700 ring-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:ring-purple-900/40"
+                  : "bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:ring-amber-900/40"
+                }`}
               >
-                Issue #{task.githubNumber}
+                {task.isPullRequest ? `PR #${task.githubNumber}` : `Issue #${task.githubNumber}`}
               </a>
             ) : null}
             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${sessionTone}`}>

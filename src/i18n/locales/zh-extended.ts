@@ -1026,6 +1026,16 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     updatedAt: "更新于",
     stateOpen: "开放",
     stateClosed: "关闭",
+    tabIssues: "Issues",
+    tabPulls: "Pull Requests",
+    loadingPulls: "正在加载 GitHub pull requests…",
+    loadPullsFailed: "加载 GitHub pull requests 失败。",
+    noPulls: "没有可导入的 pull request。",
+    pullsLoaded: "个 pull request",
+    importPullsFailed: "导入 GitHub pull requests 失败。",
+    draftBadge: "草稿",
+    mergedBadge: "已合并",
+    branchInfo: "→",
   },
 
   kanbanBgAgent: {

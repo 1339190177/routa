@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
     githubUrl,
     githubRepo,
     githubState,
+    isPullRequest,
   } = body;
 
   const normalizedTitle = typeof title === "string" ? title : "";
@@ -187,6 +188,7 @@ export async function POST(request: NextRequest) {
   const normalizedGitHubState = typeof githubState === "string" && githubState.trim()
     ? githubState.trim()
     : undefined;
+  const normalizedIsPullRequest = isPullRequest === true ? true : undefined;
   const hasImportedGitHubIssue = Boolean(normalizedGitHubRepo && normalizedGitHubNumber !== undefined);
 
   if (!normalizedTitle) {
@@ -294,6 +296,7 @@ export async function POST(request: NextRequest) {
     githubState: nextGitHubState,
     githubSyncedAt,
     lastSyncError,
+    isPullRequest: normalizedIsPullRequest,
     codebaseIds: normalizedCodebaseIds,
   });
 
@@ -398,6 +401,7 @@ async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSyste
     githubState: task.githubState,
     githubSyncedAt: task.githubSyncedAt?.toISOString(),
     lastSyncError: task.lastSyncError,
+    isPullRequest: task.isPullRequest,
     dependencies: task.dependencies,
     parallelGroup: task.parallelGroup,
     workspaceId: task.workspaceId,

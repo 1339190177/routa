@@ -29,6 +29,22 @@ export interface GitHubIssueListItem {
   updatedAt?: string;
 }
 
+export interface GitHubPRListItem {
+  id: string;
+  number: number;
+  title: string;
+  body?: string;
+  url: string;
+  state: "open" | "closed";
+  labels: string[];
+  assignees: string[];
+  updatedAt?: string;
+  draft: boolean;
+  mergedAt?: string;
+  headRef: string;
+  baseRef: string;
+}
+
 function getGitHubToken(): string | undefined {
   return process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 }
@@ -190,6 +206,67 @@ export async function createGitHubIssue(repo: string, payload: GitHubIssuePayloa
     state: data.state,
     repo,
   };
+}
+
+export async function listGitHubPulls(
+  repo: string,
+  options?: { state?: "open" | "closed" | "all"; perPage?: number },
+): Promise<GitHubPRListItem[]> {
+  const token = getGitHubToken();
+  const state = options?.state ?? "open";
+  const perPage = Math.max(1, Math.min(options?.perPage ?? 50, 100));
+
+  const searchParams = new URLSearchParams({
+    state,
+    sort: "updated",
+    direction: "desc",
+    per_page: String(perPage),
+  });
+
+  const response = await fetchGitHub(`https://api.github.com/repos/${repo}/pulls?${searchParams.toString()}`, {
+    method: "GET",
+    headers: getHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub pull request list failed: ${response.status} ${await response.text()}`);
+  }
+
+  const data = await response.json() as Array<{
+    id: number;
+    number: number;
+    title: string;
+    body?: string | null;
+    html_url: string;
+    state: "open" | "closed";
+    updated_at?: string;
+    merged_at?: string | null;
+    draft?: boolean;
+    labels?: Array<{ name?: string | null }>;
+    assignees?: Array<{ login?: string | null }>;
+    head?: { ref?: string };
+    base?: { ref?: string };
+  }>;
+
+  return data.map((item) => ({
+    id: String(item.id),
+    number: item.number,
+    title: item.title,
+    body: item.body ?? undefined,
+    url: item.html_url,
+    state: item.state,
+    labels: (item.labels ?? [])
+      .map((label) => label.name?.trim())
+      .filter((label): label is string => Boolean(label)),
+    assignees: (item.assignees ?? [])
+      .map((assignee) => assignee.login?.trim())
+      .filter((assignee): assignee is string => Boolean(assignee)),
+    updatedAt: item.updated_at,
+    draft: item.draft ?? false,
+    mergedAt: item.merged_at ?? undefined,
+    headRef: item.head?.ref ?? "",
+    baseRef: item.base?.ref ?? "",
+  }));
 }
 
 export async function updateGitHubIssue(repo: string, issueNumber: number, payload: GitHubIssuePayload): Promise<void> {

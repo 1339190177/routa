@@ -196,6 +196,7 @@ export interface Task {
   githubState?: string;
   githubSyncedAt?: Date;
   lastSyncError?: string;
+  isPullRequest?: boolean;
   dependencies: string[];
   parallelGroup?: string;
   workspaceId: string;
@@ -243,6 +244,7 @@ export function createTask(params: {
   githubState?: string;
   githubSyncedAt?: Date;
   lastSyncError?: string;
+  isPullRequest?: boolean;
   status?: TaskStatus;
   codebaseIds?: string[];
   worktreeId?: string;
@@ -278,6 +280,7 @@ export function createTask(params: {
     githubState: params.githubState,
     githubSyncedAt: params.githubSyncedAt,
     lastSyncError: params.lastSyncError,
+    isPullRequest: params.isPullRequest,
     dependencies: params.dependencies ?? [],
     parallelGroup: params.parallelGroup,
     workspaceId: params.workspaceId,
