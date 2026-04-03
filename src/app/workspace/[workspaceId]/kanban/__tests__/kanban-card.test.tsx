@@ -119,4 +119,33 @@ describe("KanbanCard artifact gate status", () => {
     expect(screen.getByText("Live Session")).toBeTruthy();
     expect(screen.getByTestId("kanban-card-live-tail").textContent).toContain("Updated parser;");
   });
+
+  it("renders imported pull requests with a PR badge", () => {
+    render(
+      <KanbanCard
+        task={buildTask({
+          githubNumber: 289,
+          githubUrl: "https://github.com/acme/platform/pull/289",
+          isPullRequest: true,
+        })}
+        boardColumns={boardColumns}
+        specialistLanguage="en"
+        availableProviders={[]}
+        specialists={[]}
+        codebases={[]}
+        allCodebaseIds={[]}
+        worktreeCache={{}}
+        onDragStart={vi.fn()}
+        onOpenDetail={vi.fn()}
+        onDelete={vi.fn()}
+        onPatchTask={vi.fn()}
+        onRetryTrigger={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "PR #289" }).getAttribute("href"),
+    ).toBe("https://github.com/acme/platform/pull/289");
+  });
 });

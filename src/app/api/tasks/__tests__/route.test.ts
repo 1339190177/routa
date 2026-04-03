@@ -338,6 +338,50 @@ describe("/api/tasks GET", () => {
     });
   });
 
+  it("imports an existing GitHub pull request and preserves the PR flag", async () => {
+    system.codebaseStore.get.mockResolvedValue({
+      id: "codebase-1",
+      repoPath: "/repos/acme/platform",
+      sourceUrl: "https://github.com/acme/platform",
+    });
+    taskStore.listByWorkspace.mockResolvedValue([]);
+
+    const response = await POST(new NextRequest("http://localhost/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        title: "Imported PR",
+        objective: "Imported from GitHub pull requests",
+        workspaceId: "workspace-1",
+        codebaseIds: ["codebase-1"],
+        githubId: "pr-289",
+        githubNumber: 289,
+        githubUrl: "https://github.com/acme/platform/pull/289",
+        githubRepo: "acme/platform",
+        githubState: "open",
+        isPullRequest: true,
+      }),
+      headers: { "Content-Type": "application/json" },
+    }));
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(createGitHubIssue).not.toHaveBeenCalled();
+    expect(data.task).toMatchObject({
+      githubId: "pr-289",
+      githubNumber: 289,
+      githubRepo: "acme/platform",
+      githubUrl: "https://github.com/acme/platform/pull/289",
+      githubState: "open",
+      isPullRequest: true,
+      codebaseIds: ["codebase-1"],
+    });
+    expect(taskStore.save).toHaveBeenCalledWith(expect.objectContaining({
+      githubNumber: 289,
+      githubRepo: "acme/platform",
+      isPullRequest: true,
+    }));
+  });
+
   it("rejects importing the same GitHub issue twice into one workspace", async () => {
     taskStore.listByWorkspace.mockResolvedValue([
       createTask({

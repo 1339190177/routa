@@ -97,6 +97,7 @@ export const tasks = sqliteTable("tasks", {
   githubState: text("github_state"),
   githubSyncedAt: integer("github_synced_at", { mode: "timestamp_ms" }),
   lastSyncError: text("last_sync_error"),
+  isPullRequest: integer("is_pull_request", { mode: "boolean" }),
   dependencies: text("dependencies", { mode: "json" }).$type<string[]>().default([]),
   parallelGroup: text("parallel_group"),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

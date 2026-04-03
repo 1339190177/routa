@@ -230,6 +230,7 @@ export async function PATCH(
   if (body.githubRepo !== undefined) nextTask.githubRepo = body.githubRepo;
   if (body.githubState !== undefined) nextTask.githubState = body.githubState;
   if (body.lastSyncError !== undefined) nextTask.lastSyncError = body.lastSyncError;
+  if (body.isPullRequest !== undefined) nextTask.isPullRequest = body.isPullRequest === true ? true : undefined;
   if (body.dependencies !== undefined) nextTask.dependencies = body.dependencies;
   if (body.parallelGroup !== undefined) nextTask.parallelGroup = body.parallelGroup;
   if (body.completionSummary !== undefined) nextTask.completionSummary = body.completionSummary;

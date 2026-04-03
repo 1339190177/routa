@@ -95,6 +95,7 @@ export const tasks = pgTable("tasks", {
   githubState: text("github_state"),
   githubSyncedAt: timestamp("github_synced_at", { withTimezone: true }),
   lastSyncError: text("last_sync_error"),
+  isPullRequest: boolean("is_pull_request"),
   dependencies: jsonb("dependencies").$type<string[]>().default([]),
   parallelGroup: text("parallel_group"),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
