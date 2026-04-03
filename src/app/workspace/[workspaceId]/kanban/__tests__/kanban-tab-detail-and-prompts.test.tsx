@@ -240,7 +240,7 @@ describe("KanbanCardDetail repository health", () => {
     expect(screen.queryByText(/Current run failed on Codex:/i)).toBeNull();
   });
 
-  it("renders A2A lane targets and remote task metadata in the execution panel", () => {
+  it("renders legacy A2A lane targets as ACP summaries in the execution panel", () => {
     const a2aBoard: KanbanBoardInfo = {
       ...board,
       columns: [
@@ -300,7 +300,7 @@ describe("KanbanCardDetail repository health", () => {
       />
     );
 
-    expect(screen.getAllByText(/A2A · GATE · Remote Review · agents\.example\.com\/reviewer\/agent-card\.json · skill:review/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Workspace default · GATE · Remote Review/i).length).toBeGreaterThan(0);
   });
 
   it("syncs detail fields when the same task updates in the background", async () => {
