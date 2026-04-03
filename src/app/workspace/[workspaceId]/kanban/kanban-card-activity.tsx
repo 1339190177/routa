@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { ArrowRightLeft, Check, CircleHelp, LoaderCircle, OctagonX, X } from "lucide-react";
 import { useTranslation } from "@/i18n";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
@@ -65,6 +66,35 @@ function getTaskRunStatusClasses(status: TaskRunInfo["status"] | undefined): str
     default:
       return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
   }
+}
+
+function renderTaskRunStatusIcon(status: TaskRunInfo["status"] | undefined) {
+  switch (status) {
+    case "completed":
+      return <Check className="h-3.5 w-3.5" />;
+    case "failed":
+      return <X className="h-3.5 w-3.5" />;
+    case "timed_out":
+      return <OctagonX className="h-3.5 w-3.5" />;
+    case "running":
+      return <LoaderCircle className="h-3.5 w-3.5 animate-spin" />;
+    case "transitioned":
+      return <ArrowRightLeft className="h-3.5 w-3.5" />;
+    default:
+      return <CircleHelp className="h-3.5 w-3.5" />;
+  }
+}
+
+function TaskRunStatusIcon({ status }: { status: TaskRunInfo["status"] | undefined }) {
+  return (
+    <span
+      className={`inline-flex h-5 w-5 items-center justify-center rounded-md ${getTaskRunStatusClasses(status)}`}
+      aria-label={formatTaskRunStatus(status)}
+      title={formatTaskRunStatus(status)}
+    >
+      {renderTaskRunStatusIcon(status)}
+    </span>
+  );
 }
 
 function formatAgentCardTarget(agentCardUrl?: string): string | undefined {
@@ -328,9 +358,7 @@ export function KanbanCardActivityBar({
               >
                 <span className="truncate font-semibold">{laneLabel}</span>
                 {run && (
-                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${getTaskRunStatusClasses(run.status)}`}>
-                    {formatTaskRunStatus(run.status)}
-                  </span>
+                  <TaskRunStatusIcon status={run.status} />
                 )}
                 <span className={`rounded-none border border-slate-200 px-1.5 py-0.5 text-[10px] ${
                   active
