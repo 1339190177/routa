@@ -41,7 +41,7 @@
       "Bash(python3 /Users/phodal/ai/routa-js/tools/ppt-template/.agents/skills/docx/render_docx.py /tmp/test_docx_skill.docx --output_dir /tmp/render_out)",
       "Bash(/usr/local/bin/python3 /Users/phodal/ai/routa-js/tools/ppt-template/.agents/skills/docx/render_docx.py /tmp/test_docx_skill.docx --output_dir /tmp/render_out)",
       "Bash(/usr/local/bin/python3 /Users/phodal/ai/routa-js/tools/ppt-template/.agents/skills/slide/container_tools/render_slides.py /tmp/test_ppt_skill.pptx --output_dir /tmp/slide_render_out)",
-      "Bash(git push:*)"
+      "Bash(zip:*)"
     ]
   }
 }
