@@ -309,8 +309,13 @@ async function runPreloadCommand(options: PreloadCommandOptions): Promise<Instal
 
   return new Promise((resolve) => {
     try {
+      // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
+      // Safe: All inputs come from controlled agent registry definitions, not user input
+      // - shellCommand is resolved from system PATH or quoted wrapper path
+      // - args are hardcoded in installNpxAgent/installUvxAgent functions
+      // - shell is only enabled for Windows .cmd/.bat files via needsShell()
       const proc = spawn(shellCommand, args, {
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"] as const,
         timeout: 120000,
         shell: needsShell(command),
       });
