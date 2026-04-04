@@ -70,6 +70,7 @@
     "api:schema:validate:json": "node --import tsx scripts/fitness/validate-openapi-schema.ts --json",
     "api:schema:report": "node --import tsx scripts/fitness/validate-openapi-schema.ts --report",
     "git:coauthor:stats": "node --import tsx scripts/coauthor-stats.ts",
+    "git:doctor": "node scripts/check-git-control-plane.js",
     "hooks:sync": "node --import tsx tools/hook-runtime/src/install.ts",
     "hook:prepush": "node --import tsx tools/hook-runtime/src/cli.ts",
     "codemod:lucide-icons": "node --import tsx tools/codemods/replace-inline-svg-with-lucide.ts --write",

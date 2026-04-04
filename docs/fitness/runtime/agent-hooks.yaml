@@ -25,11 +25,12 @@ hooks:
     description: "Validate prompt against security policy"
 
   - event: SessionStart
+    matcher: "startup|resume"
     type: command
-    command: "echo session-start >> /tmp/agent-audit.log"
+    command: "node scripts/check-git-control-plane.js"
     timeout: 5
     blocking: false
-    description: "Audit log for session start"
+    description: "Warn when git hook or commit identity control-plane drift is detected"
 
   - event: Stop
     type: command

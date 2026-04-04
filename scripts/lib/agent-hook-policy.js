@@ -15,7 +15,9 @@ const PROTECTED_PATH_RULES = [
   { label: "docs/fitness/runtime/agent-hooks.yaml", pattern: /^docs\/fitness\/runtime\/agent-hooks\.yaml$/ },
   { label: "scripts/check-tool-permission.js", pattern: /^scripts\/check-tool-permission\.js$/ },
   { label: "scripts/check-prompt-policy.js", pattern: /^scripts\/check-prompt-policy\.js$/ },
+  { label: "scripts/check-git-control-plane.js", pattern: /^scripts\/check-git-control-plane\.js$/ },
   { label: "scripts/lib/agent-hook-policy.js", pattern: /^scripts\/lib\/agent-hook-policy\.js$/ },
+  { label: "scripts/lib/git-control-plane-doctor.js", pattern: /^scripts\/lib\/git-control-plane-doctor\.js$/ },
   { label: "tools/hook-runtime/src/install.ts", pattern: /^tools\/hook-runtime\/src\/install\.ts$/ },
 ];
 
@@ -178,7 +180,7 @@ function detectProtectedPathShellMutation(command) {
   }
 
   const protectedPathPattern =
-    "(?:\\.git\\/config|\\.git\\/hooks(?:\\/|\\b)|\\.husky(?:\\/|\\b)|\\.codex\\/hooks\\.json|\\.claude\\/settings(?:\\.local)?\\.json|\\.qoder\\/settings\\.json|docs\\/fitness\\/runtime\\/agent-hooks\\.yaml|scripts\\/check-tool-permission\\.js|scripts\\/check-prompt-policy\\.js|scripts\\/lib\\/agent-hook-policy\\.js|tools\\/hook-runtime\\/src\\/install\\.ts)";
+    "(?:\\.git\\/config|\\.git\\/hooks(?:\\/|\\b)|\\.husky(?:\\/|\\b)|\\.codex\\/hooks\\.json|\\.claude\\/settings(?:\\.local)?\\.json|\\.qoder\\/settings\\.json|docs\\/fitness\\/runtime\\/agent-hooks\\.yaml|scripts\\/check-tool-permission\\.js|scripts\\/check-prompt-policy\\.js|scripts\\/check-git-control-plane\\.js|scripts\\/lib\\/agent-hook-policy\\.js|scripts\\/lib\\/git-control-plane-doctor\\.js|tools\\/hook-runtime\\/src\\/install\\.ts)";
 
   const redirectPattern = new RegExp(`(?:>|>>)\\s*['"]?${protectedPathPattern}`, "i");
   const teePattern = new RegExp(`\\btee\\b[^\\n\\r]*['"]?${protectedPathPattern}`, "i");
