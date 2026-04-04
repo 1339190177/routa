@@ -78,24 +78,9 @@ async function createAutomationSession(
 ): Promise<string | null> {
   const task = await system.taskStore.get(params.cardId);
   if (!task?.boardId) return null;
-  const workspace = await system.workspaceStore.get(task.workspaceId);
-  const autoProviderId = getKanbanAutoProvider(workspace?.metadata, task.boardId);
-  const resolvedStep = resolveKanbanAutomationStep(params.step, resolveKanbanSpecialist, {
-    autoProviderId,
-  });
   const result = await enqueueKanbanTaskSession(system, {
     task,
     expectedColumnId: params.columnId,
-    mutateTask: (nextTask) => {
-      nextTask.assignedProvider =
-        resolvedStep?.providerId ?? task.assignedProvider ?? "opencode";
-      nextTask.assignedRole =
-        resolvedStep?.role ?? task.assignedRole ?? "DEVELOPER";
-      nextTask.assignedSpecialistId =
-        resolvedStep?.specialistId ?? task.assignedSpecialistId;
-      nextTask.assignedSpecialistName =
-        resolvedStep?.specialistName ?? task.assignedSpecialistName;
-    },
     step: params.step,
     stepIndex: params.stepIndex,
     supervision: params.supervision,

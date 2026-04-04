@@ -1050,11 +1050,17 @@ function ExecutionSection({
     autoProviderId: selectedProvider ?? undefined,
   });
   const canRunTask = effectiveAutomation.canRun && task.columnId !== "done";
-  const hasCardOverride = Boolean(task.assignedProvider || task.assignedRole || task.assignedSpecialistId || task.assignedSpecialistName);
+  const hasCardOverride = effectiveAutomation.source === "card";
+  const overrideProviderValue = hasCardOverride ? task.assignedProvider ?? "" : "";
+  const overrideRoleValue = hasCardOverride ? task.assignedRole ?? "DEVELOPER" : "DEVELOPER";
+  const overrideSpecialistValue = hasCardOverride
+    ? getLanguageSpecificSpecialistId(task.assignedSpecialistId, specialistLanguage) ?? ""
+    : "";
   const usesSelectedProvider = Boolean(
-    !task.assignedProvider
+    !hasCardOverride
     && selectedProvider
-    && effectiveAutomation.transport !== "a2a",
+    && effectiveAutomation.transport !== "a2a"
+    && effectiveAutomation.providerSource === "auto",
   );
   const manualRunTarget = usesSelectedProvider
     ? formatEffectiveAutomationTarget(
@@ -1085,8 +1091,8 @@ function ExecutionSection({
   const failedRunProviderId = task.triggerSessionId
     ? sessionInfo?.sessionId === task.triggerSessionId
       ? sessionInfo.provider
-      : activeLaneSession?.provider ?? task.assignedProvider ?? (usesSelectedProvider ? selectedProvider ?? undefined : effectiveAutomation.providerId)
-    : task.assignedProvider ?? (usesSelectedProvider ? selectedProvider ?? undefined : effectiveAutomation.providerId);
+      : activeLaneSession?.provider ?? (hasCardOverride ? task.assignedProvider : undefined) ?? (usesSelectedProvider ? selectedProvider ?? undefined : effectiveAutomation.providerId)
+    : (hasCardOverride ? task.assignedProvider : undefined) ?? (usesSelectedProvider ? selectedProvider ?? undefined : effectiveAutomation.providerId);
   const failedRunLabel = activeLaneSession?.transport === "a2a" || effectiveAutomation.transport === "a2a"
     ? "current A2A run"
     : getProviderName(
@@ -1199,20 +1205,20 @@ function ExecutionSection({
         </summary>
         {hasCardOverride && (
           <div className={`mt-2 border-l-2 border-amber-300/80 px-2.5 py-2 text-xs text-amber-800 dark:border-amber-700/70 dark:text-amber-300 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
-            {task.assignedProvider
+            {overrideProviderValue
               ? `${t.kanbanDetail.cardHasExplicitOverride} ${getProviderName(task.assignedProvider, availableProviders)} · ${task.assignedRole ?? "DEVELOPER"} · ${cardSpecialist}`
               : t.kanbanDetail.noCardOverride}
           </div>
         )}
         <div className="mt-3 space-y-2.5">
           <Select
-            value={task.assignedProvider ?? ""}
+            value={overrideProviderValue}
             onChange={async (event) => {
               const newProvider = event.target.value || null;
               if (newProvider) {
                 await onPatchTask(task.id, {
                   assignedProvider: newProvider,
-                  assignedRole: task.assignedRole ?? "DEVELOPER",
+                  assignedRole: hasCardOverride ? task.assignedRole ?? "DEVELOPER" : "DEVELOPER",
                 });
                 onProviderChange?.(newProvider);
               } else {
@@ -1232,10 +1238,10 @@ function ExecutionSection({
               <option key={`${provider.id}-${provider.name}`} value={provider.id}>{provider.name}</option>
             ))}
           </Select>
-          {task.assignedProvider && (
+          {hasCardOverride && (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Select
-                value={task.assignedRole ?? "DEVELOPER"}
+                value={overrideRoleValue}
                 onChange={async (event) => {
                   await onPatchTask(task.id, { assignedRole: event.target.value });
                 }}
@@ -1244,13 +1250,13 @@ function ExecutionSection({
                 {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
               </Select>
               <Select
-                value={getLanguageSpecificSpecialistId(task.assignedSpecialistId, specialistLanguage) ?? ""}
+                value={overrideSpecialistValue}
                 onChange={async (event) => {
                   const specialist = findSpecialistById(specialists, event.target.value);
                   await onPatchTask(task.id, {
                     assignedSpecialistId: event.target.value || undefined,
                     assignedSpecialistName: specialist?.name,
-                    assignedRole: specialist?.role ?? task.assignedRole,
+                    assignedRole: specialist?.role ?? (hasCardOverride ? task.assignedRole : undefined),
                   });
                 }}
                 className={`w-full border border-slate-200/80 bg-transparent text-sm text-slate-700 outline-none focus:border-amber-400 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 ${compact ? "px-2.5 py-2" : "px-3 py-2"}`}

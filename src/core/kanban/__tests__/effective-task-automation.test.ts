@@ -164,6 +164,46 @@ describe("resolveEffectiveTaskAutomation", () => {
     expect(resolved.specialistName).toBe("Kanban Dev Executor");
   });
 
+  it("does not treat lane-resolved assignments as explicit card overrides", () => {
+    const resolved = resolveEffectiveTaskAutomation(
+      {
+        columnId: "backlog",
+        assignedProvider: "codex",
+        assignedRole: "ROUTA",
+        assignedSpecialistId: "backlog-refiner",
+        assignedSpecialistName: "Backlog Refiner",
+      },
+      [
+        {
+          id: "backlog",
+          automation: {
+            enabled: true,
+            steps: [{
+              id: "refine",
+              role: "ROUTA",
+              specialistId: "backlog-refiner",
+              specialistName: "Backlog Refiner",
+            }],
+          },
+        },
+      ],
+      (id) => id === "backlog-refiner"
+        ? {
+          name: "Backlog Refiner",
+          role: "ROUTA",
+          defaultProvider: "claude",
+        }
+        : undefined,
+      { autoProviderId: "codex" },
+    );
+
+    expect(resolved.source).toBe("lane");
+    expect(resolved.providerId).toBe("codex");
+    expect(resolved.providerSource).toBe("auto");
+    expect(resolved.role).toBe("ROUTA");
+    expect(resolved.specialistId).toBe("backlog-refiner");
+  });
+
   it("resolves a single step with specialist execution defaults", () => {
     const resolved = resolveKanbanAutomationStep(
       {

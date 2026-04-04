@@ -148,4 +148,39 @@ describe("KanbanCard artifact gate status", () => {
       screen.getByRole("link", { name: "PR #289" }).getAttribute("href"),
     ).toBe("https://github.com/acme/platform/pull/289");
   });
+
+  it("shows a run action when the lane is automated through the board auto provider", () => {
+    render(
+      <KanbanCard
+        task={buildTask({ columnId: "backlog" })}
+        boardColumns={[{
+          id: "backlog",
+          name: "Backlog",
+          position: 0,
+          stage: "backlog",
+          automation: {
+            enabled: true,
+            role: "ROUTA",
+            specialistId: "backlog-refiner",
+            specialistName: "Backlog Refiner",
+          },
+        }]}
+        specialistLanguage="en"
+        availableProviders={[{ id: "codex", name: "Codex", description: "Codex provider", command: "codex" }]}
+        specialists={[{ id: "backlog-refiner", name: "Backlog Refiner", role: "ROUTA", defaultProvider: "claude" }]}
+        codebases={[]}
+        allCodebaseIds={[]}
+        worktreeCache={{}}
+        autoProviderId="codex"
+        onDragStart={vi.fn()}
+        onOpenDetail={vi.fn()}
+        onDelete={vi.fn()}
+        onPatchTask={vi.fn()}
+        onRetryTrigger={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Run" })).toBeTruthy();
+  });
 });

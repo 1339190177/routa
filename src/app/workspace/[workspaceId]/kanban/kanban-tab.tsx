@@ -227,6 +227,14 @@ export function KanbanTab({
     () => resolveKanbanBoardAutoProviderId(board, acp?.selectedProvider),
     [acp?.selectedProvider, board],
   );
+  const activeTaskEffectiveAutomation = useMemo(
+    () => activeTask
+      ? resolveEffectiveTaskAutomation(activeTask, board?.columns ?? [], resolveSpecialist, {
+        autoProviderId: boardAutoProviderId,
+      })
+      : null,
+    [activeTask, board?.columns, boardAutoProviderId, resolveSpecialist],
+  );
   const queuedPositions = boardQueue?.queuedPositions ?? {};
 
   useEffect(() => {
@@ -455,7 +463,12 @@ export function KanbanTab({
   useEffect(() => {
     if (!activeTaskId) return;
     const task = localTasks.find((t) => t.id === activeTaskId);
-    if (task?.assignedProvider && acp?.setProvider) {
+    const effectiveAutomation = task
+      ? resolveEffectiveTaskAutomation(task, board?.columns ?? [], resolveSpecialist, {
+        autoProviderId: boardAutoProviderId,
+      })
+      : null;
+    if (task?.assignedProvider && effectiveAutomation?.source === "card" && acp?.setProvider) {
       acp.setProvider(task.assignedProvider);
     }
     // Only trigger when activeTaskId changes, not when acp changes
@@ -464,11 +477,11 @@ export function KanbanTab({
 
   useEffect(() => {
     if (!board?.id || !acp?.setProvider) return;
-    if (activeTask?.assignedProvider) return;
+    if (activeTaskEffectiveAutomation?.source === "card") return;
     if (board.autoProviderId && acp.selectedProvider !== board.autoProviderId) {
       acp.setProvider(board.autoProviderId);
     }
-  }, [acp, activeTask?.assignedProvider, board?.autoProviderId, board?.id]);
+  }, [acp, activeTaskEffectiveAutomation?.source, board?.autoProviderId, board?.id]);
 
   useEffect(() => {
     if (!activeTask) {
@@ -1267,8 +1280,9 @@ export function KanbanTab({
       })
       : undefined;
     const retryProviderId = task
-      && !task.assignedProvider
+      && effectiveAutomation?.source !== "card"
       && effectiveAutomation?.transport !== "a2a"
+      && effectiveAutomation?.providerSource === "auto"
       && boardAutoProviderId
       ? boardAutoProviderId
       : undefined;

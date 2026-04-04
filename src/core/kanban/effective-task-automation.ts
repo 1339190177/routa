@@ -63,6 +63,35 @@ function normalizeProviderId(providerId: string | null | undefined): string | un
   return normalized ? normalized : undefined;
 }
 
+function hasTaskAssignment(task: TaskAutomationFields): boolean {
+  return Boolean(
+    task.assignedProvider
+      || task.assignedRole
+      || task.assignedSpecialistId
+      || task.assignedSpecialistName,
+  );
+}
+
+function taskAssignmentMatchesStep(
+  task: TaskAutomationFields,
+  step: ResolvedKanbanAutomationStep,
+): boolean {
+  const assignedProvider = normalizeProviderId(task.assignedProvider);
+  if (assignedProvider && normalizeProviderId(step.providerId) !== assignedProvider) {
+    return false;
+  }
+  if (task.assignedRole && step.role !== task.assignedRole) {
+    return false;
+  }
+  if (task.assignedSpecialistId && step.specialistId !== task.assignedSpecialistId) {
+    return false;
+  }
+  if (task.assignedSpecialistName && step.specialistName !== task.assignedSpecialistName) {
+    return false;
+  }
+  return true;
+}
+
 export function resolveKanbanAutomationStep(
   step: KanbanAutomationStep | undefined,
   resolveSpecialist?: AutomationSpecialistResolver,
@@ -105,14 +134,14 @@ export function resolveEffectiveTaskAutomation(
   const currentColumnId = task.columnId ?? "backlog";
   const laneAutomation = boardColumns.find((column) => column.id === currentColumnId)?.automation;
   const enabledLaneAutomation = laneAutomation?.enabled ? laneAutomation : undefined;
-  const hasCardOverride = Boolean(
-    task.assignedProvider
-      || task.assignedRole
-      || task.assignedSpecialistId
-      || task.assignedSpecialistName,
-  );
+  const resolvedLaneSteps = getKanbanAutomationSteps(enabledLaneAutomation)
+    .map((step) => resolveKanbanAutomationStep(step, resolveSpecialist, options))
+    .filter((step): step is ResolvedKanbanAutomationStep => Boolean(step));
+  const hasTaskOverrideFields = hasTaskAssignment(task);
+  const hasCardOverride = hasTaskOverrideFields
+    && !resolvedLaneSteps.some((step) => taskAssignmentMatchesStep(task, step));
   const canRun = hasCardOverride || Boolean(enabledLaneAutomation);
-  const rawSteps = hasCardOverride
+  const cardOverrideSteps = hasCardOverride
     ? [{
       id: "card-override",
       providerId: task.assignedProvider,
@@ -120,12 +149,12 @@ export function resolveEffectiveTaskAutomation(
       specialistId: task.assignedSpecialistId,
       specialistName: task.assignedSpecialistName,
     }]
-    : getKanbanAutomationSteps(enabledLaneAutomation);
-  const steps = rawSteps
-    .map((step) => resolveKanbanAutomationStep(step, resolveSpecialist, options))
-    .filter((step): step is ResolvedKanbanAutomationStep => Boolean(step));
+        .map((step) => resolveKanbanAutomationStep(step, resolveSpecialist, options))
+        .filter((step): step is ResolvedKanbanAutomationStep => Boolean(step))
+    : resolvedLaneSteps;
+  const steps = cardOverrideSteps;
   const step = steps[0];
-  const providerSource: EffectiveAutomationProviderSource = normalizeProviderId(task.assignedProvider)
+  const providerSource: EffectiveAutomationProviderSource = hasCardOverride && normalizeProviderId(task.assignedProvider)
     ? "card"
     : step?.providerSource ?? "none";
 
@@ -137,11 +166,11 @@ export function resolveEffectiveTaskAutomation(
     stepIndex: step ? 0 : undefined,
     step,
     transport: step?.transport ?? (canRun ? "acp" : undefined),
-    providerId: normalizeProviderId(task.assignedProvider) ?? step?.providerId,
+    providerId: hasCardOverride ? normalizeProviderId(task.assignedProvider) ?? step?.providerId : step?.providerId,
     providerSource,
-    role: task.assignedRole ?? step?.role ?? (canRun ? "DEVELOPER" : undefined),
-    specialistId: task.assignedSpecialistId ?? step?.specialistId,
-    specialistName: task.assignedSpecialistName ?? step?.specialistName,
+    role: hasCardOverride ? task.assignedRole ?? step?.role ?? (canRun ? "DEVELOPER" : undefined) : step?.role ?? (canRun ? "DEVELOPER" : undefined),
+    specialistId: hasCardOverride ? task.assignedSpecialistId ?? step?.specialistId : step?.specialistId,
+    specialistName: hasCardOverride ? task.assignedSpecialistName ?? step?.specialistName : step?.specialistName,
     agentCardUrl: step?.agentCardUrl,
     skillId: step?.skillId,
     authConfigId: step?.authConfigId,

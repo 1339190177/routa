@@ -4,6 +4,7 @@ import { useState, type DragEvent } from "react";
 import { useTranslation } from "@/i18n";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
+import { resolveEffectiveTaskAutomation } from "@/core/kanban/effective-task-automation";
 import { formatArtifactLabel, resolveKanbanTransitionArtifacts } from "@/core/kanban/transition-artifacts";
 import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import {
@@ -13,6 +14,7 @@ import {
   KANBAN_SPECIALIST_LANGUAGE_LABELS,
   type KanbanSpecialistLanguage,
 } from "./kanban-specialist-language";
+import { createKanbanSpecialistResolver } from "./kanban-card-session-utils";
 import { GripVertical, Trash2 } from "lucide-react";
 
 
@@ -21,6 +23,7 @@ interface SpecialistOption {
   name: string;
   role: string;
   displayName?: string;
+  defaultProvider?: string;
 }
 
 export interface KanbanCardProps {
@@ -34,6 +37,7 @@ export interface KanbanCardProps {
   codebases: CodebaseData[];
   allCodebaseIds: string[];
   worktreeCache: Record<string, WorktreeInfo>;
+  autoProviderId?: string;
   queuePosition?: number;
   onDragStart: () => void;
   onOpenDetail: () => void;
@@ -155,6 +159,7 @@ export function KanbanCard({
   codebases,
   allCodebaseIds,
   worktreeCache,
+  autoProviderId,
   queuePosition,
   onDragStart,
   onOpenDetail,
@@ -165,13 +170,22 @@ export function KanbanCard({
 }: KanbanCardProps) {
   const { t } = useTranslation();
   const sessionStatus = linkedSession?.acpStatus;
-  const canRetry = Boolean(task.assignedProvider) && (
+  const resolveSpecialist = createKanbanSpecialistResolver(specialists);
+  const effectiveAutomation = resolveEffectiveTaskAutomation(task, boardColumns, resolveSpecialist, {
+    autoProviderId,
+  });
+  const canRetry = effectiveAutomation.canRun && (
     sessionStatus === "error" || (!task.triggerSessionId && task.columnId === "dev")
   ) && !queuePosition;
-  const canRun = Boolean(task.assignedProvider) && !task.triggerSessionId && task.columnId !== "done" && !queuePosition;
+  const canRun = effectiveAutomation.canRun && !task.triggerSessionId && task.columnId !== "done" && !queuePosition;
   const [showAssignment, setShowAssignment] = useState(false);
 
-  const hasCardOverride = Boolean(task.assignedProvider || task.assignedRole || task.assignedSpecialistId || task.assignedSpecialistName);
+  const hasCardOverride = effectiveAutomation.source === "card";
+  const overrideProviderValue = hasCardOverride ? task.assignedProvider ?? "" : "";
+  const overrideRoleValue = hasCardOverride ? task.assignedRole ?? "DEVELOPER" : "DEVELOPER";
+  const overrideSpecialistValue = hasCardOverride
+    ? getLanguageSpecificSpecialistId(task.assignedSpecialistId, specialistLanguage) ?? ""
+    : "";
   const priorityTone = getPriorityTone(task.priority);
   const sessionTone = getSessionTone(sessionStatus, queuePosition);
   const statusLabel = getStatusLabel(sessionStatus, queuePosition);
@@ -219,7 +233,7 @@ export function KanbanCard({
     if (providerId) {
       await onPatchTask(task.id, {
         assignedProvider: providerId,
-        assignedRole: task.assignedRole ?? "DEVELOPER",
+        assignedRole: hasCardOverride ? task.assignedRole ?? "DEVELOPER" : "DEVELOPER",
       });
     } else {
       await onPatchTask(task.id, {
@@ -437,7 +451,7 @@ export function KanbanCard({
                   {t.kanban.providerLabel}
                 </span>
                 <select
-                  value={task.assignedProvider ?? ""}
+                  value={overrideProviderValue}
                   disabled={availableProviders.length === 0}
                   onMouseDown={stopCardInteraction}
                   onClick={stopCardInteraction}
@@ -463,6 +477,9 @@ export function KanbanCard({
         {showAssignment && (
           <AssignmentSection
             task={task}
+            hasCardOverride={hasCardOverride}
+            overrideRoleValue={overrideRoleValue}
+            overrideSpecialistValue={overrideSpecialistValue}
             specialists={specialists}
             specialistLanguage={specialistLanguage}
             stopCardInteraction={stopCardInteraction}
@@ -519,6 +536,9 @@ function WorktreeBadge({ task, worktreeCache, onOpenDetail, stopCardInteraction 
 
 interface AssignmentSectionProps {
   task: TaskInfo;
+  hasCardOverride: boolean;
+  overrideRoleValue: string;
+  overrideSpecialistValue: string;
   specialists: SpecialistOption[];
   specialistLanguage: KanbanSpecialistLanguage;
   stopCardInteraction: (event: { stopPropagation: () => void }) => void;
@@ -528,6 +548,9 @@ interface AssignmentSectionProps {
 
 function AssignmentSection({
   task,
+  hasCardOverride,
+  overrideRoleValue,
+  overrideSpecialistValue,
   specialists,
   specialistLanguage,
   stopCardInteraction,
@@ -537,17 +560,17 @@ function AssignmentSection({
   const { t } = useTranslation();
   return (
     <div className="mt-2 space-y-2 border-t border-slate-200/80 pt-2 dark:border-[#262938]">
-      {!task.assignedProvider && (
+      {!hasCardOverride && (
         <div className="rounded-xl border border-dashed border-slate-200 bg-white/80 px-3 py-2 text-[11px] text-slate-500 dark:border-gray-700 dark:bg-[#10131a] dark:text-gray-400">
           {t.kanban.selectProviderHint}
         </div>
       )}
 
-      {task.assignedProvider && (
+      {hasCardOverride && (
         <div className="flex items-center gap-2">
           <span className="w-16 shrink-0 text-[10px] font-medium text-slate-500 dark:text-gray-400">{t.kanban.role}</span>
           <select
-            value={task.assignedRole ?? "DEVELOPER"}
+            value={overrideRoleValue}
             onClick={stopCardInteraction}
             onChange={async (event) => {
               await onPatchTask(task.id, { assignedRole: event.target.value });
@@ -562,11 +585,11 @@ function AssignmentSection({
         </div>
       )}
 
-      {task.assignedProvider && (
+      {hasCardOverride && (
         <div className="flex items-center gap-2">
           <span className="w-16 shrink-0 text-[10px] font-medium text-slate-500 dark:text-gray-400">{t.kanban.specialist}</span>
           <select
-            value={getLanguageSpecificSpecialistId(task.assignedSpecialistId, specialistLanguage) ?? ""}
+            value={overrideSpecialistValue}
             onClick={stopCardInteraction}
             onChange={async (event) => {
               const specialist = findSpecialistById(specialists, event.target.value);

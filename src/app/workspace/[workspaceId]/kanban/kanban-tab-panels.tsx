@@ -385,6 +385,7 @@ export function KanbanBoardSurface({
                             codebases={codebases}
                             allCodebaseIds={allCodebaseIds}
                             worktreeCache={worktreeCache}
+                            autoProviderId={resolveKanbanBoardAutoProviderId(board, boardAutoProviderId)}
                             queuePosition={queuedPositions[task.id]}
                             onDragStart={() => setDragTaskId(task.id)}
                             onOpenDetail={() => openTaskDetail(task)}
@@ -741,7 +742,9 @@ export function KanbanTaskDetailOverlay({
                   name: primaryCodebase.label ?? primaryCodebase.repoPath.split("/").pop() ?? "",
                 }
               : null;
-            const taskAgentRole = activeTask?.assignedRole ?? undefined;
+            const taskAgentRole = activeSessionInfo?.role
+              ?? selectedLaneSession?.role
+              ?? undefined;
 
             if (showEmptySessionPane && activeTask) {
               return (
