@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p .claude)",
+      "Bash(ln -sfn ../agents/skills .claude/skills)",
+      "Bash(ln -sfn ../.agents/skills .claude/skills)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
+    ]
+  }
+}
