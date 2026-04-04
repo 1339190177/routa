@@ -403,6 +403,7 @@ mod tests {
             FitnessAction::Fluency(args) => {
                 assert_eq!(args.framing, FluencyFraming::Harnessability);
             }
+            FitnessAction::ArchDsl(_) => panic!("expected fluency subcommand"),
         }
     }
 }
