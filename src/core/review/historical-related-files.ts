@@ -148,19 +148,21 @@ function fileExistsAtRevision(
   }
 }
 
+function tryGitOutput(repoRoot: string, args: string[]): string | undefined {
+  try {
+    return safeExecSync("git", args, { cwd: repoRoot });
+  } catch {
+    return undefined;
+  }
+}
+
 function collectInterestingLines(
   repoRoot: string,
   diffRange: string,
   filePath: string,
 ): number[] {
-  let rawDiff = "";
-  try {
-    rawDiff = safeExecSync(
-      "git",
-      ["diff", "--unified=0", diffRange, "--", filePath],
-      { cwd: repoRoot },
-    );
-  } catch {
+  const rawDiff = tryGitOutput(repoRoot, ["diff", "--unified=0", diffRange, "--", filePath]);
+  if (!rawDiff) {
     return [];
   }
 
@@ -198,14 +200,8 @@ function loadBlameChunks(
     return cached;
   }
 
-  let rawBlame = "";
-  try {
-    rawBlame = safeExecSync(
-      "git",
-      ["blame", "--incremental", revision, "--", filePath],
-      { cwd: repoRoot },
-    );
-  } catch {
+  const rawBlame = tryGitOutput(repoRoot, ["blame", "--incremental", revision, "--", filePath]);
+  if (!rawBlame) {
     cache.set(cacheKey, []);
     return [];
   }
@@ -268,14 +264,11 @@ function loadChangedFilesForCommit(
     return cached;
   }
 
-  let rawFiles = "";
-  try {
-    rawFiles = safeExecSync(
-      "git",
-      ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", commit],
-      { cwd: repoRoot },
-    );
-  } catch {
+  const rawFiles = tryGitOutput(
+    repoRoot,
+    ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-m", commit],
+  );
+  if (!rawFiles) {
     cache.set(commit, []);
     return [];
   }

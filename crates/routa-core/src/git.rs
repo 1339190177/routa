@@ -558,9 +558,7 @@ pub fn compute_historical_related_files(
                     continue;
                 }
 
-                let entry = candidate_map
-                    .entry(candidate_path)
-                    .or_insert_with(HistoricalCandidateAggregate::default);
+                let entry = candidate_map.entry(candidate_path).or_default();
                 entry.hits = entry.hits.saturating_add(hits);
                 entry.source_files.insert(source_file.clone());
                 entry.related_commits.insert(commit_sha.clone());
