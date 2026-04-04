@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { HarnessSectionCard, HarnessSectionStateFrame } from "@/client/components/harness-section-card";
 import { HarnessUnsupportedState } from "@/client/components/harness-support-state";
+import { HarnessModuleGraphView } from "@/client/components/harness-module-graph-view";
 import type {
   ArchitectureQualityResponse,
   ArchitectureRuleResult,
@@ -36,7 +37,7 @@ type ArchitectureCluster = {
   sample: string;
 };
 
-type ArchitectureDetailView = "summary" | "boundaries" | "cycles" | "violations";
+type ArchitectureDetailView = "summary" | "boundaries" | "cycles" | "violations" | "graph";
 
 type PrimaryFinding = {
   id: string;
@@ -362,6 +363,7 @@ export function HarnessArchitectureQualityPanel({
     { id: "boundaries", label: copy.boundariesViewLabel },
     { id: "cycles", label: copy.cyclesViewLabel },
     { id: "violations", label: copy.violationsViewLabel },
+    { id: "graph", label: copy.graphViewLabel },
   ] satisfies Array<{ id: ArchitectureDetailView; label: string }>), [copy]);
 
   const statusLabel = data?.summaryStatus === "fail"
@@ -800,6 +802,12 @@ export function HarnessArchitectureQualityPanel({
                   {drilldown ? copy.noMatchingViolations : copy.noViolations}
                 </div>
               )}
+            </div>
+          ) : null}
+
+          {detailView === "graph" ? (
+            <div data-testid="architecture-view-graph">
+              <HarnessModuleGraphView repoRoot={data.repoRoot} />
             </div>
           ) : null}
 

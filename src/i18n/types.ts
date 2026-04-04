@@ -36,6 +36,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     saveAndClose: string;
     auto: string;
     none: string;
+    all: string;
     active: string;
     enter: string;
     unavailable: string;
@@ -294,6 +295,17 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
         violationCycle: string;
         violationEmptyTest: string;
         violationUnknown: string;
+        graphViewLabel: string;
+      };
+      moduleGraph: {
+        loading: string;
+        error: string;
+        noData: string;
+        filterLanguage: string;
+        filterEdgeKind: string;
+        nodes: string;
+        edges: string;
+        legend: string;
       };
       healthCards: {
         fitnessScore: string;
