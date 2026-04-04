@@ -1132,16 +1132,21 @@ fn extract_java_class(
     // Extract extends/implements relationships
     extract_java_inheritance(node, source, &class_id, package_name, edges);
 
-    // Extract methods and fields
+    // Extract methods and fields from class_body
     for child in node.children(&mut node.walk()) {
-        match child.kind() {
-            "method_declaration" | "constructor_declaration" => {
-                extract_java_method(child, source, file_id, &class_id, package_name, nodes, edges);
+        if child.kind() == "class_body" {
+            // Iterate through class_body children
+            for body_child in child.children(&mut child.walk()) {
+                match body_child.kind() {
+                    "method_declaration" | "constructor_declaration" => {
+                        extract_java_method(body_child, source, file_id, &class_id, package_name, nodes, edges);
+                    }
+                    "field_declaration" => {
+                        extract_java_field(body_child, source, file_id, &class_id, package_name, nodes, edges);
+                    }
+                    _ => {}
+                }
             }
-            "field_declaration" => {
-                extract_java_field(child, source, file_id, &class_id, package_name, nodes, edges);
-            }
-            _ => {}
         }
     }
 }
@@ -1189,10 +1194,14 @@ fn extract_java_interface(
         ));
     }
 
-    // Extract methods
+    // Extract methods from interface_body
     for child in node.children(&mut node.walk()) {
-        if child.kind() == "method_declaration" {
-            extract_java_method(child, source, file_id, &interface_id, package_name, nodes, edges);
+        if child.kind() == "interface_body" {
+            for body_child in child.children(&mut child.walk()) {
+                if body_child.kind() == "method_declaration" {
+                    extract_java_method(body_child, source, file_id, &interface_id, package_name, nodes, edges);
+                }
+            }
         }
     }
 }
@@ -1360,25 +1369,54 @@ fn extract_java_inheritance(
             "super_interfaces" => {
                 // implements Interface1, Interface2
                 for interface_node in child.children(&mut child.walk()) {
-                    if interface_node.kind() == "type_identifier" {
-                        let interface_name = interface_node.utf8_text(source).unwrap_or("").trim();
-                        if !interface_name.is_empty() {
-                            let target_id = if interface_name.contains('.') {
-                                format!("interface:{}", interface_name)
-                            } else if let Some(pkg) = package_name {
-                                format!("interface:{}.{}", pkg, interface_name)
-                            } else {
-                                format!("interface:{}", interface_name)
-                            };
+                    // Can be type_identifier or type_list containing type_identifier
+                    let interface_name = if interface_node.kind() == "type_identifier" {
+                        interface_node.utf8_text(source).unwrap_or("").trim().to_string()
+                    } else if interface_node.kind() == "type_list" {
+                        // For multiple interfaces, iterate through type_list
+                        for type_node in interface_node.children(&mut interface_node.walk()) {
+                            if type_node.kind() == "type_identifier" || type_node.kind() == "scoped_type_identifier" {
+                                let name = type_node.utf8_text(source).unwrap_or("").trim();
+                                if !name.is_empty() {
+                                    let target_id = if name.contains('.') {
+                                        format!("interface:{}", name)
+                                    } else if let Some(pkg) = package_name {
+                                        format!("interface:{}.{}", pkg, name)
+                                    } else {
+                                        format!("interface:{}", name)
+                                    };
 
-                            edges.insert((
-                                class_id.to_string(),
-                                target_id,
-                                EdgeKind::Implements,
-                                interface_name.to_string(),
-                                false,
-                            ));
+                                    edges.insert((
+                                        class_id.to_string(),
+                                        target_id,
+                                        EdgeKind::Implements,
+                                        name.to_string(),
+                                        false,
+                                    ));
+                                }
+                            }
                         }
+                        continue;
+                    } else {
+                        continue;
+                    };
+
+                    if !interface_name.is_empty() {
+                        let target_id = if interface_name.contains('.') {
+                            format!("interface:{}", interface_name)
+                        } else if let Some(pkg) = package_name {
+                            format!("interface:{}.{}", pkg, interface_name)
+                        } else {
+                            format!("interface:{}", interface_name)
+                        };
+
+                        edges.insert((
+                            class_id.to_string(),
+                            target_id,
+                            EdgeKind::Implements,
+                            interface_name,
+                            false,
+                        ));
                     }
                 }
             }
@@ -1578,5 +1616,177 @@ import React from "react";"#,
         assert!(dot.contains("\"src/main.rs\""));
         assert!(dot.contains("\"serde\""));
         assert!(dot.contains("->"));
+    }
+
+    #[test]
+    fn analyzes_java_normal_mode_with_methods_and_fields() {
+        let dir = TempDir::new().unwrap();
+        write_file(
+            &dir,
+            "src/main/java/com/example/Person.java",
+            r#"package com.example;
+
+public class Person {
+    private String name;
+    private int age;
+
+    public Person(String name) {
+        this.name = name;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+}"#,
+        );
+
+        let graph = analyze_directory(dir.path(), AnalysisLang::Java, AnalysisDepth::Normal);
+
+        // Should have package, class, constructor, 2 fields, 2 methods, and file
+        assert_eq!(graph.node_count, 8);
+
+        // Check package node
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|n| n.kind == NodeKind::Package && n.name.as_deref() == Some("com.example")));
+
+        // Check class node
+        assert!(graph.nodes.iter().any(|n| n.kind == NodeKind::Class
+            && n.name.as_deref() == Some("Person")
+            && n.package_name.as_deref() == Some("com.example")));
+
+        // Check constructor
+        assert!(graph.nodes.iter().any(|n| n.kind == NodeKind::Constructor
+            && n.name.as_deref() == Some("Person")));
+
+        // Check methods
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|n| n.kind == NodeKind::Method && n.name.as_deref() == Some("getName")));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|n| n.kind == NodeKind::Method && n.name.as_deref() == Some("setName")));
+
+        // Check fields
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|n| n.kind == NodeKind::Field && n.name.as_deref() == Some("name")));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|n| n.kind == NodeKind::Field && n.name.as_deref() == Some("age")));
+
+        // Check MADE_OF edges
+        let made_of_edges: Vec<_> = graph
+            .edges
+            .iter()
+            .filter(|e| e.kind == EdgeKind::MadeOf)
+            .collect();
+        assert_eq!(made_of_edges.len(), 6); // Package->Class + Class->(Constructor+2Fields+2Methods)
+    }
+
+    #[test]
+    fn analyzes_java_normal_mode_with_inheritance() {
+        let dir = TempDir::new().unwrap();
+        write_file(
+            &dir,
+            "src/main/java/com/example/Animal.java",
+            r#"package com.example;
+
+public class Animal {
+    public void eat() {}
+}"#,
+        );
+        write_file(
+            &dir,
+            "src/main/java/com/example/Dog.java",
+            r#"package com.example;
+
+public class Dog extends Animal {
+    public void bark() {}
+}"#,
+        );
+
+        let graph = analyze_directory(dir.path(), AnalysisLang::Java, AnalysisDepth::Normal);
+
+        // Check EXTENDS edge
+        assert!(graph.edges.iter().any(|e| e.kind == EdgeKind::Extends
+            && e.from.contains("Dog")
+            && e.to.contains("Animal")));
+    }
+
+    #[test]
+    fn analyzes_java_normal_mode_with_interface() {
+        let dir = TempDir::new().unwrap();
+        write_file(
+            &dir,
+            "src/main/java/com/example/Flyable.java",
+            r#"package com.example;
+
+public interface Flyable {
+    void fly();
+}"#,
+        );
+        write_file(
+            &dir,
+            "src/main/java/com/example/Bird.java",
+            r#"package com.example;
+
+public class Bird implements Flyable {
+    public void fly() {}
+}"#,
+        );
+
+        let graph = analyze_directory(dir.path(), AnalysisLang::Java, AnalysisDepth::Normal);
+
+        // Check interface node
+        assert!(graph.nodes.iter().any(|n| n.kind == NodeKind::Interface
+            && n.name.as_deref() == Some("Flyable")));
+
+        // Check IMPLEMENTS edge
+        assert!(graph.edges.iter().any(|e| e.kind == EdgeKind::Implements
+            && e.from.contains("Bird")
+            && e.to.contains("Flyable")));
+    }
+
+    #[test]
+    fn fast_mode_only_extracts_file_level_imports() {
+        let dir = TempDir::new().unwrap();
+        write_file(
+            &dir,
+            "src/main/java/com/example/Test.java",
+            r#"package com.example;
+
+import java.util.List;
+
+public class Test {
+    private List<String> items;
+
+    public void add(String item) {
+        items.add(item);
+    }
+}"#,
+        );
+
+        let graph = analyze_directory(dir.path(), AnalysisLang::Java, AnalysisDepth::Fast);
+
+        // Fast mode: only file and external package nodes
+        assert!(graph
+            .nodes
+            .iter()
+            .all(|n| n.kind == NodeKind::File || n.kind == NodeKind::ExternalPackage));
+
+        // No class, method, or field nodes
+        assert!(!graph.nodes.iter().any(|n| n.kind == NodeKind::Class));
+        assert!(!graph.nodes.iter().any(|n| n.kind == NodeKind::Method));
+        assert!(!graph.nodes.iter().any(|n| n.kind == NodeKind::Field));
     }
 }
