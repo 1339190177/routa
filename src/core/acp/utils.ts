@@ -30,14 +30,27 @@ export function needsShell(command: string): boolean {
 /**
  * Quote Windows wrapper paths before handing them to `spawn(..., { shell: true })`.
  *
- * Without the extra quotes, cmd.exe splits paths like
- * `C:\Program Files\nodejs\npx.cmd` at the first space.
+ * Without the extra quotes, cmd.exe treats special characters as operators:
+ * - `C:\Program Files\nodejs\npx.cmd` splits at the space
+ * - `C:\Users\R&D\AppData\npx.cmd` treats `&` as a command separator
+ * - `C:\Program Files (x86)\Tool\script.cmd` treats `(` and `)` as grouping operators
+ * - Other special chars: `^`, `|`, `<`, `>`, `%`
+ *
+ * This function quotes all shell wrapper paths (`.cmd`, `.bat`) to handle all
+ * Windows shell special characters, not just whitespace.
  */
 export function quoteShellCommandPath(command: string): string {
-  if (!needsShell(command) || !/\s/.test(command)) {
+  // Only quote paths that need shell execution (.cmd, .bat files)
+  if (!needsShell(command)) {
     return command;
   }
 
+  // Already quoted - don't double-quote
+  if (command.startsWith('"') && command.endsWith('"')) {
+    return command;
+  }
+
+  // Quote all shell wrapper paths to handle all special characters
   return `"${command}"`;
 }
 

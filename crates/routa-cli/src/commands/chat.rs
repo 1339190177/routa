@@ -145,6 +145,8 @@ pub async fn run(
                             workspace_id: &effective_workspace_id,
                             provider: Some(&effective_provider),
                             role: Some(&effective_role),
+                            custom_command: None,
+                            custom_args: None,
                             parent_session_id: None,
                         })
                         .await

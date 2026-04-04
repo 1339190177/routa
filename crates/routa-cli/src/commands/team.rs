@@ -131,6 +131,8 @@ pub async fn run(
                     workspace_id: &workspace_id,
                     provider: Some(provider),
                     role: Some(specialist.role.as_str()),
+                    custom_command: None,
+                    custom_args: None,
                     parent_session_id: None,
                 })
                 .await

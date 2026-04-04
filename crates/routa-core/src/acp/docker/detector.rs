@@ -8,7 +8,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::process::Command;
-use tokio::sync::{Mutex, Notify, RwLock};
+use tokio::sync::{Mutex, RwLock};
 
 /// Cache TTL in milliseconds (30 seconds).
 const CACHE_TTL_MS: u64 = 30_000;
@@ -271,6 +271,7 @@ fn docker_command() -> Command {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::sync::Notify;
 
     #[tokio::test]
     async fn check_availability_coalesces_concurrent_requests() {

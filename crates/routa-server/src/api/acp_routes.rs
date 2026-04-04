@@ -1502,6 +1502,7 @@ async fn acp_sse(
 }
 
 /// Persist a session to local JSONL file (best-effort, non-blocking).
+#[allow(clippy::too_many_arguments)]
 async fn persist_session_to_jsonl(
     session_id: &str,
     cwd: &str,
