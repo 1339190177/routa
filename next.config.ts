@@ -8,8 +8,14 @@ const isPageSnapshotServerBuild = process.env.ROUTA_PAGE_SNAPSHOT_SERVER === "1"
 // When set, proxy API requests to the Rust backend server (desktop mode without Node.js backend)
 const rustBackendUrl = process.env.ROUTA_RUST_BACKEND_URL;
 
+// Allow additional dev origins via ROUTA_ALLOWED_DEV_ORIGINS environment variable
+// Format: comma-separated list of IP addresses or hostnames (e.g., "192.168.1.210,10.0.0.5")
+const additionalDevOrigins = process.env.ROUTA_ALLOWED_DEV_ORIGINS
+  ? process.env.ROUTA_ALLOWED_DEV_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
+  : [];
+
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["127.0.0.1"],
+  allowedDevOrigins: ["127.0.0.1", ...additionalDevOrigins],
   typescript: {
     tsconfigPath: isDesktopServerBuild ? "tsconfig.desktop.json" : "tsconfig.json",
   },
