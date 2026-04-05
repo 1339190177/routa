@@ -8,6 +8,7 @@ module.exports = {
   projectName: "routa",
   trailingSlash: false,
   favicon: "favicon.ico",
+  staticDirectories: ["public"],
   onBrokenLinks: "warn",
   markdown: {
     format: "detect",
