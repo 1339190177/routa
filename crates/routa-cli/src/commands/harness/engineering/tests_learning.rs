@@ -241,3 +241,132 @@ fn test_reorder_patches_by_playbook() {
     assert_eq!(patches[0].id, "patch.B");
     assert_eq!(patches[1].id, "patch.A");
 }
+
+#[test]
+fn test_fuzzy_matching_playbook() {
+    use super::learning::{find_matching_playbook, PlaybookCandidate, PlaybookStrategy, PlaybookProvenance};
+    use super::HarnessEngineeringGap;
+
+    // Playbook trained on 2 specific gaps
+    let playbooks = vec![
+        PlaybookCandidate {
+            id: "playbook-1".to_string(),
+            task_type: "harness_evolution".to_string(),
+            confidence: 0.95,
+            strategy: PlaybookStrategy {
+                preferred_patch_order: vec![],
+                gap_patterns: vec![
+                    "missing_automation".to_string(),
+                    "missing_governance_gate".to_string(),
+                ],
+                anti_patterns: vec![],
+            },
+            provenance: PlaybookProvenance {
+                source_runs: vec![],
+                success_rate: 0.95,
+                evidence_count: 3,
+            },
+        },
+    ];
+
+    // Current run has 3 gaps, 2 of which match the playbook (66% overlap)
+    let gaps = vec![
+        HarnessEngineeringGap {
+            id: "gap-1".to_string(),
+            category: "missing_automation".to_string(),
+            severity: "medium".to_string(),
+            title: "Test Gap 1".to_string(),
+            detail: "test detail 1".to_string(),
+            evidence: vec![],
+            suggested_fix: "test fix 1".to_string(),
+            harness_mutation_candidate: true,
+        },
+        HarnessEngineeringGap {
+            id: "gap-2".to_string(),
+            category: "missing_governance_gate".to_string(),
+            severity: "medium".to_string(),
+            title: "Test Gap 2".to_string(),
+            detail: "test detail 2".to_string(),
+            evidence: vec![],
+            suggested_fix: "test fix 2".to_string(),
+            harness_mutation_candidate: true,
+        },
+        HarnessEngineeringGap {
+            id: "gap-3".to_string(),
+            category: "missing_execution_surface".to_string(),
+            severity: "medium".to_string(),
+            title: "Test Gap 3".to_string(),
+            detail: "test detail 3".to_string(),
+            evidence: vec![],
+            suggested_fix: "test fix 3".to_string(),
+            harness_mutation_candidate: true,
+        },
+    ];
+
+    // Should still match because overlap is >= 50%
+    let matched = find_matching_playbook(&playbooks, &gaps);
+    assert!(matched.is_some());
+    assert_eq!(matched.unwrap().id, "playbook-1");
+}
+
+#[test]
+fn test_no_match_when_overlap_too_low() {
+    use super::learning::{find_matching_playbook, PlaybookCandidate, PlaybookStrategy, PlaybookProvenance};
+    use super::HarnessEngineeringGap;
+
+    let playbooks = vec![
+        PlaybookCandidate {
+            id: "playbook-1".to_string(),
+            task_type: "harness_evolution".to_string(),
+            confidence: 0.95,
+            strategy: PlaybookStrategy {
+                preferred_patch_order: vec![],
+                gap_patterns: vec!["missing_automation".to_string()],
+                anti_patterns: vec![],
+            },
+            provenance: PlaybookProvenance {
+                source_runs: vec![],
+                success_rate: 0.95,
+                evidence_count: 3,
+            },
+        },
+    ];
+
+    // Current run has 3 gaps, only 1 matches (33% overlap, below 50% threshold)
+    let gaps = vec![
+        HarnessEngineeringGap {
+            id: "gap-1".to_string(),
+            category: "missing_automation".to_string(),
+            severity: "medium".to_string(),
+            title: "Test Gap 1".to_string(),
+            detail: "test detail 1".to_string(),
+            evidence: vec![],
+            suggested_fix: "test fix 1".to_string(),
+            harness_mutation_candidate: true,
+        },
+        HarnessEngineeringGap {
+            id: "gap-2".to_string(),
+            category: "missing_execution_surface".to_string(),
+            severity: "medium".to_string(),
+            title: "Test Gap 2".to_string(),
+            detail: "test detail 2".to_string(),
+            evidence: vec![],
+            suggested_fix: "test fix 2".to_string(),
+            harness_mutation_candidate: true,
+        },
+        HarnessEngineeringGap {
+            id: "gap-3".to_string(),
+            category: "missing_governance_gate".to_string(),
+            severity: "medium".to_string(),
+            title: "Test Gap 3".to_string(),
+            detail: "test detail 3".to_string(),
+            evidence: vec![],
+            suggested_fix: "test fix 3".to_string(),
+            harness_mutation_candidate: true,
+        },
+    ];
+
+    // Should NOT match because overlap < 50%
+    let matched = find_matching_playbook(&playbooks, &gaps);
+    assert!(matched.is_none());
+}

@@ -320,12 +320,46 @@ pub fn find_matching_playbook<'a>(
     current_categories.sort();
     current_categories.dedup();
 
-    // Find exact match
-    playbooks.iter().find(|pb| {
+    // Find exact match first
+    if let Some(exact) = playbooks.iter().find(|pb| {
         let mut playbook_pattern = pb.strategy.gap_patterns.clone();
         playbook_pattern.sort();
         playbook_pattern == current_categories
-    })
+    }) {
+        return Some(exact);
+    }
+
+    // If no exact match, find best partial match (highest overlap)
+    let mut best_match: Option<(&PlaybookCandidate, f64)> = None;
+
+    for playbook in playbooks {
+        let playbook_patterns = &playbook.strategy.gap_patterns;
+
+        // Calculate overlap percentage
+        let overlap_count = current_categories
+            .iter()
+            .filter(|cat| playbook_patterns.contains(cat))
+            .count();
+
+        if overlap_count == 0 {
+            continue; // No overlap at all
+        }
+
+        // Overlap score: (overlap / total unique categories)
+        let total_unique = current_categories.len().max(playbook_patterns.len());
+        let overlap_score = overlap_count as f64 / total_unique as f64;
+
+        // Only consider if overlap is significant (>= 50%) and weighted by confidence
+        let weighted_score = overlap_score * playbook.confidence;
+
+        if overlap_score >= 0.5 {
+            if best_match.is_none() || weighted_score > best_match.unwrap().1 {
+                best_match = Some((playbook, weighted_score));
+            }
+        }
+    }
+
+    best_match.map(|(pb, _)| pb)
 }
 
 /// Reorder patches based on playbook strategy
@@ -355,14 +389,37 @@ pub fn reorder_patches_by_playbook(
 /// Display preflight guidance from playbook
 pub fn display_preflight_guidance(
     playbook: &PlaybookCandidate,
+    gaps: &[super::HarnessEngineeringGap],
     json_output: bool,
 ) {
     if json_output {
         return; // Skip in JSON mode
     }
 
+    // Calculate match type
+    let current_categories: Vec<String> = gaps
+        .iter()
+        .map(|g| g.category.clone())
+        .collect();
+
+    let exact_match = {
+        let mut sorted_current = current_categories.clone();
+        sorted_current.sort();
+        sorted_current.dedup();
+        let mut sorted_playbook = playbook.strategy.gap_patterns.clone();
+        sorted_playbook.sort();
+        sorted_current == sorted_playbook
+    };
+
+    let match_type = if exact_match {
+        "exact match"
+    } else {
+        "partial match"
+    };
+
     println!();
-    println!("🧠 Loaded learned playbook (confidence: {:.0}%)", playbook.confidence * 100.0);
+    println!("🧠 Loaded learned playbook (confidence: {:.0}%, {})",
+             playbook.confidence * 100.0, match_type);
     println!("  ID: {}", playbook.id);
     println!("  Evidence: {} successful runs", playbook.provenance.evidence_count);
 

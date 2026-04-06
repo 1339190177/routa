@@ -91,7 +91,7 @@ pub async fn evaluate_harness_engineering(
     });
 
     if let Some(playbook) = learning::find_matching_playbook(&playbooks, &gaps) {
-        learning::display_preflight_guidance(playbook, options.json_output);
+        learning::display_preflight_guidance(playbook, &gaps, options.json_output);
         learning::reorder_patches_by_playbook(&mut patch_candidates, playbook);
     } else {
         // No matching playbook, use default sorting
