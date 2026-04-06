@@ -84,6 +84,7 @@ pub struct SessionLaunchOptions {
     pub specialist_system_prompt: Option<String>,
     pub allowed_native_tools: Option<Vec<String>>,
     pub initialize_timeout_ms: Option<u64>,
+    pub provider_args: Option<Vec<String>>,
 }
 
 // ─── Managed Process ────────────────────────────────────────────────────
@@ -330,11 +331,7 @@ impl AcpManager {
         .await
     }
 
-    fn spawn_history_mirror(
-        &self,
-        session_id: &str,
-        ntx: &broadcast::Sender<serde_json::Value>,
-    ) {
+    fn spawn_history_mirror(&self, session_id: &str, ntx: &broadcast::Sender<serde_json::Value>) {
         let history_manager = self.clone();
         let history_session_id = session_id.to_string();
         let mut history_rx = ntx.subscribe();
@@ -400,7 +397,10 @@ impl AcpManager {
             specialist_system_prompt: options.specialist_system_prompt.clone(),
         };
 
-        self.sessions.write().await.insert(session_id.clone(), record);
+        self.sessions
+            .write()
+            .await
+            .insert(session_id.clone(), record);
         self.processes.write().await.insert(
             session_id.clone(),
             ManagedProcess {
@@ -559,6 +559,9 @@ impl AcpManager {
 
             // Build args: preset args + optional model flag
             let mut extra_args: Vec<String> = preset.args.clone();
+            if let Some(provider_args) = options.provider_args.clone() {
+                extra_args.extend(provider_args);
+            }
             if let Some(ref m) = model {
                 if !m.is_empty() {
                     // opencode (and future providers) accept -m <model>

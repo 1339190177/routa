@@ -6,10 +6,12 @@ mod fluency;
 use clap::{Args, Subcommand, ValueEnum};
 use std::path::{Path, PathBuf};
 
-use self::fluency::{
-    evaluate_harness_fluency, format_text_report, EvaluateOptions, FluencyMode, ReportFraming,
-};
 use self::arch_dsl::{run as run_arch_dsl, ArchDslArgs};
+use self::fluency::format_text_report;
+pub use self::fluency::{
+    evaluate_harness_fluency, CriterionStatus, EvaluateOptions, FluencyMode, HarnessFluencyReport,
+    LevelChange, ReportFraming,
+};
 
 const DEFAULT_MODEL_RELATIVE_PATH: &str = "docs/fitness/harness-fluency.model.yaml";
 const AGENT_ORCHESTRATOR_MODEL_RELATIVE_PATH: &str =
