@@ -159,11 +159,19 @@ pub async fn evaluate_harness_engineering(
     }
 
     let apply_outcome = if options.apply && !patch_candidates.is_empty() {
+        // Build evolution context for trace learning
+        let evolution_context = build_evolution_context(
+            state,
+            &gaps,
+            options,
+        );
+
         Some(apply_patches(
             repo_root,
             &patch_candidates,
             &verification_plan,
             options,
+            Some(&evolution_context),
         )?)
     } else {
         None
@@ -1409,11 +1417,22 @@ async fn bootstrap_weak_repository(
     }];
 
     let apply_outcome = if options.apply && !patch_candidates.is_empty() {
+        // Build evolution context for bootstrap mode
+        let evolution_context = EvolutionContext {
+            session_id: None,
+            workflow: Some("bootstrap".to_string()),
+            gaps_detected: gaps.len(),
+            gap_categories: gaps.iter().map(|g| g.category.clone()).collect(),
+            rollback_reason: None,
+            error_messages: None,
+        };
+
         Some(apply_patches(
             repo_root,
             &patch_candidates,
             &verification_plan,
             options,
+            Some(&evolution_context),
         )?)
     } else {
         None
@@ -1731,6 +1750,7 @@ fn apply_patches(
     patches: &[HarnessEngineeringPatchCandidate],
     verification_plan: &[HarnessEngineeringVerificationStep],
     options: &HarnessEngineeringOptions,
+    evolution_context: Option<&EvolutionContext>,
 ) -> Result<ApplyOutcome, String> {
     // Separate patches by risk level
     let low_risk: Vec<_> = patches.iter().filter(|p| p.risk == "low").collect();
@@ -1818,7 +1838,7 @@ fn apply_patches(
             eprintln!("  ↻ Rolling back changes...");
             rollback_snapshot(repo_root, &snapshot)?;
             if let Err(history_error) =
-                record_evolution_outcome(repo_root, &[], &selected_for_apply, None)
+                record_evolution_outcome(repo_root, &[], &selected_for_apply, evolution_context)
             {
                 eprintln!(
                     "  ⚠️  Warning: Failed to record evolution history: {}",
@@ -1836,7 +1856,7 @@ fn apply_patches(
             eprintln!("  ↻ Rolling back...");
             rollback_snapshot(repo_root, &snapshot)?;
             if let Err(history_error) =
-                record_evolution_outcome(repo_root, &[], &selected_for_apply, None)
+                record_evolution_outcome(repo_root, &[], &selected_for_apply, evolution_context)
             {
                 eprintln!(
                     "  ⚠️  Warning: Failed to record evolution history: {}",
@@ -1855,7 +1875,7 @@ fn apply_patches(
             eprintln!("  ↻ Rolling back verified changes...");
             rollback_snapshot(repo_root, &snapshot)?;
             if let Err(history_error) =
-                record_evolution_outcome(repo_root, &[], &selected_for_apply, None)
+                record_evolution_outcome(repo_root, &[], &selected_for_apply, evolution_context)
             {
                 eprintln!(
                     "  ⚠️  Warning: Failed to record evolution history: {}",
@@ -1873,7 +1893,7 @@ fn apply_patches(
             eprintln!("  ↻ Rolling back verified changes...");
             rollback_snapshot(repo_root, &snapshot)?;
             if let Err(history_error) =
-                record_evolution_outcome(repo_root, &[], &selected_for_apply, None)
+                record_evolution_outcome(repo_root, &[], &selected_for_apply, evolution_context)
             {
                 eprintln!(
                     "  ⚠️  Warning: Failed to record evolution history: {}",
@@ -1884,7 +1904,7 @@ fn apply_patches(
         }
     };
 
-    if let Err(error) = record_evolution_outcome(repo_root, &selected_for_apply, &[], None) {
+    if let Err(error) = record_evolution_outcome(repo_root, &selected_for_apply, &[], evolution_context) {
         eprintln!(
             "  ⚠️  Warning: Failed to record evolution history: {}",
             error
@@ -2057,6 +2077,46 @@ entrypointGroups:
 }
 
 // Phase 3: Feedback Learning Loop (Foundation)
+
+fn build_evolution_context(
+    state: Option<&AppState>,
+    gaps: &[HarnessEngineeringGap],
+    options: &HarnessEngineeringOptions,
+) -> EvolutionContext {
+    // Try to get session ID from AppState (if running through ACP)
+    let session_id = state.and_then(|_s| {
+        // AppState might have session tracking - check local_session_provider
+        // For now, return None until we wire up the actual session capture
+        // TODO: Capture actual session ID from trace writer
+        None::<String>
+    });
+
+    // Infer workflow type from options
+    let workflow = if options.bootstrap {
+        Some("bootstrap".to_string())
+    } else if options.apply {
+        Some("auto-apply".to_string())
+    } else {
+        Some("evaluation".to_string())
+    };
+
+    // Aggregate gap categories
+    let mut gap_categories: Vec<String> = gaps
+        .iter()
+        .map(|gap| gap.category.clone())
+        .collect();
+    gap_categories.sort();
+    gap_categories.dedup();
+
+    EvolutionContext {
+        session_id,
+        workflow,
+        gaps_detected: gaps.len(),
+        gap_categories,
+        rollback_reason: None,
+        error_messages: None,
+    }
+}
 
 fn record_evolution_outcome(
     repo_root: &Path,
