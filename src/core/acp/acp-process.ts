@@ -322,13 +322,18 @@ export class AcpProcess {
             // npx/uvx agents may need longer timeout for first-time package download
             const isNpxOrUvx = this._config.command === "npx" || this._config.command === "uvx";
             const isInitRequest = method === "initialize" || method === "session/new";
+            const isPromptRequest = method === "session/prompt";
 
             let defaultTimeout: number;
             if (isInitRequest) {
                 // npx/uvx may need to download packages on first run
-                defaultTimeout = isNpxOrUvx ? 120000 : 10000; // 2 min for npx/uvx, 10s for others
+                defaultTimeout = isNpxOrUvx ? 120000 : 15000; // 2 min for npx/uvx, 15s for others
+            } else if (isPromptRequest) {
+                // session/prompt can take a long time for complex tasks
+                // Match Rust implementation: 5 minutes for prompt requests
+                defaultTimeout = 300000; // 5 min
             } else {
-                defaultTimeout = 30000; // 30s for normal requests
+                defaultTimeout = 30000; // 30s for other requests
             }
 
             const timeout = setTimeout(() => {

@@ -467,6 +467,37 @@ describe("KanbanCardDetail repository health", () => {
 
     expect(await screen.findByText("session-review-long-id-1234567890")).toBeTruthy();
   });
+
+  it("shows full review feedback in the description tab after review sends the card back", () => {
+    render(
+      <KanbanCardDetail
+        task={{
+          ...createTask("task-review", "Story Review"),
+          columnId: "dev",
+          verificationVerdict: "NOT_APPROVED",
+          verificationReport: "AC3 failed.\n\nEditor compatibility still breaks pasted rich text spans.",
+        }}
+        boardColumns={board.columns}
+        availableProviders={[]}
+        specialists={[]}
+        specialistLanguage="en"
+        codebases={[]}
+        allCodebaseIds={[]}
+        worktreeCache={{}}
+        sessions={[]}
+        fullWidth
+        onPatchTask={vi.fn(async () => createTask("task-review", "Story Review"))}
+        onRetryTrigger={vi.fn()}
+        onDelete={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Review Feedback")).toBeTruthy();
+    expect(screen.getByText("Returned to Dev")).toBeTruthy();
+    expect(screen.getByText(/AC3 failed/i)).toBeTruthy();
+    expect(screen.getByText(/Editor compatibility still breaks/i)).toBeTruthy();
+  });
 });
 
 describe("KanbanTab live session tail", () => {

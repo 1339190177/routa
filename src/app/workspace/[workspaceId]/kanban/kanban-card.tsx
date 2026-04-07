@@ -49,6 +49,22 @@ export interface KanbanCardProps {
 
 const ROLE_OPTIONS = ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"];
 
+function summarizeReviewFeedback(report: string | undefined, maxLength = 180): string | null {
+  const normalized = report
+    ?.split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ");
+
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.length <= maxLength
+    ? normalized
+    : `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
 function getPriorityTone(priority?: string) {
   switch ((priority ?? "medium").toLowerCase()) {
     case "high":
@@ -224,6 +240,21 @@ export function KanbanCard({
       ? `Ready for ${transitionArtifacts.nextColumn?.name ?? "the next lane"}: ${transitionArtifacts.nextRequiredArtifacts.map((artifact) => formatArtifactLabel(artifact)).join(", ")} present.`
       : `Before ${transitionArtifacts.nextColumn?.name ?? "the next lane"}: missing ${missingNextArtifacts.map((artifact) => formatArtifactLabel(artifact)).join(", ")}.`
     : undefined;
+  const hasReviewFeedback = Boolean(task.verificationReport?.trim())
+    || (task.verificationVerdict != null && task.verificationVerdict !== "APPROVED");
+  const reviewFeedbackPreview = summarizeReviewFeedback(task.verificationReport, 160);
+  const reviewVerdictLabel = task.verificationVerdict === "NOT_APPROVED"
+    ? t.kanbanDetail.reviewRequestedChanges
+    : task.verificationVerdict === "BLOCKED"
+      ? t.kanbanDetail.reviewBlockedVerdict
+      : task.verificationVerdict === "APPROVED"
+        ? t.kanbanDetail.reviewApprovedVerdict
+        : t.kanbanDetail.reviewFeedback;
+  const reviewFeedbackTone = task.verificationVerdict === "BLOCKED"
+    ? "border-rose-200/80 bg-rose-50/80 text-rose-800 dark:border-rose-900/40 dark:bg-rose-900/15 dark:text-rose-200"
+    : task.verificationVerdict === "APPROVED"
+      ? "border-emerald-200/80 bg-emerald-50/80 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/15 dark:text-emerald-200"
+      : "border-amber-200/80 bg-amber-50/80 text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/15 dark:text-amber-200";
 
   const stopCardInteraction = (event: { stopPropagation: () => void }) => {
     event.stopPropagation();
@@ -346,6 +377,31 @@ export function KanbanCard({
       )}
 
       <p className="line-clamp-3 text-[12px] leading-5 text-slate-600 dark:text-slate-400">{objectiveText}</p>
+      {hasReviewFeedback && (
+        <div
+          className={`rounded-xl border px-3 py-2.5 ${reviewFeedbackTone}`}
+          data-testid="kanban-card-review-feedback"
+        >
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em]">
+              {t.kanbanDetail.reviewFeedback}
+            </div>
+            <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] dark:bg-black/20">
+              {task.columnId === "dev" && task.verificationVerdict !== "APPROVED"
+                ? t.kanbanDetail.reviewReturnedToDev
+                : reviewVerdictLabel}
+            </span>
+          </div>
+          {(reviewFeedbackPreview || task.verificationVerdict) && (
+            <div
+              className="mt-1.5 line-clamp-3 text-[12px] leading-5"
+              title={task.verificationReport ?? reviewVerdictLabel}
+            >
+              {reviewFeedbackPreview ?? reviewVerdictLabel}
+            </div>
+          )}
+        </div>
+      )}
       {liveMessageTail && (
         <div className="rounded-xl border border-sky-200/80 bg-sky-50/70 px-3 py-2.5 dark:border-sky-900/50 dark:bg-sky-900/10">
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-600 dark:text-sky-300">

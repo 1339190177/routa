@@ -120,6 +120,34 @@ describe("KanbanCard artifact gate status", () => {
     expect(screen.getByTestId("kanban-card-live-tail").textContent).toContain("Updated parser;");
   });
 
+  it("surfaces review feedback on cards returned to dev", () => {
+    render(
+      <KanbanCard
+        task={buildTask({
+          columnId: "dev",
+          verificationVerdict: "NOT_APPROVED",
+          verificationReport: "AC3 failed: editor still strips nested marks when pasting rich text.",
+        })}
+        boardColumns={boardColumns}
+        specialistLanguage="en"
+        availableProviders={[]}
+        specialists={[]}
+        codebases={[]}
+        allCodebaseIds={[]}
+        worktreeCache={{}}
+        onDragStart={vi.fn()}
+        onOpenDetail={vi.fn()}
+        onDelete={vi.fn()}
+        onPatchTask={vi.fn()}
+        onRetryTrigger={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("kanban-card-review-feedback").textContent).toContain("Returned to Dev");
+    expect(screen.getByTestId("kanban-card-review-feedback").textContent).toContain("AC3 failed");
+  });
+
   it("renders imported pull requests with a PR badge", () => {
     render(
       <KanbanCard

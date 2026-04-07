@@ -740,6 +740,11 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     investTestable: string;
     reviewable: string;
     reviewBlocked: string;
+    reviewFeedback: string;
+    reviewReturnedToDev: string;
+    reviewRequestedChanges: string;
+    reviewBlockedVerdict: string;
+    reviewApprovedVerdict: string;
     requiredArtifacts: string;
     verification: string;
     completion: string;
