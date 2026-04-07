@@ -67,6 +67,7 @@ function TracePageContent() {
   const [tracesLoading, setTracesLoading] = useState(false);
   const [sessionTracesLoaded, setSessionTracesLoaded] = useState(false);
   const selectedSessionIdRef = useRef<string | null>(null);
+  const fetchSessionsRequestIdRef = useRef(0);
 
   const selectedSession = sessions.find((session) => session.sessionId === selectedSessionId) ?? null;
   const resolvedWorkspaceId = activeWorkspaceId || selectedSession?.workspaceId || null;
@@ -122,6 +123,7 @@ function TracePageContent() {
   const workspaceQuery = activeWorkspaceId ? `?workspaceId=${encodeURIComponent(activeWorkspaceId)}` : "";
 
   const fetchSessions = useCallback(async () => {
+    const requestId = ++fetchSessionsRequestIdRef.current;
     setLoading(true);
     try {
       // Fetch traces and session metadata in parallel
@@ -169,23 +171,18 @@ function TracePageContent() {
         }))
         .sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime());
 
+      if (requestId !== fetchSessionsRequestIdRef.current) {
+        return;
+      }
+
       setSessions(sessionList);
 
-      // Keep "all workspaces" as the default trace query. We still resolve the
-      // header/sidebar workspace context from the selected session so navigation
-      // stays aligned with the rest of the app without narrowing the trace query.
-      // Check URL parameter first, then keep current session if possible, finally fallback.
-      const urlSessionId = searchParams.get("sessionId");
-      if (isTracesSnapshotSelection(urlSessionId)) {
-        setSelectedSessionId(null);
-      } else if (urlSessionId && sessionList.some((s) => s.sessionId === urlSessionId)) {
-        setSelectedSessionId(urlSessionId);
-      } else if (
-        selectedSessionIdRef.current &&
-        sessionList.some((s) => s.sessionId === selectedSessionIdRef.current)
-      ) {
-        setSelectedSessionId(selectedSessionIdRef.current);
-      } else if (sessionList.length > 0) {
+      const currentSelectedSessionId = selectedSessionIdRef.current;
+      if (currentSelectedSessionId && sessionList.some((s) => s.sessionId === currentSelectedSessionId)) {
+        return;
+      }
+
+      if (sessionList.length > 0) {
         setSelectedSessionId(sessionList[0].sessionId);
       } else {
         setSelectedSessionId(null);
@@ -195,7 +192,25 @@ function TracePageContent() {
     } finally {
       setLoading(false);
     }
-  }, [searchParams, workspaceQuery]);
+  }, [workspaceQuery]);
+
+  useEffect(() => {
+    const urlSessionId = searchParams.get("sessionId");
+    if (isTracesSnapshotSelection(urlSessionId)) {
+      if (selectedSessionId !== null) {
+        setSelectedSessionId(null);
+      }
+      return;
+    }
+
+    if (!urlSessionId) {
+      return;
+    }
+
+    if (sessions.some((session) => session.sessionId === urlSessionId) && selectedSessionId !== urlSessionId) {
+      setSelectedSessionId(urlSessionId);
+    }
+  }, [searchParams, selectedSessionId, sessions]);
 
   // Fetch traces for the selected session (shared across all view tabs)
   const fetchSessionTraces = useCallback(async () => {
