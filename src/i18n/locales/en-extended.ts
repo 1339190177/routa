@@ -673,6 +673,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     noRepoChanges: "No repository or worktree linked to this task.",
     clickFileToInspectDiff: "Click a file to inspect its diff.",
     clickCommitToInspectDiff: "Click a commit to inspect its diff.",
+    filesChanged: "Files Changed",
     loadingFileDiff: "Loading diff...",
     loadingCommitDiff: "Loading commit diff...",
     failedToLoadFileDiff: "Failed to load file diff",

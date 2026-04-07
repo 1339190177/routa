@@ -673,6 +673,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     noRepoChanges: "当前任务没有关联仓库或 worktree。",
     clickFileToInspectDiff: "点击文件可查看对应 diff。",
     clickCommitToInspectDiff: "点击提交可查看对应 diff。",
+    filesChanged: "变更文件",
     loadingFileDiff: "正在加载 diff...",
     loadingCommitDiff: "正在加载提交 diff...",
     failedToLoadFileDiff: "加载文件 diff 失败",

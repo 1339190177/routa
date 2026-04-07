@@ -65,7 +65,7 @@ export function getKanbanFileChangesSummary(repos: KanbanRepoChanges[]) {
   return { changedRepos, changedFiles };
 }
 
-function splitFilePath(path: string): { name: string; directory: string | null } {
+export function splitFilePath(path: string): { name: string; directory: string | null } {
   const normalized = path.trim();
   const lastSlash = normalized.lastIndexOf("/");
   if (lastSlash === -1) {
