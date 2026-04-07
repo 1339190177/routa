@@ -1975,6 +1975,8 @@ function ExecutionSection({
   const runActionLabel = needsLiveRunRecovery
     ? t.kanbanDetail.recoverLiveRun
     : hasRecordedRuns ? t.kanban.rerun : t.kanban.run;
+  // Only show "Current Run" separately if it differs from the lane pipeline (multi-step or has override)
+  const showCurrentRunSeparately = laneSteps.length > 1 || hasCardOverride || effectiveRunTarget !== lanePipeline;
 
   return (
     <DetailSection
@@ -1999,19 +2001,25 @@ function ExecutionSection({
           value={lanePipeline}
           compact={compact}
         />
-        <InlineSummary
-          label={t.kanbanDetail.currentRun}
-          value={effectiveRunTarget}
-          compact={compact}
-        />
+        {showCurrentRunSeparately && (
+          <InlineSummary
+            label={t.kanbanDetail.currentRun}
+            value={effectiveRunTarget}
+            compact={compact}
+          />
+        )}
       </div>
       {canRunTask && !hasRecordedRuns && (
         <div className={`mt-2 border-l-2 border-sky-300/70 px-3 py-2 text-xs text-sky-800 dark:border-sky-700/70 dark:text-sky-200 ${compact ? "leading-[1.125rem]" : "leading-5"}`}>
           {sessionCopy.emptyPaneDescription}
           {" "}
           {sessionCopy.emptyPaneHint}
-          {" "}
-          {sessionCopy.expectedTarget(effectiveRunTarget)}
+          {effectiveRunTarget !== lanePipeline && (
+            <>
+              {" "}
+              {sessionCopy.expectedTarget(effectiveRunTarget)}
+            </>
+          )}
         </div>
       )}
       {transitionArtifacts.currentRequiredArtifacts.length > 0 && (
@@ -2115,7 +2123,7 @@ function ExecutionSection({
           )}
         </div>
       </details>
-      {canRunTask && (
+      {canRunTask && (manualRunTarget !== lanePipeline || hasCardOverride) && (
         <div className={`mt-2 border-l-2 border-sky-300/80 px-3 py-2 text-xs text-sky-800 dark:border-sky-700/70 dark:text-sky-200 ${compact ? "leading-[1.125rem]" : "leading-[1.2rem]"}`}>
           Manual {hasRecordedRuns ? "reruns" : "runs"} use {manualRunSourceLabel}:
           {" "}

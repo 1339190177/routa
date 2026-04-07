@@ -714,6 +714,9 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     present: string;
     missing: string;
     investSummary: string;
+    investCheck: string;
+    status: string;
+    reason: string;
     source: string;
     sourceCanonicalStory: string;
     sourceHeuristic: string;
