@@ -189,10 +189,9 @@ pub async fn run(
     println!("🚀 Sending requirement to team lead...");
     println!();
 
-    if let Err(err) = state
-        .acp_manager
-        .prompt(&session_id, &coordinator_prompt)
-        .await
+    let final_status = "COMPLETED";
+    if let Err(err) =
+        prompt_and_stream_until_idle(&mut rx, state, &session_id, &coordinator_prompt).await
     {
         if let Err(status_err) = update_agent_status(&router, &agent_id, "ERROR").await {
             eprintln!("Failed to mark agent {} ERROR: {}", agent_id, status_err);
@@ -202,57 +201,8 @@ pub async fn run(
         return Err(format!("Failed to send prompt: {}", err));
     }
 
-    // ── 10. Stream updates until completion ──────────────────────────────
-    let mut renderer = TuiRenderer::new();
-    let mut idle_count = 0u32;
-    let max_idle = 600; // 10 minutes at 1s intervals
-    let mut final_status = "COMPLETED";
-
-    loop {
-        match tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv()).await {
-            Ok(Ok(update)) => {
-                idle_count = 0;
-                // Detect turn_complete to stop streaming
-                let is_done = update
-                    .get("params")
-                    .and_then(|p| p.get("update"))
-                    .and_then(|u| u.get("sessionUpdate"))
-                    .and_then(|v| v.as_str())
-                    == Some("turn_complete");
-                renderer.handle_update(&update);
-                if is_done {
-                    renderer.finish();
-                    println!("═══ Team lead turn complete ═══");
-                    break;
-                }
-            }
-            Ok(Err(_)) => {
-                renderer.finish();
-                final_status = "ERROR";
-                println!("═══ Team lead session ended ═══");
-                break;
-            }
-            Err(_) => {
-                idle_count += 1;
-                if idle_count >= max_idle {
-                    renderer.finish();
-                    final_status = "ERROR";
-                    println!("⏰ Timeout: no activity for {} seconds", max_idle);
-                    break;
-                }
-                if !state.acp_manager.is_alive(&session_id).await {
-                    renderer.finish();
-                    final_status = "ERROR";
-                    println!("═══ Team lead process exited ═══");
-                    break;
-                }
-            }
-        }
-    }
-
-    // ── 11. Enter interactive REPL if requested ──────────────────────────
+    // ── 10. Enter interactive REPL if requested ──────────────────────────
     if interactive && state.acp_manager.is_alive(&session_id).await {
-        renderer.finish();
         if let Err(err) = run_interactive_repl(
             state,
             &agent_id,
@@ -280,11 +230,11 @@ pub async fn run(
         );
     }
 
-    // ── 12. Print summary ────────────────────────────────────────────────
+    // ── 11. Print summary ────────────────────────────────────────────────
     println!();
     print_session_summary(&router, &workspace_id, Some(&agent_id), Some(&session_id)).await;
 
-    // ── 13. Cleanup ──────────────────────────────────────────────────────
+    // ── 12. Cleanup ──────────────────────────────────────────────────────
     state.acp_manager.kill_session(&session_id).await;
     orchestrator.cleanup(&session_id).await;
 
