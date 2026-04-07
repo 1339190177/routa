@@ -243,7 +243,7 @@ jobs:
           APPLE_API_KEY_PATH: ${{ env.SKIP_MACOS_SIGNING != 'true' && env.APPLE_API_KEY_PATH || '' }}
         with:
           projectPath: apps/desktop
-          args: ${{ matrix.args }}
+          args: ${{ env.SKIP_MACOS_SIGNING == 'true' && format('{0} --no-sign', matrix.args) || matrix.args }}
 
       - name: Verify macOS signing and notarization
         if: runner.os == 'macOS'
