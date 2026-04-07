@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { KanbanTab } from "../kanban-tab";
 import { KanbanCardDetail } from "../kanban-card-detail";
+import { KanbanCardActivityPanel } from "../kanban-card-activity";
 import type { KanbanBoardInfo, TaskInfo } from "../../types";
 import type { UseAcpActions, UseAcpState } from "@/client/hooks/use-acp";
 
@@ -440,6 +441,31 @@ describe("KanbanCardDetail repository health", () => {
     expect(screen.getByRole("button", { name: "Evidence Bundle" })).toBeTruthy();
     expect(screen.getByText("Evidence incomplete")).toBeTruthy();
     expect(screen.getByText(/test_results/i)).toBeTruthy();
+  });
+
+  it("shows the full run session id in activity history", async () => {
+    render(
+      <KanbanCardActivityPanel
+        task={{
+          ...createTask("task-runs", "Story Runs"),
+          columnId: "review",
+          laneSessions: [{
+            sessionId: "session-review-long-id-1234567890",
+            columnId: "review",
+            columnName: "Review",
+            provider: "codex",
+            role: "GATE",
+            status: "running",
+            startedAt: "2025-01-01T00:00:00.000Z",
+          }],
+        }}
+        sessions={[]}
+        specialists={[]}
+        specialistLanguage="en"
+      />,
+    );
+
+    expect(await screen.findByText("session-review-long-id-1234567890")).toBeTruthy();
   });
 });
 
