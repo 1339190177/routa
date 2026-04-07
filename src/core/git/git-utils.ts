@@ -141,6 +141,27 @@ export interface RepoFileDiff {
   deletions?: number;
 }
 
+export interface RepoCommitChange {
+  sha: string;
+  shortSha: string;
+  summary: string;
+  authorName: string;
+  authoredAt: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface RepoCommitDiff {
+  sha: string;
+  shortSha: string;
+  summary: string;
+  authorName: string;
+  authoredAt: string;
+  patch: string;
+  additions: number;
+  deletions: number;
+}
+
 export interface RepoDeliveryStatus {
   branch: string;
   baseBranch?: string;
@@ -404,6 +425,22 @@ function countDiffPatchLines(patch: string): { additions: number; deletions: num
   return { additions, deletions };
 }
 
+function countNumstatTotals(output: string): { additions: number; deletions: number } {
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .reduce((totals, line) => {
+      const [rawAdditions, rawDeletions] = line.split(/\s+/);
+      const additions = rawAdditions === "-" ? 0 : Number.parseInt(rawAdditions ?? "", 10);
+      const deletions = rawDeletions === "-" ? 0 : Number.parseInt(rawDeletions ?? "", 10);
+      return {
+        additions: totals.additions + (Number.isNaN(additions) ? 0 : additions),
+        deletions: totals.deletions + (Number.isNaN(deletions) ? 0 : deletions),
+      };
+    }, { additions: 0, deletions: 0 });
+}
+
 function parseNumstat(output: string): { additions: number; deletions: number } | null {
   const firstLine = output
     .split("\n")
@@ -493,6 +530,81 @@ export function getRepoFileDiff(repoPath: string, file: GitFileChange): RepoFile
     patch: "",
     additions: 0,
     deletions: 0,
+  };
+}
+
+export function getRepoCommitChanges(
+  repoPath: string,
+  options: { baseRef: string; maxCount?: number },
+): RepoCommitChange[] {
+  const maxCount = Math.max(1, options.maxCount ?? 20);
+  const range = `${options.baseRef}..HEAD`;
+  const output = (() => {
+    try {
+      return gitExecSync(
+      `git log --format=%H%x1f%h%x1f%s%x1f%an%x1f%aI ${shellQuote(range)} -n ${maxCount}`,
+      repoPath,
+      );
+    } catch {
+      return null;
+    }
+  })();
+  if (!output) return [];
+
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split("\u001f"))
+    .flatMap((parts): RepoCommitChange[] => {
+      const [sha, shortSha, summary, authorName, authoredAt] = parts;
+      if (!sha || !shortSha || !summary || !authorName || !authoredAt) return [];
+
+      const numstat = (() => {
+        try {
+          return gitExecSync(
+          `git --no-pager show --format= --numstat --find-renames --find-copies ${shellQuote(sha)}`,
+          repoPath,
+          );
+        } catch {
+          return "";
+        }
+      })();
+      const counts = countNumstatTotals(numstat);
+
+      return [{
+        sha,
+        shortSha,
+        summary,
+        authorName,
+        authoredAt,
+        additions: counts.additions,
+        deletions: counts.deletions,
+      }];
+    });
+}
+
+export function getRepoCommitDiff(repoPath: string, sha: string): RepoCommitDiff {
+  const quotedSha = shellQuote(sha);
+  const summary = gitExecSync(`git show -s --format=%s ${quotedSha}`, repoPath);
+  const shortSha = gitExecSync(`git rev-parse --short ${quotedSha}`, repoPath);
+  const authorName = gitExecSync(`git show -s --format=%an ${quotedSha}`, repoPath);
+  const authoredAt = gitExecSync(`git show -s --format=%aI ${quotedSha}`, repoPath);
+  const patch = gitExecSync(
+    `git --no-pager show --no-ext-diff --find-renames --find-copies --format=medium --unified=3 ${quotedSha}`,
+    repoPath,
+  );
+  const counts = countDiffPatchLines(patch);
+
+  return {
+    sha,
+    shortSha,
+    summary,
+    authorName,
+    authoredAt,
+    patch,
+    additions: counts.additions,
+    deletions: counts.deletions,
   };
 }
 

@@ -1062,6 +1062,175 @@ describe("KanbanCardDetail changes tab", () => {
     expect(screen.getByTestId("kanban-diff-old-line-5").textContent).toBe("1");
     expect(screen.getByTestId("kanban-diff-new-line-6").textContent).toBe("1");
   });
+
+  it("falls back to committed changes when the worktree is clean but the branch is ahead", async () => {
+    desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/tasks/task-1/changes") {
+        return {
+          ok: true,
+          json: async () => ({
+            changes: {
+              codebaseId: "codebase-1",
+              repoPath: "/tmp/repos/main",
+              label: "feature-worktree",
+              branch: "task/story-one",
+              status: {
+                clean: true,
+                ahead: 3,
+                behind: 0,
+                modified: 0,
+                untracked: 0,
+              },
+              files: [],
+              mode: "commits",
+              baseRef: "origin/main",
+              commits: [
+                {
+                  sha: "abc1234567890",
+                  shortSha: "abc1234",
+                  summary: "Upgrade tiptap core",
+                  authorName: "Codex",
+                  authoredAt: "2025-01-01T00:00:00.000Z",
+                  additions: 12,
+                  deletions: 4,
+                },
+                {
+                  sha: "def1234567890",
+                  shortSha: "def1234",
+                  summary: "Add regression coverage",
+                  authorName: "Codex",
+                  authoredAt: "2025-01-01T00:05:00.000Z",
+                  additions: 24,
+                  deletions: 1,
+                },
+                {
+                  sha: "fed1234567890",
+                  shortSha: "fed1234",
+                  summary: "Normalize editor integration",
+                  authorName: "Codex",
+                  authoredAt: "2025-01-01T00:10:00.000Z",
+                  additions: 7,
+                  deletions: 2,
+                },
+              ],
+              source: "worktree",
+              worktreeId: "wt-1",
+              worktreePath: "/tmp/worktrees/story-one",
+            },
+          }),
+        } as Response;
+      }
+      if (url === "/api/tasks/task-1/changes/commit?sha=abc1234567890") {
+        return {
+          ok: true,
+          json: async () => ({
+            diff: {
+              sha: "abc1234567890",
+              shortSha: "abc1234",
+              summary: "Upgrade tiptap core",
+              authorName: "Codex",
+              authoredAt: "2025-01-01T00:00:00.000Z",
+              additions: 12,
+              deletions: 4,
+              patch: [
+                "commit abc1234567890",
+                "Author: Codex",
+                "Date:   2025-01-01T00:00:00.000Z",
+                "",
+                "    Upgrade tiptap core",
+                "",
+                "diff --git a/package.json b/package.json",
+                "index 1111111..2222222 100644",
+                "--- a/package.json",
+                "+++ b/package.json",
+                "@@ -1 +1 @@",
+                '-  "version": "1.0.0",',
+                '+  "version": "1.1.0",',
+              ].join("\n"),
+            },
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected desktopAwareFetch: ${url}`);
+    });
+
+    render(
+      <KanbanCardDetail
+        task={createTask("task-1", "Story One", {
+          worktreeId: "wt-1",
+          codebaseIds: ["codebase-1"],
+          deliveryReadiness: {
+            checked: true,
+            repoPath: "/tmp/worktrees/story-one",
+            branch: "task/story-one",
+            baseBranch: "main",
+            baseRef: "origin/main",
+            modified: 0,
+            untracked: 0,
+            ahead: 3,
+            behind: 0,
+            commitsSinceBase: 3,
+            hasCommitsSinceBase: true,
+            hasUncommittedChanges: false,
+            isGitHubRepo: true,
+            canCreatePullRequest: true,
+          },
+        })}
+        availableProviders={[]}
+        specialists={[]}
+        specialistLanguage="en"
+        codebases={[{
+          id: "codebase-1",
+          workspaceId: "workspace-1",
+          repoPath: "/tmp/repos/main",
+          branch: "main",
+          isDefault: true,
+          sourceType: "github",
+          sourceUrl: "https://example.com/repo.git",
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        allCodebaseIds={["codebase-1"]}
+        worktreeCache={{
+          "wt-1": {
+            id: "wt-1",
+            codebaseId: "codebase-1",
+            workspaceId: "workspace-1",
+            worktreePath: "/tmp/worktrees/story-one",
+            branch: "task/story-one",
+            baseBranch: "main",
+            status: "active",
+            createdAt: "2025-01-01T00:00:00.000Z",
+            updatedAt: "2025-01-01T00:00:00.000Z",
+          },
+        }}
+        onPatchTask={vi.fn(async () => createTask("task-1", "Story One"))}
+        onRetryTrigger={vi.fn()}
+        onDelete={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Changes" }));
+
+    expect(await screen.findByText("Upgrade tiptap core")).toBeTruthy();
+    expect(screen.getByText("Add regression coverage")).toBeTruthy();
+    expect(screen.getByText("Normalize editor integration")).toBeTruthy();
+    expect(screen.getByText("Showing committed changes relative to origin/main.")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("kanban-commit-row-abc1234567890"));
+
+    await waitFor(() => {
+      expect(desktopAwareFetch).toHaveBeenCalledWith(
+        "/api/tasks/task-1/changes/commit?sha=abc1234567890",
+        { cache: "no-store", signal: expect.any(AbortSignal) },
+      );
+    });
+
+    expect(await screen.findByText(/"version": "1\.1\.0"/)).toBeTruthy();
+    expect(screen.getByText(/"version": "1\.0\.0"/)).toBeTruthy();
+  });
 });
 
 // TODO: This test suite is flaky - skipping temporarily

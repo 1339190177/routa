@@ -17,7 +17,13 @@ import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../t
 import { KanbanCardActivityPanel } from "./kanban-card-activity";
 import { KanbanDescriptionEditor } from "./kanban-description-editor";
 import { FileRow, formatChangeSummary, STATUS_BADGE } from "./kanban-file-changes-panel";
-import type { KanbanFileChangeItem, KanbanFileDiffPreview, KanbanTaskChanges } from "./kanban-file-changes-types";
+import type {
+  KanbanCommitChangeItem,
+  KanbanCommitDiffPreview,
+  KanbanFileChangeItem,
+  KanbanFileDiffPreview,
+  KanbanTaskChanges,
+} from "./kanban-file-changes-types";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import {
   createKanbanSpecialistResolver,
@@ -868,22 +874,36 @@ function TaskChangesPanel({
 }) {
   const { t } = useTranslation();
   const [pinnedFileKey, setPinnedFileKey] = useState<string | null>(null);
+  const [pinnedCommitSha, setPinnedCommitSha] = useState<string | null>(null);
   const [diffCache, setDiffCache] = useState<Record<string, KanbanFileDiffPreview>>({});
+  const [commitDiffCache, setCommitDiffCache] = useState<Record<string, KanbanCommitDiffPreview>>({});
   const [diffErrors, setDiffErrors] = useState<Record<string, string>>({});
+  const [commitDiffErrors, setCommitDiffErrors] = useState<Record<string, string>>({});
   const [loadingFileKey, setLoadingFileKey] = useState<string | null>(null);
+  const [loadingCommitSha, setLoadingCommitSha] = useState<string | null>(null);
+  const viewingCommits = changes?.mode === "commits" && (changes.commits?.length ?? 0) > 0;
 
   const fileKey = (file: KanbanFileChangeItem) => `${file.status}:${file.previousPath ?? ""}:${file.path}`;
+  const commitKey = (commit: KanbanCommitChangeItem) => commit.sha;
   const activeFile = useMemo(() => {
     const preferredKey = pinnedFileKey;
     if (!changes?.files.length || !preferredKey) return null;
     return changes.files.find((file) => fileKey(file) === preferredKey) ?? null;
   }, [changes?.files, pinnedFileKey]);
+  const activeCommit = useMemo(() => {
+    const preferredSha = pinnedCommitSha;
+    if (!changes?.commits?.length || !preferredSha) return null;
+    return changes.commits.find((commit) => commit.sha === preferredSha) ?? null;
+  }, [changes?.commits, pinnedCommitSha]);
   const activeFileKey = activeFile ? fileKey(activeFile) : null;
+  const activeCommitKey = activeCommit ? commitKey(activeCommit) : null;
   const activeDiff = activeFileKey ? diffCache[activeFileKey] : undefined;
   const activeDiffError = activeFileKey ? diffErrors[activeFileKey] : undefined;
+  const activeCommitDiff = activeCommitKey ? commitDiffCache[activeCommitKey] : undefined;
+  const activeCommitDiffError = activeCommitKey ? commitDiffErrors[activeCommitKey] : undefined;
 
   useEffect(() => {
-    if (!changes?.files.length) {
+    if (viewingCommits || !changes?.files.length) {
       setPinnedFileKey(null);
       return;
     }
@@ -892,10 +912,22 @@ function TaskChangesPanel({
     if (pinnedFileKey && !availableKeys.has(pinnedFileKey)) {
       setPinnedFileKey(null);
     }
-  }, [changes?.files, pinnedFileKey]);
+  }, [changes?.files, pinnedFileKey, viewingCommits]);
 
   useEffect(() => {
-    if (!taskId || !changes || changes.error || !activeFile || !activeFileKey || diffCache[activeFileKey]) {
+    if (!viewingCommits || !changes?.commits?.length) {
+      setPinnedCommitSha(null);
+      return;
+    }
+
+    const availableShas = new Set(changes.commits.map((commit) => commit.sha));
+    if (pinnedCommitSha && !availableShas.has(pinnedCommitSha)) {
+      setPinnedCommitSha(null);
+    }
+  }, [changes?.commits, pinnedCommitSha, viewingCommits]);
+
+  useEffect(() => {
+    if (viewingCommits || !taskId || !changes || changes.error || !activeFile || !activeFileKey || diffCache[activeFileKey]) {
       return;
     }
 
@@ -950,7 +982,57 @@ function TaskChangesPanel({
 
     void loadDiff();
     return () => controller.abort();
-  }, [activeFile, activeFileKey, changes, diffCache, t.kanbanDetail.failedToLoadFileDiff, taskId]);
+  }, [activeFile, activeFileKey, changes, diffCache, t.kanbanDetail.failedToLoadFileDiff, taskId, viewingCommits]);
+
+  useEffect(() => {
+    if (!viewingCommits || !taskId || !changes || changes.error || !activeCommit || !activeCommitKey || commitDiffCache[activeCommitKey]) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({ sha: activeCommit.sha });
+
+    const loadDiff = async () => {
+      setLoadingCommitSha(activeCommitKey);
+      setCommitDiffErrors((current) => {
+        if (!(activeCommitKey in current)) return current;
+        const next = { ...current };
+        delete next[activeCommitKey];
+        return next;
+      });
+
+      try {
+        const response = await desktopAwareFetch(
+          `/api/tasks/${encodeURIComponent(taskId)}/changes/commit?${params.toString()}`,
+          { cache: "no-store", signal: controller.signal },
+        );
+        const data = await response.json().catch(() => ({}));
+        if (controller.signal.aborted) return;
+        if (!response.ok) {
+          throw new Error(data.error ?? t.kanbanDetail.failedToLoadCommitDiff);
+        }
+
+        const diff = (data.diff ?? {
+          ...activeCommit,
+          patch: "",
+        }) as KanbanCommitDiffPreview;
+        setCommitDiffCache((current) => ({ ...current, [activeCommitKey]: diff }));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setCommitDiffErrors((current) => ({
+          ...current,
+          [activeCommitKey]: error instanceof Error ? error.message : t.kanbanDetail.failedToLoadCommitDiff,
+        }));
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadingCommitSha((current) => (current === activeCommitKey ? null : current));
+        }
+      }
+    };
+
+    void loadDiff();
+    return () => controller.abort();
+  }, [activeCommit, activeCommitKey, changes, commitDiffCache, taskId, t.kanbanDetail.failedToLoadCommitDiff, viewingCommits]);
 
   if (loading) {
     return (
@@ -1016,6 +1098,33 @@ function TaskChangesPanel({
         <div className="border-l-2 border-rose-400/80 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/70 dark:text-rose-300">
           {changes.error}
         </div>
+      ) : viewingCommits ? (
+        <div className="space-y-3">
+          {changes.baseRef && (
+            <div className="px-1 text-xs text-slate-500 dark:text-slate-400">
+              {t.kanbanDetail.baseComparison.replace("{baseRef}", changes.baseRef)}
+            </div>
+          )}
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-1 dark:border-[#202433] dark:bg-[#0d1018]">
+            <div className="space-y-0.5">
+              {changes.commits?.map((commit) => (
+                <CommitRow
+                  key={`${changes.codebaseId}-${commit.sha}`}
+                  commit={commit}
+                  selected={commit.sha === activeCommitKey}
+                  onClick={() => setPinnedCommitSha(commit.sha)}
+                />
+              ))}
+            </div>
+          </div>
+          <TaskCommitDiffPreview
+            commit={activeCommit}
+            diff={activeCommitDiff}
+            loading={loadingCommitSha === activeCommitKey && !activeCommitDiff}
+            error={activeCommitDiffError}
+            compact={compact}
+          />
+        </div>
       ) : changes.files.length === 0 ? (
         <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
           {changes.repoPath ? t.kanbanDetail.noChanges : t.kanbanDetail.noRepoChanges}
@@ -1051,7 +1160,6 @@ function TaskChangesPanel({
 }
 
 interface ParsedDiffPreview {
-  path: string;
   additions: number;
   deletions: number;
   lines: Array<{
@@ -1062,20 +1170,16 @@ interface ParsedDiffPreview {
   }>;
 }
 
-function parseFileDiffPreview(diff: KanbanFileDiffPreview): ParsedDiffPreview {
+function parseUnifiedDiffPreview(diff: { patch: string; additions?: number; deletions?: number }): ParsedDiffPreview {
   const lines = diff.patch.split("\n");
   let additions = diff.additions ?? 0;
   let deletions = diff.deletions ?? 0;
-  let resolvedPath = diff.path;
   let oldLineNumber = 0;
   let newLineNumber = 0;
   let countedBodyLines = false;
 
   const parsedLines = lines.map((line) => {
-    if (line.startsWith("+++ b/")) {
-      resolvedPath = line.slice(6);
-      return { kind: "meta" as const, text: line };
-    }
+    if (line.startsWith("+++ b/")) return { kind: "meta" as const, text: line };
     if (line.startsWith("+") && !line.startsWith("+++")) {
       if (diff.additions == null) additions += 1;
       countedBodyLines = true;
@@ -1121,11 +1225,50 @@ function parseFileDiffPreview(diff: KanbanFileDiffPreview): ParsedDiffPreview {
   });
 
   return {
-    path: resolvedPath,
     additions: countedBodyLines ? additions : diff.additions ?? additions,
     deletions: countedBodyLines ? deletions : diff.deletions ?? deletions,
     lines: parsedLines,
   };
+}
+
+function renderUnifiedDiffLines(parsedDiff: ParsedDiffPreview) {
+  return parsedDiff.lines.map((line, index) => (
+    <div
+      key={`${line.text}-${index}`}
+      className={
+        line.kind === "add"
+          ? "grid grid-cols-[3rem_3rem_1.5rem_minmax(0,1fr)] bg-emerald-950/70 px-3 text-emerald-100"
+          : line.kind === "remove"
+            ? "grid grid-cols-[3rem_3rem_1.5rem_minmax(0,1fr)] bg-rose-950/60 px-3 text-rose-100"
+            : line.kind === "hunk"
+              ? "bg-sky-950/60 px-3 text-sky-100"
+              : line.kind === "meta"
+                ? "bg-slate-900 px-3 text-slate-400"
+                : "grid grid-cols-[3rem_3rem_1.5rem_minmax(0,1fr)] px-3 text-slate-200"
+      }
+    >
+      {line.kind === "add" || line.kind === "remove" || line.kind === "context" ? (
+        <>
+          <span className="select-none pr-2 text-right text-slate-500">
+            {typeof line.oldLineNumber === "number" ? (
+              <span data-testid={`kanban-diff-old-line-${index}`}>{line.oldLineNumber}</span>
+            ) : ""}
+          </span>
+          <span className="select-none pr-2 text-right text-slate-500">
+            {typeof line.newLineNumber === "number" ? (
+              <span data-testid={`kanban-diff-new-line-${index}`}>{line.newLineNumber}</span>
+            ) : ""}
+          </span>
+          <span className="select-none text-center">
+            {line.text[0] ?? " "}
+          </span>
+          <span>{line.text.slice(1) || " "}</span>
+        </>
+      ) : (
+        line.text || " "
+      )}
+    </div>
+  ));
 }
 
 function TaskFileDiffPreview({
@@ -1152,8 +1295,8 @@ function TaskFileDiffPreview({
   }
 
   const badge = STATUS_BADGE[file.status];
-  const parsedDiff = diff ? parseFileDiffPreview(diff) : null;
-  const previewPath = parsedDiff?.path ?? file.path;
+  const parsedDiff = diff ? parseUnifiedDiffPreview(diff) : null;
+  const previewPath = diff?.path ?? file.path;
   const lastSlash = previewPath.lastIndexOf("/");
   const fileName = lastSlash === -1 ? previewPath : previewPath.slice(lastSlash + 1);
   const fileDirectory = lastSlash === -1 ? null : previewPath.slice(0, lastSlash);
@@ -1208,43 +1351,115 @@ function TaskFileDiffPreview({
       ) : (
         <div className="max-h-[28rem] overflow-auto">
           <pre className="min-w-full bg-slate-950/95 px-0 py-0 text-[11px] leading-5 text-slate-100">
-            {parsedDiff.lines.map((line, index) => (
-              <div
-                key={`${line.text}-${index}`}
-                className={
-                  line.kind === "add"
-                    ? "grid grid-cols-[3rem_3rem_1.5rem_minmax(0,1fr)] bg-emerald-950/70 px-3 text-emerald-100"
-                    : line.kind === "remove"
-                      ? "grid grid-cols-[3rem_3rem_1.5rem_minmax(0,1fr)] bg-rose-950/60 px-3 text-rose-100"
-                      : line.kind === "hunk"
-                        ? "bg-sky-950/60 px-3 text-sky-100"
-                        : line.kind === "meta"
-                          ? "bg-slate-900 px-3 text-slate-400"
-                          : "grid grid-cols-[3rem_3rem_1.5rem_minmax(0,1fr)] px-3 text-slate-200"
-                }
-              >
-                {line.kind === "add" || line.kind === "remove" || line.kind === "context" ? (
-                  <>
-                    <span className="select-none pr-2 text-right text-slate-500">
-                      {typeof line.oldLineNumber === "number" ? (
-                        <span data-testid={`kanban-diff-old-line-${index}`}>{line.oldLineNumber}</span>
-                      ) : ""}
-                    </span>
-                    <span className="select-none pr-2 text-right text-slate-500">
-                      {typeof line.newLineNumber === "number" ? (
-                        <span data-testid={`kanban-diff-new-line-${index}`}>{line.newLineNumber}</span>
-                      ) : ""}
-                    </span>
-                    <span className="select-none text-center">
-                      {line.text[0] ?? " "}
-                    </span>
-                    <span>{line.text.slice(1) || " "}</span>
-                  </>
-                ) : (
-                  line.text || " "
-                )}
-              </div>
-            ))}
+            {renderUnifiedDiffLines(parsedDiff)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommitRow({
+  commit,
+  selected = false,
+  onClick,
+}: {
+  commit: KanbanCommitChangeItem;
+  selected?: boolean;
+  onClick?: () => void;
+}) {
+  const timestamp = new Date(commit.authoredAt);
+  const renderedTimestamp = Number.isNaN(timestamp.getTime()) ? commit.authoredAt : timestamp.toLocaleString();
+  return (
+    <button
+      type="button"
+      className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+        selected ? "bg-amber-50/80 dark:bg-amber-900/10" : "hover:bg-slate-100/80 dark:hover:bg-[#171b27]"
+      }`}
+      onClick={onClick}
+      aria-pressed={selected}
+      data-testid={`kanban-commit-row-${commit.sha}`}
+    >
+      <div className="min-w-0">
+        <div className="truncate text-[11px] font-medium leading-4 text-slate-800 dark:text-slate-100" title={commit.summary}>
+          {commit.summary}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[9px] leading-3.5 text-slate-500 dark:text-slate-400">
+          <span className="rounded-sm border border-slate-200 px-1 py-0 dark:border-slate-700">{commit.shortSha}</span>
+          <span>{commit.authorName}</span>
+          <span>{renderedTimestamp}</span>
+        </div>
+      </div>
+      <div className="mt-0.5 flex min-w-[3.25rem] shrink-0 items-center justify-end gap-1 self-start text-[10px] font-mono leading-4">
+        <span className="text-emerald-600 dark:text-emerald-300">+{commit.additions}</span>
+        <span className="text-rose-600 dark:text-rose-300">-{commit.deletions}</span>
+      </div>
+    </button>
+  );
+}
+
+function TaskCommitDiffPreview({
+  commit,
+  diff,
+  loading,
+  error,
+  compact = false,
+}: {
+  commit: KanbanCommitChangeItem | null;
+  diff?: KanbanCommitDiffPreview;
+  loading: boolean;
+  error?: string;
+  compact?: boolean;
+}) {
+  const { t } = useTranslation();
+
+  if (!commit) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-200/80 px-3 py-4 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
+        {t.kanbanDetail.clickCommitToInspectDiff}
+      </div>
+    );
+  }
+
+  const preview = diff ?? { ...commit, patch: "" };
+  const parsedDiff = preview.patch ? parseUnifiedDiffPreview(preview) : null;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-[#202433] dark:bg-[#0d1018]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 px-3 py-2 dark:border-[#202433]">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100" title={preview.summary}>
+            {preview.summary}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="rounded-full border border-slate-200 px-2 py-0.5 dark:border-slate-700">{preview.shortSha}</span>
+            <span>{preview.authorName}</span>
+            <span>{new Date(preview.authoredAt).toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="shrink-0 text-[11px] font-mono">
+          <span className="text-emerald-600 dark:text-emerald-300">+{preview.additions}</span>
+          {" "}
+          <span className="text-rose-600 dark:text-rose-300">-{preview.deletions}</span>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className={`px-3 py-3 text-sm text-slate-500 dark:text-slate-400 ${compact ? "leading-5" : "leading-6"}`}>
+          {t.kanbanDetail.loadingCommitDiff}
+        </div>
+      ) : error ? (
+        <div className={`border-l-2 border-rose-400/80 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/70 dark:text-rose-300 ${compact ? "leading-5" : "leading-6"}`}>
+          {error}
+        </div>
+      ) : !parsedDiff ? (
+        <div className={`px-3 py-3 text-sm text-slate-500 dark:text-slate-400 ${compact ? "leading-5" : "leading-6"}`}>
+          {t.kanbanDetail.noDiffAvailable}
+        </div>
+      ) : (
+        <div className="max-h-[28rem] overflow-auto">
+          <pre className="min-w-full bg-slate-950/95 px-0 py-0 text-[11px] leading-5 text-slate-100">
+            {renderUnifiedDiffLines(parsedDiff)}
           </pre>
         </div>
       )}

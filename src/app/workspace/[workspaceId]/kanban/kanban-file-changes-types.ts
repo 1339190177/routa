@@ -38,6 +38,9 @@ export interface KanbanTaskChanges extends KanbanRepoChanges {
   source: "worktree" | "repo";
   worktreeId?: string;
   worktreePath?: string;
+  mode?: "worktree" | "commits";
+  baseRef?: string;
+  commits?: KanbanCommitChangeItem[];
 }
 
 export interface KanbanFileDiffPreview {
@@ -47,4 +50,18 @@ export interface KanbanFileDiffPreview {
   patch: string;
   additions?: number;
   deletions?: number;
+}
+
+export interface KanbanCommitChangeItem {
+  sha: string;
+  shortSha: string;
+  summary: string;
+  authorName: string;
+  authoredAt: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface KanbanCommitDiffPreview extends KanbanCommitChangeItem {
+  patch: string;
 }

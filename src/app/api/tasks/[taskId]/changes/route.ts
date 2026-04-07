@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getRoutaSystem } from "@/core/routa-system";
 import { getRepoChanges, isGitRepository } from "@/core/git/git-utils";
+import { buildTaskDeliveryReadiness } from "@/core/kanban/task-delivery-readiness";
+import { getRepoCommitChanges } from "@/core/git";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +59,17 @@ export async function GET(
     }
 
     const changes = getRepoChanges(repoPath);
+    const deliveryReadiness = await buildTaskDeliveryReadiness(task, system);
+    const committedChanges = changes.status.clean
+      && deliveryReadiness.checked
+      && deliveryReadiness.hasCommitsSinceBase
+      && deliveryReadiness.baseRef
+      ? getRepoCommitChanges(repoPath, {
+        baseRef: deliveryReadiness.baseRef,
+        maxCount: Math.max(deliveryReadiness.commitsSinceBase, 1),
+      })
+      : [];
+
     return NextResponse.json({
       changes: {
         codebaseId,
@@ -65,6 +78,9 @@ export async function GET(
         branch: changes.branch,
         status: changes.status,
         files: changes.files,
+        mode: committedChanges.length > 0 ? "commits" : "worktree",
+        baseRef: deliveryReadiness.baseRef,
+        commits: committedChanges,
         source: worktree ? "worktree" : "repo",
         worktreeId: worktree?.id,
         worktreePath: worktree?.worktreePath,
