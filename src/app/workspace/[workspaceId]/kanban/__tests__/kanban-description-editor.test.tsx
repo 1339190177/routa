@@ -104,12 +104,12 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  delete (HTMLElement.prototype as Partial<HTMLElement>).getBoundingClientRect;
-  delete (HTMLElement.prototype as Partial<HTMLElement>).getClientRects;
-  delete (Text.prototype as Partial<Text>).getBoundingClientRect;
-  delete (Text.prototype as Partial<Text>).getClientRects;
-  delete (Range.prototype as Partial<Range>).getBoundingClientRect;
-  delete (Range.prototype as Partial<Range>).getClientRects;
+  delete ((HTMLElement.prototype as unknown) as Record<string, unknown>).getBoundingClientRect;
+  delete ((HTMLElement.prototype as unknown) as Record<string, unknown>).getClientRects;
+  delete ((Text.prototype as unknown) as Record<string, unknown>).getBoundingClientRect;
+  delete ((Text.prototype as unknown) as Record<string, unknown>).getClientRects;
+  delete ((Range.prototype as unknown) as Record<string, unknown>).getBoundingClientRect;
+  delete ((Range.prototype as unknown) as Record<string, unknown>).getClientRects;
 });
 
 describe("KanbanDescriptionEditor markdown conversion", () => {
