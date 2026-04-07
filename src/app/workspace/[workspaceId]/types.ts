@@ -3,6 +3,7 @@
 import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
 import type { KanbanRequiredTaskField } from "@/core/models/kanban";
 import type { TaskAnalysisStatus } from "@/core/models/task";
+import type { TaskDeliveryReadiness } from "@/core/kanban/task-delivery-readiness";
 
 export interface SessionInfo {
   sessionId: string;
@@ -194,6 +195,7 @@ export interface TaskInfo {
   verificationReport?: string;
   artifactSummary?: ArtifactSummaryInfo;
   evidenceSummary?: TaskEvidenceSummaryInfo;
+  deliveryReadiness?: TaskDeliveryReadiness;
   storyReadiness?: {
     ready: boolean;
     missing: KanbanRequiredTaskField[];

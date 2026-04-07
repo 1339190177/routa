@@ -182,6 +182,11 @@ describe("/api/tasks/[taskId]", () => {
       missing: [],
       requiredTaskFields: [],
     });
+    expect(data.task.deliveryReadiness).toMatchObject({
+      checked: false,
+      commitsSinceBase: 0,
+      hasCommitsSinceBase: false,
+    });
     expect(data.task.investValidation).toMatchObject({
       source: "heuristic",
       overallStatus: "fail",
@@ -532,6 +537,65 @@ describe("/api/tasks/[taskId]", () => {
       checked: true,
       commitsSinceBase: 0,
       hasCommitsSinceBase: false,
+    });
+    expect(taskStore.save).not.toHaveBeenCalled();
+  });
+
+  it("blocks moving a card to review when the branch still has uncommitted changes", async () => {
+    const existingTask = createTask({
+      id: "task-1",
+      title: "Review blocked until worktree is clean",
+      objective: "Need all implementation committed before review",
+      workspaceId: "workspace-1",
+      boardId: "board-1",
+      columnId: "dev",
+      status: TaskStatus.IN_PROGRESS,
+    });
+    taskStore.get.mockResolvedValue(existingTask);
+    system.kanbanBoardStore.get = vi.fn().mockResolvedValue({
+      id: "board-1",
+      columns: [
+        { id: "dev", name: "Dev", position: 1, stage: "dev" },
+        { id: "review", name: "Review", position: 2, stage: "review" },
+      ],
+    });
+    buildTaskDeliveryReadiness.mockResolvedValue({
+      checked: true,
+      branch: "issue/task-1",
+      baseBranch: "main",
+      baseRef: "origin/main",
+      modified: 2,
+      untracked: 1,
+      ahead: 1,
+      behind: 0,
+      commitsSinceBase: 1,
+      hasCommitsSinceBase: true,
+      hasUncommittedChanges: true,
+      isGitHubRepo: true,
+      canCreatePullRequest: false,
+    });
+    buildTaskDeliveryTransitionError.mockReturnValue(
+      'Cannot move task to "Review": branch "issue/task-1" still has uncommitted changes (2 modified, 1 untracked). Commit, stash, or discard them before requesting review.',
+    );
+
+    const request = new NextRequest("http://localhost/api/tasks/task-1", {
+      method: "PATCH",
+      body: JSON.stringify({ columnId: "review" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await PATCH(request, {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain("uncommitted changes");
+    expect(data.error).toContain("before requesting review");
+    expect(data.deliveryReadiness).toMatchObject({
+      checked: true,
+      hasCommitsSinceBase: true,
+      hasUncommittedChanges: true,
     });
     expect(taskStore.save).not.toHaveBeenCalled();
   });

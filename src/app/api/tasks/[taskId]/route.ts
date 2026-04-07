@@ -36,6 +36,7 @@ async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSyste
   const evidenceSummary = await buildTaskEvidenceSummary(task, system);
   const storyReadiness = await buildTaskStoryReadiness(task, system);
   const investValidation = buildTaskInvestValidation(task);
+  const deliveryReadiness = await buildTaskDeliveryReadiness(task, system);
 
   return {
     ...task,
@@ -43,6 +44,7 @@ async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSyste
     evidenceSummary,
     storyReadiness,
     investValidation,
+    deliveryReadiness,
     githubSyncedAt: task.githubSyncedAt?.toISOString(),
     createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
     updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,

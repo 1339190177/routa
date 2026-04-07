@@ -684,6 +684,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     clean: string;
     evidenceBundle: string;
     evidenceBundleHint: string;
+    commits: string;
     inheritedFromLane: string;
     laneMetadataUnavailable: string;
     noLaneAutomation: string;

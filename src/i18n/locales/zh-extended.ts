@@ -679,6 +679,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     clean: "干净",
     evidenceBundle: "证据摘要",
     evidenceBundleHint: "先汇总评审证据，再深入查看原始 artifact。",
+    commits: "提交",
     inheritedFromLane: "继承自当前泳道。",
     laneMetadataUnavailable: "泳道元数据不可用，使用任务级默认值。",
     noLaneAutomation: "未配置泳道自动化",

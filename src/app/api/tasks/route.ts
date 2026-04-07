@@ -30,6 +30,7 @@ import {
   buildTaskInvestValidation,
   buildTaskStoryReadiness,
 } from "./task-evidence-summary";
+import { buildTaskDeliveryReadiness } from "@/core/kanban/task-delivery-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -369,6 +370,7 @@ async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSyste
   const evidenceSummary = await buildTaskEvidenceSummary(task, system);
   const storyReadiness = await buildTaskStoryReadiness(task, system);
   const investValidation = buildTaskInvestValidation(task);
+  const deliveryReadiness = await buildTaskDeliveryReadiness(task, system);
 
   return {
     id: task.id,
@@ -415,6 +417,7 @@ async function serializeTask(task: Task, system: ReturnType<typeof getRoutaSyste
     evidenceSummary,
     storyReadiness,
     investValidation,
+    deliveryReadiness,
     createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
     updatedAt: task.updatedAt instanceof Date ? task.updatedAt.toISOString() : task.updatedAt,
   };

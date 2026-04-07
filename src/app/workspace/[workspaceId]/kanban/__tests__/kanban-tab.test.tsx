@@ -820,6 +820,45 @@ describe("KanbanTab manual run provider selection", () => {
 });
 
 describe("KanbanCardDetail changes tab", () => {
+  it("shows committed change count in the detail header when delivery readiness reports local commits", () => {
+    render(
+      <KanbanCardDetail
+        task={createTask("task-1", "Story One", {
+          githubNumber: 378,
+          deliveryReadiness: {
+            checked: true,
+            repoPath: "/tmp/repos/main",
+            branch: "task/story-one",
+            baseBranch: "main",
+            baseRef: "origin/main",
+            modified: 0,
+            untracked: 0,
+            ahead: 1,
+            behind: 0,
+            commitsSinceBase: 1,
+            hasCommitsSinceBase: true,
+            hasUncommittedChanges: false,
+            isGitHubRepo: true,
+            canCreatePullRequest: true,
+          },
+        })}
+        availableProviders={[]}
+        specialists={[]}
+        specialistLanguage="en"
+        codebases={[]}
+        allCodebaseIds={[]}
+        worktreeCache={{}}
+        onPatchTask={vi.fn(async () => createTask("task-1", "Story One"))}
+        onRetryTrigger={vi.fn()}
+        onDelete={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Commits")).toBeTruthy();
+    expect(screen.getByText("1")).toBeTruthy();
+  });
+
   it("loads task-scoped worktree changes when the changes tab opens", async () => {
     desktopAwareFetch.mockResolvedValue({
       ok: true,

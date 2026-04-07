@@ -679,6 +679,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     clean: "Clean",
     evidenceBundle: "Evidence Bundle",
     evidenceBundleHint: "Aggregate review evidence before drilling into raw artifacts.",
+    commits: "Commits",
     inheritedFromLane: "Inherited from the current lane.",
     laneMetadataUnavailable: "Lane metadata unavailable, using task-level defaults.",
     noLaneAutomation: "No lane automation configured",

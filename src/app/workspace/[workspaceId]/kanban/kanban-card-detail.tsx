@@ -353,6 +353,13 @@ export function KanbanCardDetail({
             {task.githubNumber && (
               <MetaBadge label="GitHub" value={`#${task.githubNumber}`} compact={compactMode} />
             )}
+            {task.deliveryReadiness?.hasCommitsSinceBase && task.deliveryReadiness.commitsSinceBase > 0 && (
+              <MetaBadge
+                label={t.kanbanDetail.commits}
+                value={String(task.deliveryReadiness.commitsSinceBase)}
+                compact={compactMode}
+              />
+            )}
             {(task.labels ?? []).map((label) => (
               <span
                 key={label}
