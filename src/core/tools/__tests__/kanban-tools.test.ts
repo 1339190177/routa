@@ -532,6 +532,7 @@ describe("KanbanTools", () => {
           position: 3,
           stage: "review",
           automation: {
+            enabled: true,
             deliveryRules: {
               requireCommittedChanges: true,
               requireCleanWorktree: true,
@@ -623,6 +624,7 @@ describe("KanbanTools", () => {
           position: 4,
           stage: "done",
           automation: {
+            enabled: true,
             deliveryRules: {
               requireCommittedChanges: true,
               requireCleanWorktree: true,
