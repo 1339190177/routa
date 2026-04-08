@@ -58,3 +58,15 @@ export {
   type GitCredentialInstructions,
   type GitOperationResult,
 } from "./git-error-handler";
+
+export {
+  stageFiles,
+  unstageFiles,
+  discardChanges,
+  createCommit,
+  pullCommits,
+  rebaseBranch,
+  resetBranch,
+  getCommitList,
+  type CommitInfo,
+} from "./git-operations";
