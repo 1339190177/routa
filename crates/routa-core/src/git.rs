@@ -5,7 +5,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -286,6 +286,33 @@ pub fn reset_local_changes(repo_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_git_paths(files: &[String]) -> Result<(), String> {
+    for file in files {
+        if file.trim().is_empty() {
+            return Err("File path cannot be empty".to_string());
+        }
+
+        let path = Path::new(file);
+        if path.is_absolute() {
+            return Err(format!("Absolute file paths are not allowed: {}", file));
+        }
+
+        if path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        }) {
+            return Err(format!(
+                "File paths must stay within the repository root: {}",
+                file
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 // ============================================================================
 // Git Workflow Operations (for enhanced kanban file changes UI)
 // ============================================================================
@@ -295,6 +322,7 @@ pub fn stage_files(repo_path: &str, files: &[String]) -> Result<(), String> {
     if files.is_empty() {
         return Ok(());
     }
+    validate_git_paths(files)?;
 
     let mut args = vec!["add", "--"];
     args.extend(files.iter().map(|s| s.as_str()));
@@ -319,6 +347,7 @@ pub fn unstage_files(repo_path: &str, files: &[String]) -> Result<(), String> {
     if files.is_empty() {
         return Ok(());
     }
+    validate_git_paths(files)?;
 
     let mut args = vec!["restore", "--staged", "--"];
     args.extend(files.iter().map(|s| s.as_str()));
@@ -344,6 +373,7 @@ pub fn discard_changes(repo_path: &str, files: &[String]) -> Result<(), String> 
     if files.is_empty() {
         return Ok(());
     }
+    validate_git_paths(files)?;
 
     let mut tracked_files: Vec<&str> = Vec::new();
     let mut untracked_files: Vec<&str> = Vec::new();
@@ -413,6 +443,7 @@ pub fn create_commit(
 
     // Stage specific files if provided
     if let Some(file_list) = files {
+        validate_git_paths(file_list)?;
         stage_files(repo_path, file_list)?;
     }
 
@@ -499,7 +530,12 @@ pub fn rebase_branch(repo_path: &str, onto: &str) -> Result<(), String> {
 
 /// Reset branch to a specific commit or branch
 /// mode: "soft" keeps changes staged, "hard" discards all changes
-pub fn reset_branch(repo_path: &str, to: &str, mode: &str) -> Result<(), String> {
+pub fn reset_branch(
+    repo_path: &str,
+    to: &str,
+    mode: &str,
+    confirm_destructive: bool,
+) -> Result<(), String> {
     let reset_mode = match mode {
         "hard" => "--hard",
         "soft" => "--soft",
@@ -510,6 +546,10 @@ pub fn reset_branch(repo_path: &str, to: &str, mode: &str) -> Result<(), String>
             ))
         }
     };
+
+    if mode == "hard" && !confirm_destructive {
+        return Err("Hard reset requires explicit destructive confirmation".to_string());
+    }
 
     let output = Command::new("git")
         .args(["reset", reset_mode, to])

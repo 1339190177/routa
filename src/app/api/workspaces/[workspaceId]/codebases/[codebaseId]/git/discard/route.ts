@@ -15,11 +15,18 @@ export async function POST(
 ) {
   const { workspaceId, codebaseId } = await params;
   const body = await request.json();
-  const { files } = body as { files?: string[] };
+  const { files, confirm } = body as { files?: string[]; confirm?: boolean };
 
   if (!files || !Array.isArray(files) || files.length === 0) {
     return NextResponse.json(
       { success: false, error: "Missing or invalid 'files' array in request body" },
+      { status: 400 },
+    );
+  }
+
+  if (confirm !== true) {
+    return NextResponse.json(
+      { success: false, error: "Discard changes requires explicit confirmation" },
       { status: 400 },
     );
   }

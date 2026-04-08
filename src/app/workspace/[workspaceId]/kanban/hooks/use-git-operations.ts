@@ -23,7 +23,7 @@ export function useGitOperations({ workspaceId, codebaseId, onSuccess, onError }
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ files }),
+          body: JSON.stringify({ files, confirm: true }),
         }
       );
 
