@@ -38,7 +38,7 @@ async fn stage_files(
         .workspace_store
         .get(&workspace_id)
         .await
-        .map_err(|e| ServerError::InternalError(e.to_string()))?
+        .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Workspace not found".to_string()))?;
 
     // Get codebase
@@ -46,7 +46,7 @@ async fn stage_files(
         .codebase_store
         .get(&codebase_id)
         .await
-        .map_err(|e| ServerError::InternalError(e.to_string()))?
+        .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Codebase not found".to_string()))?;
 
     // Verify it's a git repository
@@ -82,14 +82,14 @@ async fn unstage_files(
         .workspace_store
         .get(&workspace_id)
         .await
-        .map_err(|e| ServerError::InternalError(e.to_string()))?
+        .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Workspace not found".to_string()))?;
 
     let codebase = state
         .codebase_store
         .get(&codebase_id)
         .await
-        .map_err(|e| ServerError::InternalError(e.to_string()))?
+        .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Codebase not found".to_string()))?;
 
     if !routa_core::git::is_git_repository(&codebase.repo_path) {
@@ -137,14 +137,14 @@ async fn create_commit(
         .workspace_store
         .get(&workspace_id)
         .await
-        .map_err(|e| ServerError::InternalError(e.to_string()))?
+        .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Workspace not found".to_string()))?;
 
     let codebase = state
         .codebase_store
         .get(&codebase_id)
         .await
-        .map_err(|e| ServerError::InternalError(e.to_string()))?
+        .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Codebase not found".to_string()))?;
 
     if !routa_core::git::is_git_repository(&codebase.repo_path) {
@@ -194,14 +194,14 @@ async fn get_commits(
         .workspace_store
         .get(&workspace_id)
         .await
-        .map_err(|e| ServerError::InternalError(e.to_string()))?
+        .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Workspace not found".to_string()))?;
 
     let codebase = state
         .codebase_store
         .get(&codebase_id)
         .await
-        .map_err(|e| ServerError::InternalError(e.to_string()))?
+        .map_err(|e| ServerError::Internal(e.to_string()))?
         .ok_or_else(|| ServerError::NotFound("Codebase not found".to_string()))?;
 
     if !routa_core::git::is_git_repository(&codebase.repo_path) {
@@ -215,7 +215,7 @@ async fn get_commits(
         query.limit,
         query.since.as_deref(),
     )
-    .map_err(|e| ServerError::InternalError(e))?;
+    .map_err(|e| ServerError::Internal(e))?;
 
     let count = commits.len();
 
