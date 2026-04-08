@@ -302,6 +302,61 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("submit_lane_handoff");
   });
 
+  it("shows unresolved handoffs for the current lane even when currentSessionId is unavailable", () => {
+    const task = createTask({
+      id: "task-4c",
+      title: "Recover dev verification context",
+      objective: "Continue dev with review feedback context",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "dev",
+    });
+    task.laneSessions = [
+      {
+        sessionId: "session-dev-1",
+        columnId: "dev",
+        columnName: "Dev",
+        provider: "opencode",
+        role: "DEVELOPER",
+        status: "completed",
+        startedAt: "2026-03-17T00:00:00.000Z",
+      },
+      {
+        sessionId: "session-review-1",
+        columnId: "review",
+        columnName: "Review",
+        provider: "codex",
+        role: "GATE",
+        status: "completed",
+        startedAt: "2026-03-17T01:00:00.000Z",
+      },
+    ];
+    task.laneHandoffs = [
+      {
+        id: "handoff-2",
+        fromSessionId: "session-review-1",
+        toSessionId: "session-dev-1",
+        fromColumnId: "review",
+        toColumnId: "dev",
+        requestType: "runtime_context",
+        request: "Use the same seeded fixture and confirm the visual diff.",
+        status: "delivered",
+        requestedAt: "2026-03-17T01:30:00.000Z",
+      },
+    ];
+
+    const prompt = buildTaskPrompt(task, [
+      { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+      { id: "dev", name: "Dev", position: 1, stage: "dev" },
+      { id: "review", name: "Review", position: 2, stage: "review" },
+      { id: "done", name: "Done", position: 3, stage: "done" },
+    ]);
+
+    expect(prompt).toContain("## Lane Handoff Context");
+    expect(prompt).toContain("Pending handoff 1: Runtime context");
+    expect(prompt).toContain("Use the same seeded fixture and confirm the visual diff.");
+  });
+
   it("routes review happy-path guidance to done even if blocked is positioned before it", () => {
     const task = createTask({
       id: "task-review-1",

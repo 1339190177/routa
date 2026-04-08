@@ -82,17 +82,18 @@ export function buildTaskPrompt(
   const previousLaneRun = !isBacklogPlanning
     ? getPreviousLaneRun(task, options?.currentSessionId) ?? getLatestLaneSessionForColumn(task, currentColumnId)
     : undefined;
-  const pendingLaneHandoffs = options?.currentSessionId
-    ? (task.laneHandoffs ?? []).filter((handoff) => (
-      !handoff.respondedAt && (
-        handoff.toSessionId === options.currentSessionId
-        || (
-          Boolean(currentLaneSession?.columnId)
-          && handoff.toColumnId === currentLaneSession?.columnId
-        )
-      )
-    ))
-    : [];
+  const pendingLaneHandoffs = (task.laneHandoffs ?? []).filter((handoff) => {
+    if (handoff.respondedAt) {
+      return false;
+    }
+
+    if (options?.currentSessionId && handoff.toSessionId === options.currentSessionId) {
+      return true;
+    }
+
+    const targetColumnId = currentLaneSession?.columnId ?? currentColumnId;
+    return Boolean(targetColumnId) && handoff.toColumnId === targetColumnId;
+  });
   const laneAutomationState = resolveCurrentLaneAutomationState(task, boardColumns, options);
   const canAdvanceToNextColumn = !isBacklogPlanning && !laneAutomationState.hasRemainingSteps;
   const summaryContext = options?.summaryContext;
