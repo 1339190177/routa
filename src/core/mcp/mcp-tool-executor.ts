@@ -500,6 +500,8 @@ export async function executeMcpTool(
           title: args.title as string | undefined,
           description: args.description as string | undefined,
           comment: args.comment as string | undefined,
+          agentId: args.agentId as string | undefined,
+          sessionId: args.sessionId as string | undefined,
           priority: args.priority as "low" | "medium" | "high" | "urgent" | undefined,
           labels: args.labels as string[] | undefined,
         })

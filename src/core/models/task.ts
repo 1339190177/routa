@@ -167,6 +167,8 @@ export interface TaskCommentEntry {
   body: string;
   createdAt: string;
   source?: "legacy_import" | "update_card";
+  agentId?: string;
+  sessionId?: string;
 }
 
 export interface Task {

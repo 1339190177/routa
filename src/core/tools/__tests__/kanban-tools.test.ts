@@ -517,6 +517,8 @@ describe("KanbanTools", () => {
     const result = await tools.updateCard({
       cardId: task.id,
       comment: "Second note",
+      agentId: "agent-review-1",
+      sessionId: "session-review-1",
     });
 
     expect(result.success).toBe(true);
@@ -526,11 +528,18 @@ describe("KanbanTools", () => {
     expect(saved?.comments).toHaveLength(2);
     expect(saved?.comments.map((entry) => entry.body)).toEqual(["Initial note", "Second note"]);
     expect(saved?.comments[1]?.source).toBe("update_card");
+    expect(saved?.comments[1]?.agentId).toBe("agent-review-1");
+    expect(saved?.comments[1]?.sessionId).toBe("session-review-1");
     expect(result.data).toMatchObject({
       comment: "Initial note\n\nSecond note",
       comments: [
         { body: "Initial note", source: "legacy_import" },
-        { body: "Second note", source: "update_card" },
+        {
+          body: "Second note",
+          source: "update_card",
+          agentId: "agent-review-1",
+          sessionId: "session-review-1",
+        },
       ],
     });
   });

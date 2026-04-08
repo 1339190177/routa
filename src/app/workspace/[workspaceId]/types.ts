@@ -122,6 +122,8 @@ export interface TaskInfo {
     body: string;
     createdAt: string;
     source?: "legacy_import" | "update_card";
+    agentId?: string;
+    sessionId?: string;
   }>;
   scope?: string;
   acceptanceCriteria?: string[];

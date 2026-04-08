@@ -93,6 +93,8 @@ function resolveTaskCommentEntries(task: TaskInfo): Array<{
   body: string;
   createdAt?: string;
   source?: "legacy_import" | "update_card";
+  agentId?: string;
+  sessionId?: string;
 }> {
   if ((task.comments?.length ?? 0) > 0) {
     return task.comments ?? [];
@@ -123,6 +125,22 @@ function formatCommentSource(
   }
   if (source === "update_card") {
     return t.kanbanDetail.progressNoteSourceUpdateCard;
+  }
+  return null;
+}
+
+function formatCommentActor(entry: {
+  agentId?: string;
+  sessionId?: string;
+}): string | null {
+  if (entry.agentId && entry.sessionId) {
+    return `${entry.agentId} · ${entry.sessionId}`;
+  }
+  if (entry.agentId) {
+    return entry.agentId;
+  }
+  if (entry.sessionId) {
+    return entry.sessionId;
   }
   return null;
 }
@@ -508,6 +526,7 @@ export function KanbanCardDetail({
                       {progressNotes.map((entry, index) => {
                         const timestamp = formatCommentTimestamp(entry.createdAt);
                         const sourceLabel = formatCommentSource(entry.source, t);
+                        const actorLabel = formatCommentActor(entry);
                         return (
                           <div key={entry.id} className="rounded-xl border border-slate-200/70 bg-slate-50/80 px-3 py-2.5 dark:border-slate-700/70 dark:bg-slate-900/30">
                             <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
@@ -516,6 +535,11 @@ export function KanbanCardDetail({
                                 {sourceLabel ? (
                                   <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
                                     {sourceLabel}
+                                  </span>
+                                ) : null}
+                                {actorLabel ? (
+                                  <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800/80 dark:text-slate-300">
+                                    {actorLabel}
                                   </span>
                                 ) : null}
                               </div>

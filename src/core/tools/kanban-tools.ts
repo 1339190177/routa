@@ -311,6 +311,8 @@ export class KanbanTools {
     title?: string;
     description?: string;
     comment?: string;
+    agentId?: string;
+    sessionId?: string;
     priority?: "low" | "medium" | "high" | "urgent";
     labels?: string[];
   }): Promise<ToolResult> {
@@ -330,7 +332,10 @@ export class KanbanTools {
     if (params.description !== undefined) task.objective = params.description;
     if (params.comment !== undefined) {
       task.comment = appendTaskComment(task.comment, params.comment);
-      task.comments = appendTaskCommentEntry(task.comments, params.comment);
+      task.comments = appendTaskCommentEntry(task.comments, params.comment, {
+        agentId: params.agentId,
+        sessionId: params.sessionId,
+      });
     }
     if (params.priority !== undefined) task.priority = params.priority as TaskPriority;
     if (params.labels !== undefined) task.labels = params.labels;
@@ -889,7 +894,11 @@ function appendTaskComment(existing: string | undefined, next: string): string {
   return trimmedExisting ? `${trimmedExisting}\n\n${trimmedNext}` : trimmedNext;
 }
 
-function appendTaskCommentEntry(existing: TaskCommentEntry[] | undefined, next: string): TaskCommentEntry[] {
+function appendTaskCommentEntry(
+  existing: TaskCommentEntry[] | undefined,
+  next: string,
+  metadata?: { agentId?: string; sessionId?: string },
+): TaskCommentEntry[] {
   const trimmedNext = next.trim();
   if (!trimmedNext) {
     return existing ?? [];
@@ -902,6 +911,8 @@ function appendTaskCommentEntry(existing: TaskCommentEntry[] | undefined, next: 
       body: trimmedNext,
       createdAt: new Date().toISOString(),
       source: "update_card",
+      agentId: metadata?.agentId,
+      sessionId: metadata?.sessionId,
     },
   ];
 }
