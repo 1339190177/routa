@@ -499,7 +499,10 @@ export function processUpdate(
     case "available_commands_update":
     case "config_option_update":
     case "session_info_update":
+      break;
+
     case "acp_status":
+      processAcpStatus(update, arr);
       break;
 
     default:
@@ -558,6 +561,31 @@ function processTaskCompletion(
       };
     }
   }
+}
+
+function processAcpStatus(update: Record<string, unknown>, arr: ChatMessage[]): void {
+  const status = typeof update.status === "string" ? update.status : undefined;
+  const error = typeof update.error === "string" ? update.error : undefined;
+  if (status !== "error" || !error) {
+    return;
+  }
+
+  const lastMessage = arr.at(-1);
+  if (lastMessage?.role === "info" && lastMessage.content === error) {
+    return;
+  }
+
+  arr.push({
+    id: uuidv4(),
+    role: "info",
+    content: error,
+    timestamp: new Date(),
+    rawData: {
+      sessionUpdate: "acp_status",
+      status,
+      error,
+    },
+  });
 }
 
 /**

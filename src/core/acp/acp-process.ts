@@ -415,45 +415,15 @@ export class AcpProcess {
         if (pending.method === "session/request_permission") {
             const decision = typeof response.decision === "string" ? response.decision : "approve";
             const scope = response.scope === "session" ? "session" : "turn";
-            const optionId = this.resolvePermissionOptionId(pending.params, decision, scope);
-
-            if (optionId) {
-                result = {
-                    outcome: {
-                        outcome: "selected",
-                        optionId,
-                    },
-                };
-                notificationRawInput = {
-                    ...pending.params,
-                    decision,
-                    scope,
-                    optionId,
-                    outcome: "selected",
-                };
-            } else {
-                const requestedPermissions = (
-                    typeof pending.params.permissions === "object" && pending.params.permissions !== null
-                ) ? pending.params.permissions as Record<string, unknown> : {};
-                const grantedPermissions = decision === "deny"
-                    ? {}
-                    : (
-                        typeof response.permissions === "object" && response.permissions !== null
-                            ? response.permissions as Record<string, unknown>
-                            : requestedPermissions
-                    );
-                result = {
-                    permissions: grantedPermissions,
-                    scope,
-                    outcome: decision === "deny" ? "denied" : "approved",
-                };
-                notificationRawInput = {
-                    ...pending.params,
-                    decision,
-                    scope,
-                    outcome: result.outcome,
-                };
-            }
+            result = this.buildPermissionResponseResult(pending.params, decision, scope);
+            const selectedOptionId = this.extractSelectedPermissionOptionId(result);
+            notificationRawInput = {
+                ...pending.params,
+                decision,
+                scope,
+                outcome: typeof selectedOptionId === "string" ? "selected" : "cancelled",
+                ...(selectedOptionId ? { optionId: selectedOptionId } : {}),
+            };
         } else {
             result = response;
         }
@@ -806,31 +776,7 @@ export class AcpProcess {
 
     private buildPermissionApprovalResult(params: Record<string, unknown>): Record<string, unknown> {
         const scope = this.getDefaultPermissionScope();
-        const optionId = this.resolvePermissionOptionId(params, "approve", scope);
-        if (optionId) {
-            return {
-                outcome: {
-                    outcome: "selected",
-                    optionId,
-                },
-            };
-        }
-
-        const requestedPermissions = (
-            typeof params.permissions === "object" && params.permissions !== null
-        ) ? params.permissions as Record<string, unknown> : undefined;
-
-        if (requestedPermissions) {
-            return {
-                permissions: requestedPermissions,
-                scope,
-                outcome: "approved",
-            };
-        }
-
-        return {
-            outcome: {outcome: "approved"},
-        };
+        return this.buildPermissionResponseResult(params, "approve", scope);
     }
 
     private getDefaultPermissionScope(): "session" | "turn" {
@@ -895,6 +841,47 @@ export class AcpProcess {
             "allow_once",
             "allow_always",
         ]);
+    }
+
+    private buildPermissionResponseResult(
+        params: Record<string, unknown>,
+        decision: string,
+        scope: "session" | "turn",
+    ): Record<string, unknown> {
+        const optionId = this.resolvePermissionOptionId(params, decision, scope)
+            ?? this.getFallbackPermissionOptionId(decision, scope);
+
+        if (optionId) {
+            return {
+                outcome: {
+                    outcome: "selected",
+                    optionId,
+                },
+            };
+        }
+
+        return {
+            outcome: {
+                outcome: "cancelled",
+            },
+        };
+    }
+
+    private getFallbackPermissionOptionId(
+        decision: string,
+        scope: "session" | "turn",
+    ): string | undefined {
+        if (decision === "deny") {
+            return "abort";
+        }
+        return scope === "session" ? "approved-for-session" : "approved";
+    }
+
+    private extractSelectedPermissionOptionId(result: Record<string, unknown>): string | undefined {
+        const outcome = typeof result.outcome === "object" && result.outcome !== null
+            ? result.outcome as Record<string, unknown>
+            : undefined;
+        return typeof outcome?.optionId === "string" ? outcome.optionId : undefined;
     }
 
     private findPermissionOptionId(

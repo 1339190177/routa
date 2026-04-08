@@ -57,6 +57,13 @@ import { handleSessionPrompt } from "./acp-session-prompt";
 
 export const dynamic = "force-dynamic";
 
+function isAcpErrorLike(error: unknown): error is AcpError {
+  if (error instanceof AcpError) return true;
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as Record<string, unknown>;
+  return candidate.name === "AcpError" && typeof candidate.message === "string";
+}
+
 function encodeSsePayload(payload: unknown): string {
   const params = typeof payload === "object" && payload !== null
     ? (payload as { params?: { eventId?: string } }).params
@@ -791,7 +798,7 @@ export async function POST(request: NextRequest) {
     console.error("[ACP Route] Error:", error);
 
     // Handle AcpError with auth information
-    if (error instanceof AcpError) {
+    if (isAcpErrorLike(error)) {
       return jsonrpcResponse(null, null, {
         code: error.code,
         message: error.message,

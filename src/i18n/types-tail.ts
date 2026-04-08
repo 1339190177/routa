@@ -6,6 +6,11 @@ export interface TailTranslationDictionarySections {
     plan: string;
     requestPermissions: string;
     permissionReason: string;
+    permissionCommand: string;
+    permissionSuggestedAccess: string;
+    permissionTechnicalDetails: string;
+    permissionAllow: string;
+    permissionDeny: string;
     permissionApproved: string;
     permissionDenied: string;
     permissionScopeTurn: string;

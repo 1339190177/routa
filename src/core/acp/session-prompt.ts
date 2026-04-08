@@ -129,7 +129,7 @@ function markSessionPromptError(
 }
 
 function getPromptErrorData(error: unknown): Record<string, unknown> | undefined {
-  if (error instanceof AcpError) {
+  if (isAcpErrorLike(error)) {
     return {
       source: "acp",
       code: error.code,
@@ -146,6 +146,13 @@ function getPromptErrorData(error: unknown): Record<string, unknown> | undefined
     };
   }
   return undefined;
+}
+
+function isAcpErrorLike(error: unknown): error is AcpError {
+  if (error instanceof AcpError) return true;
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as Record<string, unknown>;
+  return candidate.name === "AcpError" && typeof candidate.message === "string";
 }
 
 function buildCoordinatorContextPrompt(input: {

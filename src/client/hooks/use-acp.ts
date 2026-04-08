@@ -64,15 +64,20 @@ const BUILTIN_PROVIDER_FALLBACKS: AcpProviderInfo[] = [
   },
 ];
 
-function formatAcpErrorForLog(err: unknown): unknown {
+export function formatAcpErrorForLog(err: unknown): unknown {
   if (err instanceof AcpClientError) {
+    const data = err.data && typeof err.data === "object"
+      ? err.data as Record<string, unknown>
+      : undefined;
+    const nestedErrorData = data?.errorData;
     return {
       name: err.name,
       message: err.message,
       code: err.code,
       authMethods: err.authMethods,
       agentInfo: err.agentInfo,
-      data: err.data,
+      data,
+      errorData: nestedErrorData,
     };
   }
   return err;

@@ -42,6 +42,11 @@ vi.mock("@/i18n", () => ({
       messageBubble: {
         requestPermissions: "Request permissions",
         permissionReason: "Reason",
+        permissionCommand: "Command",
+        permissionSuggestedAccess: "Suggested access",
+        permissionTechnicalDetails: "Technical details",
+        permissionAllow: "Allow",
+        permissionDeny: "Deny",
         permissionScopeSession: "Entire session",
         permissionScopeTurn: "This turn only",
         permissionApproved: "Approved",
@@ -140,7 +145,7 @@ describe("ChatPanel session targeting", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
 
     await waitFor(() => {
       expect(mockSetMessagesBySession).toHaveBeenCalledTimes(1);

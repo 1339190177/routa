@@ -41,13 +41,10 @@ describe("AcpProcess codex permission handling", () => {
       jsonrpc: "2.0",
       id: 7,
       result: {
-        permissions: {
-          file_system: {
-            write: ["/tmp/outside"],
-          },
+        outcome: {
+          outcome: "selected",
+          optionId: "approved",
         },
-        scope: "turn",
-        outcome: "approved",
       },
     });
     expect(onNotification).toHaveBeenCalledWith(expect.objectContaining({
@@ -134,6 +131,42 @@ describe("AcpProcess codex permission handling", () => {
         outcome: {
           outcome: "selected",
           optionId: "approved-for-session",
+        },
+      },
+    });
+  });
+
+  it("falls back to ACP-standard selected results when options are missing", () => {
+    const process = createProcess();
+    const writeMessage = vi.fn();
+
+    process.setSessionContext({
+      sessionId: "session-1",
+      provider: "codex",
+      role: "CRAFTER",
+    });
+
+    (process as any).writeMessage = writeMessage;
+    (process as any).handleAgentRequest({
+      jsonrpc: "2.0",
+      id: 11,
+      method: "session/request_permission",
+      params: {
+        permissions: {
+          file_system: {
+            write: ["/tmp/outside"],
+          },
+        },
+      },
+    });
+
+    expect(writeMessage).toHaveBeenCalledWith({
+      jsonrpc: "2.0",
+      id: 11,
+      result: {
+        outcome: {
+          outcome: "selected",
+          optionId: "approved",
         },
       },
     });

@@ -12,6 +12,11 @@ vi.mock("@/i18n", () => ({
       messageBubble: {
         requestPermissions: "Request permissions",
         permissionReason: "Reason",
+        permissionCommand: "Command",
+        permissionSuggestedAccess: "Suggested access",
+        permissionTechnicalDetails: "Technical details",
+        permissionAllow: "Allow",
+        permissionDeny: "Deny",
         permissionApproved: "Approved",
         permissionDenied: "Denied",
         permissionScopeTurn: "This turn only",
@@ -86,11 +91,13 @@ describe("PermissionRequestBubble", () => {
 
     expect(screen.getByText("Run gh api repos/phodal/routa/pulls?head=phodal:issue/670c06ff&state=open")).not.toBeNull();
     expect(screen.getByText("Do you want to allow checking GitHub for an existing PR so I don’t create a duplicate?")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Yes" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "No, provide feedback" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Allow" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Deny" })).not.toBeNull();
     expect(screen.getByRole("option", { name: "Always" })).not.toBeNull();
-    expect(screen.getByText("command_prefix")).not.toBeNull();
-    expect(screen.getByText(/"gh"/)).not.toBeNull();
-    expect(screen.getByText(/"api"/)).not.toBeNull();
+    expect(screen.getByText("Suggested access")).not.toBeNull();
+    expect(screen.getByText("gh")).not.toBeNull();
+    expect(screen.getByText("api")).not.toBeNull();
+    expect(screen.getByText("Technical details")).not.toBeNull();
+    expect(screen.queryByText("Command")).toBeNull();
   });
 });

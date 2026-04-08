@@ -239,6 +239,32 @@ function getOptionLabel(option: PermissionRequestOption | undefined, fallback: s
     return fallback;
 }
 
+function extractPermissionCommand(rawInput: PermissionRequestPayload): string | null {
+    const command = rawInput.toolCall?.rawInput?.command;
+    if (Array.isArray(command) && command.length > 0) {
+        const shellCommand = command[command.length - 1];
+        if (typeof shellCommand === "string" && shellCommand.trim().length > 0) {
+            return shellCommand.trim();
+        }
+    }
+    return null;
+}
+
+function extractPermissionAmendment(rawInput: PermissionRequestPayload): string[] {
+    const amendment = rawInput.toolCall?.rawInput?.proposed_execpolicy_amendment;
+    if (Array.isArray(amendment)) {
+        return amendment.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    }
+    return [];
+}
+
+function shouldRenderPermissionCommand(requestTitle: string, command: string | null): boolean {
+    if (!command) return false;
+    const normalizedTitle = requestTitle.trim().toLowerCase();
+    const normalizedCommand = command.trim().toLowerCase();
+    return normalizedTitle.length === 0 || normalizedTitle === "request permissions" || normalizedTitle === "请求权限" || normalizedTitle !== `run ${normalizedCommand}`;
+}
+
 function AssistantBubble({content}: { content: string }) {
     return (
         <div className="w-full">
@@ -628,11 +654,12 @@ export function PermissionRequestBubble({
     const requestedPermissions = extractRequestedPermissions(rawInput);
     const reason = extractPermissionReason(rawInput);
     const requestTitle = extractPermissionTitle(rawInput, t.messageBubble.requestPermissions);
+    const command = extractPermissionCommand(rawInput);
+    const amendment = extractPermissionAmendment(rawInput);
     const outcome = mapPermissionOutcome(rawInput);
     const options = rawInput.options ?? [];
     const alwaysOption = options.find((option) => option.optionId === "approved-for-session" || option.kind === "allow_always");
     const onceOption = options.find((option) => option.optionId === "approved" || option.kind === "allow_once");
-    const denyOption = options.find((option) => option.optionId === "abort" || option.kind === "reject_once");
     const scopeLabel = scope === "session"
         ? t.messageBubble.permissionScopeSession
         : t.messageBubble.permissionScopeTurn;
@@ -671,6 +698,16 @@ export function PermissionRequestBubble({
                 <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
                     {requestTitle}
                 </div>
+                {shouldRenderPermissionCommand(requestTitle, command) ? (
+                    <div className="space-y-1">
+                        <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                            {t.messageBubble.permissionCommand}
+                        </div>
+                        <code className="block rounded-md bg-white/80 px-2 py-1.5 text-[11px] text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-200 dark:ring-slate-700 break-all">
+                            {command}
+                        </code>
+                    </div>
+                ) : null}
                 {reason ? (
                     <div className="space-y-1">
                         <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
@@ -687,7 +724,23 @@ export function PermissionRequestBubble({
                         {outcome === "approve" ? ` · ${scopeLabel}` : ""}
                     </div>
                 ) : null}
-                <ToolInputTable input={requestedPermissions} />
+                {amendment.length > 0 ? (
+                    <div className="space-y-1">
+                        <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                            {t.messageBubble.permissionSuggestedAccess}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {amendment.map((entry) => (
+                                <span
+                                    key={entry}
+                                    className="inline-flex items-center rounded-full bg-white/85 px-2 py-1 text-[11px] font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:text-slate-200 dark:ring-slate-700"
+                                >
+                                    {entry}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
                 {!isCompleted && !isFailed && (
                     <div className="space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
@@ -706,9 +759,7 @@ export function PermissionRequestBubble({
                                 onClick={() => void handleSubmit("approve")}
                                 className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
                             >
-                                {scope === "session"
-                                    ? getOptionLabel(alwaysOption, t.common.save)
-                                    : getOptionLabel(onceOption, t.common.save)}
+                                {t.messageBubble.permissionAllow}
                             </button>
                             <button
                                 type="button"
@@ -716,7 +767,7 @@ export function PermissionRequestBubble({
                                 onClick={() => void handleSubmit("deny")}
                                 className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
                             >
-                                {getOptionLabel(denyOption, t.common.cancel)}
+                                {t.messageBubble.permissionDeny}
                             </button>
                         </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -724,6 +775,28 @@ export function PermissionRequestBubble({
                         </div>
                     </div>
                 )}
+                {(Object.keys(requestedPermissions).length > 0 || options.length > 0) ? (
+                    <details className="rounded-md border border-slate-200/80 bg-white/70 px-2 py-1.5 dark:border-slate-700/80 dark:bg-slate-900/40">
+                        <summary className="cursor-pointer text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                            {t.messageBubble.permissionTechnicalDetails}
+                        </summary>
+                        <div className="mt-2 space-y-2">
+                            <ToolInputTable input={requestedPermissions} />
+                            {options.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {options.map((option) => (
+                                        <span
+                                            key={option.optionId ?? option.name ?? option.kind}
+                                            className="inline-flex items-center rounded-full border border-slate-200 px-2 py-1 text-[10px] text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                                        >
+                                            {getOptionLabel(option, option.optionId ?? option.kind ?? "option")}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    </details>
+                ) : null}
                 {submitError ? (
                     <div className="text-xs text-rose-600 dark:text-rose-400">{submitError}</div>
                 ) : null}
