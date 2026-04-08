@@ -90,12 +90,16 @@ interface FileRowProps {
   file: KanbanFileChangeItem;
   selected?: boolean;
   onClick?: (file: KanbanFileChangeItem) => void;
+  onSelect?: (file: KanbanFileChangeItem, selected: boolean) => void;
+  showCheckbox?: boolean;
 }
 
 export function FileRow({
   file,
   selected = false,
   onClick,
+  onSelect,
+  showCheckbox = false,
 }: FileRowProps) {
   const { t } = useTranslation();
   const badge = STATUS_BADGE[file.status];
@@ -104,13 +108,30 @@ export function FileRow({
   const previous = file.previousPath ? splitFilePath(file.previousPath) : null;
   const lineDelta = formatFileLineDelta(file);
   const interactive = typeof onClick === "function";
-  const containerClassName = `grid w-full grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-0 rounded-md px-1 py-1 text-left transition-colors ${
+  const gridCols = showCheckbox ? "grid-cols-[20px_16px_minmax(0,1fr)_auto]" : "grid-cols-[16px_minmax(0,1fr)_auto]";
+  const containerClassName = `grid w-full ${gridCols} items-start gap-x-2 gap-y-0 rounded-md px-1 py-1 text-left transition-colors ${
     selected
       ? "bg-amber-50/80 dark:bg-amber-900/10"
       : "hover:bg-slate-100/80 dark:hover:bg-[#171b27]"
   }`;
+
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    onSelect?.(file, e.target.checked);
+  };
+
   const content = (
     <>
+      {showCheckbox && (
+        <input
+          type="checkbox"
+          checked={file.selected ?? false}
+          onChange={handleCheckboxChange}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-amber-600 focus:ring-2 focus:ring-amber-500 dark:border-slate-600 dark:bg-slate-700"
+          aria-label={`Select ${file.path}`}
+        />
+      )}
       <span
         className={`inline-flex h-4 w-4 shrink-0 items-center justify-center self-start rounded-sm ${badge.className}`}
         title={file.status}
