@@ -128,6 +128,38 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("Do not treat `update_card` text as artifact evidence");
   });
 
+  it("injects canonical contract gates from the next transition into the prompt", () => {
+    const task = createTask({
+      id: "task-contract-prompt",
+      title: "Refine backlog contract",
+      objective: "Clarify the story before todo.",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "backlog",
+    });
+
+    const prompt = buildTaskPrompt(task, [
+      { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+      {
+        id: "todo",
+        name: "Todo",
+        position: 1,
+        stage: "todo",
+        automation: {
+          enabled: true,
+          contractRules: {
+            requireCanonicalStory: true,
+            loopBreakerThreshold: 2,
+          },
+        },
+      },
+    ]);
+
+    expect(prompt).toContain("## Contract Gates");
+    expect(prompt).toContain("Moving this card to Todo requires one valid canonical ```yaml``` story contract");
+    expect(prompt).toContain("Todo and downstream lanes will not silently repair malformed canonical YAML");
+  });
+
   it("injects normalized readiness, INVEST, and evidence summaries into the prompt", () => {
     const task = createTask({
       id: "task-ctx-1",

@@ -24,7 +24,6 @@ import type { RoutaSystem } from "../routa-system";
 import {
   createTask,
   Task,
-  type TaskCommentEntry,
   TaskLaneHandoffRequestType,
   TaskLaneHandoffStatus,
   TaskPriority,
@@ -50,9 +49,23 @@ import {
   validateTaskReadiness,
 } from "../kanban/task-derived-summary";
 import {
+  appendTaskComment,
+  appendTaskCommentEntry,
+} from "../kanban/task-comment-log";
+import {
   buildTaskDeliveryReadiness,
   buildTaskDeliveryTransitionErrorFromRules,
 } from "../kanban/task-delivery-readiness";
+import {
+  buildContractGateNote,
+  buildContractLoopBreakerMessage,
+  buildTaskContractReadiness,
+  buildTaskContractTransitionErrorFromRules,
+  buildTaskContractUpdateErrorFromRules,
+  CONTRACT_GATE_BLOCKED_LABEL,
+  countContractGateFailures,
+  resolveCurrentOrNextContractGate,
+} from "../kanban/task-contract-readiness";
 
 const DESCRIPTION_FROZEN_STAGES = new Set<KanbanColumnStage>(["dev", "review", "blocked", "done"]);
 
@@ -274,6 +287,23 @@ export class KanbanTools {
       }
     }
 
+    const contractReadiness = buildTaskContractReadiness(task, targetColumn.automation?.contractRules);
+    const contractError = buildTaskContractTransitionErrorFromRules(
+      contractReadiness,
+      targetColumn.name,
+      targetColumn.automation?.contractRules,
+    );
+    if (contractError) {
+      await this.recordTaskContractGateFailure(
+        task,
+        contractError,
+        targetColumn.name,
+        contractReadiness.loopBreakerThreshold,
+        task.triggerSessionId,
+      );
+      return errorResult(contractError);
+    }
+
     if (this.isAutomationSystemCompatible()) {
       const deliveryReadiness = await buildTaskDeliveryReadiness(task, this.automationSystem!);
       const deliveryError = buildTaskDeliveryTransitionErrorFromRules(
@@ -343,6 +373,35 @@ export class KanbanTools {
       return errorResult(
         `Cannot update card description in ${stage}. The story description is frozen from dev onward; update the comment field instead.`
       );
+    }
+
+    if (params.description !== undefined && task.boardId) {
+      const board = await this.kanbanBoardStore.get(task.boardId);
+      const contractGate = board
+        ? resolveCurrentOrNextContractGate(board.columns, task.columnId)
+        : null;
+      if (contractGate) {
+        const nextTask = {
+          ...task,
+          objective: params.description,
+        };
+        const contractReadiness = buildTaskContractReadiness(nextTask, contractGate.rules);
+        const contractError = buildTaskContractUpdateErrorFromRules(
+          contractReadiness,
+          contractGate.columnName,
+          contractGate.rules,
+        );
+        if (contractError) {
+          await this.recordTaskContractGateFailure(
+            task,
+            contractError,
+            contractGate.columnName,
+            contractReadiness.loopBreakerThreshold,
+            params.sessionId,
+          );
+          return errorResult(contractError);
+        }
+      }
     }
 
     if (params.title !== undefined) task.title = params.title;
@@ -901,7 +960,47 @@ export class KanbanTools {
     task.comment = appendTaskComment(task.comment, note);
     task.comments = appendTaskCommentEntry(task.comments, note, {
       sessionId,
+      source: undefined,
     });
+    task.updatedAt = new Date();
+    await this.taskStore.save(task);
+    this.notifyWorkspaceChanged(task.workspaceId, "task", "updated", task.id);
+  }
+
+  private async recordTaskContractGateFailure(
+    task: Task,
+    message: string,
+    targetColumnName: string,
+    threshold: number,
+    sessionId?: string,
+  ): Promise<void> {
+    const note = buildContractGateNote(message);
+    let changed = true;
+
+    task.comment = appendTaskComment(task.comment, note);
+    task.comments = appendTaskCommentEntry(task.comments, note, {
+      sessionId,
+      source: undefined,
+    });
+
+    const failureCount = countContractGateFailures(task);
+    if (failureCount >= threshold) {
+      const nextLabels = Array.from(new Set([...(task.labels ?? []), CONTRACT_GATE_BLOCKED_LABEL]));
+      const nextMessage = buildContractLoopBreakerMessage(targetColumnName, failureCount, threshold);
+      if (task.lastSyncError !== nextMessage) {
+        task.lastSyncError = nextMessage;
+        changed = true;
+      }
+      if (nextLabels.length !== (task.labels ?? []).length) {
+        task.labels = nextLabels;
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      return;
+    }
+
     task.updatedAt = new Date();
     await this.taskStore.save(task);
     this.notifyWorkspaceChanged(task.workspaceId, "task", "updated", task.id);
@@ -920,36 +1019,4 @@ function normalizeColumnStage(columnId?: string): KanbanColumnStage | undefined 
     default:
       return undefined;
   }
-}
-
-function appendTaskComment(existing: string | undefined, next: string): string {
-  const trimmedNext = next.trim();
-  if (!trimmedNext) {
-    return existing ?? "";
-  }
-  const trimmedExisting = existing?.trim();
-  return trimmedExisting ? `${trimmedExisting}\n\n${trimmedNext}` : trimmedNext;
-}
-
-function appendTaskCommentEntry(
-  existing: TaskCommentEntry[] | undefined,
-  next: string,
-  metadata?: { agentId?: string; sessionId?: string },
-): TaskCommentEntry[] {
-  const trimmedNext = next.trim();
-  if (!trimmedNext) {
-    return existing ?? [];
-  }
-
-  return [
-    ...(existing ?? []),
-    {
-      id: uuidv4(),
-      body: trimmedNext,
-      createdAt: new Date().toISOString(),
-      source: "update_card",
-      agentId: metadata?.agentId,
-      sessionId: metadata?.sessionId,
-    },
-  ];
 }

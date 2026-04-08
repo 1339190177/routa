@@ -354,6 +354,116 @@ describe("/api/tasks/[taskId]", () => {
     });
   });
 
+  it("rejects malformed canonical YAML when updating a backlog card description", async () => {
+    const existingTask = createTask({
+      id: "task-1",
+      title: "Refine canonical contract",
+      objective: "Initial prose",
+      workspaceId: "workspace-1",
+      boardId: "board-1",
+      columnId: "backlog",
+      status: TaskStatus.PENDING,
+    });
+    taskStore.get.mockResolvedValue(existingTask);
+    system.kanbanBoardStore.get = vi.fn().mockResolvedValue({
+      id: "board-1",
+      columns: [
+        { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+        {
+          id: "todo",
+          name: "Todo",
+          position: 1,
+          stage: "todo",
+          automation: {
+            enabled: true,
+            contractRules: {
+              requireCanonicalStory: true,
+              loopBreakerThreshold: 2,
+            },
+          },
+        },
+      ],
+    });
+
+    const request = new NextRequest("http://localhost/api/tasks/task-1", {
+      method: "PATCH",
+      body: JSON.stringify({ objective: "```yaml\nstory: [broken\n```" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await PATCH(request, {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toContain("Cannot update card description");
+    expect(data.error).toContain('canonical story YAML is invalid for "Todo"');
+    expect(data.contractReadiness).toMatchObject({
+      checked: true,
+      ready: false,
+      hasCanonicalStoryBlock: true,
+    });
+    expect(taskStore.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: "task-1",
+      comment: expect.stringContaining("Contract gate blocked:"),
+    }));
+  });
+
+  it("breaks the contract retry loop after repeated canonical YAML failures", async () => {
+    const existingTask = createTask({
+      id: "task-1",
+      title: "Loop on malformed contract",
+      objective: "Initial prose",
+      workspaceId: "workspace-1",
+      boardId: "board-1",
+      columnId: "backlog",
+      status: TaskStatus.PENDING,
+      comments: [{
+        id: "note-1",
+        body: 'Contract gate blocked: Cannot update card description: canonical story YAML is invalid for "Todo".',
+        createdAt: new Date().toISOString(),
+      }],
+    });
+    taskStore.get.mockResolvedValue(existingTask);
+    system.kanbanBoardStore.get = vi.fn().mockResolvedValue({
+      id: "board-1",
+      columns: [
+        { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+        {
+          id: "todo",
+          name: "Todo",
+          position: 1,
+          stage: "todo",
+          automation: {
+            enabled: true,
+            contractRules: {
+              requireCanonicalStory: true,
+              loopBreakerThreshold: 2,
+            },
+          },
+        },
+      ],
+    });
+
+    const request = new NextRequest("http://localhost/api/tasks/task-1", {
+      method: "PATCH",
+      body: JSON.stringify({ objective: "```yaml\nstory: [broken-again\n```" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const response = await PATCH(request, {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(taskStore.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: "task-1",
+      labels: expect.arrayContaining(["contract-gate-blocked"]),
+      lastSyncError: expect.stringContaining('Stopped automatic retries for "Todo"'),
+    }));
+  });
+
   it("clears the active queue entry before rerunning a task trigger", async () => {
     const request = new NextRequest("http://localhost/api/tasks/task-1", {
       method: "PATCH",

@@ -29,6 +29,20 @@ import {
   buildTaskDeliveryReadiness,
   buildTaskDeliveryTransitionErrorFromRules,
 } from "@/core/kanban/task-delivery-readiness";
+import {
+  appendTaskComment,
+  appendTaskCommentEntry,
+} from "@/core/kanban/task-comment-log";
+import {
+  buildContractGateNote,
+  buildContractLoopBreakerMessage,
+  buildTaskContractReadiness,
+  buildTaskContractTransitionErrorFromRules,
+  buildTaskContractUpdateErrorFromRules,
+  CONTRACT_GATE_BLOCKED_LABEL,
+  countContractGateFailures,
+  resolveCurrentOrNextContractGate,
+} from "@/core/kanban/task-contract-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +97,58 @@ function parseStatus(value: unknown): TaskStatus | undefined {
   return Object.values(TaskStatus).includes(value as TaskStatus)
     ? value as TaskStatus
     : undefined;
+}
+
+async function recordTaskContractGateFailure(
+  task: Task,
+  system: ReturnType<typeof getRoutaSystem>,
+  params: {
+    message: string;
+    targetColumnName: string;
+    threshold: number;
+    sessionId?: string;
+  },
+): Promise<void> {
+  const note = buildContractGateNote(params.message);
+  let changed = true;
+
+  task.comment = appendTaskComment(task.comment, note);
+  task.comments = appendTaskCommentEntry(task.comments, note, {
+    sessionId: params.sessionId,
+    source: undefined,
+  });
+
+  const failureCount = countContractGateFailures(task);
+  if (failureCount >= params.threshold) {
+    const nextLabels = Array.from(new Set([...(task.labels ?? []), CONTRACT_GATE_BLOCKED_LABEL]));
+    const nextMessage = buildContractLoopBreakerMessage(
+      params.targetColumnName,
+      failureCount,
+      params.threshold,
+    );
+    if (task.lastSyncError !== nextMessage) {
+      task.lastSyncError = nextMessage;
+      changed = true;
+    }
+    if (nextLabels.length !== (task.labels ?? []).length) {
+      task.labels = nextLabels;
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  task.updatedAt = new Date();
+  await system.taskStore.save(task);
+  getKanbanEventBroadcaster().notify({
+    workspaceId: task.workspaceId,
+    entity: "task",
+    action: "updated",
+    resourceId: task.id,
+    source: "system",
+  });
 }
 
 export async function GET(
@@ -145,12 +211,41 @@ export async function PATCH(
   if (body.worktreeId === null) nextTask.worktreeId = undefined;
   if (typeof body.worktreeId === "string") nextTask.worktreeId = body.worktreeId;
 
+  const boardId = body.boardId ?? existing.boardId;
+  const board = boardId
+    ? await system.kanbanBoardStore.get(boardId)
+    : null;
+
+  if (body.objective !== undefined && board) {
+    const contractGate = resolveCurrentOrNextContractGate(board.columns, existing.columnId);
+    if (contractGate) {
+      const contractReadiness = buildTaskContractReadiness(nextTask, contractGate.rules);
+      const contractError = buildTaskContractUpdateErrorFromRules(
+        contractReadiness,
+        contractGate.columnName,
+        contractGate.rules,
+      );
+      if (contractError) {
+        await recordTaskContractGateFailure(existing, system, {
+          message: contractError,
+          targetColumnName: contractGate.columnName,
+          threshold: contractReadiness.loopBreakerThreshold,
+          sessionId: existing.triggerSessionId,
+        });
+        return NextResponse.json(
+          {
+            error: contractError,
+            contractReadiness,
+          },
+          { status: 400 },
+        );
+      }
+    }
+  }
+
   // Check required artifacts before allowing column transition
   if (body.columnId !== undefined && body.columnId !== existing.columnId) {
-    const boardId = body.boardId ?? existing.boardId;
-    if (boardId) {
-      const board = await system.kanbanBoardStore.get(boardId);
-      if (board) {
+    if (boardId && board) {
         if (existing.triggerSessionId) {
           const laneAutomationState = resolveCurrentLaneAutomationState(existing, board.columns, {
             currentSessionId: existing.triggerSessionId,
@@ -201,6 +296,28 @@ export async function PATCH(
           }
         }
 
+        const contractReadiness = buildTaskContractReadiness(nextTask, targetColumn?.automation?.contractRules);
+        const contractError = buildTaskContractTransitionErrorFromRules(
+          contractReadiness,
+          targetColumn?.name ?? body.columnId,
+          targetColumn?.automation?.contractRules,
+        );
+        if (contractError) {
+          await recordTaskContractGateFailure(existing, system, {
+            message: contractError,
+            targetColumnName: targetColumn?.name ?? body.columnId,
+            threshold: contractReadiness.loopBreakerThreshold,
+            sessionId: existing.triggerSessionId,
+          });
+          return NextResponse.json(
+            {
+              error: contractError,
+              contractReadiness,
+            },
+            { status: 400 },
+          );
+        }
+
         if (targetColumn?.automation?.deliveryRules) {
           const deliveryReadiness = await buildTaskDeliveryReadiness(nextTask, system);
           const deliveryError = buildTaskDeliveryTransitionErrorFromRules(
@@ -218,7 +335,6 @@ export async function PATCH(
             );
           }
         }
-      }
     }
   }
 

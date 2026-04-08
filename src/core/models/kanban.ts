@@ -32,6 +32,13 @@ export interface KanbanDeliveryRules {
   requirePullRequestReady?: boolean;
 }
 
+export interface KanbanContractRules {
+  /** Require a valid canonical story YAML block before transition or description updates. */
+  requireCanonicalStory?: boolean;
+  /** Stop automated retries after this many canonical-story gate failures. */
+  loopBreakerThreshold?: number;
+}
+
 export interface KanbanAutomationStep {
   id: string;
   /** Transport protocol for this automation step */
@@ -85,6 +92,8 @@ export interface KanbanColumnAutomation {
   requiredArtifacts?: ("screenshot" | "test_results" | "code_diff")[];
   /** Task fields that must be present before transition is allowed */
   requiredTaskFields?: KanbanRequiredTaskField[];
+  /** Canonical story contract requirements enforced before transition or description updates */
+  contractRules?: KanbanContractRules;
   /** Delivery-readiness requirements enforced before transition is allowed */
   deliveryRules?: KanbanDeliveryRules;
   /** Automatically advance card to next column on agent success */
@@ -179,6 +188,9 @@ export function cloneKanbanColumns(columns: KanbanColumn[]): KanbanColumn[] {
           : undefined,
         requiredTaskFields: column.automation.requiredTaskFields
           ? [...column.automation.requiredTaskFields]
+          : undefined,
+        contractRules: column.automation.contractRules
+          ? { ...column.automation.contractRules }
           : undefined,
         deliveryRules: column.automation.deliveryRules
           ? { ...column.automation.deliveryRules }

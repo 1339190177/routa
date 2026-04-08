@@ -36,6 +36,10 @@ const RECOMMENDED_AUTOMATION_BY_STAGE: Partial<Record<KanbanColumnStage, KanbanC
       specialistName: "Todo Orchestrator",
     }],
     transitionType: "entry",
+    contractRules: {
+      requireCanonicalStory: true,
+      loopBreakerThreshold: 2,
+    },
     autoAdvanceOnSuccess: false,
   },
   dev: {
@@ -221,6 +225,7 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
         requiredArtifacts: shouldRefreshArtifactPolicy
           ? recommended.requiredArtifacts
           : (currentAutomation.requiredArtifacts ?? recommended.requiredArtifacts),
+        contractRules: currentAutomation.contractRules ?? recommended.contractRules,
         deliveryRules: currentAutomation.deliveryRules ?? recommended.deliveryRules,
         autoAdvanceOnSuccess: recommended.autoAdvanceOnSuccess,
       }),

@@ -1,6 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
 import type { Task, TaskEvidenceSummary, TaskInvestValidation, TaskStoryReadiness } from "../models/task";
-import { getNextHappyPathColumnId, type KanbanColumn, type KanbanDeliveryRules } from "../models/kanban";
+import {
+  getNextHappyPathColumnId,
+  type KanbanColumn,
+  type KanbanContractRules,
+  type KanbanDeliveryRules,
+} from "../models/kanban";
 import { AgentEventType, type EventBus } from "../events/event-bus";
 import { isClaudeCodeSdkConfigured } from "../acp/claude-code-sdk-adapter";
 import { dispatchSessionPrompt } from "@/core/acp/session-prompt";
@@ -57,6 +62,14 @@ function formatDeliveryRules(rules: KanbanDeliveryRules | undefined): string {
   if (rules.requireCleanWorktree) labels.push("clean worktree");
   if (rules.requirePullRequestReady) labels.push("PR-ready branch");
   return labels.length > 0 ? labels.join(", ") : "none";
+}
+
+function formatContractRules(rules: KanbanContractRules | undefined): string {
+  if (!rules?.requireCanonicalStory) {
+    return "none";
+  }
+
+  return "one valid canonical ```yaml``` story contract";
 }
 
 export function getInternalApiOrigin(): string {
@@ -204,6 +217,17 @@ export function buildTaskPrompt(
       ]
     : [];
 
+  const contractGateSection = transitionArtifacts.nextColumn?.automation?.contractRules?.requireCanonicalStory
+    ? [
+        "## Contract Gates",
+        "",
+        `Moving this card to ${transitionArtifacts.nextColumn.name ?? nextColumnId ?? "the next column"} requires ${formatContractRules(transitionArtifacts.nextColumn.automation.contractRules)} in the description.`,
+        "Do not call `move_card` until the canonical YAML parses cleanly and satisfies the required schema.",
+        "Todo and downstream lanes will not silently repair malformed canonical YAML. Regenerate it in Backlog before retrying.",
+        "",
+      ]
+    : [];
+
   const laneRunHistorySection = !isBacklogPlanning && previousLaneRun
     ? [
         "## Current Lane History",
@@ -336,6 +360,7 @@ export function buildTaskPrompt(
     ...storyReadinessSection,
     ...investSection,
     ...artifactGateSection,
+    ...contractGateSection,
     ...deliveryGateSection,
     ...evidenceBundleSection,
     ...laneRunHistorySection,

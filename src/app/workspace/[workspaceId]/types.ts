@@ -289,6 +289,10 @@ export interface KanbanColumnAutomationInfo {
   transitionType?: "entry" | "exit" | "both";
   requiredArtifacts?: ("screenshot" | "test_results" | "code_diff")[];
   requiredTaskFields?: KanbanRequiredTaskField[];
+  contractRules?: {
+    requireCanonicalStory?: boolean;
+    loopBreakerThreshold?: number;
+  };
   autoAdvanceOnSuccess?: boolean;
 }
 

@@ -92,8 +92,9 @@ export function buildKanbanTaskAgentPrompt(params: {
 11. 新建 backlog 卡片时，description 必须包含一个唯一的 \`\`\`yaml 代码块，作为 canonical user story contract。
 12. 这个 YAML 代码块必须包含 story.version、language、title、problem_statement、user_value、acceptance_criteria、constraints_and_affected_areas、dependencies_and_sequencing、out_of_scope、invest。
 13. invest 下必须显式给出 Independent、Negotiable、Valuable、Estimable、Small、Testable 六项，每项都要有 status 和 reason。
-14. YAML 之外可以有极少量说明文字，但下游 gate 只信任这个 canonical YAML。
-15. 最后要明确汇报你创建了哪些 backlog 卡片，并说明 backlog 自动化会在创建后继续运行。
+14. 如果 canonical YAML 解析失败或结构不合法，必须在 backlog 内重写整个 YAML block，不要指望 Todo 或下游 lane 替你修补。
+15. YAML 之外可以有极少量说明文字，但下游 gate 只信任这个 canonical YAML。
+16. 最后要明确汇报你创建了哪些 backlog 卡片，并说明 backlog 自动化会在创建后继续运行。
 
 canonical YAML 结构示例：
 \`\`\`yaml
@@ -179,8 +180,9 @@ Hard rules:
 11. Every new backlog card description must contain exactly one \`\`\`yaml code block as the canonical user story contract.
 12. That YAML block must include story.version, language, title, problem_statement, user_value, acceptance_criteria, constraints_and_affected_areas, dependencies_and_sequencing, out_of_scope, and invest.
 13. The invest object must explicitly cover Independent, Negotiable, Valuable, Estimable, Small, and Testable with both status and reason.
-14. You may include a short human-readable summary outside the YAML block, but downstream gates only trust the canonical YAML.
-15. Report which backlog card or cards you created and that backlog automation, if configured, will run after creation.
+14. If the canonical YAML fails to parse or violates the schema, rewrite the whole YAML block in backlog. Do not expect Todo or downstream lanes to repair it for you.
+15. You may include a short human-readable summary outside the YAML block, but downstream gates only trust the canonical YAML.
+16. Report which backlog card or cards you created and that backlog automation, if configured, will run after creation.
 
 Canonical YAML example:
 \`\`\`yaml

@@ -512,6 +512,118 @@ describe("KanbanTools", () => {
     expect(result.error).toContain("comment field instead");
   });
 
+  it("blocks moving a backlog card into todo when canonical YAML is missing", async () => {
+    const boardStore = new InMemoryKanbanBoardStore();
+    const taskStore = new InMemoryTaskStore();
+    const tools = new KanbanTools(boardStore, taskStore);
+
+    const board = createKanbanBoard({
+      id: "board-contract-gate",
+      workspaceId: "default",
+      name: "Default Board",
+      isDefault: true,
+      columns: [
+        { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+        {
+          id: "todo",
+          name: "Todo",
+          position: 1,
+          stage: "todo",
+          automation: {
+            enabled: true,
+            contractRules: {
+              requireCanonicalStory: true,
+              loopBreakerThreshold: 2,
+            },
+          },
+        },
+      ],
+    });
+    await boardStore.save(board);
+
+    const task = createTask({
+      id: "task-contract-move",
+      title: "Missing canonical contract",
+      objective: "Only prose here",
+      workspaceId: "default",
+      boardId: board.id,
+      columnId: "backlog",
+    });
+    await taskStore.save(task);
+
+    const result = await tools.moveCard({
+      cardId: task.id,
+      targetColumnId: "todo",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Canonical story YAML is missing");
+
+    const savedTask = await taskStore.get(task.id);
+    expect(savedTask?.columnId).toBe("backlog");
+    expect(savedTask?.comments.at(-1)?.body).toContain("Contract gate blocked:");
+  });
+
+  it("breaks the contract retry loop after repeated invalid description updates", async () => {
+    const boardStore = new InMemoryKanbanBoardStore();
+    const taskStore = new InMemoryTaskStore();
+    const tools = new KanbanTools(boardStore, taskStore);
+
+    const board = createKanbanBoard({
+      id: "board-contract-update",
+      workspaceId: "default",
+      name: "Default Board",
+      isDefault: true,
+      columns: [
+        { id: "backlog", name: "Backlog", position: 0, stage: "backlog" },
+        {
+          id: "todo",
+          name: "Todo",
+          position: 1,
+          stage: "todo",
+          automation: {
+            enabled: true,
+            contractRules: {
+              requireCanonicalStory: true,
+              loopBreakerThreshold: 2,
+            },
+          },
+        },
+      ],
+    });
+    await boardStore.save(board);
+
+    const task = createTask({
+      id: "task-contract-update",
+      title: "Malformed canonical contract",
+      objective: "Initial prose",
+      workspaceId: "default",
+      boardId: board.id,
+      columnId: "backlog",
+    });
+    await taskStore.save(task);
+
+    const first = await tools.updateCard({
+      cardId: task.id,
+      description: "```yaml\nstory: [broken\n```",
+      sessionId: "session-contract-1",
+    });
+    expect(first.success).toBe(false);
+
+    const second = await tools.updateCard({
+      cardId: task.id,
+      description: "```yaml\nstory: [broken-again\n```",
+      sessionId: "session-contract-2",
+    });
+    expect(second.success).toBe(false);
+    expect(second.error).toContain("canonical story YAML is invalid");
+
+    const savedTask = await taskStore.get(task.id);
+    expect(savedTask?.labels).toContain("contract-gate-blocked");
+    expect(savedTask?.lastSyncError).toContain("Stopped automatic retries for \"Todo\"");
+    expect(savedTask?.comments.filter((entry) => entry.body.startsWith("Contract gate blocked:"))).toHaveLength(2);
+  });
+
   it("blocks dev to review moves without committed changes and records the reason on the task", async () => {
     const system = createInMemorySystem();
     const tools = new KanbanTools(system.kanbanBoardStore, system.taskStore);
