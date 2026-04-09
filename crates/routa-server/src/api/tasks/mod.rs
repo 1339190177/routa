@@ -20,7 +20,7 @@ pub use dto::{
 pub use evidence::{
     build_task_evidence_summary, build_task_run_ledger, ensure_transition_artifacts,
     resolve_next_required_artifacts, resolve_next_required_task_fields,
-    serialize_task_with_evidence, task_lane_session_status_as_str,
+    serialize_task_with_evidence, serialize_tasks_batch, task_lane_session_status_as_str,
 };
 
 pub use changes::{

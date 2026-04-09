@@ -166,6 +166,62 @@ impl KanbanStore {
             .await
     }
 
+    /// Batch load boards by IDs
+    /// Returns a HashMap<board_id, KanbanBoard>
+    pub async fn get_many(
+        &self,
+        board_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, KanbanBoard>, ServerError> {
+        if board_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        // Remove duplicates
+        let unique_ids: Vec<String> = board_ids
+            .iter()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        self.db
+            .with_conn_async(move |conn| {
+                // Build placeholders for IN clause
+                let placeholders = unique_ids
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("?{}", i + 1))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let query = format!(
+                    "SELECT id, workspace_id, name, is_default, columns, created_at, updated_at \
+                     FROM kanban_boards WHERE id IN ({})",
+                    placeholders
+                );
+
+                let mut stmt = conn.prepare(&query)?;
+                let params: Vec<&dyn rusqlite::ToSql> = unique_ids
+                    .iter()
+                    .map(|id| id as &dyn rusqlite::ToSql)
+                    .collect();
+
+                let rows = stmt
+                    .query_map(params.as_slice(), |row| Ok(row_to_board(row)))?
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                // Convert to HashMap
+                let mut result: std::collections::HashMap<String, KanbanBoard> =
+                    std::collections::HashMap::new();
+                for board in rows {
+                    result.insert(board.id.clone(), board);
+                }
+
+                Ok(result)
+            })
+            .await
+    }
+
     pub async fn update(&self, board: &KanbanBoard) -> Result<(), ServerError> {
         let stored = board.clone();
         self.db

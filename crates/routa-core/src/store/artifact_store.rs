@@ -114,6 +114,59 @@ impl ArtifactStore {
             })
             .await
     }
+
+    /// Batch load artifacts for multiple tasks
+    /// Returns a HashMap<task_id, Vec<Artifact>>
+    pub async fn list_by_tasks(
+        &self,
+        task_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<Artifact>>, ServerError> {
+        if task_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let task_ids = task_ids.to_vec();
+        self.db
+            .with_conn_async(move |conn| {
+                // Build placeholders for IN clause
+                let placeholders = task_ids
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("?{}", i + 1))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let query = format!(
+                    "SELECT id, type, task_id, workspace_id, provided_by_agent_id, requested_by_agent_id,
+                     request_id, content, context, status, expires_at, metadata, created_at, updated_at
+                     FROM artifacts WHERE task_id IN ({}) ORDER BY task_id, created_at DESC",
+                    placeholders
+                );
+
+                let mut stmt = conn.prepare(&query)?;
+                let params: Vec<&dyn rusqlite::ToSql> = task_ids
+                    .iter()
+                    .map(|id| id as &dyn rusqlite::ToSql)
+                    .collect();
+
+                let rows = stmt
+                    .query_map(params.as_slice(), |row| Ok(row_to_artifact(row)))?
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                // Group by task_id
+                let mut result: std::collections::HashMap<String, Vec<Artifact>> =
+                    std::collections::HashMap::new();
+                for artifact in rows {
+                    result
+                        .entry(artifact.task_id.clone())
+                        .or_insert_with(Vec::new)
+                        .push(artifact);
+                }
+
+                Ok(result)
+            })
+            .await
+    }
 }
 
 fn row_to_artifact(row: &rusqlite::Row<'_>) -> Artifact {

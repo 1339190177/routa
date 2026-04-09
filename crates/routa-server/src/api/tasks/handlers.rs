@@ -13,7 +13,7 @@ use super::dto::{
     CreateTaskArtifactRequest, CreateTaskRequest, ListTasksQuery, UpdateStatusRequest,
     UpdateTaskRequest,
 };
-use super::evidence::{build_task_run_ledger, ensure_transition_artifacts, serialize_task_with_evidence};
+use super::evidence::{build_task_run_ledger, ensure_transition_artifacts, serialize_task_with_evidence, serialize_tasks_batch};
 
 use crate::api::tasks_automation::{
     auto_create_worktree, resolve_codebase, trigger_assigned_task_agent,
@@ -210,10 +210,8 @@ async fn list_tasks(
         state.task_store.list_by_workspace(workspace_id).await?
     };
 
-    let mut serialized_tasks = Vec::with_capacity(tasks.len());
-    for task in &tasks {
-        serialized_tasks.push(serialize_task_with_evidence(&state, task).await?);
-    }
+    // Use batch serialization to avoid N+1 queries
+    let serialized_tasks = serialize_tasks_batch(&state, &tasks).await?;
 
     Ok(Json(serde_json::json!({ "tasks": serialized_tasks })))
 }
@@ -615,10 +613,10 @@ async fn find_ready_tasks(
 ) -> Result<Json<serde_json::Value>, ServerError> {
     let workspace_id = query.workspace_id.as_deref().unwrap_or("default");
     let tasks = state.task_store.find_ready_tasks(workspace_id).await?;
-    let mut serialized_tasks = Vec::with_capacity(tasks.len());
-    for task in &tasks {
-        serialized_tasks.push(serialize_task_with_evidence(&state, task).await?);
-    }
+
+    // Use batch serialization to avoid N+1 queries
+    let serialized_tasks = serialize_tasks_batch(&state, &tasks).await?;
+
     Ok(Json(serde_json::json!({ "tasks": serialized_tasks })))
 }
 

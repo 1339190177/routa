@@ -2,7 +2,7 @@ use routa_core::models::task::{
     build_task_invest_validation, build_task_story_readiness, Task, TaskLaneSessionStatus,
 };
 use routa_core::models::kanban::KanbanBoard;
-use routa_core::models::artifact::ArtifactType;
+use routa_core::models::artifact::{Artifact, ArtifactType};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::dto::{
@@ -15,15 +15,20 @@ use crate::state::AppState;
 const KANBAN_HAPPY_PATH_COLUMN_ORDER: [&str; 5] = ["backlog", "todo", "dev", "review", "done"];
 
 /// Serialize task with evidence, readiness, and validation summaries
+/// Queries board and artifacts if not already loaded (for single-task operations)
 pub async fn serialize_task_with_evidence(
     state: &AppState,
     task: &Task,
 ) -> Result<serde_json::Value, ServerError> {
-    let evidence_summary = build_task_evidence_summary(state, task).await?;
+    // Load board once
     let board = match task.board_id.as_deref() {
         Some(board_id) => state.kanban_store.get(board_id).await?,
         None => None,
     };
+
+    // Build evidence summary with pre-loaded board
+    let evidence_summary = build_task_evidence_summary_with_board(state, task, board.as_ref()).await?;
+
     let story_readiness = build_task_story_readiness(
         task,
         &resolve_next_required_task_fields(board.as_ref(), task.column_id.as_deref()),
@@ -132,9 +137,23 @@ pub async fn build_task_run_ledger(
 }
 
 /// Build task evidence summary including artifacts, verification, completion, and runs
+/// Queries artifacts and board (for backward compatibility)
 pub async fn build_task_evidence_summary(
     state: &AppState,
     task: &Task,
+) -> Result<TaskEvidenceSummary, ServerError> {
+    let board = match task.board_id.as_deref() {
+        Some(board_id) => state.kanban_store.get(board_id).await?,
+        None => None,
+    };
+    build_task_evidence_summary_with_board(state, task, board.as_ref()).await
+}
+
+/// Build task evidence summary with pre-loaded board to avoid duplicate queries
+async fn build_task_evidence_summary_with_board(
+    state: &AppState,
+    task: &Task,
+    board: Option<&KanbanBoard>,
 ) -> Result<TaskEvidenceSummary, ServerError> {
     let artifacts = state.artifact_store.list_by_task(&task.id).await?;
     let mut by_type = BTreeMap::new();
@@ -143,12 +162,7 @@ pub async fn build_task_evidence_summary(
         *by_type.entry(key).or_insert(0) += 1;
     }
 
-    let board = match task.board_id.as_deref() {
-        Some(board_id) => state.kanban_store.get(board_id).await?,
-        None => None,
-    };
-    let required_artifacts =
-        resolve_next_required_artifacts(board.as_ref(), task.column_id.as_deref());
+    let required_artifacts = resolve_next_required_artifacts(board, task.column_id.as_deref());
     let present_artifacts = by_type.keys().cloned().collect::<BTreeSet<_>>();
     let missing_required = required_artifacts
         .into_iter()
@@ -382,4 +396,173 @@ pub async fn ensure_transition_artifacts(
         target_column.name,
         missing_artifacts.join(", ")
     )))
+}
+
+/// Batch serialize tasks with evidence - optimized to avoid N+1 queries
+/// Preloads all artifacts and boards in batch before serializing
+pub async fn serialize_tasks_batch(
+    state: &AppState,
+    tasks: &[Task],
+) -> Result<Vec<serde_json::Value>, ServerError> {
+    if tasks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Step 1: Collect all unique task_ids and board_ids
+    let task_ids: Vec<String> = tasks.iter().map(|t| t.id.clone()).collect();
+    let board_ids: Vec<String> = tasks
+        .iter()
+        .filter_map(|t| t.board_id.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+
+    // Step 2: Batch load all artifacts and boards
+    let artifacts_map = state.artifact_store.list_by_tasks(&task_ids).await?;
+    let boards_map = state.kanban_store.get_many(&board_ids).await?;
+
+    // Step 3: Serialize each task with pre-loaded data
+    let mut results = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        let artifacts = artifacts_map
+            .get(&task.id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]);
+        let board = task
+            .board_id
+            .as_ref()
+            .and_then(|id| boards_map.get(id));
+
+        let serialized = serialize_task_with_preloaded_data(task, artifacts, board).await?;
+        results.push(serialized);
+    }
+
+    Ok(results)
+}
+
+/// Serialize a single task with pre-loaded artifacts and board (no queries)
+async fn serialize_task_with_preloaded_data(
+    task: &Task,
+    artifacts: &[Artifact],
+    board: Option<&KanbanBoard>,
+) -> Result<serde_json::Value, ServerError> {
+    // Build evidence summary from pre-loaded data
+    let evidence_summary = build_task_evidence_summary_from_artifacts(task, artifacts, board)?;
+
+    // Build story readiness
+    let story_readiness = build_task_story_readiness(
+        task,
+        &resolve_next_required_task_fields(board, task.column_id.as_deref()),
+    );
+
+    // Build INVEST validation
+    let invest_validation = build_task_invest_validation(task);
+
+    // Serialize task and add computed fields
+    let mut task_value = serde_json::to_value(task)
+        .map_err(|error| ServerError::Internal(format!("Failed to serialize task: {error}")))?;
+    let task_object = task_value.as_object_mut().ok_or_else(|| {
+        ServerError::Internal("Task payload must serialize to a JSON object".to_string())
+    })?;
+
+    task_object.insert(
+        "artifactSummary".to_string(),
+        serde_json::to_value(&evidence_summary.artifact).map_err(|error| {
+            ServerError::Internal(format!(
+                "Failed to serialize task artifact summary: {error}"
+            ))
+        })?,
+    );
+    task_object.insert(
+        "evidenceSummary".to_string(),
+        serde_json::to_value(&evidence_summary).map_err(|error| {
+            ServerError::Internal(format!(
+                "Failed to serialize task evidence summary: {error}"
+            ))
+        })?,
+    );
+    task_object.insert(
+        "storyReadiness".to_string(),
+        serde_json::to_value(&story_readiness).map_err(|error| {
+            ServerError::Internal(format!(
+                "Failed to serialize task story readiness summary: {error}"
+            ))
+        })?,
+    );
+    task_object.insert(
+        "investValidation".to_string(),
+        serde_json::to_value(&invest_validation).map_err(|error| {
+            ServerError::Internal(format!(
+                "Failed to serialize task INVEST validation summary: {error}"
+            ))
+        })?,
+    );
+
+    Ok(task_value)
+}
+
+/// Build evidence summary from pre-loaded artifacts (no queries)
+fn build_task_evidence_summary_from_artifacts(
+    task: &Task,
+    artifacts: &[Artifact],
+    board: Option<&KanbanBoard>,
+) -> Result<TaskEvidenceSummary, ServerError> {
+    // Count artifacts by type
+    let mut by_type = BTreeMap::new();
+    for artifact in artifacts {
+        let key = artifact.artifact_type.as_str().to_string();
+        *by_type.entry(key).or_insert(0) += 1;
+    }
+
+    // Determine required artifacts
+    let required_artifacts =
+        resolve_next_required_artifacts(board, task.column_id.as_deref());
+    let present_artifacts = by_type.keys().cloned().collect::<BTreeSet<_>>();
+    let missing_required = required_artifacts
+        .into_iter()
+        .filter(|artifact| !present_artifacts.contains(artifact))
+        .collect::<Vec<_>>();
+
+    // Get latest status
+    let latest_status = task
+        .lane_sessions
+        .last()
+        .map(|session| task_lane_session_status_as_str(&session.status).to_string())
+        .unwrap_or_else(|| {
+            if task.session_ids.is_empty() {
+                "idle".to_string()
+            } else {
+                "unknown".to_string()
+            }
+        });
+
+    Ok(TaskEvidenceSummary {
+        artifact: TaskArtifactSummary {
+            total: artifacts.len(),
+            by_type,
+            required_satisfied: missing_required.is_empty(),
+            missing_required,
+        },
+        verification: TaskVerificationSummary {
+            has_verdict: task.verification_verdict.is_some(),
+            verdict: task
+                .verification_verdict
+                .as_ref()
+                .map(|verdict| verdict.as_str().to_string()),
+            has_report: task
+                .verification_report
+                .as_ref()
+                .is_some_and(|report| !report.trim().is_empty()),
+        },
+        completion: TaskCompletionSummary {
+            has_summary: task
+                .completion_summary
+                .as_ref()
+                .is_some_and(|summary| !summary.trim().is_empty()),
+        },
+        runs: TaskRunSummary {
+            total: task.session_ids.len(),
+            latest_status,
+        },
+    })
 }
