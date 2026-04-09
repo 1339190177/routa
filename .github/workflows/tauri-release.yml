@@ -363,6 +363,8 @@ jobs:
 
   generate-release-notes:
     name: Generate desktop release notes
+    # Temporarily disabled due to issues with git tag resolution
+    if: false
     permissions:
       contents: read
     runs-on: ubuntu-latest
