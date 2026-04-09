@@ -128,7 +128,7 @@ const zh: TranslationDictionary = {
     advancedModeDescription: "只有在需要团队协作、治理工具或专家级启动器时，再打开这些入口。",
     setupGateHint: "先完成上面的引导清单，再解锁概览恢复入口和高级能力。当前首页只保留最直接的起步路径。",
     whatToAdvance: "你现在要推进什么？",
-    homePrimaryHint: "先选择启动模式，再描述要做的事。普通会话、backlog 规划和 team run 现在都从这里进入。",
+    homePrimaryHint: "先选择工作面。会话负责直接工作和上下文恢复，看板负责路由与执行，团队负责多专家协作委派。",
     modeSessionTitle: "普通会话",
     modeSessionDescription: "直接进入标准会话，适合探索、实现和恢复上下文。",
     modeSessionPlaceholder: "描述你要处理的问题、实现目标或需要继续的上下文",
@@ -148,6 +148,7 @@ const zh: TranslationDictionary = {
 
   nav: {
     home: "主页",
+    sessions: "会话",
     overview: "概览",
     kanban: "看板",
     team: "团队",
@@ -168,6 +169,10 @@ const zh: TranslationDictionary = {
     advanced: "高级",
     advancedGroupCollab: "协作",
     advancedGroupQuality: "质量与工具",
+    advancedGroupMetrics: "Metric",
+    advancedGroupCustomize: "Customize",
+    advancedGroupTools: "工具",
+    advancedGroupOther: "其它",
     records: "记录",
   },
 

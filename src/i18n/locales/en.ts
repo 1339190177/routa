@@ -129,7 +129,7 @@ const en: TranslationDictionary = {
     advancedModeDescription: "Open these entry points only when you need team coordination, governance tools, or the expert launcher.",
     setupGateHint: "Finish the checklist above before unlocking Overview recovery and advanced tools. The home page now keeps only the most direct starting path.",
     whatToAdvance: "What do you want to advance?",
-    homePrimaryHint: "Pick a launch mode first, then describe the work. Standard sessions, backlog planning, and Team runs now start from the same launcher.",
+    homePrimaryHint: "Pick a surface first. Sessions handle direct work and recovery, Kanban handles routing and execution, and Team handles multi-specialist delegation.",
     modeSessionTitle: "Session",
     modeSessionDescription: "Start a standard session for exploration, implementation, or context recovery.",
     modeSessionPlaceholder: "Describe the problem to solve, the implementation to make, or the context to resume",
@@ -149,6 +149,7 @@ const en: TranslationDictionary = {
 
   nav: {
     home: "Home",
+    sessions: "Sessions",
     overview: "Overview",
     kanban: "Kanban",
     team: "Team",
@@ -169,6 +170,10 @@ const en: TranslationDictionary = {
     advanced: "Advanced",
     advancedGroupCollab: "Collaboration",
     advancedGroupQuality: "Quality & Tools",
+    advancedGroupMetrics: "Metric",
+    advancedGroupCustomize: "Customize",
+    advancedGroupTools: "Tools",
+    advancedGroupOther: "Other",
     records: "Records",
   },
 

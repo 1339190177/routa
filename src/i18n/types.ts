@@ -155,6 +155,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
   // Navigation & Header
   nav: {
     home: string;
+    sessions: string;
     overview: string;
     kanban: string;
     team: string;
@@ -175,6 +176,10 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     advanced: string;
     advancedGroupCollab: string;
     advancedGroupQuality: string;
+    advancedGroupMetrics: string;
+    advancedGroupCustomize: string;
+    advancedGroupTools: string;
+    advancedGroupOther: string;
     records: string;
   };
 

@@ -5,77 +5,15 @@ import React from "react";
 import { usePathname } from "next/navigation";
 import {
   Calendar,
-  ChevronDown,
   CircleUser,
   Monitor,
   MonitorUp,
-  MoreHorizontal,
   Server,
-  Share2,
   Workflow,
 } from "lucide-react";
 
 import { useTranslation } from "@/i18n";
 import { HarnessMark } from "./harness-mark";
-
-const DESKTOP_ADVANCED_EXPANDED_KEY = "routa.desktop.advanced-expanded";
-const DESKTOP_ADVANCED_CHANGE_EVENT = "routa:desktop-advanced-expanded";
-let advancedExpandedFallback = false;
-
-export function getDesktopAdvancedExpandedSnapshot(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  if (typeof window.localStorage?.getItem !== "function") {
-    return advancedExpandedFallback;
-  }
-
-  return window.localStorage.getItem(DESKTOP_ADVANCED_EXPANDED_KEY) === "true";
-}
-
-export function getDesktopAdvancedExpandedServerSnapshot(): boolean {
-  return false;
-}
-
-export function subscribeToDesktopAdvancedExpanded(onStoreChange: () => void): () => void {
-  if (typeof window === "undefined") {
-    return () => {};
-  }
-
-  const handleChange = () => onStoreChange();
-  window.addEventListener(DESKTOP_ADVANCED_CHANGE_EVENT, handleChange as EventListener);
-  window.addEventListener("storage", handleChange);
-
-  return () => {
-    window.removeEventListener(DESKTOP_ADVANCED_CHANGE_EVENT, handleChange as EventListener);
-    window.removeEventListener("storage", handleChange);
-  };
-}
-
-export function setDesktopAdvancedExpanded(expanded: boolean) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  if (typeof window.localStorage?.setItem !== "function") {
-    advancedExpandedFallback = expanded;
-    window.dispatchEvent(
-      new CustomEvent(DESKTOP_ADVANCED_CHANGE_EVENT, {
-        detail: { expanded },
-      }),
-    );
-    return;
-  }
-
-  advancedExpandedFallback = expanded;
-  window.localStorage.setItem(DESKTOP_ADVANCED_EXPANDED_KEY, String(expanded));
-  window.dispatchEvent(
-    new CustomEvent(DESKTOP_ADVANCED_CHANGE_EVENT, {
-      detail: { expanded },
-    }),
-  );
-}
 
 interface AdvancedNavMenuProps {
   workspaceId?: string | null;
@@ -91,6 +29,12 @@ interface AdvancedNavItem {
   icon: React.ReactNode;
 }
 
+interface AdvancedNavSection {
+  id: string;
+  label: string;
+  items: AdvancedNavItem[];
+}
+
 export function AdvancedNavMenu({
   workspaceId,
   collapsed = false,
@@ -99,17 +43,8 @@ export function AdvancedNavMenu({
 }: AdvancedNavMenuProps) {
   const pathname = usePathname();
   const { t } = useTranslation();
-  const isExpanded = React.useSyncExternalStore(
-    subscribeToDesktopAdvancedExpanded,
-    getDesktopAdvancedExpandedSnapshot,
-    getDesktopAdvancedExpandedServerSnapshot,
-  );
-  const [menuOpen, setMenuOpen] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
 
   const normalizedWorkspaceId = workspaceId?.trim() || null;
-  const fallbackWorkspaceId = normalizedWorkspaceId || "default";
-  const workspaceBaseHref = `/workspace/${fallbackWorkspaceId}`;
   const settingsHarnessHref = normalizedWorkspaceId
     ? `/settings/harness?workspaceId=${encodeURIComponent(normalizedWorkspaceId)}`
     : "/settings/harness";
@@ -117,82 +52,74 @@ export function AdvancedNavMenu({
     ? `/settings/fluency?workspaceId=${encodeURIComponent(normalizedWorkspaceId)}`
     : "/settings/fluency";
 
-  const tier1Items: AdvancedNavItem[] = [
+  const sections: AdvancedNavSection[] = [
     {
-      id: "team",
-      label: t.nav.team,
-      href: `${workspaceBaseHref}/team`,
-      icon: <Share2 className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75} />,
+      id: "metrics",
+      label: t.nav.advancedGroupMetrics,
+      items: [
+        {
+          id: "harness",
+          label: t.nav.harness,
+          href: settingsHarnessHref,
+          icon: <HarnessMark className="h-4 w-4" title="" />,
+        },
+        {
+          id: "fluency",
+          label: t.nav.fluency,
+          href: settingsFluencyHref,
+          icon: <MonitorUp className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
+        },
+      ],
     },
     {
-      id: "mcp",
-      label: t.nav.mcpServers,
-      href: "/settings/mcp",
-      icon: <Server className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
+      id: "customize",
+      label: t.nav.advancedGroupCustomize,
+      items: [
+        {
+          id: "workflows",
+          label: t.nav.workflows,
+          href: "/settings/workflows",
+          icon: <Workflow className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
+        },
+        {
+          id: "specialists",
+          label: t.nav.specialists,
+          href: "/settings/specialists",
+          icon: <CircleUser className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
+        },
+      ],
     },
     {
-      id: "schedules",
-      label: t.nav.schedules,
-      href: "/settings/schedules",
-      icon: <Calendar className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
+      id: "tools",
+      label: t.nav.advancedGroupTools,
+      items: [
+        {
+          id: "mcp",
+          label: t.nav.mcpServers,
+          href: "/settings/mcp",
+          icon: <Server className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
+        },
+        {
+          id: "schedules",
+          label: t.nav.schedules,
+          href: "/settings/schedules",
+          icon: <Calendar className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
+        },
+      ],
+    },
+    {
+      id: "other",
+      label: t.nav.advancedGroupOther,
+      items: [
+        {
+          id: "debug",
+          label: t.nav.debug,
+          href: "/traces",
+          icon: <Monitor className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
+        },
+      ],
     },
   ];
-
-  const tier2Items: AdvancedNavItem[] = [
-    {
-      id: "harness",
-      label: t.nav.harness,
-      href: settingsHarnessHref,
-      icon: <HarnessMark className="h-4 w-4" title="" />,
-    },
-    {
-      id: "fluency",
-      label: t.nav.fluency,
-      href: settingsFluencyHref,
-      icon: <MonitorUp className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
-    },
-    {
-      id: "workflows",
-      label: t.nav.workflows,
-      href: "/settings/workflows",
-      icon: <Workflow className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
-    },
-    {
-      id: "specialists",
-      label: t.nav.specialists,
-      href: "/settings/specialists",
-      icon: <CircleUser className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
-    },
-    {
-      id: "debug",
-      label: t.nav.debug,
-      href: "/traces",
-      icon: <Monitor className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} />,
-    },
-  ];
-
-  const items = [...tier1Items, ...tier2Items];
-
-  React.useEffect(() => {
-    if (!collapsed || !menuOpen) {
-      return;
-    }
-
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [collapsed, menuOpen]);
-
-  React.useEffect(() => {
-    if (!collapsed) {
-      setMenuOpen(false);
-    }
-  }, [collapsed]);
 
   const isActive = (href: string) => {
     const hrefPath = href.split("?")[0]?.split("#")[0] ?? href;
@@ -202,141 +129,43 @@ export function AdvancedNavMenu({
     return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
   };
 
-  const menuActive = items.some((item) => isActive(item.href));
-  const menuPositionClass = collapsed ? "left-full bottom-0 ml-1 w-56" : "left-0 right-0 bottom-full mb-1";
-  const buttonActive = menuActive || isExpanded || menuOpen;
-
-  const handleToggle = () => {
-    if (collapsed) {
-      if (!isExpanded) {
-        setDesktopAdvancedExpanded(true);
-      }
-      setMenuOpen((current) => !current);
-      return;
-    }
-
-    setDesktopAdvancedExpanded(!isExpanded);
-  };
+  const collapsedLinkClassName = buttonClassName ?? "h-10 w-10 px-0 py-0 justify-center";
+  const expandedLinkClassName = buttonClassName ?? "h-11 w-full gap-3 px-3 py-0 text-sm font-medium justify-start";
 
   return (
-    <div ref={containerRef} className={`relative ${className ?? ""}`}>
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={collapsed ? menuOpen : isExpanded}
-        aria-label={t.nav.advanced}
-        onClick={handleToggle}
-        className={`inline-flex items-center rounded-md border border-desktop-border text-xs font-medium transition-colors ${buttonClassName ?? "h-8 px-2 py-1"} ${
-          buttonActive
-            ? "bg-desktop-bg-active text-desktop-accent"
-            : "text-desktop-text-secondary hover:border-desktop-accent/40 hover:bg-desktop-bg-active/60 hover:text-desktop-text-primary"
-        }`}
-      >
-        <MoreHorizontal className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7} />
-        {!collapsed ? (
-          <>
-            <span className="ml-1.5 mr-1.5">{t.nav.advanced}</span>
-            <ChevronDown className={`h-3 w-3 opacity-70 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} />
-          </>
-        ) : null}
-      </button>
-
-      {!collapsed && isExpanded ? (
-        <div className="mt-1 space-y-1">
-          <div className="px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary/60">
-            {t.nav.advancedGroupCollab}
-          </div>
-          <div className="space-y-0.5">
-            {tier1Items.map((item) => {
+    <div className={className ?? ""}>
+      {sections.map((section) => (
+        <div key={section.id} className={collapsed ? "contents" : "mb-3 last:mb-0"}>
+          {!collapsed ? (
+            <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary/60">
+              {section.label}
+            </div>
+          ) : null}
+          <div className={collapsed ? "flex flex-col items-center gap-1" : "space-y-1"}>
+            {section.items.map((item) => {
               const active = isActive(item.href);
               return (
                 <Link
                   key={item.id}
                   href={item.href}
-                  className={`flex items-center gap-2 rounded-md px-2 py-2 text-[11px] transition-colors ${
+                  className={`relative flex items-center rounded-xl transition-colors ${
+                    collapsed ? collapsedLinkClassName : expandedLinkClassName
+                  } ${
                     active
                       ? "bg-desktop-bg-active text-desktop-accent"
-                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/80 hover:text-desktop-text-primary"
+                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/70 hover:text-desktop-text-primary"
                   }`}
+                  title={collapsed ? `${section.label} / ${item.label}` : item.label}
                 >
+                  {active && <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r bg-desktop-accent" />}
                   {item.icon}
-                  <span className="truncate">{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-          <div className="px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary/60">
-            {t.nav.advancedGroupQuality}
-          </div>
-          <div className="space-y-0.5">
-            {tier2Items.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className={`flex items-center gap-2 rounded-md px-2 py-2 text-[11px] transition-colors ${
-                    active
-                      ? "bg-desktop-bg-active text-desktop-accent"
-                      : "text-desktop-text-secondary hover:bg-desktop-bg-active/80 hover:text-desktop-text-primary"
-                  }`}
-                >
-                  {item.icon}
-                  <span className="truncate">{item.label}</span>
+                  {!collapsed ? <span className="truncate">{item.label}</span> : null}
                 </Link>
               );
             })}
           </div>
         </div>
-      ) : null}
-
-      {collapsed && menuOpen ? (
-        <div className={`absolute z-30 ${menuPositionClass} rounded-lg border border-desktop-border bg-desktop-bg-secondary/95 p-1 text-[11px] shadow-lg backdrop-blur`}>
-          <div className="px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">
-            {t.nav.advancedGroupCollab}
-          </div>
-          {tier1Items.map((item) => {
-            const active = isActive(item.href);
-            return (
-              <Link
-                key={item.id}
-                href={item.href}
-                onClick={() => setMenuOpen(false)}
-                className={`mb-0.5 last:mb-0 flex items-center gap-2 rounded-md px-2 py-2 transition-colors ${
-                  active
-                    ? "bg-desktop-bg-active text-desktop-accent"
-                    : "text-desktop-text-secondary hover:bg-desktop-bg-active/80 hover:text-desktop-text-primary"
-                }`}
-              >
-                {item.icon}
-                <span className="truncate">{item.label}</span>
-              </Link>
-            );
-          })}
-          <div className="my-1 border-t border-desktop-border/50" />
-          <div className="px-2 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-desktop-text-secondary">
-            {t.nav.advancedGroupQuality}
-          </div>
-          {tier2Items.map((item) => {
-            const active = isActive(item.href);
-            return (
-              <Link
-                key={item.id}
-                href={item.href}
-                onClick={() => setMenuOpen(false)}
-                className={`mb-0.5 last:mb-0 flex items-center gap-2 rounded-md px-2 py-2 transition-colors ${
-                  active
-                    ? "bg-desktop-bg-active text-desktop-accent"
-                    : "text-desktop-text-secondary hover:bg-desktop-bg-active/80 hover:text-desktop-text-primary"
-                }`}
-              >
-                {item.icon}
-                <span className="truncate">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      ) : null}
+      ))}
     </div>
   );
 }
