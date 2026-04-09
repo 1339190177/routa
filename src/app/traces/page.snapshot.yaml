@@ -1,9 +1,9 @@
 # page-id: traces
 # route: /traces?view=trace
 # source-page: src/app/traces/page.tsx
-# url: http://127.0.0.1:60043/traces?view=trace
+# url: http://127.0.0.1:56021/traces?view=trace
 # title: Routa - Multi-Agent Coordinator
-# generated-at: 2026-04-02T15:04:17.006Z
+# generated-at: 2026-04-09T01:13:52.510Z
 # generator: playwright
 # playwright-version: 1.58.2
 - banner:
@@ -74,9 +74,9 @@
   - region "Trace content":
     - text: 🔗 EventBridge View 5 events
     - button "All"
-    - button "Messages"
+    - button "Chat"
     - button "Tools"
-    - button "Thoughts"
+    - button "thoughts"
     - text: ▶ Session Started opencode <time> 🤖 Agent <time> → <time>
     - button "🔧 codebase-retrieval ⏳"
     - button "🔧 codebase-retrieval ✓"
