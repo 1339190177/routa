@@ -100,6 +100,8 @@ interface ChatPanelProps {
   inputPrefill?: string | null;
   /** Called after inputPrefill has been consumed */
   onInputPrefillConsumed?: () => void;
+  /** Optional recovery action for a selected historical session. */
+  onResumeActiveSession?: () => Promise<void>;
 }
 
 // ─── Main Component ────────────────────────────────────────────────────
@@ -125,6 +127,7 @@ export function ChatPanel({
   codebases: _codebases = [],
   inputPrefill,
   onInputPrefillConsumed,
+  onResumeActiveSession,
 }: ChatPanelProps) {
   const { t } = useTranslation();
   const { connected, loading, error, authError, updates, promptSession, clearAuthError } = acp;
@@ -132,6 +135,7 @@ export function ChatPanel({
   const [copiedRepoPath, setCopiedRepoPath] = useState(false);
   // View mode: 'chat' or 'trace'
   const [viewMode, setViewMode] = useState<"chat" | "trace">("chat");
+  const [isResumingActiveSession, setIsResumingActiveSession] = useState(false);
 
   // Use the extracted chat messages hook
   const {
@@ -411,6 +415,16 @@ export function ChatPanel({
     setSetupInput("");
   }, [setupInput, handleSend]);
 
+  const handleResumeActiveSession = useCallback(async () => {
+    if (!onResumeActiveSession || isResumingActiveSession) return;
+    setIsResumingActiveSession(true);
+    try {
+      await onResumeActiveSession();
+    } finally {
+      setIsResumingActiveSession(false);
+    }
+  }, [isResumingActiveSession, onResumeActiveSession]);
+
   // ── Render ───────────────────────────────────────────────────────────
 
   return (
@@ -464,8 +478,19 @@ export function ChatPanel({
       )}
 
       {error && (
-        <div className="px-5 py-2 bg-red-50 dark:bg-red-900/10 text-red-600 dark:text-red-400 text-xs border-b border-red-100 dark:border-red-900/20">
-          {error}
+        <div className="flex items-start justify-between gap-3 border-b border-red-100 bg-red-50 px-5 py-2 text-xs text-red-600 dark:border-red-900/20 dark:bg-red-900/10 dark:text-red-400">
+          <div className="min-w-0 flex-1">{error}</div>
+          {activeSessionId && onResumeActiveSession && (
+            <button
+              type="button"
+              onClick={() => void handleResumeActiveSession()}
+              disabled={isResumingActiveSession || loading}
+              className="shrink-0 rounded-md border border-red-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-900/40"
+              title={t.sessions.resumeHint}
+            >
+              {isResumingActiveSession ? t.sessions.resuming : t.sessions.resume}
+            </button>
+          )}
         </div>
       )}
 

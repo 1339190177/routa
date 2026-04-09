@@ -29,6 +29,85 @@ import type { KanbanBoardInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../ty
 import type { KanbanRepoChanges } from "./kanban-file-changes-types";
 import { ChevronRight, ArrowRight } from "lucide-react";
 
+interface SessionRestoreTranscriptMessage {
+  role?: string;
+  content?: string;
+  toolName?: string;
+  toolStatus?: string;
+}
+
+const KANBAN_RESTORE_CONTEXT_MESSAGE_LIMIT = 12;
+const KANBAN_RESTORE_CONTEXT_CHAR_LIMIT = 12000;
+
+function isRecoverableAcpSessionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const message = (error as { message?: unknown }).message;
+  if (typeof message !== "string") return false;
+  return message.includes("embedded ACP processes cannot be resumed on a different instance")
+    || message.includes("session/load not supported");
+}
+
+function formatRestoreTranscriptLine(message: SessionRestoreTranscriptMessage): string | null {
+  const content = message.content?.trim();
+  if (!content) return null;
+
+  switch (message.role) {
+    case "user":
+      return `User:\n${content}`;
+    case "assistant":
+      return `Assistant:\n${content}`;
+    case "tool":
+      return `Tool${message.toolName ? ` (${message.toolName}${message.toolStatus ? `, ${message.toolStatus}` : ""})` : ""}:\n${content}`;
+    case "plan":
+      return `Plan:\n${content}`;
+    case "info":
+      return `Info:\n${content}`;
+    case "terminal":
+      return `Terminal:\n${content}`;
+    default:
+      return null;
+  }
+}
+
+function buildKanbanSessionRestorePrompt(
+  session: SessionInfo,
+  messages: SessionRestoreTranscriptMessage[],
+): string {
+  const recent = messages
+    .filter((message) => message.role !== "thought")
+    .map(formatRestoreTranscriptLine)
+    .filter((value): value is string => Boolean(value))
+    .slice(-KANBAN_RESTORE_CONTEXT_MESSAGE_LIMIT);
+
+  let transcript = recent.join("\n\n");
+  if (transcript.length > KANBAN_RESTORE_CONTEXT_CHAR_LIMIT) {
+    transcript = transcript.slice(transcript.length - KANBAN_RESTORE_CONTEXT_CHAR_LIMIT).trimStart();
+  }
+
+  return [
+    "You are continuing a previous Routa Kanban card session because its embedded ACP runtime could not be reattached.",
+    "Treat the transcript below as prior conversation state. Continue from it instead of starting over.",
+    `Previous session ID: ${session.sessionId}`,
+    session.name ? `Previous session name: ${session.name}` : null,
+    session.cwd ? `Working directory: ${session.cwd}` : null,
+    session.branch ? `Branch: ${session.branch}` : null,
+    "",
+    "Transcript excerpt:",
+    transcript || "(No transcript content was available. Ask the user what to continue.)",
+    "",
+    "First turn requirements:",
+    "1. Briefly acknowledge that the card session context was restored.",
+    "2. Identify the latest unfinished card task or decision from the transcript.",
+    "3. Continue the work directly without re-summarizing everything.",
+  ].filter(Boolean).join("\n");
+}
+
+async function fetchSessionTranscriptForRestore(sessionId: string): Promise<SessionRestoreTranscriptMessage[]> {
+  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/transcript`, { cache: "no-store" });
+  if (!response.ok) return [];
+  const data = await response.json().catch(() => null) as { messages?: unknown } | null;
+  return Array.isArray(data?.messages) ? data.messages as SessionRestoreTranscriptMessage[] : [];
+}
 
 interface SpecialistOption {
   id: string;
@@ -657,14 +736,68 @@ export function KanbanTaskDetailOverlay({
   const isA2ASessionPane = Boolean(activeTask && isA2ATaskSession(activeTask, activeSessionId));
   const canShowSessionPane = Boolean(showEmptySessionPane || isA2ASessionPane || (activeSessionId && acp));
   const [hiddenSessionPaneTaskId, setHiddenSessionPaneTaskId] = useState<string | null>(null);
+  const [sessionRecoveryInputPrefill, setSessionRecoveryInputPrefill] = useState<string | null>(null);
   const isSessionPaneVisible = activeTaskId ? hiddenSessionPaneTaskId !== activeTaskId : true;
   const hasSessionPane = canShowSessionPane && isSessionPaneVisible;
   const selectTaskSession = (task: TaskInfo, sessionId: string) => {
     setActiveSessionId(sessionId);
+    setSessionRecoveryInputPrefill(null);
     setHiddenSessionPaneTaskId(null);
     if (acp && canSelectTaskSessionInAcp(task, sessionId, sessionMap)) {
       acp.selectSession(sessionId);
     }
+  };
+
+  const recoverActiveAcpSession = async () => {
+    if (!acp || !activeSessionId) return;
+    const targetSessionInfo = sessionMap.get(activeSessionId);
+    if (!targetSessionInfo?.cwd) return;
+
+    try {
+      const resumed = await acp.resumeSession(activeSessionId, targetSessionInfo.cwd, { throwOnError: true });
+      if (resumed?.sessionId) {
+        setActiveSessionId(resumed.sessionId);
+        setSessionRecoveryInputPrefill(null);
+        onRefresh();
+      }
+      return;
+    } catch (error) {
+      if (!isRecoverableAcpSessionError(error)) {
+        throw error;
+      }
+    }
+
+    const transcript = await fetchSessionTranscriptForRestore(activeSessionId);
+    const replacement = await acp.createSession(
+      targetSessionInfo.cwd,
+      targetSessionInfo.provider ?? boardAutoProviderId ?? acp.selectedProvider,
+      targetSessionInfo.modeId,
+      targetSessionInfo.role,
+      targetSessionInfo.workspaceId || workspaceId,
+      targetSessionInfo.model,
+      undefined,
+      targetSessionInfo.specialistId,
+      undefined,
+      undefined,
+      undefined,
+      targetSessionInfo.branch,
+    );
+
+    if (!replacement?.sessionId) return;
+
+    if (activeTask) {
+      const nextSessionIds = [
+        ...(activeTask.sessionIds ?? []),
+        activeSessionId,
+        replacement.sessionId,
+      ].filter((sessionId, index, values) => sessionId && values.indexOf(sessionId) === index);
+      await patchTask(activeTask.id, { sessionIds: nextSessionIds });
+    }
+
+    setActiveSessionId(replacement.sessionId);
+    setSessionRecoveryInputPrefill(buildKanbanSessionRestorePrompt(targetSessionInfo, transcript));
+    setHiddenSessionPaneTaskId(null);
+    onRefresh();
   };
 
   if (!isOverlayOpen) return null;
@@ -826,6 +959,9 @@ export function KanbanTaskDetailOverlay({
                       codebases={codebases}
                       activeWorkspaceId={workspaceId}
                       agentRole={taskAgentRole}
+                      inputPrefill={sessionRecoveryInputPrefill}
+                      onInputPrefillConsumed={() => setSessionRecoveryInputPrefill(null)}
+                      onResumeActiveSession={recoverActiveAcpSession}
                     />
                   </div>
                 )}
