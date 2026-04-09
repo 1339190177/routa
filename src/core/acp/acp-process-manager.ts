@@ -94,6 +94,17 @@ export class AcpProcessManager {
     private claudeCodeSdkAdapters = new Map<string, ManagedClaudeCodeSdkAdapter>();
     private workspaceAgents = new Map<string, ManagedWorkspaceAgent>();
 
+    hasActiveSession(sessionId: string): boolean {
+        return Boolean(
+            this.processes.get(sessionId)?.process.alive ||
+            this.claudeProcesses.get(sessionId)?.process.alive ||
+            this.opencodeAdapters.get(sessionId)?.adapter.alive ||
+            this.dockerAdapters.get(sessionId)?.adapter.alive ||
+            this.claudeCodeSdkAdapters.get(sessionId)?.adapter.alive ||
+            this.workspaceAgents.get(sessionId)?.adapter.alive
+        );
+    }
+
     /**
      * Spawn a new ACP agent process, initialize the protocol, and create a session.
      * In serverless environments with OPENCODE_SERVER_URL configured, uses SDK adapter instead.
@@ -183,6 +194,7 @@ export class AcpProcessManager {
         toolMode?: "essential" | "full",
         mcpProfile?: McpServerProfile,
         sessionContext?: Omit<AcpSessionContext, "sessionId">,
+        providerSessionId?: string,
     ): Promise<string> {
         let mcpConfigs: string[] | undefined;
         if (providerSupportsMcp(presetId)) {
@@ -199,7 +211,8 @@ export class AcpProcessManager {
 
         await proc.start();
         await proc.initialize();
-        await proc.loadSession(sessionId, cwd);
+        const resolvedProviderSessionId = providerSessionId ?? sessionId;
+        await proc.loadSession(resolvedProviderSessionId, cwd);
         proc.setSessionContext({
             sessionId,
             provider: sessionContext?.provider ?? presetId,
@@ -207,7 +220,7 @@ export class AcpProcessManager {
             autoApprovePermissions: sessionContext?.autoApprovePermissions,
         });
 
-        const acpSessionId = proc.sessionId ?? sessionId;
+        const acpSessionId = proc.sessionId ?? resolvedProviderSessionId;
         this.processes.set(sessionId, {
             process: proc,
             acpSessionId,

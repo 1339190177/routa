@@ -505,14 +505,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      const existingSession =
-        manager.getProcess(sessionId) !== undefined ||
-        manager.getClaudeProcess(sessionId) !== undefined ||
-        manager.isDockerAdapterSession(sessionId) ||
-        manager.isClaudeCodeSdkSession(sessionId) ||
-        manager.isOpencodeAdapterSession(sessionId) ||
-        (await manager.isClaudeCodeSdkSessionAsync(sessionId)) ||
-        (await manager.isOpencodeSdkSessionAsync(sessionId));
+      const existingSession = manager.hasActiveSession(sessionId);
 
       const storedSession = store.getSession(sessionId);
       const persistedSession = storedSession
@@ -539,6 +532,7 @@ export async function POST(request: NextRequest) {
       const cwd = (typeof p.cwd === "string" ? p.cwd : recoveredSession.cwd) ?? process.cwd();
       const workspaceId = recoveredSession.workspaceId;
       const role = recoveredSession.role ?? "CRAFTER";
+      const providerSessionId = recoveredSession.routaAgentId ?? sessionId;
 
       if (existingSession) {
         store.upsertSession({
@@ -590,6 +584,7 @@ export async function POST(request: NextRequest) {
               provider,
               role,
             },
+            providerSessionId,
           );
           resumeMode = "native";
         } else {

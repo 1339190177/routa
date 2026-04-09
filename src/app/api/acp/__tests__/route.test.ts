@@ -33,6 +33,7 @@ const {
   const processManager = {
     createSession: vi.fn(),
     loadSession: vi.fn(),
+    hasActiveSession: vi.fn(),
     respondToUserInput: vi.fn(),
     getProcess: vi.fn(),
     getClaudeProcess: vi.fn(),
@@ -158,6 +159,7 @@ describe("/api/acp GET", () => {
     acpProcessManager.respondToUserInput.mockReset();
     acpProcessManager.createSession.mockReset();
     acpProcessManager.loadSession.mockReset();
+    acpProcessManager.hasActiveSession.mockReset();
     acpProcessManager.getProcess.mockReset();
     acpProcessManager.getClaudeProcess.mockReset();
     acpProcessManager.isClaudeSession.mockReset();
@@ -174,6 +176,7 @@ describe("/api/acp GET", () => {
     acpProcessManager.getProcess.mockReturnValue(undefined);
     acpProcessManager.getClaudeProcess.mockReturnValue(undefined);
     acpProcessManager.isClaudeSession.mockReturnValue(false);
+    acpProcessManager.hasActiveSession.mockReturnValue(false);
     acpProcessManager.getAcpSessionId.mockReturnValue(undefined);
     acpProcessManager.isDockerAdapterSession.mockReturnValue(false);
     acpProcessManager.isOpencodeAdapterSession.mockReturnValue(false);
@@ -524,6 +527,7 @@ describe("/api/acp POST", () => {
       workspaceId: "workspace-1",
       provider: "codex",
       role: "DEVELOPER",
+      routaAgentId: "codex-thread-1",
       createdAt: new Date("2026-04-08T00:00:00.000Z"),
     });
     acpProcessManager.loadSession.mockResolvedValue("session-codex");
@@ -554,6 +558,7 @@ describe("/api/acp POST", () => {
         provider: "codex",
         role: "DEVELOPER",
       },
+      "codex-thread-1",
     );
     expect(acpProcessManager.createSession).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({

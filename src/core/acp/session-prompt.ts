@@ -242,13 +242,7 @@ async function ensurePromptSessionExists(args: {
   const forwardSessionUpdate = createSessionUpdateForwarder(store, sessionId);
 
   const sessionExists =
-    manager.getProcess(sessionId) !== undefined ||
-    manager.getClaudeProcess(sessionId) !== undefined ||
-    manager.isDockerAdapterSession(sessionId) ||
-    manager.isClaudeCodeSdkSession(sessionId) ||
-    manager.isOpencodeAdapterSession(sessionId) ||
-    (await manager.isClaudeCodeSdkSessionAsync(sessionId)) ||
-    (await manager.isOpencodeSdkSessionAsync(sessionId));
+    manager.hasActiveSession(sessionId);
 
   if (sessionExists) {
     return null;
@@ -290,6 +284,7 @@ async function ensurePromptSessionExists(args: {
   const allowedNativeTools = storedSession?.allowedNativeTools;
   const specialistId = recoveredSession?.specialistId;
   const specialistSystemPrompt = storedSession?.specialistSystemPrompt;
+  const providerSessionId = recoveredSession?.routaAgentId ?? sessionId;
 
   try {
     const preset = getPresetById(provider);
@@ -380,6 +375,7 @@ async function ensurePromptSessionExists(args: {
             provider,
             role,
           },
+          providerSessionId,
         );
         console.log(`[ACP Route] Native Codex resume succeeded for session ${sessionId}`);
       } catch (resumeError) {
