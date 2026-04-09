@@ -15,7 +15,7 @@ import type { KanbanTaskAgentCopy } from "./i18n/kanban-task-agent";
 import { KanbanCreateModal, type TaskDraft } from "../kanban-create-modal";
 import { KanbanCardActivityPanel, KanbanEmptySessionPane } from "./kanban-card-activity";
 import { formatSessionTimestamp } from "./kanban-card-session-utils";
-import { KanbanRepoSyncStatus, type RepoSyncState } from "./kanban-repo-sync-status";
+import type { RepoSyncState } from "./kanban-repo-sync-status";
 import type { KanbanSpecialistLanguage } from "./kanban-specialist-language";
 import {
   canSelectTaskSessionInAcp,
@@ -156,7 +156,7 @@ export function KanbanBoardSurface({
   codebases,
   workspaceId,
   defaultCodebase,
-  repoSync,
+  repoSync: _repoSync,
   setSelectedCodebase: _setSelectedCodebase,
   fetchCodebaseWorktrees: _fetchCodebaseWorktrees,
   onRefresh,
@@ -347,7 +347,6 @@ export function KanbanBoardSurface({
                 />
               </div>
             )}
-            <KanbanRepoSyncStatus repoSync={repoSync} />
           </div>
 
           {onAgentPrompt ? (

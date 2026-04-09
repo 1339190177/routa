@@ -5,6 +5,7 @@ import { useTranslation } from "@/i18n";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { KanbanBoardInfo } from "../types";
+import type { RepoSyncState } from "./kanban-repo-sync-status";
 
 interface KanbanStatusBarProps {
   /** 当前默认仓库 */
@@ -37,6 +38,8 @@ interface KanbanStatusBarProps {
   gitLogOpen?: boolean;
   /** 点击设置时的回调 */
   onSettingsClick?: () => void;
+  /** 仓库同步状态 */
+  repoSync?: RepoSyncState;
 }
 
 export function KanbanStatusBar({
@@ -53,6 +56,7 @@ export function KanbanStatusBar({
   onSettingsClick,
   fileChangesOpen = false,
   gitLogOpen = false,
+  repoSync,
 }: KanbanStatusBarProps) {
   const { t } = useTranslation();
 
@@ -127,8 +131,32 @@ export function KanbanStatusBar({
         )}
       </div>
 
-      {/* 右侧：运行状态和 Provider */}
+      {/* 右侧：同步状态、运行状态和 Provider */}
       <div className="flex items-center divide-x divide-desktop-border/50">
+        {/* 同步状态 */}
+        {repoSync && repoSync.status !== "idle" && (
+          <div className="flex items-center gap-1.5 px-2.5 h-6 text-desktop-text-secondary text-[11px]">
+            <span
+              className={`w-1.5 h-1.5 shrink-0 rounded-full ${
+                repoSync.status === "error"
+                  ? "bg-rose-500"
+                  : repoSync.status === "done"
+                    ? "bg-emerald-500"
+                    : "animate-pulse bg-sky-500"
+              }`}
+            />
+            <span className="max-w-[150px] truncate">
+              {repoSync.status === "syncing"
+                ? repoSync.total > 0
+                  ? `${t.kanban.syncingProgress} ${repoSync.completed}/${repoSync.total}`
+                  : t.kanban.syncingRepos
+                : repoSync.status === "done"
+                  ? `${repoSync.total} ${repoSync.total === 1 ? t.kanban.repoUpdated : t.kanban.reposUpdated}`
+                  : t.kanban.syncIssue}
+            </span>
+          </div>
+        )}
+
         {/* 运行状态 */}
         {board && (
           <div className="flex items-center gap-2 px-2.5 h-6 text-desktop-text-secondary">

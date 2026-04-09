@@ -1773,6 +1773,7 @@ export function KanbanTab({
         onSettingsClick={() => setShowSettings(true)}
         fileChangesOpen={fileChangesOpen}
         gitLogOpen={gitLogOpen}
+        repoSync={repoSync}
       />
     </div>
   );
