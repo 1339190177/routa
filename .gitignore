@@ -126,3 +126,4 @@ dogfood-output
 docs/issues/*-gh-*.md
 tools/ppt-template/output/
 tools/ppt-template/node_modules/
+.agents

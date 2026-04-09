@@ -190,7 +190,7 @@ impl AcpProcess {
                             tracing::debug!(
                                 "[AcpProcess:{}] Non-JSON stdout: {}",
                                 name_clone,
-                                &line[..line.len().min(200)]
+                                truncate_content(&line, 200)
                             );
                             continue;
                         }
@@ -276,9 +276,7 @@ impl AcpProcess {
                                             turn: None,
                                             role: Some("assistant".to_string()),
                                             content_preview: Some(
-                                                agent_thought_buffer
-                                                    [..agent_thought_buffer.len().min(200)]
-                                                    .to_string(),
+                                                truncate_content(&agent_thought_buffer, 200)
                                             ),
                                             full_content: Some(agent_thought_buffer.clone()),
                                         });
@@ -306,8 +304,7 @@ impl AcpProcess {
                                             turn: None,
                                             role: Some("assistant".to_string()),
                                             content_preview: Some(
-                                                agent_msg_buffer[..agent_msg_buffer.len().min(200)]
-                                                    .to_string(),
+                                                truncate_content(&agent_msg_buffer, 200)
                                             ),
                                             full_content: Some(agent_msg_buffer.clone()),
                                         });
@@ -332,7 +329,7 @@ impl AcpProcess {
                                         turn: None,
                                         role: Some("assistant".to_string()),
                                         content_preview: Some(
-                                            text[..text.len().min(200)].to_string(),
+                                            truncate_content(&text, 200)
                                         ),
                                         full_content: Some(text.to_string()),
                                     });
@@ -471,7 +468,7 @@ impl AcpProcess {
                     tracing::debug!(
                         "[AcpProcess:{}] Unhandled message: {}",
                         name_clone,
-                        &line[..line.len().min(200)]
+                        truncate_content(&line, 200)
                     );
                 }
             }
@@ -487,7 +484,7 @@ impl AcpProcess {
                     turn: None,
                     role: Some("assistant".to_string()),
                     content_preview: Some(
-                        agent_msg_buffer[..agent_msg_buffer.len().min(200)].to_string(),
+                        truncate_content(&agent_msg_buffer, 200)
                     ),
                     full_content: Some(agent_msg_buffer.clone()),
                 });
@@ -506,7 +503,7 @@ impl AcpProcess {
                     turn: None,
                     role: Some("assistant".to_string()),
                     content_preview: Some(
-                        agent_thought_buffer[..agent_thought_buffer.len().min(200)].to_string(),
+                        truncate_content(&agent_thought_buffer, 200)
                     ),
                     full_content: Some(agent_thought_buffer.clone()),
                 });
@@ -751,20 +748,8 @@ async fn handle_agent_request(
 ) -> serde_json::Value {
     match method {
         "session/request_permission" => {
-            let requested_permissions = params.get("permissions").cloned();
-            if let Some(permissions) = requested_permissions {
-                tracing::info!("[AcpProcess] session/request_permission params={}", params);
-                serde_json::json!({
-                    "permissions": permissions,
-                    "scope": "turn",
-                    "outcome": "approved"
-                })
-            } else {
-                tracing::info!("[AcpProcess] session/request_permission params={}", params);
-                serde_json::json!({
-                    "outcome": { "outcome": "approved" }
-                })
-            }
+            tracing::info!("[AcpProcess] session/request_permission params={}", params);
+            build_permission_approval_result(params)
         }
         "fs/read_text_file" => {
             let path = params["path"].as_str().unwrap_or("");
@@ -858,4 +843,114 @@ fn try_parse_embedded_json(line: &str) -> Option<serde_json::Value> {
         }
     }
     None
+}
+
+/// Build permission approval response following ACP spec and codex-acp expectations.
+/// This mirrors the Next.js implementation in acp-process.ts.
+fn build_permission_approval_result(params: &serde_json::Value) -> serde_json::Value {
+    // Default scope is "turn"
+    let scope = "turn";
+
+    // Try to resolve optionId from params.options array
+    if let Some(option_id) = resolve_permission_option_id(params, scope) {
+        return serde_json::json!({
+            "outcome": {
+                "outcome": "selected",
+                "optionId": option_id
+            }
+        });
+    }
+
+    // Fallback: return cancelled outcome
+    serde_json::json!({
+        "outcome": {
+            "outcome": "cancelled"
+        }
+    })
+}
+
+/// Resolve the appropriate permission optionId from the options array.
+/// Prefers "approved" or "approved-for-session" for turn/session scope.
+fn resolve_permission_option_id(params: &serde_json::Value, scope: &str) -> Option<String> {
+    let options = params.get("options")?.as_array()?;
+
+    // Define preferred option IDs based on scope
+    let preferred_ids = if scope == "session" {
+        vec![
+            "approved-for-session",
+            "approved-always",
+            "approved-execpolicy-amendment",
+            "approved",
+        ]
+    } else {
+        vec![
+            "approved",
+            "approved-once",
+            "approved-for-session",
+            "approved-always",
+            "approved-execpolicy-amendment",
+        ]
+    };
+
+    // Define preferred option kinds
+    let preferred_kinds = if scope == "session" {
+        vec!["allow_always", "allow_once"]
+    } else {
+        vec!["allow_once", "allow_always"]
+    };
+
+    // First, try to find by preferred optionId
+    for pref_id in &preferred_ids {
+        for option in options {
+            if let Some(option_id) = option.get("optionId").and_then(|v| v.as_str()) {
+                if option_id == *pref_id {
+                    return Some(option_id.to_string());
+                }
+            }
+        }
+    }
+
+    // Second, try to find by preferred kind
+    for pref_kind in &preferred_kinds {
+        for option in options {
+            if let Some(kind) = option.get("kind").and_then(|v| v.as_str()) {
+                if kind == *pref_kind {
+                    if let Some(option_id) = option.get("optionId").and_then(|v| v.as_str()) {
+                        return Some(option_id.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: use first available option or default
+    if let Some(first_option) = options.first() {
+        if let Some(option_id) = first_option.get("optionId").and_then(|v| v.as_str()) {
+            return Some(option_id.to_string());
+        }
+    }
+
+    // Last resort: return default based on scope
+    Some(if scope == "session" {
+        "approved-for-session".to_string()
+    } else {
+        "approved".to_string()
+    })
+}
+
+/// Safely truncate a string at a UTF-8 character boundary.
+/// Returns a substring of at most `max_bytes` bytes, but ensures it doesn't
+/// cut in the middle of a multi-byte UTF-8 character.
+fn truncate_content(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        return s.to_string();
+    }
+
+    // Find the last valid UTF-8 character boundary before max_bytes
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+
+    s[..end].to_string()
 }

@@ -982,7 +982,7 @@ impl AcpManager {
         .with_conversation(TraceConversation {
             turn: None,
             role: Some("user".to_string()),
-            content_preview: Some(text[..text.len().min(200)].to_string()),
+            content_preview: Some(truncate_content(text, 500)),
             full_content: Some(text.to_string()),
         });
 
