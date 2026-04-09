@@ -62,7 +62,13 @@ export function formatChangeSummary(
 export function getKanbanFileChangesSummary(repos: KanbanRepoChanges[]) {
   const changedRepos = repos.filter((repo) => !repo.error && !repo.status.clean).length;
   const changedFiles = repos.reduce((count, repo) => count + repo.files.length, 0);
-  return { changedRepos, changedFiles };
+  const totalAdditions = repos.reduce((sum, repo) => {
+    return sum + repo.files.reduce((fileSum, file) => fileSum + (file.additions ?? 0), 0);
+  }, 0);
+  const totalDeletions = repos.reduce((sum, repo) => {
+    return sum + repo.files.reduce((fileSum, file) => fileSum + (file.deletions ?? 0), 0);
+  }, 0);
+  return { changedRepos, changedFiles, totalAdditions, totalDeletions };
 }
 
 export function splitFilePath(path: string): { name: string; directory: string | null } {

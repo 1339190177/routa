@@ -45,6 +45,8 @@ import {
   importGitHubItems,
 } from "./kanban-github-import";
 import { KanbanTabHeader } from "./kanban-tab-header";
+import { KanbanStatusBar } from "./kanban-status-bar";
+import { getKanbanFileChangesSummary } from "./kanban-file-changes-panel";
 import {
   KanbanCodebaseModal,
   KanbanDeleteCodebaseModal,
@@ -196,6 +198,8 @@ export function KanbanTab({
   const [moveBlockedMessage, setMoveBlockedMessage] = useState<string | null>(null);
   const detailSplitContainerRef = useRef<HTMLDivElement | null>(null);
   const [isTaskDetailFullscreen, setIsTaskDetailFullscreen] = useState(false);
+  const [fileChangesOpen, setFileChangesOpen] = useState(false);
+  const [gitLogOpen, setGitLogOpen] = useState(false);
   const sessionBackfillInFlightRef = useRef(new Set<string>());
   const emptySessionRecoveryRef = useRef<string | null>(null);
   const previousPreferredTaskSessionIdRef = useRef<string | null>(null);
@@ -471,6 +475,14 @@ export function KanbanTab({
 
     return { missingRepoTasks, cwdMismatchTasks };
   }, [codebases, defaultCodebase, localTasks, sessionMap]);
+
+  const fileChangesSummary = useMemo(() => {
+    return getKanbanFileChangesSummary(repoChanges);
+  }, [repoChanges]);
+
+  const selectedProviderInfo = useMemo(() => {
+    return acp?.providers.find((p) => p.id === acp.selectedProvider) ?? null;
+  }, [acp]);
 
   // Sync task's assignedProvider to ACP state when activeTaskId changes
   useEffect(() => {
@@ -1552,6 +1564,10 @@ export function KanbanTab({
         onCloseAgentPanel={() => setAgentPanelOpen(false)}
         ensureKanbanAgentSession={ensureKanbanAgentSession}
         kanbanRepoSelection={kanbanRepoSelection}
+        fileChangesOpen={fileChangesOpen}
+        setFileChangesOpen={setFileChangesOpen}
+        gitLogOpen={gitLogOpen}
+        setGitLogOpen={setGitLogOpen}
       />
 
       <KanbanCreateTaskModal
@@ -1736,6 +1752,28 @@ export function KanbanTab({
       <KanbanMoveBlockedModal
         message={moveBlockedMessage}
         onClose={() => setMoveBlockedMessage(null)}
+      />
+
+      <KanbanStatusBar
+        defaultCodebase={defaultCodebase}
+        codebases={codebases}
+        fileChangesSummary={fileChangesSummary}
+        board={board}
+        boardQueue={boardQueue}
+        selectedProvider={selectedProviderInfo}
+        onRepoClick={() => {
+          if (defaultCodebase) {
+            setSelectedCodebase(defaultCodebase);
+            void fetchCodebaseWorktrees(defaultCodebase);
+          }
+        }}
+        onFileChangesClick={() => setFileChangesOpen((prev) => !prev)}
+        onGitLogClick={() => setGitLogOpen((prev) => !prev)}
+        onProviderClick={() => {
+          // Could open provider settings or do nothing
+        }}
+        fileChangesOpen={fileChangesOpen}
+        gitLogOpen={gitLogOpen}
       />
     </div>
   );

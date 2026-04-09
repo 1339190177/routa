@@ -22,7 +22,7 @@ interface KanbanStatusBarProps {
   /** 看板队列状态 */
   boardQueue?: KanbanBoardInfo["queue"];
   /** 当前选中的 Provider */
-  selectedProvider?: AcpProviderInfo;
+  selectedProvider?: AcpProviderInfo | null;
   /** 点击仓库时的回调 */
   onRepoClick?: () => void;
   /** 点击文件变更时的回调 */

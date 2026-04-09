@@ -200,6 +200,10 @@ export function KanbanBoardSurface({
   onCloseAgentPanel,
   ensureKanbanAgentSession,
   kanbanRepoSelection,
+  fileChangesOpen,
+  setFileChangesOpen,
+  gitLogOpen,
+  setGitLogOpen,
 }: {
   moveError: string | null;
   onDismissMoveError: () => void;
@@ -266,9 +270,9 @@ export function KanbanBoardSurface({
   const [gitLogRepoPath, setGitLogRepoPath] = useState<string | null>(defaultCodebase?.repoPath ?? null);
 
   // Use external state if provided, otherwise use local state
-  const _fileChangesOpenValue = fileChangesOpen ?? localFileChangesOpen;
-  const _setFileChangesOpenValue = setFileChangesOpen ?? setLocalFileChangesOpen;
-  const _gitLogOpenValue = gitLogOpen ?? localGitLogOpen;
+  const fileChangesOpenValue = fileChangesOpen ?? localFileChangesOpen;
+  const setFileChangesOpenValue = setFileChangesOpen ?? setLocalFileChangesOpen;
+  const gitLogOpenValue = gitLogOpen ?? localGitLogOpen;
   const _setGitLogOpenValue = setGitLogOpen ?? setLocalGitLogOpen;
 
   // Use RealGitAdapter when a real repo is available; fall back to MockGitAdapter for demo
