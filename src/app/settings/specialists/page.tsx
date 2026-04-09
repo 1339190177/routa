@@ -25,7 +25,7 @@ export default function SpecialistsSettingsPage() {
         { label: t.settingsExtended.specialistsPurposeLabel, value: t.settingsExtended.specialistsPurposeValue },
         { label: t.settingsExtended.specialistsBindingLabel, value: t.settingsExtended.specialistsBindingValue },
       ]}
-      contentClassName="flex h-full min-h-0 w-full flex-col px-4 py-4"
+      contentClassName="flex h-full min-h-0 w-full flex-col"
     >
       <SpecialistsTab modelDefs={modelDefs} />
     </SettingsRouteShell>

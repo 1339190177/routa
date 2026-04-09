@@ -42,7 +42,7 @@ export function SettingsRouteShell({
       workspaceTitle={workspaceTitle}
       workspaceSwitcher={workspaceSwitcher}
     >
-      <main className="h-full overflow-y-auto bg-desktop-bg-primary text-desktop-text-primary">
+      <main className="h-full overflow-hidden bg-desktop-bg-primary text-desktop-text-primary">
         <div className={contentClassName ?? "flex min-h-full w-full flex-col px-8 py-8"}>
           {children}
         </div>

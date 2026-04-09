@@ -14,6 +14,7 @@ export default function WorkflowSettingsPage() {
       title={t.settingsExtended.workflowsTitle}
       description={t.settingsExtended.workflowsDesc}
       badgeLabel={t.settingsExtended.workflowsBadge}
+      contentClassName="flex h-full min-h-0 w-full flex-col"
       icon={(
         <Workflow className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}/>
       )}
@@ -22,17 +23,17 @@ export default function WorkflowSettingsPage() {
         { label: t.settingsExtended.outputLabel, value: t.settingsExtended.outputValue },
       ]}
     >
-      <div className="space-y-6">
+      <div className="flex min-h-0 flex-1 flex-col">
         <SettingsPageHeader
           title={t.settingsExtended.workflowsTitle}
-          description={t.settingsExtended.workflowsDesc}
           metadata={[
             { label: t.settingsExtended.focusLabel, value: t.settingsExtended.focusValue },
             { label: t.settingsExtended.outputLabel, value: t.settingsExtended.outputValue },
           ]}
         />
-
-        <WorkflowPanel />
+        <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
+          <WorkflowPanel />
+        </div>
       </div>
     </SettingsRouteShell>
   );

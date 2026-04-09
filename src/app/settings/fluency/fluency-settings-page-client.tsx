@@ -112,6 +112,7 @@ export function FluencySettingsPageClient({ defaultRepoPath }: FluencySettingsPa
       badgeLabel={t.settings.diagnosticsBeta}
       workspaceId={workspaceId}
       workspaceTitle={activeWorkspaceTitle}
+      contentClassName="flex h-full min-h-0 w-full flex-col"
       workspaceSwitcher={(
         <WorkspaceSwitcher
           workspaces={workspacesHook.workspaces}
@@ -135,10 +136,9 @@ export function FluencySettingsPageClient({ defaultRepoPath }: FluencySettingsPa
         />
       )}
     >
-      <div className="space-y-4">
+      <div className="flex min-h-0 flex-1 flex-col">
         <SettingsPageHeader
           title={t.nav.fluency}
-          description=""
           metadata={[]}
           extra={(
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px]">
@@ -177,12 +177,13 @@ export function FluencySettingsPageClient({ defaultRepoPath }: FluencySettingsPa
             </div>
           )}
         />
-
-        <FitnessAnalysisPanel
-          workspaceId={workspaceId}
-          codebaseId={activeRepoCodebaseId}
-          repoPath={activeRepoSelection?.path}
-        />
+        <div className="min-h-0 flex-1 overflow-auto px-4 py-4">
+          <FitnessAnalysisPanel
+            workspaceId={workspaceId}
+            codebaseId={activeRepoCodebaseId}
+            repoPath={activeRepoSelection?.path}
+          />
+        </div>
       </div>
     </SettingsRouteShell>
   );
