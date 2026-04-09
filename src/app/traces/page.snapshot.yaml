@@ -23,8 +23,8 @@
       - /url: /
     - link "Kanban":
       - /url: /workspace/default/kanban
-    - link "Overview":
-      - /url: /workspace/default/overview
+    - link "Sessions":
+      - /url: /workspace/default/sessions
     - link "Team":
       - /url: /workspace/default/team
     - link "MCP Servers":
