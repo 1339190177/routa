@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type {
   GitLogAdapter,
   GitRefsResult,
@@ -54,36 +54,31 @@ export function useGitLog(
   const [activeBranches, setActiveBranches] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const adapterRef = useRef(adapter);
-  adapterRef.current = adapter;
-  const repoPathRef = useRef(repoPath);
-  repoPathRef.current = repoPath;
-
   const buildQuery = useCallback(
     (skip: number): GitLogQuery => ({
-      repoPath: repoPathRef.current,
+      repoPath,
       branches: activeBranches.length > 0 ? activeBranches : undefined,
       search: searchText || undefined,
       limit: PAGE_SIZE,
       skip,
     }),
-    [activeBranches, searchText],
+    [activeBranches, repoPath, searchText],
   );
 
   const loadRefs = useCallback(async () => {
     try {
-      const result = await adapterRef.current.getRefs(repoPathRef.current);
+      const result = await adapter.getRefs(repoPath);
       setRefs(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  }, [adapter, repoPath]);
 
   const loadLog = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const page = await adapterRef.current.getLog(buildQuery(0));
+      const page = await adapter.getLog(buildQuery(0));
       setCommits(page.commits);
       setTotal(page.total);
       setHasMore(page.hasMore);
@@ -92,13 +87,13 @@ export function useGitLog(
     } finally {
       setLoading(false);
     }
-  }, [buildQuery]);
+  }, [adapter, buildQuery]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const page = await adapterRef.current.getLog(buildQuery(commits.length));
+      const page = await adapter.getLog(buildQuery(commits.length));
       setCommits((prev) => [...prev, ...page.commits]);
       setTotal(page.total);
       setHasMore(page.hasMore);
@@ -107,19 +102,19 @@ export function useGitLog(
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, commits.length, buildQuery]);
+  }, [adapter, buildQuery, commits.length, hasMore, loadingMore]);
 
   const selectCommit = useCallback(
     (sha: string) => {
       setSelectedSha(sha);
       setDetailLoading(true);
-      adapterRef.current
-        .getCommitDetail(repoPathRef.current, sha)
+      adapter
+        .getCommitDetail(repoPath, sha)
         .then((d) => setDetail(d))
         .catch(() => setDetail(null))
         .finally(() => setDetailLoading(false));
     },
-    [],
+    [adapter, repoPath],
   );
 
   const setSearch = useCallback((text: string) => {
@@ -136,7 +131,17 @@ export function useGitLog(
     await Promise.all([loadRefs(), loadLog()]);
   }, [loadRefs, loadLog]);
 
-  // Load refs and initial log on mount
+  useEffect(() => {
+    setRefs(null);
+    setCommits([]);
+    setTotal(0);
+    setHasMore(false);
+    setSelectedSha(null);
+    setDetail(null);
+    setDetailLoading(false);
+    setActiveBranches((prev) => (prev.length > 0 ? [] : prev));
+  }, [repoPath]);
+
   useEffect(() => {
     void loadRefs();
   }, [loadRefs]);

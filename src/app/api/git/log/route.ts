@@ -22,6 +22,8 @@ import type { GitCommit, GitRef, GitLogPage } from "@/app/workspace/[workspaceId
 
 export const dynamic = "force-dynamic";
 
+const SEARCH_SCAN_LIMIT = 2000;
+
 function gitExec(command: string, cwd: string): string {
   const bridge = getServerBridge();
   return bridge.process.execSync(command, { cwd }).trimEnd();
@@ -58,7 +60,7 @@ function parseRefs(repoPath: string): GitRef[] {
     );
     for (const line of output.split("\n").filter(Boolean)) {
       const [fullName, sha] = line.split("\t");
-      if (!fullName || !sha || fullName.endsWith("/HEAD")) continue;
+      if (!fullName || !sha || fullName.endsWith("/HEAD") || !fullName.includes("/")) continue;
       const slashIdx = fullName.indexOf("/");
       const remote = slashIdx >= 0 ? fullName.slice(0, slashIdx) : "origin";
       const name = slashIdx >= 0 ? fullName.slice(slashIdx + 1) : fullName;
@@ -96,6 +98,48 @@ function buildRefMap(refs: GitRef[]): Map<string, GitRef[]> {
   return map;
 }
 
+function buildLogCommand(
+  repoPath: string,
+  branchesParam: string | null,
+  maxCount: number | null,
+): string {
+  const parts = [
+    "git",
+    "--no-pager",
+    "log",
+    "--date-order",
+    "--format=%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%P%x00",
+  ];
+
+  if (maxCount != null) {
+    parts.push(`--max-count=${maxCount}`);
+  }
+
+  if (branchesParam) {
+    const branches = branchesParam.split(",").map((b) => b.trim()).filter(Boolean);
+    for (const branch of branches) {
+      parts.push(shellQuote(branch));
+    }
+  } else {
+    parts.push("--all");
+  }
+
+  return parts.join(" ");
+}
+
+function matchesSearch(commit: GitCommit, search: string): boolean {
+  const query = search.trim().toLowerCase();
+  if (!query) return true;
+
+  return [
+    commit.sha,
+    commit.shortSha,
+    commit.summary,
+    commit.authorName,
+    commit.authorEmail,
+  ].some((value) => value.toLowerCase().includes(query));
+}
+
 export async function GET(request: NextRequest) {
   const repoPath = request.nextUrl.searchParams.get("repoPath");
   if (!repoPath) {
@@ -115,102 +159,73 @@ export async function GET(request: NextRequest) {
     const refs = parseRefs(repoPath);
     const refMap = buildRefMap(refs);
 
-    // Build git log command
-    const parts = [
-      "git",
-      "--no-pager",
-      "log",
-      `--format=%H%x1f%h%x1f%s%x1f%B%x1e%an%x1f%ae%x1f%aI%x1f%P`,
-      `--max-count=${limit + 1}`,  // +1 to detect hasMore
-      `--skip=${skip}`,
-    ];
-
-    // Branch filter
-    if (branchesParam) {
-      const branches = branchesParam.split(",").map((b) => b.trim()).filter(Boolean);
-      for (const b of branches) {
-        parts.push(shellQuote(b));
-      }
-    } else {
-      parts.push("--all");
-    }
-
-    // Search filter
-    if (search) {
-      // Check if it looks like a SHA
-      if (/^[0-9a-f]{4,40}$/i.test(search)) {
-        // For SHA search, we need a different approach
-        parts.push(`--grep=${shellQuote(search)}`);
-      } else {
-        parts.push(`--grep=${shellQuote(search)}`, "--regexp-ignore-case");
-      }
-    }
-
-    const output = (() => {
+    const shouldScanForSearch = search.trim().length > 0;
+    const rawOutput = (() => {
       try {
-        return gitExec(parts.join(" "), repoPath);
+        return gitExec(
+          buildLogCommand(
+            repoPath,
+            branchesParam,
+            shouldScanForSearch ? SEARCH_SCAN_LIMIT : skip + limit + 1,
+          ),
+          repoPath,
+        );
       } catch {
         return "";
       }
     })();
 
-    const commits: GitCommit[] = [];
-    const lines = output.split("\n").filter(Boolean);
+    const parsedCommits = rawOutput
+      .split("\u0000")
+      .map((record) => record.trim())
+      .filter(Boolean)
+      .flatMap((record): GitCommit[] => {
+        const [sha, shortSha, summary, authorName, authorEmail, authoredAt, parentStr = ""] = record.split("\u001f");
 
-    for (const line of lines) {
-      // Format: SHA\x1fshortSHA\x1fsummary\x1ffullMessage\x1eauthorName\x1fauthorEmail\x1fauthoredAt\x1fparents
-      const mainParts = line.split("\u001e");
-      const firstHalf = (mainParts[0] ?? "").split("\u001f");
-      const secondHalf = (mainParts[1] ?? "").split("\u001f");
+        if (!sha || !shortSha || !summary || !authorName || !authoredAt) {
+          return [];
+        }
 
-      const sha = firstHalf[0];
-      const shortSha = firstHalf[1];
-      const summary = firstHalf[2];
-      const message = firstHalf[3] ?? summary;
-      const authorName = secondHalf[0];
-      const authorEmail = secondHalf[1];
-      const authoredAt = secondHalf[2];
-      const parentStr = secondHalf[3] ?? "";
+        const parents = parentStr.split(" ").filter(Boolean);
 
-      if (!sha || !shortSha || !summary || !authorName || !authoredAt) continue;
-
-      const parents = parentStr.split(" ").filter(Boolean);
-
-      commits.push({
-        sha,
-        shortSha,
-        message: message ?? summary,
-        summary,
-        authorName,
-        authorEmail: authorEmail ?? "",
-        authoredAt,
-        parents,
-        refs: refMap.get(sha) ?? [],
-        lane: parents.length > 1 ? 1 : 0,  // Simplified lane assignment
-        graphEdges: parents.length > 1
-          ? [{ fromLane: 1, toLane: 0, isMerge: true }, { fromLane: 1, toLane: 1 }]
-          : [{ fromLane: 0, toLane: 0 }],
+        return [{
+          sha,
+          shortSha,
+          message: summary,
+          summary,
+          authorName,
+          authorEmail: authorEmail ?? "",
+          authoredAt,
+          parents,
+          refs: refMap.get(sha) ?? [],
+          lane: parents.length > 1 ? 1 : 0,
+          graphEdges: parents.length > 1
+            ? [{ fromLane: 1, toLane: 0, isMerge: true }, { fromLane: 1, toLane: 1 }]
+            : [{ fromLane: 0, toLane: 0 }],
+        }];
       });
-    }
 
-    const hasMore = commits.length > limit;
-    if (hasMore) commits.pop();
+    const filteredCommits = shouldScanForSearch
+      ? parsedCommits.filter((commit) => matchesSearch(commit, search))
+      : parsedCommits;
 
-    // Count total commits (approximate for performance)
-    let total = skip + commits.length + (hasMore ? 1 : 0);
-    if (skip === 0 && !hasMore) {
-      total = commits.length;
-    } else {
+    const pageCommits = filteredCommits.slice(skip, skip + limit);
+    const hasMore = skip + limit < filteredCommits.length;
+
+    let total = filteredCommits.length;
+    if (!shouldScanForSearch) {
       try {
         const countCmd = branchesParam
-          ? `git rev-list --count ${branchesParam.split(",").map(b => shellQuote(b.trim())).join(" ")}`
+          ? `git rev-list --count ${branchesParam.split(",").map((branch) => shellQuote(branch.trim())).join(" ")}`
           : "git rev-list --count --all";
         const countStr = gitExec(countCmd, repoPath);
         total = Number.parseInt(countStr, 10) || total;
-      } catch { /* use approximate */ }
+      } catch {
+        total = filteredCommits.length;
+      }
     }
 
-    const page: GitLogPage = { commits, total, hasMore };
+    const page: GitLogPage = { commits: pageCommits, total, hasMore };
     return NextResponse.json(page);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

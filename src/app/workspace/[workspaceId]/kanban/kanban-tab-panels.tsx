@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type SetStateAction, type RefObject } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction, type RefObject } from "react";
 import { useTranslation } from "@/i18n";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
@@ -259,15 +259,32 @@ export function KanbanBoardSurface({
   const { t } = useTranslation();
   const [fileChangesOpen, setFileChangesOpen] = useState(false);
   const [gitLogOpen, setGitLogOpen] = useState(false);
+  const [gitLogRepoPath, setGitLogRepoPath] = useState<string | null>(defaultCodebase?.repoPath ?? null);
   const fileChangesSummary = getKanbanFileChangesSummary(repoChanges);
 
   // Use RealGitAdapter when a real repo is available; fall back to MockGitAdapter for demo
   const gitAdapter = useMemo(() => {
-    const hasRealRepo = defaultCodebase?.repoPath;
+    const hasRealRepo = codebases.length > 0;
     return hasRealRepo ? new RealGitAdapter() : new MockGitAdapter();
-  }, [defaultCodebase?.repoPath]);
+  }, [codebases.length]);
 
-  const gitLogRepoPath = defaultCodebase?.repoPath ?? "/mock/repo";
+  useEffect(() => {
+    if (gitLogRepoPath && codebases.some((codebase) => codebase.repoPath === gitLogRepoPath)) {
+      return;
+    }
+
+    if (defaultCodebase?.repoPath) {
+      setGitLogRepoPath(defaultCodebase.repoPath);
+      return;
+    }
+
+    if (codebases[0]?.repoPath) {
+      setGitLogRepoPath(codebases[0].repoPath);
+      return;
+    }
+
+    setGitLogRepoPath(null);
+  }, [codebases, defaultCodebase?.repoPath, gitLogRepoPath]);
 
   return (
     <>
@@ -468,7 +485,9 @@ export function KanbanBoardSurface({
             <div className="shrink-0 border-b border-slate-200 dark:border-[#1c1f2e]" style={{ height: "340px" }}>
               <GitLogPanel
                 adapter={gitAdapter}
-                repoPath={gitLogRepoPath}
+                repoPath={gitLogRepoPath ?? "/mock/repo"}
+                codebases={codebases}
+                onSelectRepoPath={setGitLogRepoPath}
                 title={t.gitLog.title}
               />
             </div>

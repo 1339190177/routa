@@ -2,6 +2,9 @@
 
 import React, { useState } from "react";
 import { GitBranch, PanelLeftClose, PanelLeft } from "lucide-react";
+import { CodebasePicker } from "@/client/components/codebase-picker";
+import type { CodebaseData } from "@/client/hooks/use-workspaces";
+import { useTranslation } from "@/i18n";
 import type { GitLogAdapter } from "./types";
 import { useGitLog } from "./use-git-log";
 import { RefsTree } from "./refs-tree";
@@ -12,6 +15,8 @@ import { CommitDetailPanel } from "./commit-detail-panel";
 interface GitLogPanelProps {
   adapter: GitLogAdapter;
   repoPath: string;
+  codebases?: CodebaseData[];
+  onSelectRepoPath?: (repoPath: string) => void;
   /** Panel title — defaults to "Git Log" */
   title?: string;
   className?: string;
@@ -20,9 +25,12 @@ interface GitLogPanelProps {
 export function GitLogPanel({
   adapter,
   repoPath,
+  codebases = [],
+  onSelectRepoPath,
   title = "Git Log",
   className = "",
 }: GitLogPanelProps) {
+  const { t } = useTranslation();
   const git = useGitLog(adapter, repoPath);
   const [refsOpen, setRefsOpen] = useState(true);
   const [detailOpen, setDetailOpen] = useState(true);
@@ -68,6 +76,16 @@ export function GitLogPanel({
           {repoPath.split("/").pop()}
         </span>
 
+        {codebases.length > 0 && onSelectRepoPath && (
+          <div className="min-w-0 max-w-[16rem]">
+            <CodebasePicker
+              codebases={codebases}
+              selectedRepoPath={repoPath}
+              onSelect={onSelectRepoPath}
+            />
+          </div>
+        )}
+
         <div className="flex-1" />
 
         {/* Toggle refs sidebar */}
@@ -75,7 +93,7 @@ export function GitLogPanel({
           type="button"
           onClick={() => setRefsOpen(!refsOpen)}
           className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-[#1a1d29] dark:hover:text-slate-300"
-          title={refsOpen ? "Hide refs" : "Show refs"}
+          title={refsOpen ? t.gitLog.hideRefs : t.gitLog.showRefs}
         >
           {refsOpen ? (
             <PanelLeftClose className="h-3.5 w-3.5" />

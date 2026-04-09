@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       );
       for (const line of output.split("\n").filter(Boolean)) {
         const [fullName, sha] = line.split("\t");
-        if (!fullName || !sha || fullName.endsWith("/HEAD")) continue;
+        if (!fullName || !sha || fullName.endsWith("/HEAD") || !fullName.includes("/")) continue;
         const slashIdx = fullName.indexOf("/");
         const remoteName = slashIdx >= 0 ? fullName.slice(0, slashIdx) : "origin";
         const name = slashIdx >= 0 ? fullName.slice(slashIdx + 1) : fullName;
