@@ -201,6 +201,9 @@ export function reconstructFileContentsFromUnifiedDiff(parsedDiff: ParsedDiffPre
   const oldLines: string[] = [];
   const newLines: string[] = [];
   let foundBodyLine = false;
+  let oldEndsWithNewline = true;
+  let newEndsWithNewline = true;
+  let lastBodyLineKind: "context" | "remove" | "add" | null = null;
 
   for (const line of parsedDiff.lines) {
     if (line.kind === "context" && line.text.startsWith(" ")) {
@@ -208,12 +211,24 @@ export function reconstructFileContentsFromUnifiedDiff(parsedDiff: ParsedDiffPre
       oldLines.push(content);
       newLines.push(content);
       foundBodyLine = true;
+      lastBodyLineKind = "context";
     } else if (line.kind === "remove") {
       oldLines.push(line.text.slice(1));
       foundBodyLine = true;
+      lastBodyLineKind = "remove";
     } else if (line.kind === "add") {
       newLines.push(line.text.slice(1));
       foundBodyLine = true;
+      lastBodyLineKind = "add";
+    } else if (line.text === "\\ No newline at end of file") {
+      if (lastBodyLineKind === "context") {
+        oldEndsWithNewline = false;
+        newEndsWithNewline = false;
+      } else if (lastBodyLineKind === "remove") {
+        oldEndsWithNewline = false;
+      } else if (lastBodyLineKind === "add") {
+        newEndsWithNewline = false;
+      }
     }
   }
 
@@ -222,9 +237,14 @@ export function reconstructFileContentsFromUnifiedDiff(parsedDiff: ParsedDiffPre
   }
 
   return {
-    oldContents: oldLines.join("\n"),
-    newContents: newLines.join("\n"),
+    oldContents: joinReconstructedFileLines(oldLines, oldEndsWithNewline),
+    newContents: joinReconstructedFileLines(newLines, newEndsWithNewline),
   };
+}
+
+function joinReconstructedFileLines(lines: string[], endsWithNewline: boolean): string {
+  if (lines.length === 0) return "";
+  return `${lines.join("\n")}${endsWithNewline ? "\n" : ""}`;
 }
 
 export function buildPierreDiffFromFullUnifiedPatch(file: CommitDiffFileSection): FileDiffMetadata | null {

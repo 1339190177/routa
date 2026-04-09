@@ -51,12 +51,35 @@ describe("kanban diff preview", () => {
       "export const unchangedTop = true;",
       "export const label = 'old';",
       "export const unchangedBottom = true;",
+      "",
     ].join("\n"));
     expect(contents?.newContents).toBe([
       "export const unchangedTop = true;",
       "export const label = 'new';",
       "export const unchangedBottom = true;",
+      "",
     ].join("\n"));
+  });
+
+  it("preserves real no-newline-at-eof markers when reconstructing files", () => {
+    const parsedDiff = parseUnifiedDiffPreview({
+      patch: [
+        "diff --git a/src/app.ts b/src/app.ts",
+        "index 1111111..2222222 100644",
+        "--- a/src/app.ts",
+        "+++ b/src/app.ts",
+        "@@ -1 +1 @@",
+        "-export const label = 'old';",
+        "\\ No newline at end of file",
+        "+export const label = 'new';",
+        "\\ No newline at end of file",
+      ].join("\n"),
+    });
+
+    const contents = reconstructFileContentsFromUnifiedDiff(parsedDiff);
+
+    expect(contents?.oldContents).toBe("export const label = 'old';");
+    expect(contents?.newContents).toBe("export const label = 'new';");
   });
 
   it("builds an expandable @pierre/diffs file diff from a full-context file patch", () => {
