@@ -563,6 +563,7 @@ mod tests {
             branch: Some("main".to_string()),
             workspace_id: workspace_id.to_string(),
             routa_agent_id: Some(format!("agent-{session_id}")),
+            provider_session_id: Some(format!("provider-{session_id}")),
             provider: Some("codex".to_string()),
             role: Some("CRAFTER".to_string()),
             mode_id: Some("default".to_string()),

@@ -585,7 +585,7 @@ impl AcpProcess {
         // npx/uvx agents may need longer timeout for first-time package download
         let is_npx_or_uvx = self.command == "npx" || self.command == "uvx";
         let default_timeout = match method {
-            "initialize" | "session/new" => {
+            "initialize" | "session/new" | "session/load" => {
                 if is_npx_or_uvx {
                     120_000 // 2 min for npx/uvx (may need to download packages)
                 } else {
@@ -669,6 +669,33 @@ impl AcpProcess {
         Ok(session_id)
     }
 
+    /// Load a persisted ACP session. Returns the agent's resumed session ID.
+    pub async fn load_session(&self, session_id: &str, cwd: &str) -> Result<String, String> {
+        let result = self
+            .send_request(
+                "session/load",
+                serde_json::json!({
+                    "sessionId": session_id,
+                    "cwd": cwd,
+                    "mcpServers": [],
+                }),
+                None,
+            )
+            .await?;
+
+        let resumed_session_id = result["sessionId"]
+            .as_str()
+            .unwrap_or(session_id)
+            .to_string();
+
+        tracing::info!(
+            "[AcpProcess:{}] Session loaded: {}",
+            self.display_name,
+            resumed_session_id
+        );
+        Ok(resumed_session_id)
+    }
+
     /// Send a prompt to an existing session. 5-minute timeout.
     pub async fn prompt(&self, session_id: &str, text: &str) -> Result<serde_json::Value, String> {
         self.send_request(
@@ -726,20 +753,14 @@ async fn handle_agent_request(
         "session/request_permission" => {
             let requested_permissions = params.get("permissions").cloned();
             if let Some(permissions) = requested_permissions {
-                tracing::info!(
-                    "[AcpProcess] session/request_permission params={}",
-                    params
-                );
+                tracing::info!("[AcpProcess] session/request_permission params={}", params);
                 serde_json::json!({
                     "permissions": permissions,
                     "scope": "turn",
                     "outcome": "approved"
                 })
             } else {
-                tracing::info!(
-                    "[AcpProcess] session/request_permission params={}",
-                    params
-                );
+                tracing::info!("[AcpProcess] session/request_permission params={}", params);
                 serde_json::json!({
                     "outcome": { "outcome": "approved" }
                 })

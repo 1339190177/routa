@@ -133,6 +133,7 @@ impl Database {
                     branch          TEXT,
                     workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                     routa_agent_id  TEXT,
+                    provider_session_id TEXT,
                     provider        TEXT,
                     role            TEXT,
                     mode_id         TEXT,
@@ -387,6 +388,7 @@ impl Database {
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE acp_sessions ADD COLUMN branch TEXT", []))?;
             // Add parent_session_id to acp_sessions for CRAFTER child session tracking
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE acp_sessions ADD COLUMN parent_session_id TEXT", []))?;
+            Self::ignore_duplicate_column(conn.execute("ALTER TABLE acp_sessions ADD COLUMN provider_session_id TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE acp_sessions ADD COLUMN custom_command TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE acp_sessions ADD COLUMN custom_args TEXT NOT NULL DEFAULT '[]'", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE codebases ADD COLUMN source_type TEXT", []))?;

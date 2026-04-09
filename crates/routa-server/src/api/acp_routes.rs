@@ -250,7 +250,7 @@ async fn acp_rpc(
                 "id": id,
                 "result": {
                     "protocolVersion": protocol_version,
-                    "agentCapabilities": { "loadSession": false },
+                    "agentCapabilities": { "loadSession": true },
                     "agentInfo": {
                         "name": "routa-acp",
                         "version": "0.1.0"
@@ -557,7 +557,7 @@ async fn acp_rpc(
             };
 
             match create_result {
-                Ok((_our_sid, _agent_sid)) => {
+                Ok((_our_sid, agent_sid)) => {
                     // Assign worktree session now that creation succeeded
                     if let Some(ref wt_id) = validated_worktree_id {
                         if let Err(e) = state
@@ -592,6 +592,17 @@ async fn acp_rpc(
                         tracing::warn!("[ACP Route] Failed to persist session to DB: {}", e);
                     } else {
                         tracing::info!("[ACP Route] Session {} persisted to DB", session_id);
+                        if let Err(e) = state
+                            .acp_session_store
+                            .set_provider_session_id(&session_id, Some(&agent_sid))
+                            .await
+                        {
+                            tracing::warn!(
+                                "[ACP Route] Failed to persist provider session id for {}: {}",
+                                session_id,
+                                e
+                            );
+                        }
                     }
 
                     let routa_agent_id = match ensure_routa_agent_registration(
@@ -1220,14 +1231,242 @@ async fn acp_rpc(
             }))))
         }
 
-        "session/load" => Ok(AcpResponse::Json(Json(serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": {
-                "code": -32601,
-                "message": "session/load not supported - create a new session instead"
+        "session/load" => {
+            let session_id = match params.get("sessionId").and_then(|v| v.as_str()) {
+                Some(sid) => sid.to_string(),
+                None => {
+                    return Ok(AcpResponse::Json(Json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32602,
+                            "message": "Missing sessionId"
+                        }
+                    }))));
+                }
+            };
+
+            let existing_session_alive = state.acp_manager.is_alive(&session_id).await;
+            let persisted_session = match state.acp_session_store.get(&session_id).await? {
+                Some(session) => session,
+                None => {
+                    return Ok(AcpResponse::Json(Json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "error": {
+                            "code": -32004,
+                            "message": format!("Persisted session not found: {}", session_id)
+                        }
+                    }))));
+                }
+            };
+
+            let provider = persisted_session
+                .provider
+                .clone()
+                .unwrap_or_else(|| "opencode".to_string());
+            let cwd = params
+                .get("cwd")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| persisted_session.cwd.clone());
+            let workspace_id = persisted_session.workspace_id.clone();
+            let role = persisted_session.role.clone();
+            let branch = persisted_session.branch.clone();
+            let parent_session_id = persisted_session.parent_session_id.clone();
+            let tool_mode = params
+                .get("toolMode")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let mcp_profile = params
+                .get("mcpProfile")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            if existing_session_alive {
+                return Ok(AcpResponse::Json(Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {
+                        "sessionId": session_id,
+                        "provider": provider,
+                        "role": role.as_deref().unwrap_or("CRAFTER"),
+                        "acpStatus": "ready",
+                        "resumeMode": "attached"
+                    }
+                }))));
             }
-        })))),
+
+            let custom_provider_launch = custom_provider_launch_from_row(&persisted_session);
+            let provider_session_id = persisted_session.provider_session_id.clone();
+            let mut resume_mode = "recreated";
+            let mut native_resume_error: Option<String> = None;
+
+            let create_result = if provider == "codex" {
+                match if let Some(custom) = custom_provider_launch.clone() {
+                    state
+                        .acp_manager
+                        .load_session_from_inline(
+                            session_id.clone(),
+                            cwd.clone(),
+                            workspace_id.clone(),
+                            provider.clone(),
+                            role.clone(),
+                            None,
+                            parent_session_id.clone(),
+                            custom.command,
+                            custom.args,
+                            provider_session_id.clone(),
+                            SessionLaunchOptions::default(),
+                        )
+                        .await
+                } else {
+                    state
+                        .acp_manager
+                        .load_session(
+                            session_id.clone(),
+                            cwd.clone(),
+                            workspace_id.clone(),
+                            Some(provider.clone()),
+                            role.clone(),
+                            None,
+                            parent_session_id.clone(),
+                            tool_mode.clone(),
+                            mcp_profile.clone(),
+                            provider_session_id.clone(),
+                        )
+                        .await
+                } {
+                    Ok(result) => {
+                        resume_mode = "native";
+                        Ok(result)
+                    }
+                    Err(error) => {
+                        native_resume_error = Some(error.clone());
+                        tracing::warn!(
+                            "[ACP Route] Native resume failed for {}, falling back to recreate: {}",
+                            session_id,
+                            error
+                        );
+                        if let Some(custom) = custom_provider_launch.clone() {
+                            state
+                                .acp_manager
+                                .create_session_from_inline(
+                                    session_id.clone(),
+                                    cwd.clone(),
+                                    workspace_id.clone(),
+                                    provider.clone(),
+                                    role.clone(),
+                                    None,
+                                    parent_session_id.clone(),
+                                    custom.command,
+                                    custom.args,
+                                    SessionLaunchOptions::default(),
+                                )
+                                .await
+                        } else {
+                            state
+                                .acp_manager
+                                .create_session(
+                                    session_id.clone(),
+                                    cwd.clone(),
+                                    workspace_id.clone(),
+                                    Some(provider.clone()),
+                                    role.clone(),
+                                    None,
+                                    parent_session_id.clone(),
+                                    tool_mode.clone(),
+                                    mcp_profile.clone(),
+                                )
+                                .await
+                        }
+                    }
+                }
+            } else if let Some(custom) = custom_provider_launch.clone() {
+                state
+                    .acp_manager
+                    .create_session_from_inline(
+                        session_id.clone(),
+                        cwd.clone(),
+                        workspace_id.clone(),
+                        provider.clone(),
+                        role.clone(),
+                        None,
+                        parent_session_id.clone(),
+                        custom.command,
+                        custom.args,
+                        SessionLaunchOptions::default(),
+                    )
+                    .await
+            } else {
+                state
+                    .acp_manager
+                    .create_session(
+                        session_id.clone(),
+                        cwd.clone(),
+                        workspace_id.clone(),
+                        Some(provider.clone()),
+                        role.clone(),
+                        None,
+                        parent_session_id.clone(),
+                        tool_mode.clone(),
+                        mcp_profile.clone(),
+                    )
+                    .await
+            };
+
+            match create_result {
+                Ok((_our_sid, agent_sid)) => {
+                    let _ = state
+                        .acp_session_store
+                        .set_routa_agent_id(&session_id, Some(&agent_sid))
+                        .await;
+                    let _ = state
+                        .acp_session_store
+                        .set_provider_session_id(&session_id, Some(&agent_sid))
+                        .await;
+
+                    persist_session_to_jsonl(
+                        &session_id,
+                        &cwd,
+                        branch.as_deref(),
+                        &workspace_id,
+                        Some(&provider),
+                        role.as_deref(),
+                        custom_provider_launch
+                            .as_ref()
+                            .map(|launch| launch.command.as_str()),
+                        custom_provider_launch
+                            .as_ref()
+                            .map(|launch| launch.args.as_slice()),
+                        parent_session_id.as_deref(),
+                    )
+                    .await;
+
+                    Ok(AcpResponse::Json(Json(serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "sessionId": session_id,
+                            "provider": provider,
+                            "role": role.as_deref().unwrap_or("CRAFTER"),
+                            "acpStatus": "ready",
+                            "resumeMode": resume_mode,
+                            "nativeResumeError": native_resume_error,
+                        }
+                    }))))
+                }
+                Err(error) => Ok(AcpResponse::Json(Json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32000,
+                        "message": format!("Failed to load session: {}", error)
+                    }
+                })))),
+            }
+        }
 
         "session/respond_user_input" => {
             let session_id = params.get("sessionId").and_then(|v| v.as_str());
@@ -1613,6 +1852,7 @@ mod tests {
             branch: Some("main".to_string()),
             workspace_id: "default".to_string(),
             routa_agent_id: None,
+            provider_session_id: None,
             provider: Some("custom-inline".to_string()),
             role: Some("CRAFTER".to_string()),
             mode_id: None,
@@ -1817,5 +2057,58 @@ mod tests {
             .await
             .expect("terminal should kill");
         TerminalManager::global().release(&terminal_id).await;
+    }
+
+    #[tokio::test]
+    async fn initialize_advertises_session_load_support() {
+        let db = Database::open_in_memory().expect("db should open");
+        let state = Arc::new(AppStateInner::new(db));
+
+        let response = acp_rpc(
+            State(state),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": 1
+                }
+            })),
+        )
+        .await
+        .expect("initialize should succeed");
+
+        let value = json_response_value(response);
+        assert_eq!(
+            value["result"]["agentCapabilities"]["loadSession"].as_bool(),
+            Some(true)
+        );
+    }
+
+    #[tokio::test]
+    async fn session_load_rejects_missing_persisted_session() {
+        let db = Database::open_in_memory().expect("db should open");
+        let state = Arc::new(AppStateInner::new(db));
+
+        let response = acp_rpc(
+            State(state),
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "session/load",
+                "params": {
+                    "sessionId": "missing-session"
+                }
+            })),
+        )
+        .await
+        .expect("request should complete");
+
+        let value = json_response_value(response);
+        assert_eq!(value["error"]["code"].as_i64(), Some(-32004));
+        assert_eq!(
+            value["error"]["message"].as_str(),
+            Some("Persisted session not found: missing-session")
+        );
     }
 }

@@ -334,6 +334,132 @@ impl AcpManager {
         .await
     }
 
+    /// Resume a persisted ACP session using the provider's native session/load path.
+    ///
+    /// Returns `(our_session_id, agent_session_id)`.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn load_session_with_options(
+        &self,
+        session_id: String,
+        cwd: String,
+        workspace_id: String,
+        provider: Option<String>,
+        role: Option<String>,
+        model: Option<String>,
+        parent_session_id: Option<String>,
+        tool_mode: Option<String>,
+        mcp_profile: Option<String>,
+        provider_session_id: Option<String>,
+        options: SessionLaunchOptions,
+    ) -> Result<(String, String), String> {
+        let provider_name = provider.as_deref().unwrap_or("opencode");
+
+        if provider_name == "claude" {
+            return Err("Native session/load is not supported for Claude".to_string());
+        }
+
+        let (ntx, _) = broadcast::channel::<serde_json::Value>(256);
+        let preset = get_preset_by_id_with_registry(provider_name).await?;
+
+        if let Some(summary) = mcp_setup::ensure_mcp_for_provider(
+            provider_name,
+            &workspace_id,
+            &session_id,
+            tool_mode.as_deref(),
+            mcp_profile.as_deref(),
+        )
+        .await?
+        {
+            tracing::info!("[AcpManager] {}", summary);
+        }
+
+        let mut extra_args: Vec<String> = preset.args.clone();
+        if let Some(provider_args) = options.provider_args.clone() {
+            extra_args.extend(provider_args);
+        }
+        if let Some(ref m) = model {
+            if !m.is_empty() {
+                extra_args.push("-m".to_string());
+                extra_args.push(m.clone());
+            }
+        }
+
+        let preset_command = resolve_preset_command(&preset);
+        let process = AcpProcess::spawn(
+            &preset_command,
+            &extra_args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            &cwd,
+            ntx.clone(),
+            &preset.name,
+            &session_id,
+        )
+        .await?;
+
+        process
+            .initialize_with_timeout(options.initialize_timeout_ms)
+            .await?;
+
+        let resolved_provider_session_id =
+            provider_session_id.unwrap_or_else(|| session_id.clone());
+        let acp_session_id = process
+            .load_session(&resolved_provider_session_id, &cwd)
+            .await?;
+
+        self.register_managed_session(
+            session_id.clone(),
+            cwd.clone(),
+            workspace_id.clone(),
+            provider_name.to_string(),
+            role.clone(),
+            model.clone(),
+            parent_session_id.clone(),
+            &options,
+            AgentProcessType::Acp(Arc::new(process)),
+            acp_session_id.clone(),
+            ntx.clone(),
+        )
+        .await;
+
+        tracing::info!(
+            "[AcpManager] Session {} loaded (provider: {}, agent session: {})",
+            session_id,
+            provider_name,
+            acp_session_id,
+        );
+
+        Ok((session_id, acp_session_id))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn load_session(
+        &self,
+        session_id: String,
+        cwd: String,
+        workspace_id: String,
+        provider: Option<String>,
+        role: Option<String>,
+        model: Option<String>,
+        parent_session_id: Option<String>,
+        tool_mode: Option<String>,
+        mcp_profile: Option<String>,
+        provider_session_id: Option<String>,
+    ) -> Result<(String, String), String> {
+        self.load_session_with_options(
+            session_id,
+            cwd,
+            workspace_id,
+            provider,
+            role,
+            model,
+            parent_session_id,
+            tool_mode,
+            mcp_profile,
+            provider_session_id,
+            SessionLaunchOptions::default(),
+        )
+        .await
+    }
+
     fn spawn_history_mirror(&self, session_id: &str, ntx: &broadcast::Sender<serde_json::Value>) {
         let history_manager = self.clone();
         let history_session_id = session_id.to_string();
@@ -484,6 +610,68 @@ impl AcpManager {
 
         tracing::info!(
             "[AcpManager] Session {} created from inline command (provider: {}, agent session: {})",
+            session_id,
+            provider_name,
+            acp_session_id,
+        );
+
+        Ok((session_id, acp_session_id))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn load_session_from_inline(
+        &self,
+        session_id: String,
+        cwd: String,
+        workspace_id: String,
+        provider_name: String,
+        role: Option<String>,
+        model: Option<String>,
+        parent_session_id: Option<String>,
+        command: String,
+        args: Vec<String>,
+        provider_session_id: Option<String>,
+        options: SessionLaunchOptions,
+    ) -> Result<(String, String), String> {
+        let (ntx, _) = broadcast::channel::<serde_json::Value>(256);
+
+        let process = AcpProcess::spawn(
+            &command,
+            &args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            &cwd,
+            ntx.clone(),
+            &provider_name,
+            &session_id,
+        )
+        .await?;
+
+        process
+            .initialize_with_timeout(options.initialize_timeout_ms)
+            .await?;
+
+        let resolved_provider_session_id =
+            provider_session_id.unwrap_or_else(|| session_id.clone());
+        let acp_session_id = process
+            .load_session(&resolved_provider_session_id, &cwd)
+            .await?;
+
+        self.register_managed_session(
+            session_id.clone(),
+            cwd.clone(),
+            workspace_id.clone(),
+            provider_name.clone(),
+            role.clone(),
+            model.clone(),
+            parent_session_id.clone(),
+            &options,
+            AgentProcessType::Acp(Arc::new(process)),
+            acp_session_id.clone(),
+            ntx.clone(),
+        )
+        .await;
+
+        tracing::info!(
+            "[AcpManager] Session {} loaded from inline command (provider: {}, agent session: {})",
             session_id,
             provider_name,
             acp_session_id,
@@ -751,6 +939,14 @@ impl AcpManager {
                 AgentProcessType::Claude(p) => p.is_alive(),
             })
             .unwrap_or(false)
+    }
+
+    /// Get the managed ACP session id for a live session.
+    pub async fn get_acp_session_id(&self, session_id: &str) -> Option<String> {
+        let processes = self.processes.read().await;
+        processes
+            .get(session_id)
+            .map(|managed| managed.acp_session_id.clone())
     }
 
     /// Get the preset ID for a session.
