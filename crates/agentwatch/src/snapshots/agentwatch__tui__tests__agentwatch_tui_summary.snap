@@ -1,33 +1,33 @@
 ---
 source: crates/agentwatch/src/tui_tests.rs
-assertion_line: 426
+assertion_line: 400
 expression: "render_snapshot(&state, &mut cache, 120, 28)"
 ---
  AgentWatch   repo:routa-js  branch:main    FILES VIEW · FOLLOW ON  rpc:socket  ag:2 act:1  dirty:2  unknown:1  synced 2
-┌Files───────────────────────────────────────────────────────────────┐┌Details─────────────────────────────────────────┐
-│ ALL FILES    REVIEW UNKNOWN                                        ││tui.rs                                          │
-│2 files  M:1 D:1  E:1 I:0 U:1                                       ││crates/agentwatch/src                           │
-│────────────────────────────────────────────────────────────────────││Last by: impl-buddy                             │
-│> tui.rs                                                            ││Modified: <ts> (4m)                         │
-│  crates/agentwatch/src  M  +38 -5     4m  EXACT                    ││State: dirty  Confidence: high                  │
-│  route.ts                                                          │└────────────────────────────────────────────────┘
-│  src/app/api/a2a/card  D  -12        5m  UNKNOWN                   │┌Diff Preview────────────────────────────────────┐
-│                                                                    ││@@ -1,2 +1,3 @@                                 │
-│                                                                    ││-use old                                        │
-│                                                                    ││+use new                                        │
-│                                                                    ││+use cache                                      │
-│                                                                    ││                                                │
-│                                                                    ││                                                │
-│                                                                    ││                                                │
-│                                                                    ││                                                │
-│                                                                    ││                                                │
-│                                                                    ││                                                │
-│                                                                    ││                                                │
-│                                                                    ││                                                │
-└────────────────────────────────────────────────────────────────────┘└────────────────────────────────────────────────┘
-┌Event Stream (all)────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│<ts>  WATCH  modify   crates/agentwatch/src/tui.rs                                                                │
-│<ts>  HOOK   live-hook-check Edit Write                                                                           │
-│<ts>  GIT    post-commit main                                                                                     │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌Files───────────────────────────────────────────────────────────────────────────────┐┌Details─────────────────────────┐
+│ ALL FILES    REVIEW UNKNOWN                                                        ││tui.rs                          │
+│2 files  M:1 D:1  E:1 I:0 U:1                                                       ││crates/agentwatch/src           │
+│────────────────────────────────────────────────────────────────────────────────────││Last by: impl-buddy             │
+│> tui.rs                             ...gentwatch/src   M  +38 -5     4m            ││Modified: 4m                    │
+│  route.ts                           .../api/a2a/card   D  -12        5m            ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+│                                                                                    ││                                │
+└────────────────────────────────────────────────────────────────────────────────────┘└────────────────────────────────┘
 Tab focus  ↑↓ select  u unknown  d preview/diff  Pg scroll  f follow:on  T theme  Esc clear  q quit

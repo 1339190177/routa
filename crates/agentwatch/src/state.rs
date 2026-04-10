@@ -92,6 +92,7 @@ pub struct RuntimeState {
     pub selected_session: usize,
     pub selected_file: usize,
     pub last_refresh_at_ms: i64,
+    pub last_file_hook_at_ms: Option<i64>,
     pub runtime_transport: String,
     pub search_query: String,
     pub search_active: bool,
@@ -122,6 +123,7 @@ impl RuntimeState {
             selected_session: 0,
             selected_file: 0,
             last_refresh_at_ms: Utc::now().timestamp_millis(),
+            last_file_hook_at_ms: None,
             runtime_transport: "feed".to_string(),
             search_query: String::new(),
             search_active: false,
@@ -433,6 +435,13 @@ impl RuntimeState {
         self.runtime_transport = transport.into();
     }
 
+    pub fn should_run_fallback_scan(&self, now_ms: i64, idle_window_ms: i64) -> bool {
+        match self.last_file_hook_at_ms {
+            Some(last_hook_ms) => now_ms.saturating_sub(last_hook_ms) >= idle_window_ms,
+            None => true,
+        }
+    }
+
     pub fn set_detected_agents(&mut self, agents: Vec<DetectedAgent>) {
         self.agent_stats = crate::detect::calculate_stats(&agents);
         self.detected_agents = agents;
@@ -543,6 +552,9 @@ impl RuntimeState {
     }
 
     fn apply_hook_event(&mut self, event: HookEvent) {
+        if !event.file_paths.is_empty() {
+            self.last_file_hook_at_ms = Some(event.observed_at_ms);
+        }
         {
             let session = self
                 .sessions

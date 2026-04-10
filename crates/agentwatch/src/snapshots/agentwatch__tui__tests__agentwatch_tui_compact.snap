@@ -1,6 +1,6 @@
 ---
 source: crates/agentwatch/src/tui_tests.rs
-assertion_line: 463
+assertion_line: 437
 expression: "render_snapshot(&state, &mut cache, 96, 24)"
 ---
  AgentWatch   repo:routa-js  branch:main    FILES VIEW · FOLLOW ON  rpc:socket  ag:2 act:1  dirt
@@ -9,9 +9,12 @@ expression: "render_snapshot(&state, &mut cache, 96, 24)"
 │2 files  M:1 D:1  E:1 I:0 U:1                                                                 │
 │──────────────────────────────────────────────────────────────────────────────────────────────│
 │> tui.rs                                                                                      │
-│  crates/agentwatch/src  M  +38 -5     4m  EXACT                                              │
+│  ...es/agentwatch/src  M  +38 -5     4m                                                      │
 │  route.ts                                                                                    │
-│  src/app/api/a2a/card  D  -12        5m  UNKNOWN                                             │
+│  src/app/api/a2a/card  D  -12        5m                                                      │
+│                                                                                              │
+│                                                                                              │
+│                                                                                              │
 │                                                                                              │
 │                                                                                              │
 │                                                                                              │
@@ -20,10 +23,7 @@ expression: "render_snapshot(&state, &mut cache, 96, 24)"
 │tui.rs                                                                                        │
 │crates/agentwatch/src                                                                         │
 │Last by: impl-buddy                                                                           │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
-┌Event Stream (all)────────────────────────────────────────────────────────────────────────────┐
-│<ts>  WATCH  modify   crates/agentwatch/src/tui.rs                                        │
-│<ts>  HOOK   live-hook-check Edit Write                                                   │
-│<ts>  GIT    post-commit main                                                             │
+│Modified: 4m                                                                                  │
+│                                                                                              │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ↑↓ select  u unknown  d preview  Pg scroll  q quit

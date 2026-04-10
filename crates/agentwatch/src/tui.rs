@@ -2,7 +2,7 @@ use crate::ipc::RuntimeFeed;
 use crate::models::DEFAULT_TUI_POLL_MS;
 use crate::observe;
 use crate::repo::RepoContext;
-use crate::state::{DetailMode, EventLogFilter, FocusPane, RuntimeState, ThemeMode};
+use crate::state::{DetailMode, EventLogFilter, RuntimeState, ThemeMode};
 use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::execute;
@@ -46,13 +46,19 @@ const STOPPED: Color = Color::Rgb(201, 96, 87);
 const IDLE: Color = Color::Rgb(122, 132, 143);
 const SESSION_BOOTSTRAP_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
 const TRANSPORT_REFRESH_MS: u64 = 1200;
-const AGENT_SCAN_REFRESH_MS: u64 = 1500;
+const AGENT_SCAN_REFRESH_MS: u64 = 15_000;
+const FALLBACK_SCAN_REFRESH_MS: u64 = 15_000;
+const FALLBACK_SCAN_IDLE_WINDOW_MS: i64 = 15_000;
 
 pub fn run(ctx: RepoContext, poll_interval_ms: u64) -> Result<()> {
     enable_raw_mode().context("enable raw mode")?;
     execute!(stdout(), EnterAlternateScreen).context("enter alternate screen")?;
     let mut terminal = ratatui::init();
-    let result = run_loop(&mut terminal, ctx, poll_interval_ms.max(200));
+    let result = run_loop(
+        &mut terminal,
+        ctx,
+        poll_interval_ms.max(FALLBACK_SCAN_REFRESH_MS),
+    );
     ratatui::restore();
     let _ = execute!(stdout(), LeaveAlternateScreen);
     let _ = disable_raw_mode();
@@ -81,8 +87,17 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     let mut last_agent_refresh = Instant::now() - Duration::from_millis(AGENT_SCAN_REFRESH_MS);
 
     loop {
+        while event::poll(Duration::from_millis(0)).context("poll terminal events")? {
+            if handle_event(&mut state)? {
+                return Ok(());
+            }
+        }
+
         let mut force_scan = false;
-        if last_poll.elapsed() >= Duration::from_millis(poll_interval_ms) {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        if last_poll.elapsed() >= Duration::from_millis(poll_interval_ms)
+            && state.should_run_fallback_scan(now_ms, FALLBACK_SCAN_IDLE_WINDOW_MS)
+        {
             let dirty = observe::scan_repo(&ctx)?;
             state.sync_dirty_files(dirty);
             last_poll = Instant::now();
