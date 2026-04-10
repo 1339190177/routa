@@ -1,6 +1,6 @@
 use super::*;
 use crate::models::{AttributionConfidence, EventLogEntry, EventSource, FileView, SessionView};
-use crate::state::UNKNOWN_SESSION_ID;
+use crate::state::{FileListMode, FocusPane, UNKNOWN_SESSION_ID};
 use pretty_assertions::assert_eq;
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;

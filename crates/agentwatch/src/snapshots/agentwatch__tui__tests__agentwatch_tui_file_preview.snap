@@ -1,6 +1,6 @@
 ---
-source: crates/agentwatch/src/tui.rs
-assertion_line: 1810
+source: crates/agentwatch/src/tui_tests.rs
+assertion_line: 278
 expression: "render_snapshot(&state, &cache, 120, 24)"
 ---
  AgentWatch   repo:routa-js  branch:main  rpc:socket  WATCH  files:BY SESSION    refreshed 2m ago
@@ -8,14 +8,14 @@ expression: "render_snapshot(&state, &cache, 120, 24)"
 │...ook-check  ACTIVE  gpt-5.4 ││ BY SESSION    GLOBAL    UNKNOWN-CONFLICT    ││crates/agentwatch/src/tui.rs           │
 │pane %12  3m ago  1 files     ││─────────────────────────────────────────────││last by live-hook-check                │
 │idle-review  IDLE  ...4-mini  ││crates/agentwatch/src/tui.rs                 ││modified <ts> (4m)  confidence     │
-│pane %18  1h ago  1 files     ││M  +38 -5     4m  ...-hook-check             │└───────────────────────────────────────┘
-│Unknown  UNKNOWN  watch       ││                                             │┌File Preview───────────────────────────┐
-│pane ?  2m ago  1 files       ││                                             ││fn render(frame: &mut Frame) {         │
+│pane %18  1h ago  1 files     ││M  +38 -5     4m  ...-hook-check             ││exact                                  │
+│Unknown  UNKNOWN  watch       ││                                             ││lines 0  size 0 B                      │
+│pane ?  2m ago  1 files       ││                                             ││created untracked  git changes 0       │
+│                              ││                                             │└───────────────────────────────────────┘
+│                              ││                                             │┌File Preview───────────────────────────┐
+│                              ││                                             ││fn render(frame: &mut Frame) {         │
 │                              ││                                             ││    // preview                         │
 │                              ││                                             ││}                                      │
-│                              ││                                             ││                                       │
-│                              ││                                             ││                                       │
-│                              ││                                             ││                                       │
 │                              ││                                             ││                                       │
 │                              ││                                             ││                                       │
 │                              ││                                             ││                                       │
