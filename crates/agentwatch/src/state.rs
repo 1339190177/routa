@@ -1,6 +1,7 @@
 use crate::models::{
-    AttributionConfidence, AttributionEvent, DetectedAgent, EventLogEntry, EventSource, FileView,
-    GitEvent, HookEvent, RuntimeMessage, SessionView, DEFAULT_INFERENCE_WINDOW_MS, EVENT_LOG_LIMIT,
+    AgentStats, AttributionConfidence, AttributionEvent, DetectedAgent, EventLogEntry, EventSource,
+    FileView, GitEvent, HookEvent, RuntimeMessage, SessionView, DEFAULT_INFERENCE_WINDOW_MS,
+    EVENT_LOG_LIMIT,
 };
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -96,6 +97,7 @@ pub struct RuntimeState {
     pub search_query: String,
     pub search_active: bool,
     pub detected_agents: Vec<DetectedAgent>,
+    pub agent_stats: AgentStats,
     cached_session_items: Vec<SessionListItem>,
     cached_file_item_keys: Vec<String>,
     cached_unmatched_agent_keys: Vec<String>,
@@ -125,6 +127,7 @@ impl RuntimeState {
             search_query: String::new(),
             search_active: false,
             detected_agents: Vec::new(),
+            agent_stats: AgentStats::default(),
             cached_session_items: Vec::new(),
             cached_file_item_keys: Vec::new(),
             cached_unmatched_agent_keys: Vec::new(),
@@ -462,6 +465,7 @@ impl RuntimeState {
     }
 
     pub fn set_detected_agents(&mut self, agents: Vec<DetectedAgent>) {
+        self.agent_stats = crate::detect::calculate_stats(&agents);
         self.detected_agents = agents;
         self.clamp_selection();
     }

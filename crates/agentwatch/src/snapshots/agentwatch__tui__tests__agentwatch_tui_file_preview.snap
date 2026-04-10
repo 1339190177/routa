@@ -1,9 +1,9 @@
 ---
 source: crates/agentwatch/src/tui_tests.rs
-assertion_line: 436
+assertion_line: 442
 expression: "render_snapshot(&state, &cache, 120, 24)"
 ---
- AgentWatch   repo:routa-js  branch:main    SESSION VIEW · FOLLOW ON  rpc:socket  dirty:1  unknown:0  synced 2m ago
+ AgentWatch   repo:routa-js  branch:main    SESSION VIEW · FOLLOW ON  rpc:socket  ag:2 act:1  dirty:1  unknown:0  synced
 ┌Sessions────────────────────────┐┌Files─────────────────────────────────┐┌File Preview────────────────────────────────┐
 │> impl-buddy  ACTIVE            ││ BY SESSION    GLOBAL    REVIEW UNKNOW││ 1 fn render(frame: &mut Frame) {           │
 │gpt-5.4  pane %12  3m ago       ││1 files  M:1 D:0  E:1 I:0 U:0         ││ 2     // preview                           │
@@ -16,10 +16,10 @@ expression: "render_snapshot(&state, &cache, 120, 24)"
 │                                ││                                      ││                                            │
 │────────────────────────────────│└──────────────────────────────────────┘│                                            │
 │Agents                          │┌Details───────────────────────────────┐│                                            │
-│CODEX #4211 project ...         ││tui.rs                                ││                                            │
-│<repo>                    ││crates/agentwatch/src                 ││                                            │
-│CLAUDE #9001 elsewhere          ││Last by: impl-buddy                   ││                                            │
-│...tmp/elsewhere                ││Modified: <ts> (4m)               ││                                            │
+│2 total  1 active  1 idle  2.6% ││tui.rs                                ││                                            │
+│cpu  224MB  claude:1 codex:1    ││crates/agentwatch/src                 ││                                            │
+│CODEX #4211  2.5%cpu 128MB 1m   ││Last by: impl-buddy                   ││                                            │
+│project codex                   ││Modified: <ts> (4m)               ││                                            │
 └────────────────────────────────┘└──────────────────────────────────────┘└────────────────────────────────────────────┘
 ┌Event Stream (all)────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │<ts>  WATCH  modify   crates/agentwatch/src/tui.rs                                                                │

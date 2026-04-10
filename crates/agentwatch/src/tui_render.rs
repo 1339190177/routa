@@ -542,46 +542,108 @@ fn render_footer(frame: &mut Frame, area: ratatui::layout::Rect, state: &Runtime
 }
 
 fn render_agent_lines(state: &RuntimeState, colors: UiPalette) -> Vec<Line<'static>> {
+    let summary = render_agent_stats_line(state, colors);
     let unmatched = state.unmatched_agents();
     if unmatched.is_empty() {
         if state.detected_agents.is_empty() {
-            return vec![Line::from(Span::styled(
-                "no repo-local agents detected",
-                Style::default().fg(colors.muted),
-            ))];
+            return vec![
+                summary,
+                Line::from(Span::styled(
+                    "no repo-local agents detected",
+                    Style::default().fg(colors.muted),
+                )),
+            ];
         }
-        return vec![Line::from(Span::styled(
-            "all repo-local agents matched to sessions",
-            Style::default().fg(colors.muted),
-        ))];
+        return vec![
+            summary,
+            Line::from(Span::styled(
+                "all repo-local agents matched to sessions",
+                Style::default().fg(colors.muted),
+            )),
+        ];
     }
 
-    unmatched
-        .iter()
-        .take(3)
-        .map(|agent| {
-            let cwd = agent
-                .cwd
-                .as_deref()
-                .map(short_cwd_label)
-                .unwrap_or_else(|| "-".to_string());
-            Line::from(vec![
-                Span::styled(
-                    agent.vendor.to_ascii_uppercase(),
-                    Style::default().fg(colors.accent),
-                ),
-                Span::raw(" "),
-                Span::styled(format!("#{}", agent.pid), Style::default().fg(colors.text)),
-                Span::raw(" "),
-                Span::styled(cwd, Style::default().fg(colors.muted)),
-                Span::raw(" "),
-                Span::styled(
-                    shorten_path(agent.command.trim(), 16),
-                    Style::default().fg(colors.muted),
-                ),
-            ])
-        })
-        .collect()
+    let mut lines = vec![summary];
+    lines.extend(unmatched.iter().take(3).map(|agent| {
+        let cwd = agent
+            .cwd
+            .as_deref()
+            .map(short_cwd_label)
+            .unwrap_or_else(|| "-".to_string());
+        let command_label = short_command_label(&agent.command);
+        Line::from(vec![
+            Span::styled(
+                agent.vendor.to_ascii_uppercase(),
+                Style::default().fg(colors.accent),
+            ),
+            Span::raw(" "),
+            Span::styled(format!("#{}", agent.pid), Style::default().fg(colors.text)),
+            Span::raw(" "),
+            Span::styled(
+                format!("{:>4.1}%cpu", agent.cpu_percent),
+                Style::default().fg(if agent.cpu_percent >= 1.0 {
+                    ACTIVE
+                } else {
+                    colors.muted
+                }),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("{:.0}MB", agent.mem_mb),
+                Style::default().fg(colors.text),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                short_uptime(agent.uptime_seconds),
+                Style::default().fg(colors.muted),
+            ),
+            Span::raw(" "),
+            Span::styled(cwd, Style::default().fg(colors.muted)),
+            Span::raw(" "),
+            Span::styled(command_label, Style::default().fg(colors.muted)),
+        ])
+    }));
+    lines
+}
+
+fn render_agent_stats_line(state: &RuntimeState, colors: UiPalette) -> Line<'static> {
+    let stats = &state.agent_stats;
+    let vendors = if stats.by_vendor.is_empty() {
+        "-".to_string()
+    } else {
+        let mut pairs = stats
+            .by_vendor
+            .iter()
+            .map(|(vendor, count)| format!("{vendor}:{count}"))
+            .collect::<Vec<_>>();
+        pairs.sort();
+        pairs.join(" ")
+    };
+    Line::from(vec![
+        Span::styled(
+            format!("{} total", stats.total),
+            Style::default().fg(colors.text),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("{} active", stats.active),
+            Style::default().fg(ACTIVE),
+        ),
+        Span::raw("  "),
+        Span::styled(format!("{} idle", stats.idle), Style::default().fg(IDLE)),
+        Span::raw("  "),
+        Span::styled(
+            format!("{:.1}% cpu", stats.total_cpu),
+            Style::default().fg(colors.accent),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("{:.0}MB", stats.total_mem_mb),
+            Style::default().fg(colors.text),
+        ),
+        Span::raw("  "),
+        Span::styled(vendors, Style::default().fg(colors.muted)),
+    ])
 }
 
 fn short_cwd_label(cwd: &str) -> String {
@@ -643,6 +705,13 @@ fn render_title_bar(frame: &mut Frame, area: Rect, state: &RuntimeState) {
         Span::styled(
             format!("rpc:{}  ", state.runtime_transport),
             Style::default().fg(colors.accent).bg(colors.surface),
+        ),
+        Span::styled(
+            format!(
+                "ag:{} act:{}  ",
+                state.agent_stats.total, state.agent_stats.active
+            ),
+            Style::default().fg(colors.text).bg(colors.surface),
         ),
         Span::styled(
             format!("dirty:{}  unknown:{}  ", dirty, unknown),
@@ -1068,4 +1137,24 @@ fn shorten_path(path: &str, max_len: usize) -> String {
     }
     let keep = max_len.saturating_sub(3);
     format!("...{}", &path[path.len().saturating_sub(keep)..])
+}
+
+fn short_uptime(seconds: u64) -> String {
+    if seconds < 60 {
+        format!("{seconds}s")
+    } else if seconds < 3600 {
+        format!("{}m", seconds / 60)
+    } else if seconds < 86_400 {
+        format!("{}h", seconds / 3600)
+    } else {
+        format!("{}d", seconds / 86_400)
+    }
+}
+
+fn short_command_label(command: &str) -> String {
+    let token = command.split_whitespace().next().unwrap_or(command);
+    Path::new(token)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| shorten_path(token, 10))
 }

@@ -233,5 +233,18 @@ pub struct DetectedAgent {
     pub vendor: String,
     pub pid: u32,
     pub cwd: Option<String>,
+    pub cpu_percent: f32,
+    pub mem_mb: f32,
+    pub uptime_seconds: u64,
     pub command: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentStats {
+    pub total: usize,
+    pub active: usize,
+    pub idle: usize,
+    pub total_cpu: f32,
+    pub total_mem_mb: f32,
+    pub by_vendor: std::collections::HashMap<String, usize>,
 }

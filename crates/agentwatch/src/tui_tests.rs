@@ -117,12 +117,15 @@ fn sample_state() -> RuntimeState {
     state.selected_file = 0;
     state.last_refresh_at_ms = now - 120_000;
     state.runtime_transport = "socket".to_string();
-    state.detected_agents = vec![
+    state.set_detected_agents(vec![
         DetectedAgent {
             key: "codex:4211".to_string(),
             vendor: "codex".to_string(),
             pid: 4211,
             cwd: Some("/tmp/project".to_string()),
+            cpu_percent: 2.5,
+            mem_mb: 128.0,
+            uptime_seconds: 95,
             command: "codex --cwd /tmp/project".to_string(),
         },
         DetectedAgent {
@@ -130,9 +133,12 @@ fn sample_state() -> RuntimeState {
             vendor: "claude".to_string(),
             pid: 9001,
             cwd: Some("/tmp/elsewhere".to_string()),
+            cpu_percent: 0.1,
+            mem_mb: 96.0,
+            uptime_seconds: 4100,
             command: "claude --cwd /tmp/elsewhere".to_string(),
         },
-    ];
+    ]);
     state.refresh_views();
     state
 }
@@ -506,12 +512,15 @@ fn detected_agents_attach_to_session_when_match_is_unique() {
 #[test]
 fn ambiguous_agents_become_candidates_instead_of_false_matches() {
     let mut state = sample_state();
-    state.detected_agents = vec![
+    state.set_detected_agents(vec![
         DetectedAgent {
             key: "codex:4211".to_string(),
             vendor: "codex".to_string(),
             pid: 4211,
             cwd: Some("/tmp/project".to_string()),
+            cpu_percent: 2.5,
+            mem_mb: 128.0,
+            uptime_seconds: 95,
             command: "codex --cwd /tmp/project".to_string(),
         },
         DetectedAgent {
@@ -519,9 +528,12 @@ fn ambiguous_agents_become_candidates_instead_of_false_matches() {
             vendor: "codex".to_string(),
             pid: 4212,
             cwd: Some("/tmp/project".to_string()),
+            cpu_percent: 0.4,
+            mem_mb: 64.0,
+            uptime_seconds: 120,
             command: "codex --cwd /tmp/project".to_string(),
         },
-    ];
+    ]);
     state.refresh_views();
 
     let live = state
@@ -538,4 +550,15 @@ fn ambiguous_agents_become_candidates_instead_of_false_matches() {
     assert_eq!(live.agent_summary.as_deref(), Some("candidates codex x2"));
     assert_eq!(idle.agent_summary.as_deref(), Some("candidates codex x2"));
     assert_eq!(state.unmatched_agents().len(), 2);
+}
+
+#[test]
+fn detected_agent_stats_are_stored_on_runtime_state() {
+    let state = sample_state();
+
+    assert_eq!(state.agent_stats.total, 2);
+    assert_eq!(state.agent_stats.active, 1);
+    assert_eq!(state.agent_stats.idle, 1);
+    assert!((state.agent_stats.total_mem_mb - 224.0).abs() < f32::EPSILON);
+    assert_eq!(state.agent_stats.by_vendor.get("codex"), Some(&1));
 }
