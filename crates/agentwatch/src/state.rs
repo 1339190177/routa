@@ -252,7 +252,11 @@ impl RuntimeState {
     }
 
     pub fn file_items(&self) -> Vec<&FileView> {
-        let mut items: Vec<_> = self.files.values().collect();
+        let mut items: Vec<_> = self
+            .files
+            .values()
+            .filter(|file| file.dirty || file.conflicted)
+            .collect();
         match self.file_list_mode {
             FileListMode::BySession => {
                 if let Some(session_id) = self.selected_session_id() {
@@ -509,7 +513,12 @@ impl RuntimeState {
         );
         if matches!(
             event.event_name.as_str(),
-            "post-commit" | "post-checkout" | "post-merge"
+            "post-commit"
+                | "post-checkout"
+                | "post-merge"
+                | "git-reset"
+                | "git-restore"
+                | "git-checkout"
         ) {
             for file in self.files.values_mut() {
                 file.dirty = false;

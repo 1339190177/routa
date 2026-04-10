@@ -147,18 +147,26 @@ pub fn try_forward_hook_to_runtime(
 ) -> Result<bool> {
     let (ctx, message) =
         build_hook_runtime_message(client_name, event_name, repo_hint, db_hint, payload_raw)?;
-    match ipc::send_socket_message(&ctx.runtime_socket_path, &message)
-        .or_else(|_| ipc::send_tcp_message(&ctx.runtime_tcp_addr, &message))
-        .or_else(|_| ipc::send_message(&ctx.runtime_event_path, &message))
-    {
-        Ok(_) => Ok(true),
-        Err(err) => {
-            eprintln!(
-                "agentwatch warning: runtime transport unavailable, fallback to local store: {err}"
-            );
-            Ok(false)
+    if let Err(err) = send_runtime_message(&ctx, &message) {
+        eprintln!("agentwatch warning: runtime transport unavailable, fallback to local store: {err}");
+        return Ok(false);
+    }
+
+    if let RuntimeMessage::Hook(event) = &message {
+        if let Some(git_event_name) = infer_git_refresh_event(event) {
+            let git_message = RuntimeMessage::Git(GitEvent {
+                repo_root: ctx.repo_root.to_string_lossy().to_string(),
+                observed_at_ms: event.observed_at_ms,
+                event_name: git_event_name.to_string(),
+                args: Vec::new(),
+                head_commit: Some(current_head(&ctx.repo_root)?),
+                branch: Some(current_branch(&ctx.repo_root)?),
+            });
+            let _ = send_runtime_message(&ctx, &git_message);
         }
     }
+
+    Ok(true)
 }
 
 pub fn build_hook_runtime_message(
@@ -278,9 +286,7 @@ pub fn try_forward_git_event(ctx: &RepoContext, event_name: &str, args: &[String
         head_commit: Some(current_head(&ctx.repo_root)?),
         branch: Some(current_branch(&ctx.repo_root)?),
     });
-    match ipc::send_socket_message(&ctx.runtime_socket_path, &message)
-        .or_else(|_| ipc::send_tcp_message(&ctx.runtime_tcp_addr, &message))
-        .or_else(|_| ipc::send_message(&ctx.runtime_event_path, &message))
+    match send_runtime_message(ctx, &message)
     {
         Ok(_) => Ok(true),
         Err(err) => {
@@ -290,6 +296,12 @@ pub fn try_forward_git_event(ctx: &RepoContext, event_name: &str, args: &[String
             Ok(false)
         }
     }
+}
+
+fn send_runtime_message(ctx: &RepoContext, message: &RuntimeMessage) -> Result<()> {
+    ipc::send_socket_message(&ctx.runtime_socket_path, message)
+        .or_else(|_| ipc::send_tcp_message(&ctx.runtime_tcp_addr, message))
+        .or_else(|_| ipc::send_message(&ctx.runtime_event_path, message))
 }
 
 fn extract_tool_command(payload: &Value) -> Option<String> {
@@ -368,6 +380,40 @@ fn normalize_event_name(_client: &str, event: &str) -> String {
         "edit" => "Edit".to_string(),
         "write" => "Write".to_string(),
         _ => event.to_string(),
+    }
+}
+
+fn infer_git_refresh_event(event: &HookEvent) -> Option<&'static str> {
+    if !matches!(event.event_name.as_str(), "PostToolUse" | "post-tool-use") {
+        return None;
+    }
+    if !event
+        .tool_name
+        .as_deref()
+        .is_some_and(|name| name.eq_ignore_ascii_case("bash"))
+    {
+        return None;
+    }
+
+    let command = event.tool_command.as_deref()?.trim();
+    let command = command.strip_prefix("git ")?;
+
+    if command.starts_with("add ") || command == "add" {
+        Some("git-add")
+    } else if command.starts_with("commit ") || command == "commit" {
+        Some("git-commit")
+    } else if command.starts_with("reset ") || command == "reset" {
+        Some("git-reset")
+    } else if command.starts_with("restore ") || command == "restore" {
+        Some("git-restore")
+    } else if command.starts_with("checkout ") || command == "checkout" {
+        Some("git-checkout")
+    } else if command.starts_with("rm ") || command == "rm" {
+        Some("git-rm")
+    } else if command.starts_with("stash ") || command == "stash" {
+        Some("git-stash")
+    } else {
+        None
     }
 }
 

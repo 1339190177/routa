@@ -125,6 +125,7 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     let mut last_poll = Instant::now() - Duration::from_millis(poll_interval_ms);
 
     loop {
+        let mut force_scan = false;
         if last_poll.elapsed() >= Duration::from_millis(poll_interval_ms) {
             let dirty = observe::scan_repo(&ctx)?;
             state.sync_dirty_files(dirty);
@@ -132,12 +133,23 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
         }
 
         for message in feed.read_new()? {
+            if matches!(message, crate::models::RuntimeMessage::Git(_)) {
+                force_scan = true;
+            }
             state.apply_message(message);
         }
         if let Some(socket) = &runtime_socket {
             for message in socket.read_pending()? {
+                if matches!(message, crate::models::RuntimeMessage::Git(_)) {
+                    force_scan = true;
+                }
                 state.apply_message(message);
             }
+        }
+        if force_scan {
+            let dirty = observe::scan_repo(&ctx)?;
+            state.sync_dirty_files(dirty);
+            last_poll = Instant::now();
         }
 
         terminal.draw(|frame| render(frame, &state, &feed))?;
