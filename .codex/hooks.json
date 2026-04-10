@@ -2,11 +2,26 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Write|Edit|MultiEdit",
+        "matcher": "Bash|Read|Write|Edit|MultiEdit|LS|Glob|Grep|Search|WebSearch",
         "hooks": [
           {
             "type": "command",
             "command": "node scripts/check-tool-permission.js"
+          },
+          {
+            "type": "command",
+            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit|MultiEdit|LS|Glob|Grep|Search|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh PostToolUse"
           }
         ]
       }
@@ -18,6 +33,10 @@
           {
             "type": "command",
             "command": "node scripts/check-git-control-plane.js"
+          },
+          {
+            "type": "command",
+            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh SessionStart"
           }
         ]
       }
@@ -28,6 +47,20 @@
           {
             "type": "command",
             "command": "node scripts/check-prompt-policy.js"
+          },
+          {
+            "type": "command",
+            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ./crates/agentwatch/scripts/run-codex-hook.sh Stop"
           }
         ]
       }

@@ -326,10 +326,9 @@ fn event_is_file_mutating(event: &str, client: &HookClient, tool_name: Option<&s
         event,
         "PostToolUse" | "post-tool-use" | "PreToolUse" | "pre-tool-use"
     ) {
-        return if matches!(client, HookClient::Claude) {
-            is_edit_like_tool(tool_name)
-        } else {
-            true
+        return match client {
+            HookClient::Claude | HookClient::Codex => is_edit_like_tool(tool_name),
+            HookClient::Unknown => false,
         };
     }
 
@@ -539,6 +538,30 @@ mod tests {
             "PostToolUse",
             &HookClient::Claude,
             Some("Read")
+        ));
+    }
+
+    #[test]
+    fn file_mutating_events_do_not_mark_codex_reads_as_writes() {
+        assert!(event_is_file_mutating(
+            "PreToolUse",
+            &HookClient::Codex,
+            Some("Edit")
+        ));
+        assert!(event_is_file_mutating(
+            "PostToolUse",
+            &HookClient::Codex,
+            Some("Write")
+        ));
+        assert!(!event_is_file_mutating(
+            "PreToolUse",
+            &HookClient::Codex,
+            Some("Read")
+        ));
+        assert!(!event_is_file_mutating(
+            "PostToolUse",
+            &HookClient::Codex,
+            Some("Grep")
         ));
     }
 

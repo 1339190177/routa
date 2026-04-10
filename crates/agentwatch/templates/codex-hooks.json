@@ -1,32 +1,57 @@
 {
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex SessionStart'"
-    },
-    {
-      "event": "PreToolUse",
-      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PreToolUse'"
-    },
-    {
-      "event": "PostToolUse",
-      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PostToolUse'"
-    },
-    {
-      "event": "UserPromptSubmit",
-      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex UserPromptSubmit'"
-    },
-    {
-      "event": "Stop",
-      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex Stop'"
-    },
-    {
-      "event": "Edit",
-      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex Edit'"
-    },
-    {
-      "event": "Write",
-      "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex Write'"
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex SessionStart'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex UserPromptSubmit'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit|MultiEdit|LS|Glob|Grep|Search|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PreToolUse'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit|MultiEdit|LS|Glob|Grep|Search|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex PostToolUse'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -lc 'AGENTWATCH_BIN=\"${AGENTWATCH_BIN:-agentwatch}\"; \"$AGENTWATCH_BIN\" hook codex Stop'"
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -173,34 +173,67 @@ Event mappings expected by `agentwatch hook`:
 
 ```json
 {
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "command": "agentwatch hook codex session-start"
-    },
-    {
-      "event": "PreToolUse",
-      "command": "agentwatch hook codex pre-tool-use"
-    },
-    {
-      "event": "PostToolUse",
-      "command": "agentwatch hook codex post-tool-use"
-    },
-    {
-      "event": "Stop",
-      "command": "agentwatch hook codex stop"
-    },
-    {
-      "event": "Edit",
-      "command": "agentwatch hook codex edit"
-    },
-    {
-      "event": "Write",
-      "command": "agentwatch hook codex write"
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agentwatch hook codex SessionStart"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agentwatch hook codex UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit|MultiEdit|LS|Glob|Grep|Search|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agentwatch hook codex PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit|MultiEdit|LS|Glob|Grep|Search|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agentwatch hook codex PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agentwatch hook codex Stop"
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
+
+The important part for session visibility is that `Read`/`Glob`/`Grep`/`Search`-style tools
+also feed `PreToolUse` and `PostToolUse`, not only `Edit`/`Write`. That lets AgentWatch keep
+sessions alive even when an agent is still exploring instead of writing.
 
 Git hooks (`.git/hooks/post-commit`, etc) should call:
 
