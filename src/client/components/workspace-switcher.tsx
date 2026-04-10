@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceData } from "../hooks/use-workspaces";
 import { useTranslation } from "@/i18n";
 import { Check, ChevronDown, Folder, Plus, Search } from "lucide-react";
@@ -39,45 +39,44 @@ export function WorkspaceSwitcher({
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
   const visibleTitle = active?.title ?? activeWorkspaceTitle;
 
+  const closeDropdown = useCallback(() => {
+    setOpen(false);
+    setCreating(false);
+    setSearchQuery("");
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
       if (!dropdownRef.current?.contains(e.target as Node)) {
-        setOpen(false);
-        setCreating(false);
+        closeDropdown();
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  }, [closeDropdown, open]);
 
   useEffect(() => {
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
   useEffect(() => {
-    if (!open) {
-      setCreating(false);
-      setSearchQuery("");
-      return;
-    }
+    if (!open) return;
     const onEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setOpen(false);
-        setCreating(false);
+        closeDropdown();
       }
     };
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);
-  }, [open]);
+  }, [closeDropdown, open]);
 
   const handleCreate = async () => {
     const title = newTitle.trim();
     if (!title || !onCreate) return;
     await onCreate(title);
     setNewTitle("");
-    setCreating(false);
-    setOpen(false);
+    closeDropdown();
   };
 
   const filteredWorkspaces = searchQuery
@@ -124,7 +123,13 @@ export function WorkspaceSwitcher({
     <div className="relative" ref={dropdownRef} data-testid="desktop-workspace-switcher">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (open) {
+            closeDropdown();
+            return;
+          }
+          setOpen(true);
+        }}
         className={triggerCls}
         title={visibleTitle ?? t.workspace.selectWorkspace}
       >
@@ -170,7 +175,7 @@ export function WorkspaceSwitcher({
                 type="button"
                 onClick={() => {
                   onSelect(ws.id);
-                  setOpen(false);
+                  closeDropdown();
                 }}
                 className={`${listItemBase} ${
                   ws.id === activeWorkspaceId
@@ -195,7 +200,10 @@ export function WorkspaceSwitcher({
                   type="text"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") setCreating(false); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreate();
+                    if (e.key === "Escape") setCreating(false);
+                  }}
                   placeholder={t.workspace.workspaceName}
                   className={`flex-1 rounded border ${createInputCls} focus:outline-none`}
                 />
