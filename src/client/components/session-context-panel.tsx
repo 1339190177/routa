@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { LaneHandoffInfo, LaneSessionInfo, SessionKanbanContext } from "@/client/types/kanban-context";
 import { desktopAwareFetch, shouldSuppressTeardownError } from "../utils/diagnostics";
 import { useTranslation } from "@/i18n";
@@ -37,6 +38,12 @@ interface SessionContextPanelProps {
   refreshTrigger?: number;
 }
 
+interface FloatingMenuPosition {
+  top: number;
+  left: number;
+  width: number;
+}
+
 export function SessionContextPanel({
   sessionId,
   workspaceId,
@@ -49,8 +56,10 @@ export function SessionContextPanel({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showRecentSessionsMenu, setShowRecentSessionsMenu] = useState(false);
+  const [recentSessionsMenuPosition, setRecentSessionsMenuPosition] = useState<FloatingMenuPosition | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const recentSessionsMenuRef = useRef<HTMLDivElement>(null);
+  const recentSessionsPortalRef = useRef<HTMLDivElement>(null);
   const tearingDownRef = useRef(false);
   const { t } = useTranslation();
 
@@ -113,16 +122,38 @@ export function SessionContextPanel({
   useEffect(() => {
     if (!showRecentSessionsMenu) return;
 
+    const updateMenuPosition = () => {
+      const anchor = recentSessionsMenuRef.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+      setRecentSessionsMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+
+    updateMenuPosition();
+
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (!recentSessionsMenuRef.current?.contains(target)) {
+      if (
+        !recentSessionsMenuRef.current?.contains(target)
+        && !recentSessionsPortalRef.current?.contains(target)
+      ) {
         setShowRecentSessionsMenu(false);
       }
     };
 
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
   }, [showRecentSessionsMenu]);
 
   const handleRename = async (targetId: string) => {
@@ -384,7 +415,7 @@ export function SessionContextPanel({
             </div>
 
             {recentSessions.length > 0 && (
-              <div ref={recentSessionsMenuRef} className="relative mt-3">
+              <div ref={recentSessionsMenuRef} className="mt-3">
                 <button
                   type="button"
                   onClick={() => setShowRecentSessionsMenu((current) => !current)}
@@ -402,8 +433,18 @@ export function SessionContextPanel({
                   </span>
                 </button>
 
-                {showRecentSessionsMenu && (
-                  <div className="absolute left-0 top-full z-20 mt-1 w-full overflow-hidden rounded-md border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-[#11161f]">
+                {showRecentSessionsMenu && recentSessionsMenuPosition && typeof document !== "undefined" && createPortal(
+                  <div
+                    ref={recentSessionsPortalRef}
+                    className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white/98 p-1.5 text-slate-900 shadow-2xl dark:border-slate-700 dark:bg-[#11161f] dark:text-slate-100"
+                    style={{
+                      position: "fixed",
+                      top: recentSessionsMenuPosition.top,
+                      left: recentSessionsMenuPosition.left,
+                      width: recentSessionsMenuPosition.width,
+                      zIndex: 9999,
+                    }}
+                  >
                     {recentSessions.map((session) => {
                       const displayName = session.name ?? getDefaultName(session);
                       return (
@@ -428,7 +469,8 @@ export function SessionContextPanel({
                         </button>
                       );
                     })}
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             )}

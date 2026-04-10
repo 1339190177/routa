@@ -92,7 +92,7 @@ describe("SessionContextPanel", () => {
     vi.clearAllMocks();
   });
 
-  it("renders recent session switching as a dropdown and keeps Show All in the kanban story context", async () => {
+  it("renders recent session switching as an inline expandable list and keeps Show All in the kanban story context", async () => {
     const onSelectSession = vi.fn();
 
     render(
