@@ -148,6 +148,7 @@ pub fn try_forward_hook_to_runtime(
     let (ctx, message) =
         build_hook_runtime_message(client_name, event_name, repo_hint, db_hint, payload_raw)?;
     match ipc::send_socket_message(&ctx.runtime_socket_path, &message)
+        .or_else(|_| ipc::send_tcp_message(&ctx.runtime_tcp_addr, &message))
         .or_else(|_| ipc::send_message(&ctx.runtime_event_path, &message))
     {
         Ok(_) => Ok(true),
@@ -278,6 +279,7 @@ pub fn try_forward_git_event(ctx: &RepoContext, event_name: &str, args: &[String
         branch: Some(current_branch(&ctx.repo_root)?),
     });
     match ipc::send_socket_message(&ctx.runtime_socket_path, &message)
+        .or_else(|_| ipc::send_tcp_message(&ctx.runtime_tcp_addr, &message))
         .or_else(|_| ipc::send_message(&ctx.runtime_event_path, &message))
     {
         Ok(_) => Ok(true),

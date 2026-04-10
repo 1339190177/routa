@@ -11,6 +11,7 @@ pub struct RepoContext {
     pub db_path: PathBuf,
     pub runtime_event_path: PathBuf,
     pub runtime_socket_path: PathBuf,
+    pub runtime_tcp_addr: String,
 }
 
 pub fn detect_repo_root(start_dir: &Path) -> Result<PathBuf> {
@@ -101,6 +102,7 @@ pub fn resolve(path_opt: Option<&str>, db_path_opt: Option<&str>) -> Result<Repo
     Ok(RepoContext {
         runtime_event_path: runtime_event_path(&repo_root),
         runtime_socket_path: runtime_socket_path(&repo_root),
+        runtime_tcp_addr: runtime_tcp_addr(&repo_root),
         repo_root,
         git_dir,
         db_path,
@@ -117,6 +119,7 @@ pub fn resolve_runtime(path_opt: Option<&str>) -> Result<RepoContext> {
     Ok(RepoContext {
         runtime_event_path: runtime_event_path(&repo_root),
         runtime_socket_path: runtime_socket_path(&repo_root),
+        runtime_tcp_addr: runtime_tcp_addr(&repo_root),
         repo_root,
         git_dir,
         db_path: PathBuf::new(),
@@ -131,14 +134,30 @@ pub fn runtime_socket_path(repo_root: &Path) -> PathBuf {
     runtime_runtime_dir(repo_root).join("events.sock")
 }
 
+pub fn runtime_tcp_addr(repo_root: &Path) -> String {
+    let port = runtime_port(repo_root);
+    format!("127.0.0.1:{port}")
+}
+
 fn runtime_runtime_dir(repo_root: &Path) -> PathBuf {
-    let mut hasher = DefaultHasher::new();
-    repo_root.to_string_lossy().hash(&mut hasher);
-    let marker = format!("{:x}", hasher.finish());
+    let marker = runtime_marker(repo_root);
     PathBuf::from("/tmp")
         .join("agentwatch")
         .join("runtime")
         .join(marker)
+}
+
+fn runtime_marker(repo_root: &Path) -> String {
+    let mut hasher = DefaultHasher::new();
+    repo_root.to_string_lossy().hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
+fn runtime_port(repo_root: &Path) -> u16 {
+    let mut hasher = DefaultHasher::new();
+    repo_root.to_string_lossy().hash(&mut hasher);
+    let seed = hasher.finish();
+    43000 + (seed % 10000) as u16
 }
 
 fn fallback_db_path(repo_root: &Path) -> Result<PathBuf> {

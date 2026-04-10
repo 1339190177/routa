@@ -8,6 +8,7 @@ mod state;
 mod tui;
 
 use crate::db::Db;
+use crate::ipc::{RuntimeSocket, RuntimeTcp};
 use crate::observe::Snapshot;
 use crate::repo::{resolve, resolve_runtime};
 use anyhow::Result;
@@ -66,6 +67,8 @@ enum Command {
         #[arg(long, default_value_t = 800)]
         interval_ms: u64,
     },
+    /// Run a local runtime service that receives hook events and appends them to the repo feed.
+    Serve,
     /// Record hook event payload. Reads JSON from stdin.
     Hook {
         /// Hook client, e.g. codex.
@@ -126,6 +129,10 @@ fn main() -> Result<()> {
                 interval_ms,
             )?;
         }
+        Command::Serve => {
+            let ctx = resolve_runtime(cli.repo.as_deref())?;
+            run_serve(&ctx)?;
+        }
     }
     Ok(())
 }
@@ -145,6 +152,39 @@ fn run_watch(
         print_watch_once(&db, &repo_root, &snapshot, last_poll)?;
         last_poll = chrono::Utc::now().timestamp_millis();
         sleep(Duration::from_millis(interval_ms.max(200)));
+    }
+}
+
+fn run_serve(ctx: &crate::repo::RepoContext) -> Result<()> {
+    let socket_server = RuntimeSocket::bind(&ctx.runtime_socket_path).ok();
+    let tcp_server = if socket_server.is_none() {
+        RuntimeTcp::bind(&ctx.runtime_tcp_addr).ok()
+    } else {
+        None
+    };
+
+    if socket_server.is_none() && tcp_server.is_none() {
+        anyhow::bail!(
+            "could not bind local runtime service on {:?} or {}",
+            ctx.runtime_socket_path,
+            ctx.runtime_tcp_addr
+        );
+    }
+
+    loop {
+        if let Some(server) = &socket_server {
+            for message in server.read_pending()? {
+                crate::ipc::send_message(&ctx.runtime_event_path, &message)?;
+            }
+        }
+
+        if let Some(server) = &tcp_server {
+            for message in server.read_pending()? {
+                crate::ipc::send_message(&ctx.runtime_event_path, &message)?;
+            }
+        }
+
+        sleep(Duration::from_millis(50));
     }
 }
 
