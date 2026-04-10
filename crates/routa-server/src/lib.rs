@@ -268,7 +268,7 @@ pub async fn start_server_with_state(
         .allow_headers(Any);
 
     let mut app = Router::new()
-        .merge(api::api_router())
+        .merge(api::api_router(state.clone()))
         .route("/api/health", axum::routing::get(health_check))
         .layer(cors.clone())
         .layer(TraceLayer::new_for_http())

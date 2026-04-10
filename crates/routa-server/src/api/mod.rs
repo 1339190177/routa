@@ -60,7 +60,7 @@ use axum::Router;
 use crate::state::AppState;
 
 /// Build the complete API router with all sub-routes.
-pub fn api_router() -> Router<AppState> {
+pub fn api_router(state: AppState) -> Router<AppState> {
     Router::new()
         .nest("/api/agents", agents::router())
         .nest("/api/notes", notes::router())
@@ -81,7 +81,7 @@ pub fn api_router() -> Router<AppState> {
         .nest("/api/acp", acp_routes::router())
         .nest("/api/acp", acp_registry::router())
         .nest("/api/acp/docker", acp_docker::router())
-        .nest("/api/mcp", mcp_routes::router())
+        .nest("/api/mcp", mcp_routes::router(state))
         .nest("/api/mcp/tools", mcp_tools::router())
         .nest("/api/mcp-server", mcp_server_mgmt::router())
         .nest("/api/mcp-servers", mcp_servers::router())

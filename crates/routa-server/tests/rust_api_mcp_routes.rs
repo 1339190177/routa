@@ -40,6 +40,15 @@ impl ApiFixture {
         format!("{}{}", self.base_url, path)
     }
 
+    fn mcp_endpoint(&self, query: Option<&str>) -> String {
+        let mut endpoint = "/api/mcp".to_string();
+        if let Some(query) = query {
+            endpoint.push('?');
+            endpoint.push_str(query);
+        }
+        self.endpoint(&endpoint)
+    }
+
     async fn wait_until_ready(&self) {
         for _ in 0..50 {
             if self
@@ -56,37 +65,105 @@ impl ApiFixture {
         panic!("server did not become ready");
     }
 
-    async fn initialize_session(&self, query: Option<&str>) -> (String, Value) {
-        let mut endpoint = "/api/mcp".to_string();
-        if let Some(query) = query {
-            endpoint.push('?');
-            endpoint.push_str(query);
+    async fn post_mcp(
+        &self,
+        query: Option<&str>,
+        session_id: Option<&str>,
+        body: Value,
+    ) -> Response {
+        let mut request = self
+            .client
+            .post(self.mcp_endpoint(query))
+            .header("content-type", "application/json")
+            .header("accept", "application/json, text/event-stream");
+
+        if let Some(session_id) = session_id {
+            request = request.header("mcp-session-id", session_id);
         }
 
-        let response = self
+        request.json(&body).send().await.expect("POST /api/mcp")
+    }
+
+    async fn get_mcp(&self, session_id: Option<&str>) -> Response {
+        let mut request = self
             .client
-            .post(self.endpoint(&endpoint))
-            .json(&json!({
-                "jsonrpc": "2.0",
-                "id": "init",
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-06-18"
-                }
-            }))
-            .send()
-            .await
-            .expect("initialize MCP session");
+            .get(self.endpoint("/api/mcp"))
+            .header("accept", "text/event-stream");
+
+        if let Some(session_id) = session_id {
+            request = request.header("mcp-session-id", session_id);
+        }
+
+        request.send().await.expect("GET /api/mcp")
+    }
+
+    async fn delete_mcp(&self, session_id: Option<&str>) -> Response {
+        let mut request = self.client.delete(self.endpoint("/api/mcp"));
+        if let Some(session_id) = session_id {
+            request = request.header("mcp-session-id", session_id);
+        }
+        request.send().await.expect("DELETE /api/mcp")
+    }
+
+    async fn initialize_session(&self, query: Option<&str>) -> (String, Value) {
+        let response = self
+            .post_mcp(
+                query,
+                None,
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": "init",
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {},
+                        "clientInfo": {
+                            "name": "routa-server-test",
+                            "version": "1.0.0"
+                        }
+                    }
+                }),
+            )
+            .await;
 
         assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("");
+        assert!(
+            content_type.contains("text/event-stream"),
+            "initialize should return SSE, got: {content_type}"
+        );
+
         let session_id = response
             .headers()
             .get("mcp-session-id")
             .and_then(|value| value.to_str().ok())
             .map(str::to_string)
             .expect("initialize response should include mcp-session-id");
-        let body: Value = response.json().await.expect("decode initialize response");
+        let body = read_first_sse_json(response, "initialize response").await;
         (session_id, body)
+    }
+
+    async fn complete_initialization(&self, query: Option<&str>, session_id: &str) {
+        let response = self
+            .post_mcp(
+                query,
+                Some(session_id),
+                json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized"
+                }),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let body = read_text(response, "initialized notification response").await;
+        assert!(
+            body.trim().is_empty(),
+            "notifications/initialized should not return a body, got: {body:?}"
+        );
     }
 }
 
@@ -107,32 +184,58 @@ async fn read_json(response: Response, label: &str) -> Value {
         .unwrap_or_else(|_| panic!("decode JSON response: {label}"))
 }
 
+async fn read_text(response: Response, label: &str) -> String {
+    response
+        .text()
+        .await
+        .unwrap_or_else(|_| panic!("decode text response: {label}"))
+}
+
+async fn read_first_sse_json(response: Response, label: &str) -> Value {
+    let body = read_text(response, label).await;
+    first_sse_json(&body, label)
+}
+
+fn first_sse_json(body: &str, label: &str) -> Value {
+    for event in body.split("\n\n") {
+        let data = event
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:"))
+            .map(str::trim_start)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if data.trim().is_empty() {
+            continue;
+        }
+
+        if let Ok(value) = serde_json::from_str(&data) {
+            return value;
+        }
+    }
+
+    panic!("expected JSON SSE event for {label}, got body: {body}");
+}
+
 #[tokio::test]
 async fn api_mcp_session_lifecycle_and_sse_contract() {
     let fixture = ApiFixture::new().await;
 
-    let get_without_session = fixture
-        .client
-        .get(fixture.endpoint("/api/mcp"))
-        .send()
-        .await
-        .expect("GET /api/mcp without session");
-    assert_eq!(get_without_session.status(), StatusCode::BAD_REQUEST);
-    let get_without_session_json = read_json(get_without_session, "get without session").await;
-    assert_eq!(get_without_session_json["error"]["code"], json!(-32600));
+    let get_without_session = fixture.get_mcp(None).await;
+    assert_eq!(get_without_session.status(), StatusCode::UNAUTHORIZED);
+    let get_without_session_text = read_text(get_without_session, "get without session").await;
+    assert!(
+        get_without_session_text.contains("Session ID is required"),
+        "unexpected GET without session response: {get_without_session_text}"
+    );
 
-    let delete_without_session = fixture
-        .client
-        .delete(fixture.endpoint("/api/mcp"))
-        .send()
-        .await
-        .expect("DELETE /api/mcp without session");
-    assert_eq!(delete_without_session.status(), StatusCode::BAD_REQUEST);
-    let delete_without_session_json =
-        read_json(delete_without_session, "delete without session").await;
-    assert_eq!(
-        delete_without_session_json["error"],
-        json!("Missing Mcp-Session-Id header")
+    let delete_without_session = fixture.delete_mcp(None).await;
+    assert_eq!(delete_without_session.status(), StatusCode::UNAUTHORIZED);
+    let delete_without_session_text =
+        read_text(delete_without_session, "delete without session").await;
+    assert!(
+        delete_without_session_text.contains("Session ID is required"),
+        "unexpected DELETE without session response: {delete_without_session_text}"
     );
 
     let (session_id, initialize_json) = fixture.initialize_session(None).await;
@@ -141,13 +244,24 @@ async fn api_mcp_session_lifecycle_and_sse_contract() {
         json!("2025-06-18")
     );
 
-    let get_with_session = fixture
-        .client
-        .get(fixture.endpoint("/api/mcp"))
-        .header("mcp-session-id", &session_id)
-        .send()
-        .await
-        .expect("GET /api/mcp with session");
+    let initialized_response = fixture
+        .post_mcp(
+            None,
+            Some(&session_id),
+            json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            }),
+        )
+        .await;
+    assert_eq!(initialized_response.status(), StatusCode::ACCEPTED);
+    let initialized_body = read_text(initialized_response, "initialized response").await;
+    assert!(
+        initialized_body.trim().is_empty(),
+        "notifications/initialized should not return a body, got: {initialized_body:?}"
+    );
+
+    let get_with_session = fixture.get_mcp(Some(&session_id)).await;
     assert_eq!(get_with_session.status(), StatusCode::OK);
     let content_type = get_with_session
         .headers()
@@ -159,70 +273,70 @@ async fn api_mcp_session_lifecycle_and_sse_contract() {
         "expected SSE content type, got: {content_type}"
     );
 
-    let delete_session = fixture
-        .client
-        .delete(fixture.endpoint("/api/mcp"))
-        .header("mcp-session-id", &session_id)
-        .send()
-        .await
-        .expect("DELETE /api/mcp with active session");
-    assert_eq!(delete_session.status(), StatusCode::NO_CONTENT);
+    let delete_session = fixture.delete_mcp(Some(&session_id)).await;
+    assert_eq!(delete_session.status(), StatusCode::ACCEPTED);
+    let delete_body = read_text(delete_session, "delete session response").await;
+    assert!(
+        delete_body.trim().is_empty(),
+        "DELETE /api/mcp should not return a body, got: {delete_body:?}"
+    );
 
-    let get_after_delete = fixture
-        .client
-        .get(fixture.endpoint("/api/mcp"))
-        .header("mcp-session-id", &session_id)
-        .send()
-        .await
-        .expect("GET /api/mcp after delete");
-    assert_eq!(get_after_delete.status(), StatusCode::BAD_REQUEST);
-    let get_after_delete_json = read_json(get_after_delete, "get after delete").await;
-    assert_eq!(get_after_delete_json["error"]["code"], json!(-32600));
+    let get_after_delete = fixture.get_mcp(Some(&session_id)).await;
+    assert_eq!(get_after_delete.status(), StatusCode::UNAUTHORIZED);
+    let get_after_delete_text = read_text(get_after_delete, "get after delete").await;
+    assert!(
+        get_after_delete_text.contains("Session not found"),
+        "unexpected GET after delete response: {get_after_delete_text}"
+    );
 }
 
 #[tokio::test]
 async fn api_mcp_unknown_method_returns_jsonrpc_method_not_found() {
     let fixture = ApiFixture::new().await;
+    let (session_id, _) = fixture.initialize_session(None).await;
+    fixture.complete_initialization(None, &session_id).await;
 
     let response = fixture
-        .client
-        .post(fixture.endpoint("/api/mcp"))
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "id": "unknown-method",
-            "method": "does/not/exist"
-        }))
-        .send()
-        .await
-        .expect("POST /api/mcp unknown method");
+        .post_mcp(
+            None,
+            Some(&session_id),
+            json!({
+                "jsonrpc": "2.0",
+                "id": "unknown-method",
+                "method": "does/not/exist"
+            }),
+        )
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = read_json(response, "unknown method response").await;
+    let body = read_first_sse_json(response, "unknown method response").await;
     assert_eq!(body["error"]["code"], json!(-32601));
 }
 
 #[tokio::test]
 async fn api_mcp_kanban_profile_filters_tools_list() {
     let fixture = ApiFixture::new().await;
-    let (session_id, _) = fixture
-        .initialize_session(Some("mcpProfile=kanban-planning"))
+    let profile_query = "mcpProfile=kanban-planning";
+    let (session_id, _) = fixture.initialize_session(Some(profile_query)).await;
+    fixture
+        .complete_initialization(Some(profile_query), &session_id)
         .await;
 
     let response = fixture
-        .client
-        .post(fixture.endpoint("/api/mcp"))
-        .header("mcp-session-id", &session_id)
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "id": "tools-list",
-            "method": "tools/list"
-        }))
-        .send()
-        .await
-        .expect("tools/list for kanban profile");
+        .post_mcp(
+            Some(profile_query),
+            Some(&session_id),
+            json!({
+                "jsonrpc": "2.0",
+                "id": "tools-list",
+                "method": "tools/list",
+                "params": {}
+            }),
+        )
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = read_json(response, "kanban tools/list response").await;
+    let body = read_first_sse_json(response, "kanban tools/list response").await;
     let tools = body["result"]["tools"]
         .as_array()
         .expect("tools/list should return tools array");
@@ -259,29 +373,30 @@ async fn api_mcp_kanban_profile_filters_tools_list() {
 #[tokio::test]
 async fn api_mcp_kanban_profile_rejects_disallowed_tool_call() {
     let fixture = ApiFixture::new().await;
-    let (session_id, _) = fixture
-        .initialize_session(Some("mcpProfile=kanban-planning"))
+    let profile_query = "mcpProfile=kanban-planning";
+    let (session_id, _) = fixture.initialize_session(Some(profile_query)).await;
+    fixture
+        .complete_initialization(Some(profile_query), &session_id)
         .await;
 
     let response = fixture
-        .client
-        .post(fixture.endpoint("/api/mcp"))
-        .header("mcp-session-id", &session_id)
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "id": "tools-call",
-            "method": "tools/call",
-            "params": {
-                "name": "list_agents",
-                "arguments": {}
-            }
-        }))
-        .send()
-        .await
-        .expect("tools/call with disallowed tool");
+        .post_mcp(
+            Some(profile_query),
+            Some(&session_id),
+            json!({
+                "jsonrpc": "2.0",
+                "id": "tools-call",
+                "method": "tools/call",
+                "params": {
+                    "name": "list_agents",
+                    "arguments": {}
+                }
+            }),
+        )
+        .await;
     assert_eq!(response.status(), StatusCode::OK);
 
-    let body = read_json(response, "disallowed tools/call response").await;
+    let body = read_first_sse_json(response, "disallowed tools/call response").await;
     assert_eq!(body["error"]["code"], json!(-32602));
     assert!(
         body["error"]["message"]
@@ -312,34 +427,35 @@ async fn api_mcp_kanban_profile_allows_update_task_for_story_readiness() {
         .as_str()
         .expect("created task should include id");
 
-    let (session_id, _) = fixture
-        .initialize_session(Some("mcpProfile=kanban-planning"))
+    let profile_query = "mcpProfile=kanban-planning";
+    let (session_id, _) = fixture.initialize_session(Some(profile_query)).await;
+    fixture
+        .complete_initialization(Some(profile_query), &session_id)
         .await;
 
     let update_response = fixture
-        .client
-        .post(fixture.endpoint("/api/mcp"))
-        .header("mcp-session-id", &session_id)
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "id": "tools-call-update-task",
-            "method": "tools/call",
-            "params": {
-                "name": "update_task",
-                "arguments": {
-                    "taskId": task_id,
-                    "scope": "Touch only the kanban readiness path",
-                    "acceptanceCriteria": ["Gate lists missing structured fields"],
-                    "verificationCommands": ["npm run test -- kanban"],
-                    "testCases": ["Move to Dev is unblocked once fields exist"]
+        .post_mcp(
+            Some(profile_query),
+            Some(&session_id),
+            json!({
+                "jsonrpc": "2.0",
+                "id": "tools-call-update-task",
+                "method": "tools/call",
+                "params": {
+                    "name": "update_task",
+                    "arguments": {
+                        "taskId": task_id,
+                        "scope": "Touch only the kanban readiness path",
+                        "acceptanceCriteria": ["Gate lists missing structured fields"],
+                        "verificationCommands": ["npm run test -- kanban"],
+                        "testCases": ["Move to Dev is unblocked once fields exist"]
+                    }
                 }
-            }
-        }))
-        .send()
-        .await
-        .expect("tools/call update_task");
+            }),
+        )
+        .await;
     assert_eq!(update_response.status(), StatusCode::OK);
-    let update_body = read_json(update_response, "update_task response").await;
+    let update_body = read_first_sse_json(update_response, "update_task response").await;
     let update_text = update_body["result"]["content"][0]["text"]
         .as_str()
         .expect("update_task should return text payload");
