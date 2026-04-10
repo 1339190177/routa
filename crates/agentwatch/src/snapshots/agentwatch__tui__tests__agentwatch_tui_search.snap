@@ -8,9 +8,9 @@ expression: "render_snapshot(&state, &mut cache, 120, 24)"
 │ ALL FILES    REVIEW UNKNOWN                                                        ││route.ts                        │
 │1 files  M:0 D:1  E:0 I:0 U:1                                                       ││src/app/api/a2a/card            │
 │────────────────────────────────────────────────────────────────────────────────────││Last by: unknown                │
-│> route.ts                           .../api/a2a/card   D  -12        5m            ││Modified: 5m                    │
-│                                                                                    ││                                │
-│                                                                                    ││                                │
+│> route.ts                                             ...2a/card  D  -12        5m ││Modified: 5m                    │
+│                                                                                    ││Lines: ...  Size: ...  Git      │
+│                                                                                    ││changes: ...                    │
 │                                                                                    ││                                │
 │                                                                                    ││                                │
 │                                                                                    ││                                │

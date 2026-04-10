@@ -8,9 +8,9 @@ expression: "render_snapshot(&state, &mut cache, 120, 24)"
 │ ALL FILES    REVIEW UNKNOWN                                                        ││tui.rs                          │
 │2 files  M:1 D:1  E:1 I:0 U:1                                                       ││crates/agentwatch/src           │
 │────────────────────────────────────────────────────────────────────────────────────││Last by: impl-buddy             │
-│> tui.rs                             ...gentwatch/src   M  +38 -5     4m            ││Modified: 4m                    │
-│  route.ts                           .../api/a2a/card   D  -12        5m            ││                                │
-│                                                                                    ││                                │
+│> tui.rs                                               ...tch/src  M  +38 -5     4m ││Modified: 4m                    │
+│  route.ts                                             ...2a/card  D  -12        5m ││Lines: ...  Size: ...  Git      │
+│                                                                                    ││changes: ...                    │
 │                                                                                    ││                                │
 │                                                                                    ││                                │
 │                                                                                    ││                                │

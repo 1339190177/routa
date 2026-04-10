@@ -9,9 +9,9 @@ expression: "render_snapshot(&state, &mut cache, 96, 24)"
 │2 files  M:1 D:1  E:1 I:0 U:1                                                                 │
 │──────────────────────────────────────────────────────────────────────────────────────────────│
 │> tui.rs                                                                                      │
-│  ...es/agentwatch/src  M  +38 -5     4m                                                      │
+│  ...gentwatch/src  M  +38 -5     4m                                                          │
 │  route.ts                                                                                    │
-│  src/app/api/a2a/card  D  -12        5m                                                      │
+│  .../api/a2a/card  D  -12        5m                                                          │
 │                                                                                              │
 │                                                                                              │
 │                                                                                              │
@@ -24,6 +24,6 @@ expression: "render_snapshot(&state, &mut cache, 96, 24)"
 │crates/agentwatch/src                                                                         │
 │Last by: impl-buddy                                                                           │
 │Modified: 4m                                                                                  │
-│                                                                                              │
+│Lines: ...  Size: ...  Git changes: ...                                                       │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ↑↓ select  u unknown  d preview  Pg scroll  q quit

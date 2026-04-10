@@ -225,18 +225,18 @@ fn render_files(
                 FileRowDensity::SingleLine => vec![render_file_single_line(
                     selected,
                     &file_name,
-                    &parent_dir,
                     file,
                     &diff_stat,
                     colors,
                     state.focus == FocusPane::Files,
+                    split[2].width as usize,
                 )],
                 FileRowDensity::TwoLine => {
                     let primary = Line::from(vec![Span::styled(
                         format!(
                             "{} {}",
                             if selected { ">" } else { " " },
-                            shorten_path(&file_name, 40)
+                            shorten_path(&file_name, split[2].width.saturating_sub(6) as usize)
                         ),
                         row_style(selected, state.focus == FocusPane::Files, colors)
                             .add_modifier(Modifier::BOLD),
@@ -291,7 +291,33 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
             Span::styled("Modified: ", Style::default().fg(colors.muted)),
             Span::styled(time_ago(file.last_modified_at_ms), Style::default().fg(colors.text)),
         ]));
-        let _ = cache;
+        if let Some(facts) = cache.file_facts(file) {
+            lines.push(Line::from(vec![
+                Span::styled("Lines: ", Style::default().fg(colors.muted)),
+                Span::styled(
+                    facts.line_count.to_string(),
+                    Style::default().fg(colors.text),
+                ),
+                Span::raw("  "),
+                Span::styled("Size: ", Style::default().fg(colors.muted)),
+                Span::styled(
+                    format_bytes(facts.byte_size),
+                    Style::default().fg(colors.text),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("Git changes: ", Style::default().fg(colors.muted)),
+                Span::styled(
+                    facts.git_change_count.to_string(),
+                    Style::default().fg(colors.accent),
+                ),
+            ]));
+        } else {
+            lines.push(Line::from(Span::styled(
+                "Lines: ...  Size: ...  Git changes: ...",
+                Style::default().fg(colors.muted),
+            )));
+        }
     } else {
         lines.push(Line::from(Span::styled(
             "No file selected",
@@ -723,7 +749,7 @@ fn render_file_meta_line(
 ) -> Line<'static> {
     let mut spans = Vec::new();
     spans.push(Span::styled(
-        format!("  {}", shorten_path(parent_dir, 20)),
+        format!("  {}", shorten_path(parent_dir, 16)),
         Style::default().fg(colors.muted),
     ));
     spans.push(Span::styled("  ", Style::default().fg(colors.muted)));
@@ -734,22 +760,25 @@ fn render_file_meta_line(
 fn render_file_single_line(
     selected: bool,
     file_name: &str,
-    parent_dir: &str,
     file: &crate::models::FileView,
     diff_stat: &DiffStatSummary,
     colors: UiPalette,
     focused: bool,
+    area_width: usize,
 ) -> Line<'static> {
+    let (_, parent_dir) = split_display_path(&file.rel_path);
+    let name_width = area_width.saturating_sub(28).clamp(26, 52);
+    let dir_width = area_width.saturating_sub(name_width + 24).clamp(10, 18);
     let mut spans = vec![Span::styled(
         format!(
             "{} {}",
             if selected { ">" } else { " " },
-            pad_right(&shorten_path(file_name, 34), 35)
+            pad_right(&shorten_path(file_name, name_width), name_width + 1)
         ),
         row_style(selected, focused, colors).add_modifier(Modifier::BOLD),
     )];
     spans.push(Span::styled(
-        pad_right(&shorten_path(parent_dir, 16), 18),
+        pad_right(&shorten_path(&parent_dir, dir_width), dir_width + 1),
         Style::default().fg(colors.muted),
     ));
     spans.push(Span::raw(" "));
@@ -873,6 +902,18 @@ fn pad_right(value: &str, width: usize) -> String {
 
 fn pad_left(value: &str, width: usize) -> String {
     format!("{value:>width$}")
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const KB: f64 = 1024.0;
+    const MB: f64 = KB * 1024.0;
+    if bytes as f64 >= MB {
+        format!("{:.1} MB", bytes as f64 / MB)
+    } else if bytes as f64 >= KB {
+        format!("{:.1} KB", bytes as f64 / KB)
+    } else {
+        format!("{bytes} B")
+    }
 }
 
 pub(super) fn render_diff_stat_spans(diff_stat: &DiffStatSummary) -> Vec<Span<'static>> {
