@@ -1763,6 +1763,111 @@ fn history_since_event_id(
     }
 }
 
+fn consolidate_replay_events(notifications: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+    if notifications.is_empty() {
+        return Vec::new();
+    }
+
+    let mut result = Vec::new();
+    let mut current_chunks = Vec::new();
+    let mut current_session_id: Option<String> = None;
+    let mut current_event_id: Option<String> = None;
+
+    let flush_chunks = |result: &mut Vec<serde_json::Value>,
+                        chunks: &mut Vec<String>,
+                        session_id: &Option<String>,
+                        event_id: &mut Option<String>| {
+        if !chunks.is_empty() {
+            if let Some(session_id) = session_id {
+                let mut consolidated = serde_json::json!({
+                    "sessionId": session_id,
+                    "update": {
+                        "sessionUpdate": "agent_message",
+                        "content": { "type": "text", "text": chunks.join("") }
+                    }
+                });
+                if let Some(event_id) = event_id.take() {
+                    consolidated["eventId"] = serde_json::Value::String(event_id);
+                }
+                result.push(consolidated);
+            }
+            chunks.clear();
+        }
+    };
+
+    for notification in notifications {
+        let session_id = notification
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
+        let session_update = notification
+            .get("update")
+            .and_then(|update| update.get("sessionUpdate"))
+            .and_then(serde_json::Value::as_str);
+
+        if session_update == Some("agent_message_chunk") {
+            let text = notification
+                .get("update")
+                .and_then(|update| update.get("content"))
+                .and_then(|content| content.get("text"))
+                .and_then(serde_json::Value::as_str);
+
+            if let Some(text) = text {
+                if current_session_id != session_id {
+                    flush_chunks(
+                        &mut result,
+                        &mut current_chunks,
+                        &current_session_id,
+                        &mut current_event_id,
+                    );
+                    current_session_id = session_id;
+                }
+                current_chunks.push(text.to_string());
+                current_event_id = notification
+                    .get("eventId")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+            }
+            continue;
+        }
+
+        flush_chunks(
+            &mut result,
+            &mut current_chunks,
+            &current_session_id,
+            &mut current_event_id,
+        );
+        current_session_id = session_id;
+        result.push(notification);
+    }
+
+    flush_chunks(
+        &mut result,
+        &mut current_chunks,
+        &current_session_id,
+        &mut current_event_id,
+    );
+
+    result
+}
+
+fn sse_event_id_from_rpc_message(message: &serde_json::Value) -> Option<String> {
+    message
+        .get("params")
+        .and_then(|params| params.get("eventId"))
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+}
+
+fn sse_event_from_rpc_message(message: serde_json::Value) -> Event {
+    let payload = message.to_string();
+    if let Some(event_id) = sse_event_id_from_rpc_message(&message) {
+        Event::default().id(event_id).data(payload)
+    } else {
+        Event::default().data(payload)
+    }
+}
+
 async fn acp_sse(State(state): State<AppState>, Query(query): Query<AcpSseQuery>) -> Response {
     if query.probe.as_deref() == Some("1") {
         return StatusCode::NO_CONTENT.into_response();
@@ -1774,7 +1879,9 @@ async fn acp_sse(State(state): State<AppState>, Query(query): Query<AcpSseQuery>
             .acp_session_store
             .get_history(&session_id)
             .await
-            .map(|history| history_since_event_id(&history, last_event_id))
+            .map(|history| {
+                consolidate_replay_events(history_since_event_id(&history, last_event_id))
+            })
             .unwrap_or_default(),
         _ => Vec::new(),
     };
@@ -1792,16 +1899,16 @@ async fn acp_sse(State(state): State<AppState>, Query(query): Query<AcpSseQuery>
         }
     });
 
-    let initial = tokio_stream::once(Ok::<_, Infallible>(
-        Event::default().data(connected_event.to_string()),
-    ));
+    let initial = tokio_stream::once(Ok::<_, Infallible>(sse_event_from_rpc_message(
+        connected_event,
+    )));
     let replay = tokio_stream::iter(replay_events.into_iter().map(|params| {
         let msg = serde_json::json!({
             "jsonrpc": "2.0",
             "method": "session/update",
             "params": params,
         });
-        Ok::<_, Infallible>(Event::default().data(msg.to_string()))
+        Ok::<_, Infallible>(sse_event_from_rpc_message(msg))
     }));
 
     // Heartbeat (keep connection alive)
@@ -1818,7 +1925,7 @@ async fn acp_sse(State(state): State<AppState>, Query(query): Query<AcpSseQuery>
         let notifications = async_stream::stream! {
             while let Ok(msg) = rx.recv().await {
                 yield Ok::<_, Infallible>(
-                    Event::default().data(msg.to_string())
+                    sse_event_from_rpc_message(msg)
                 );
             }
         };
@@ -1883,9 +1990,10 @@ mod tests {
     use tokio::sync::broadcast;
 
     use super::{
-        acp_rpc, custom_provider_launch_from_row, extract_custom_provider_launch, has_explicit_cwd,
-        history_since_event_id, resolve_session_cwd, should_attempt_native_resume, AcpResponse,
-        CustomProviderLaunch,
+        acp_rpc, consolidate_replay_events, custom_provider_launch_from_row,
+        extract_custom_provider_launch, has_explicit_cwd, history_since_event_id,
+        resolve_session_cwd, should_attempt_native_resume, sse_event_id_from_rpc_message,
+        AcpResponse, CustomProviderLaunch,
     };
     use routa_core::acp::terminal_manager::TerminalManager;
 
@@ -1917,6 +2025,54 @@ mod tests {
 
         assert_eq!(replay, history[1..]);
         assert!(history_since_event_id(&history, "missing-event").is_empty());
+    }
+
+    #[test]
+    fn consolidate_replay_events_merges_chunks_and_preserves_latest_event_id() {
+        let replay = consolidate_replay_events(vec![
+            json!({
+                "sessionId": "s1",
+                "eventId": "evt-2",
+                "update": { "sessionUpdate": "agent_message_chunk", "content": { "text": "Hel" } }
+            }),
+            json!({
+                "sessionId": "s1",
+                "eventId": "evt-3",
+                "update": { "sessionUpdate": "agent_message_chunk", "content": { "text": "lo" } }
+            }),
+            json!({
+                "sessionId": "s1",
+                "eventId": "evt-4",
+                "update": { "sessionUpdate": "tool_call", "title": "run" }
+            }),
+        ]);
+
+        assert_eq!(replay.len(), 2);
+        assert_eq!(replay[0]["eventId"].as_str(), Some("evt-3"));
+        assert_eq!(
+            replay[0]["update"]["sessionUpdate"].as_str(),
+            Some("agent_message")
+        );
+        assert_eq!(
+            replay[0]["update"]["content"]["text"].as_str(),
+            Some("Hello")
+        );
+        assert_eq!(replay[1]["eventId"].as_str(), Some("evt-4"));
+    }
+
+    #[test]
+    fn sse_event_id_from_rpc_message_reads_nested_event_id() {
+        let event_id = sse_event_id_from_rpc_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "session/update",
+            "params": {
+                "sessionId": "s1",
+                "eventId": "evt-9",
+                "update": { "sessionUpdate": "agent_message", "content": { "text": "hi" } }
+            }
+        }));
+
+        assert_eq!(event_id.as_deref(), Some("evt-9"));
     }
 
     #[test]
