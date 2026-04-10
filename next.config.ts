@@ -27,6 +27,8 @@ const nextConfig: NextConfig = {
     "bufferutil",
     "utf-8-validate",
     "better-sqlite3",
+    "yjs",
+    "lib0",
   ],
   experimental: {
     // Optimize Webpack memory usage by changing behavior to reduce max memory
