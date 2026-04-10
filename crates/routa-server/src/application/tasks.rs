@@ -265,7 +265,7 @@ impl TaskApplicationService {
             task.codebase_ids = ids;
         }
         if let Some(wt) = command.worktree_id {
-            task.worktree_id = wt.as_str().map(|s| s.to_string());
+            task.worktree_id = wt;
         }
 
         if retry_trigger {
@@ -439,7 +439,7 @@ pub struct UpdateTaskCommand {
     pub retry_trigger: Option<bool>,
     pub repo_path: Option<String>,
     pub codebase_ids: Option<Vec<String>>,
-    pub worktree_id: Option<serde_json::Value>, // null clears, string sets
+    pub worktree_id: Option<Option<String>>, // null clears, string sets
 }
 
 #[derive(Debug)]
@@ -700,6 +700,34 @@ mod tests {
         assert_eq!(plan.task.last_sync_error, None);
         assert!(plan.should_trigger_agent);
         assert!(!plan.should_sync_github);
+
+        let _ = fs::remove_file(db_path);
+    }
+
+    #[tokio::test]
+    async fn update_task_clears_worktree_when_request_explicitly_sets_null() {
+        let (service, db_path) = setup_service().await;
+        let mut task = seed_task(&service, Some("dev")).await;
+        task.worktree_id = Some("worktree-stale".to_string());
+        service
+            .state
+            .task_store
+            .save(&task)
+            .await
+            .expect("persist updated seed task");
+
+        let plan = service
+            .update_task(
+                &task.id,
+                UpdateTaskCommand {
+                    worktree_id: Some(None),
+                    ..UpdateTaskCommand::default()
+                },
+            )
+            .await
+            .expect("update task plan");
+
+        assert_eq!(plan.task.worktree_id, None);
 
         let _ = fs::remove_file(db_path);
     }

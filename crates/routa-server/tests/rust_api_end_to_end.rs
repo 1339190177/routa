@@ -417,6 +417,62 @@ async fn api_task_flow_with_validation() {
 }
 
 #[tokio::test]
+async fn api_task_patch_explicit_null_clears_worktree() {
+    let fixture = ApiFixture::new().await;
+
+    let create_task = fixture
+        .client
+        .post(fixture.endpoint("/api/tasks"))
+        .json(&json!({
+            "title": "Rust API worktree clear",
+            "objective": "Ensure explicit null clears worktreeId",
+            "workspaceId": "default"
+        }))
+        .send()
+        .await
+        .expect("create task");
+    assert_eq!(create_task.status(), StatusCode::CREATED);
+    let created_task: Value = create_task
+        .json()
+        .await
+        .expect("decode task create response");
+    let task_id = created_task["task"]["id"].as_str().expect("task id");
+
+    let assign_worktree = fixture
+        .client
+        .patch(fixture.endpoint(&format!("/api/tasks/{task_id}")))
+        .json(&json!({ "worktreeId": "worktree-stale" }))
+        .send()
+        .await
+        .expect("assign worktree");
+    assert_eq!(assign_worktree.status(), StatusCode::OK);
+
+    let clear_worktree = fixture
+        .client
+        .patch(fixture.endpoint(&format!("/api/tasks/{task_id}")))
+        .json(&json!({ "worktreeId": null }))
+        .send()
+        .await
+        .expect("clear worktree");
+    assert_eq!(clear_worktree.status(), StatusCode::OK);
+    let clear_json: Value = clear_worktree
+        .json()
+        .await
+        .expect("decode clear response");
+    assert_eq!(clear_json["task"]["worktreeId"], Value::Null);
+
+    let get_task = fixture
+        .client
+        .get(fixture.endpoint(&format!("/api/tasks/{task_id}")))
+        .send()
+        .await
+        .expect("get task");
+    assert_eq!(get_task.status(), StatusCode::OK);
+    let get_json: Value = get_task.json().await.expect("decode task");
+    assert_eq!(get_json["task"]["worktreeId"], Value::Null);
+}
+
+#[tokio::test]
 async fn api_agent_flow_with_validation() {
     let fixture = ApiFixture::new().await;
 
@@ -839,6 +895,24 @@ async fn api_mcp_tools_include_delegate_task_tool() {
         has_delegate,
         "delegate_task_to_agent should be discoverable"
     );
+
+    let has_provide_artifact = tools
+        .iter()
+        .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+        .any(|name| name == "provide_artifact");
+    assert!(
+        has_provide_artifact,
+        "provide_artifact should be discoverable"
+    );
+
+    let has_list_artifacts = tools
+        .iter()
+        .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+        .any(|name| name == "list_artifacts");
+    assert!(
+        has_list_artifacts,
+        "list_artifacts should be discoverable"
+    );
 }
 
 #[tokio::test]
@@ -976,4 +1050,94 @@ async fn api_mcp_tools_accept_prefixed_tool_name() {
         agents.as_array().is_some(),
         "expected agents array, got {agents}"
     );
+}
+
+#[tokio::test]
+async fn api_mcp_tools_provide_and_list_artifacts() {
+    let fixture = ApiFixture::new().await;
+
+    let create_task = fixture
+        .client
+        .post(fixture.endpoint("/api/tasks"))
+        .json(&json!({
+            "title": "Artifact via MCP tools",
+            "objective": "Validate Rust MCP artifact tool parity",
+            "workspaceId": "default"
+        }))
+        .send()
+        .await
+        .expect("create task");
+    assert_eq!(create_task.status(), StatusCode::CREATED);
+    let created_task: Value = create_task.json().await.expect("decode create task");
+    let task_id = created_task["task"]["id"]
+        .as_str()
+        .expect("task id should exist");
+
+    let provide_response = fixture
+        .client
+        .post(fixture.endpoint("/api/mcp/tools"))
+        .json(&json!({
+            "name": "provide_artifact",
+            "args": {
+                "workspaceId": "default",
+                "agentId": "agent-artifact-e2e",
+                "taskId": task_id,
+                "type": "screenshot",
+                "content": "base64-image",
+                "context": "Review proof",
+                "metadata": {
+                    "filename": "review-proof.png",
+                    "mediaType": "image/png"
+                }
+            }
+        }))
+        .send()
+        .await
+        .expect("call provide_artifact");
+    assert_eq!(provide_response.status(), StatusCode::OK);
+    let provide_json: Value = provide_response
+        .json()
+        .await
+        .expect("decode provide_artifact response");
+    assert_eq!(provide_json["isError"], json!(false));
+    let provide_text = provide_json["content"][0]["text"]
+        .as_str()
+        .expect("provide_artifact text payload");
+    let provide_result: Value = serde_json::from_str(provide_text).expect("decode provide_artifact payload");
+    assert_eq!(provide_result["type"], json!("screenshot"));
+    assert_eq!(provide_result["taskId"], json!(task_id));
+    assert_eq!(provide_result["status"], json!("provided"));
+    assert!(provide_result["artifactId"].as_str().is_some());
+
+    let list_response = fixture
+        .client
+        .post(fixture.endpoint("/api/mcp/tools"))
+        .json(&json!({
+            "name": "list_artifacts",
+            "args": {
+                "workspaceId": "default",
+                "taskId": task_id
+            }
+        }))
+        .send()
+        .await
+        .expect("call list_artifacts");
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_json: Value = list_response
+        .json()
+        .await
+        .expect("decode list_artifacts response");
+    assert_eq!(list_json["isError"], json!(false));
+    let list_text = list_json["content"][0]["text"]
+        .as_str()
+        .expect("list_artifacts text payload");
+    let list_result: Value = serde_json::from_str(list_text).expect("decode list_artifacts payload");
+    let artifacts = list_result["artifacts"]
+        .as_array()
+        .expect("artifacts array");
+    assert_eq!(artifacts.len(), 1);
+    assert_eq!(artifacts[0]["type"], json!("screenshot"));
+    assert_eq!(artifacts[0]["taskId"], json!(task_id));
+    assert_eq!(artifacts[0]["providedByAgentId"], json!("agent-artifact-e2e"));
+    assert_eq!(artifacts[0]["status"], json!("provided"));
 }

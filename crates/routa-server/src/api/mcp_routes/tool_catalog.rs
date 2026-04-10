@@ -111,6 +111,29 @@ fn build_tool_list_inner() -> Vec<serde_json::Value> {
             },
             "required": ["agentId"]
         })),
+        tool_def("provide_artifact", "Provide an artifact for a task, such as a screenshot, test results, code diff, or logs.", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "workspaceId": { "type": "string" },
+                "agentId": { "type": "string", "description": "Agent providing the artifact" },
+                "taskId": { "type": "string", "description": "Task ID" },
+                "type": { "type": "string", "enum": ["screenshot", "test_results", "code_diff", "logs"], "description": "Artifact type" },
+                "content": { "type": "string", "description": "Artifact content" },
+                "context": { "type": "string", "description": "Optional artifact context" },
+                "requestId": { "type": "string", "description": "Optional request ID being fulfilled" },
+                "metadata": { "type": "object", "description": "Optional artifact metadata" }
+            },
+            "required": ["agentId", "taskId", "type", "content"]
+        })),
+        tool_def("list_artifacts", "List artifacts for a task, optionally filtered by type.", serde_json::json!({
+            "type": "object",
+            "properties": {
+                "workspaceId": { "type": "string" },
+                "taskId": { "type": "string", "description": "Task ID" },
+                "type": { "type": "string", "enum": ["screenshot", "test_results", "code_diff", "logs"], "description": "Artifact type filter" }
+            },
+            "required": ["taskId"]
+        })),
         // ── Delegation tools ─────────────────────────────────────────────
         tool_def("delegate_task_to_agent", "Delegate a task to a new agent by spawning a real process. Use specialist='CRAFTER' for implementation, specialist='GATE' for verification, specialist='DEVELOPER' for solo plan+implement.", serde_json::json!({
             "type": "object",

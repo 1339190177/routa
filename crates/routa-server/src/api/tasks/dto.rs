@@ -1,5 +1,21 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
+
+fn deserialize_explicit_nullable_string<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Null => Ok(Some(None)),
+        serde_json::Value::String(value) => Ok(Some(Some(value))),
+        other => Err(serde::de::Error::custom(format!(
+            "expected string or null, received {other}"
+        ))),
+    }
+}
 
 /// Task artifact summary for evidence aggregation
 #[derive(Debug, Serialize)]
@@ -213,5 +229,6 @@ pub struct UpdateTaskRequest {
     pub sync_to_github: Option<bool>,
     pub retry_trigger: Option<bool>,
     pub repo_path: Option<String>,
-    pub worktree_id: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_explicit_nullable_string")]
+    pub worktree_id: Option<Option<String>>,
 }

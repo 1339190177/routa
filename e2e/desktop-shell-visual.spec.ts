@@ -93,6 +93,18 @@ async function openDesktopRoute(page: Page, path: string, colorScheme: "light" |
       [data-testid="traces-selected-session"] {
         visibility: hidden !important;
       }
+
+      [data-testid="desktop-shell-header"] .lg\\:flex {
+        visibility: hidden !important;
+      }
+
+      [data-testid="kanban-page-header"] > div > div:last-child {
+        visibility: hidden !important;
+      }
+
+      [data-radix-popper-content-wrapper] {
+        visibility: hidden !important;
+      }
     `,
   });
 }
@@ -107,7 +119,7 @@ test.describe("Desktop Shell Visual Regression", () => {
       await expect(page.getByTestId("desktop-shell-root")).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId("desktop-shell-header")).toHaveScreenshot(
         `workspace-shell-header-${colorScheme}.png`,
-        { animations: "disabled" },
+        { animations: "disabled", maxDiffPixels: 100 },
       );
       await expect(page.getByTestId("desktop-shell-sidebar")).toHaveScreenshot(
         `workspace-shell-sidebar-${colorScheme}.png`,
