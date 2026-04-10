@@ -61,6 +61,7 @@ mod tests {
         Task, TaskLaneHandoff, TaskLaneHandoffRequestType, TaskLaneHandoffStatus, TaskLaneSession,
         TaskLaneSessionStatus,
     };
+    use crate::models::workspace::Workspace;
     use crate::rpc::error::RpcError;
     use crate::state::{AppState, AppStateInner};
     use std::sync::Arc;
@@ -158,6 +159,68 @@ mod tests {
         assert_eq!(backlog.cards.len(), 1);
         assert_eq!(backlog.cards[0].id, created.card.id);
         assert_eq!(backlog.cards[0].priority.as_deref(), Some("high"));
+    }
+
+    #[tokio::test]
+    async fn create_card_with_cross_workspace_board_id_falls_back_to_current_workspace_default() {
+        let state = setup_state().await;
+        state
+            .workspace_store
+            .save(&Workspace::new(
+                "ws-other".to_string(),
+                "Other Workspace".to_string(),
+                None,
+            ))
+            .await
+            .expect("other workspace should save");
+
+        let foreign_board = create_board(
+            &state,
+            CreateBoardParams {
+                workspace_id: "ws-other".to_string(),
+                name: "Foreign Board".to_string(),
+                columns: None,
+                is_default: None,
+                id: None,
+            },
+        )
+        .await
+        .expect("foreign board should create");
+
+        let default_boards = list_boards(
+            &state,
+            ListBoardsParams {
+                workspace_id: "default".to_string(),
+            },
+        )
+        .await
+        .expect("default boards should list");
+        let default_board_id = default_boards.boards[0].id.clone();
+
+        let created = create_card(
+            &state,
+            CreateCardParams {
+                workspace_id: "default".to_string(),
+                board_id: Some(foreign_board.board.id.clone()),
+                column_id: Some("backlog".to_string()),
+                title: "Stay in current workspace".to_string(),
+                description: None,
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect("create card should fall back to current workspace default board");
+
+        let task = state
+            .task_store
+            .get(&created.card.id)
+            .await
+            .expect("task lookup should succeed")
+            .expect("task should exist");
+        assert_eq!(task.workspace_id, "default");
+        assert_eq!(task.board_id.as_deref(), Some(default_board_id.as_str()));
+        assert_ne!(task.board_id.as_deref(), Some(foreign_board.board.id.as_str()));
     }
 
     #[test]

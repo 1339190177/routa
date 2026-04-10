@@ -62,15 +62,29 @@ pub(super) async fn resolve_board(
     workspace_id: &str,
     board_id: Option<&str>,
 ) -> Result<KanbanBoard, RpcError> {
+    ensure_workspace_exists(state, workspace_id).await?;
+
     if let Some(board_id) = board_id {
-        return state
-            .kanban_store
-            .get(board_id)
-            .await?
-            .ok_or_else(|| RpcError::NotFound(format!("Board {} not found", board_id)));
+        match state.kanban_store.get(board_id).await? {
+            Some(board) if board.workspace_id == workspace_id => return Ok(board),
+            Some(board) => {
+                tracing::warn!(
+                    board_id = %board_id,
+                    board_workspace_id = %board.workspace_id,
+                    requested_workspace_id = %workspace_id,
+                    "kanban board workspace mismatch; falling back to workspace default board"
+                );
+            }
+            None => {
+                tracing::warn!(
+                    board_id = %board_id,
+                    requested_workspace_id = %workspace_id,
+                    "kanban board not found; falling back to workspace default board"
+                );
+            }
+        }
     }
 
-    ensure_workspace_exists(state, workspace_id).await?;
     state
         .kanban_store
         .ensure_default_board(workspace_id)

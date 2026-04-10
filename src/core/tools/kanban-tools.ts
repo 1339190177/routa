@@ -912,7 +912,10 @@ export class KanbanTools {
 
   private async resolveBoard(workspaceId: string, boardId?: string) {
     if (boardId) {
-      return await this.kanbanBoardStore.get(boardId);
+      const board = await this.kanbanBoardStore.get(boardId);
+      if (board?.workspaceId === workspaceId) {
+        return board;
+      }
     }
 
     return await this.kanbanBoardStore.getDefault(workspaceId);
