@@ -71,9 +71,9 @@ fn palette(theme_mode: ThemeMode) -> UiPalette {
             border: Color::Rgb(67, 84, 100),
             text: Color::Rgb(210, 220, 229),
             muted: Color::Rgb(124, 141, 157),
-            accent: Color::Rgb(126, 156, 181),
-            selection_focus: Color::Rgb(32, 44, 56),
-            selection_blur: Color::Rgb(27, 38, 49),
+            accent: Color::Rgb(154, 190, 214),
+            selection_focus: Color::Rgb(56, 76, 96),
+            selection_blur: Color::Rgb(40, 55, 70),
         },
         ThemeMode::Light => UiPalette {
             bg: Color::Rgb(238, 242, 246),
@@ -661,7 +661,10 @@ fn panel_block<T: Into<ratatui::text::Line<'static>>>(
 
 fn panel_border_style(active: bool, colors: UiPalette) -> Style {
     if active {
-        Style::default().fg(colors.accent).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(colors.accent)
+            .bg(colors.surface)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(colors.border)
     }
@@ -669,11 +672,18 @@ fn panel_border_style(active: bool, colors: UiPalette) -> Style {
 
 fn row_style(selected: bool, focused: bool, colors: UiPalette) -> Style {
     if selected {
-        Style::default().fg(colors.text).bg(if focused {
-            colors.selection_focus
-        } else {
-            colors.selection_blur
-        })
+        Style::default()
+            .fg(colors.text)
+            .bg(if focused {
+                colors.selection_focus
+            } else {
+                colors.selection_blur
+            })
+            .add_modifier(if focused {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            })
     } else {
         Style::default().fg(colors.text).bg(colors.surface)
     }
