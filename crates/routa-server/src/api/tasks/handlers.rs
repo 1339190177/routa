@@ -13,7 +13,10 @@ use super::dto::{
     CreateTaskArtifactRequest, CreateTaskRequest, ListTasksQuery, UpdateStatusRequest,
     UpdateTaskRequest,
 };
-use super::evidence::{build_task_run_ledger, ensure_transition_artifacts, serialize_task_with_evidence, serialize_tasks_batch};
+use super::evidence::{
+    build_task_run_ledger, ensure_transition_artifacts, serialize_task_with_evidence,
+    serialize_tasks_batch,
+};
 
 use crate::api::tasks_automation::{
     auto_create_worktree, resolve_codebase, trigger_assigned_task_agent,

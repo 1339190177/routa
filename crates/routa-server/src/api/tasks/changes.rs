@@ -1,4 +1,7 @@
-use axum::{extract::{Query, State}, Json};
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use routa_core::git::{FileChangeStatus, GitFileChange};
 use routa_core::models::task::Task;
 

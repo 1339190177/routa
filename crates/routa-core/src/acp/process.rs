@@ -275,9 +275,10 @@ impl AcpProcess {
                                         .with_conversation(TraceConversation {
                                             turn: None,
                                             role: Some("assistant".to_string()),
-                                            content_preview: Some(
-                                                truncate_content(&agent_thought_buffer, 200)
-                                            ),
+                                            content_preview: Some(truncate_content(
+                                                &agent_thought_buffer,
+                                                200,
+                                            )),
                                             full_content: Some(agent_thought_buffer.clone()),
                                         });
                                         let writer = TraceWriter::new(&cwd_clone);
@@ -303,9 +304,10 @@ impl AcpProcess {
                                         .with_conversation(TraceConversation {
                                             turn: None,
                                             role: Some("assistant".to_string()),
-                                            content_preview: Some(
-                                                truncate_content(&agent_msg_buffer, 200)
-                                            ),
+                                            content_preview: Some(truncate_content(
+                                                &agent_msg_buffer,
+                                                200,
+                                            )),
                                             full_content: Some(agent_msg_buffer.clone()),
                                         });
                                         let writer = TraceWriter::new(&cwd_clone);
@@ -481,9 +483,7 @@ impl AcpProcess {
                 .with_conversation(TraceConversation {
                     turn: None,
                     role: Some("assistant".to_string()),
-                    content_preview: Some(
-                        truncate_content(&agent_msg_buffer, 200)
-                    ),
+                    content_preview: Some(truncate_content(&agent_msg_buffer, 200)),
                     full_content: Some(agent_msg_buffer.clone()),
                 });
                 let writer = TraceWriter::new(&cwd_clone);
@@ -500,9 +500,7 @@ impl AcpProcess {
                 .with_conversation(TraceConversation {
                     turn: None,
                     role: Some("assistant".to_string()),
-                    content_preview: Some(
-                        truncate_content(&agent_thought_buffer, 200)
-                    ),
+                    content_preview: Some(truncate_content(&agent_thought_buffer, 200)),
                     full_content: Some(agent_thought_buffer.clone()),
                 });
                 let writer = TraceWriter::new(&cwd_clone);

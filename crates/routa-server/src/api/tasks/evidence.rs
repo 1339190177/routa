@@ -1,8 +1,8 @@
+use routa_core::models::artifact::{Artifact, ArtifactType};
+use routa_core::models::kanban::KanbanBoard;
 use routa_core::models::task::{
     build_task_invest_validation, build_task_story_readiness, Task, TaskLaneSessionStatus,
 };
-use routa_core::models::kanban::KanbanBoard;
-use routa_core::models::artifact::{Artifact, ArtifactType};
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::dto::{
@@ -27,7 +27,8 @@ pub async fn serialize_task_with_evidence(
     };
 
     // Build evidence summary with pre-loaded board
-    let evidence_summary = build_task_evidence_summary_with_board(state, task, board.as_ref()).await?;
+    let evidence_summary =
+        build_task_evidence_summary_with_board(state, task, board.as_ref()).await?;
 
     let story_readiness = build_task_story_readiness(
         task,
@@ -428,10 +429,7 @@ pub async fn serialize_tasks_batch(
             .get(&task.id)
             .map(|v| v.as_slice())
             .unwrap_or(&[]);
-        let board = task
-            .board_id
-            .as_ref()
-            .and_then(|id| boards_map.get(id));
+        let board = task.board_id.as_ref().and_then(|id| boards_map.get(id));
 
         let serialized = serialize_task_with_preloaded_data(task, artifacts, board).await?;
         results.push(serialized);
@@ -515,8 +513,7 @@ fn build_task_evidence_summary_from_artifacts(
     }
 
     // Determine required artifacts
-    let required_artifacts =
-        resolve_next_required_artifacts(board, task.column_id.as_deref());
+    let required_artifacts = resolve_next_required_artifacts(board, task.column_id.as_deref());
     let present_artifacts = by_type.keys().cloned().collect::<BTreeSet<_>>();
     let missing_required = required_artifacts
         .into_iter()

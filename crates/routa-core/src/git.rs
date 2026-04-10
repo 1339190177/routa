@@ -233,12 +233,7 @@ pub fn get_branch_status(repo_path: &str, branch: &str) -> BranchStatus {
     let range = format!("{}...origin/{}", branch, branch);
 
     if let Ok(o) = Command::new("git")
-        .args([
-            "rev-list",
-            "--left-right",
-            "--count",
-            &range,
-        ])
+        .args(["rev-list", "--left-right", "--count", &range])
         .current_dir(repo_path)
         .output()
     {
@@ -340,9 +335,7 @@ pub fn stage_files(repo_path: &str, files: &[String]) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr)
-            .trim()
-            .to_string());
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
 
     Ok(())
@@ -365,9 +358,7 @@ pub fn unstage_files(repo_path: &str, files: &[String]) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr)
-            .trim()
-            .to_string());
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
 
     Ok(())
@@ -509,9 +500,7 @@ pub fn pull_commits(
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr)
-            .trim()
-            .to_string());
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
 
     Ok(())
@@ -526,9 +515,7 @@ pub fn rebase_branch(repo_path: &str, onto: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr)
-            .trim()
-            .to_string());
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
 
     Ok(())
@@ -564,9 +551,7 @@ pub fn reset_branch(
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr)
-            .trim()
-            .to_string());
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
 
     Ok(())
@@ -714,10 +699,7 @@ fn parse_git_log_records(
             let author_name = parts[3].trim();
             let author_email = parts[4].trim();
             let authored_at = parts[5].trim();
-            let parents: Vec<String> = parts[6]
-                .split_whitespace()
-                .map(str::to_string)
-                .collect();
+            let parents: Vec<String> = parts[6].split_whitespace().map(str::to_string).collect();
 
             if sha.is_empty()
                 || short_sha.is_empty()
@@ -808,7 +790,9 @@ pub fn list_git_refs(repo_path: &str) -> Result<GitRefsResult, String> {
         .map_err(|error| error.to_string())?;
 
     if !local_output.status.success() {
-        return Err(String::from_utf8_lossy(&local_output.stderr).trim().to_string());
+        return Err(String::from_utf8_lossy(&local_output.stderr)
+            .trim()
+            .to_string());
     }
 
     let local: Vec<GitLogRef> = String::from_utf8_lossy(&local_output.stdout)
@@ -831,12 +815,15 @@ pub fn list_git_refs(repo_path: &str) -> Result<GitRefsResult, String> {
         })
         .collect();
 
-    let head = local.iter().find(|git_ref| git_ref.is_current == Some(true)).map(|git_ref| {
-        let mut head_ref = git_ref.clone();
-        head_ref.kind = GitRefKind::Head;
-        head_ref.is_current = Some(true);
-        head_ref
-    });
+    let head = local
+        .iter()
+        .find(|git_ref| git_ref.is_current == Some(true))
+        .map(|git_ref| {
+            let mut head_ref = git_ref.clone();
+            head_ref.kind = GitRefKind::Head;
+            head_ref.is_current = Some(true);
+            head_ref
+        });
 
     let remote_output = Command::new("git")
         .args([
@@ -1020,10 +1007,12 @@ pub fn get_git_log_page(
         }
 
         match count_command.current_dir(repo_path).output() {
-            Ok(count_output) if count_output.status.success() => String::from_utf8_lossy(&count_output.stdout)
-                .trim()
-                .parse::<usize>()
-                .unwrap_or(parsed_commits.len()),
+            Ok(count_output) if count_output.status.success() => {
+                String::from_utf8_lossy(&count_output.stdout)
+                    .trim()
+                    .parse::<usize>()
+                    .unwrap_or(parsed_commits.len())
+            }
             _ => parsed_commits.len(),
         }
     };
@@ -1222,9 +1211,7 @@ pub fn get_commit_list(
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr)
-            .trim()
-            .to_string());
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
 
     let mut commits = Vec::new();
@@ -1268,7 +1255,11 @@ pub fn get_commit_list(
         let mut additions = 0;
         let mut deletions = 0;
 
-        for stat_line in stats_section.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        for stat_line in stats_section
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+        {
             let stat_parts: Vec<&str> = stat_line.split('\t').collect();
             if stat_parts.len() >= 2 {
                 if stat_parts[0] != "-" {
@@ -1604,7 +1595,10 @@ pub fn get_repo_file_diff(repo_path: &str, file: &GitFileChange) -> RepoFileDiff
     .filter_map(|args| git_output_in_repo(repo_path, args))
     .find(|candidate| !candidate.trim().is_empty())
     .unwrap_or_else(|| {
-        if matches!(file.status, FileChangeStatus::Untracked | FileChangeStatus::Added) {
+        if matches!(
+            file.status,
+            FileChangeStatus::Untracked | FileChangeStatus::Added
+        ) {
             build_synthetic_added_diff(repo_path, file)
         } else if matches!(file.status, FileChangeStatus::Renamed) && file.previous_path.is_some() {
             build_synthetic_rename_diff(file)
@@ -1625,10 +1619,14 @@ pub fn get_repo_file_diff(repo_path: &str, file: &GitFileChange) -> RepoFileDiff
 }
 
 pub fn get_repo_commit_diff(repo_path: &str, sha: &str) -> RepoCommitDiff {
-    let summary = git_output_in_repo(repo_path, &["show", "-s", "--format=%s", sha]).unwrap_or_default();
-    let short_sha = git_output_in_repo(repo_path, &["rev-parse", "--short", sha]).unwrap_or_default();
-    let author_name = git_output_in_repo(repo_path, &["show", "-s", "--format=%an", sha]).unwrap_or_default();
-    let authored_at = git_output_in_repo(repo_path, &["show", "-s", "--format=%aI", sha]).unwrap_or_default();
+    let summary =
+        git_output_in_repo(repo_path, &["show", "-s", "--format=%s", sha]).unwrap_or_default();
+    let short_sha =
+        git_output_in_repo(repo_path, &["rev-parse", "--short", sha]).unwrap_or_default();
+    let author_name =
+        git_output_in_repo(repo_path, &["show", "-s", "--format=%an", sha]).unwrap_or_default();
+    let authored_at =
+        git_output_in_repo(repo_path, &["show", "-s", "--format=%aI", sha]).unwrap_or_default();
     let patch = git_output_in_repo(
         repo_path,
         &[

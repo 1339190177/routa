@@ -254,7 +254,11 @@ async fn fork_session(
                 mem.cwd.clone(),
             )
         } else if let Ok(Some(row)) = state.acp_session_store.get(&session_id).await {
-            (row.provider.clone(), row.workspace_id.clone(), row.cwd.clone())
+            (
+                row.provider.clone(),
+                row.workspace_id.clone(),
+                row.cwd.clone(),
+            )
         } else {
             return Err(ServerError::NotFound(format!(
                 "Session {} not found",
@@ -266,17 +270,19 @@ async fn fork_session(
 
     state
         .acp_session_store
-        .create(routa_core::store::acp_session_store::CreateAcpSessionParams {
-            id: &new_id,
-            cwd: &cwd,
-            branch: None,
-            workspace_id: &workspace_id,
-            provider: provider.as_deref(),
-            role: None,
-            custom_command: None,
-            custom_args: None,
-            parent_session_id: Some(&session_id),
-        })
+        .create(
+            routa_core::store::acp_session_store::CreateAcpSessionParams {
+                id: &new_id,
+                cwd: &cwd,
+                branch: None,
+                workspace_id: &workspace_id,
+                provider: provider.as_deref(),
+                role: None,
+                custom_command: None,
+                custom_args: None,
+                parent_session_id: Some(&session_id),
+            },
+        )
         .await
         .map_err(|e| ServerError::Internal(format!("Failed to create forked session: {}", e)))?;
 

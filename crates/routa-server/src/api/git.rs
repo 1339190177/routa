@@ -17,15 +17,15 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/stage", post(stage_files))
         .route("/unstage", post(unstage_files))
-    .route("/discard", post(discard_changes))
+        .route("/discard", post(discard_changes))
         .route("/commit", post(create_commit))
         .route("/commits", axum::routing::get(get_commits))
-    .route("/commits/{sha}/diff", get(get_commit_diff))
-    .route("/diff", get(get_file_diff))
-    .route("/pull", post(pull_commits_handler))
-    .route("/rebase", post(rebase_branch_handler))
-    .route("/reset", post(reset_branch_handler))
-    .route("/export", post(export_changes_handler))
+        .route("/commits/{sha}/diff", get(get_commit_diff))
+        .route("/diff", get(get_file_diff))
+        .route("/pull", post(pull_commits_handler))
+        .route("/rebase", post(rebase_branch_handler))
+        .route("/reset", post(reset_branch_handler))
+        .route("/export", post(export_changes_handler))
 }
 
 pub fn read_router() -> Router<AppState> {
@@ -522,11 +522,10 @@ async fn discard_changes(
     let files = req.files;
     let discarded_files = files.clone();
 
-    let result = tokio::task::spawn_blocking(move || {
-        routa_core::git::discard_changes(&repo_path, &files)
-    })
-    .await
-    .map_err(|error| ServerError::Internal(error.to_string()))?;
+    let result =
+        tokio::task::spawn_blocking(move || routa_core::git::discard_changes(&repo_path, &files))
+            .await
+            .map_err(|error| ServerError::Internal(error.to_string()))?;
 
     match result {
         Ok(()) => Ok((
@@ -589,7 +588,10 @@ async fn get_commit_diff(
     Query(query): Query<GetCommitDiffQuery>,
 ) -> Result<Json<GetCommitDiffResponse>, ServerError> {
     let sha = resolve_commit_sha(Some(&sha))?;
-    let path = query.path.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
+    let path = query
+        .path
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     if let Some(path_value) = path.as_deref() {
         validate_git_file_path(path_value).map_err(ServerError::BadRequest)?;
     }
@@ -678,9 +680,10 @@ async fn rebase_branch_handler(
         .to_string();
     let repo_path = resolve_codebase_repo_path(&state, &workspace_id, &codebase_id).await?;
 
-    let result = tokio::task::spawn_blocking(move || routa_core::git::rebase_branch(&repo_path, &onto))
-        .await
-        .map_err(|error| ServerError::Internal(error.to_string()))?;
+    let result =
+        tokio::task::spawn_blocking(move || routa_core::git::rebase_branch(&repo_path, &onto))
+            .await
+            .map_err(|error| ServerError::Internal(error.to_string()))?;
 
     match result {
         Ok(()) => Ok((
@@ -710,7 +713,9 @@ async fn reset_branch_handler(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| ServerError::BadRequest("Target commit/branch 'to' is required".to_string()))?
+        .ok_or_else(|| {
+            ServerError::BadRequest("Target commit/branch 'to' is required".to_string())
+        })?
         .to_string();
     let mode = req
         .mode
@@ -805,7 +810,10 @@ async fn export_changes_handler(
 
     let result = tokio::task::spawn_blocking(move || {
         if format == "patch" {
-            git_command_output(&repo_path, &["diff", "--cached", "--no-color", "--no-ext-diff"])
+            git_command_output(
+                &repo_path,
+                &["diff", "--cached", "--no-color", "--no-ext-diff"],
+            )
         } else if files.is_empty() {
             git_command_output(&repo_path, &["diff", "--no-color", "--no-ext-diff"])
         } else {

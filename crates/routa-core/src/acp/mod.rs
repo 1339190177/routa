@@ -1051,7 +1051,12 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec!["acp".to_string()],
             description: "OpenCode AI coding agent".to_string(),
             env_bin_override: Some("OPENCODE_BIN".to_string()),
-            resume: Some(ResumeCapability { supported: true, mode: "replay".to_string(), supports_fork: None, supports_list: None }),
+            resume: Some(ResumeCapability {
+                supported: true,
+                mode: "replay".to_string(),
+                supports_fork: None,
+                supports_list: None,
+            }),
         },
         AcpPreset {
             id: "gemini".to_string(),
@@ -1069,7 +1074,12 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec![],
             description: "OpenAI Codex CLI (codex-acp wrapper)".to_string(),
             env_bin_override: Some("CODEX_ACP_BIN".to_string()),
-            resume: Some(ResumeCapability { supported: true, mode: "both".to_string(), supports_fork: None, supports_list: Some(true) }),
+            resume: Some(ResumeCapability {
+                supported: true,
+                mode: "both".to_string(),
+                supports_fork: None,
+                supports_list: Some(true),
+            }),
         },
         AcpPreset {
             id: "copilot".to_string(),
@@ -1129,7 +1139,12 @@ pub fn get_presets() -> Vec<AcpPreset> {
             args: vec![],
             description: "Anthropic Claude Code (stream-json protocol)".to_string(),
             env_bin_override: Some("CLAUDE_BIN".to_string()),
-            resume: Some(ResumeCapability { supported: true, mode: "replay".to_string(), supports_fork: Some(true), supports_list: None }),
+            resume: Some(ResumeCapability {
+                supported: true,
+                mode: "replay".to_string(),
+                supports_fork: Some(true),
+                supports_list: None,
+            }),
         },
     ]
 }
