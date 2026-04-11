@@ -214,7 +214,7 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
         };
         let compact_height = inner.height <= 8;
         let medium_height = inner.height <= 13;
-        let bar_width = inner.width.saturating_sub(36).max(8).min(28) as usize;
+        let bar_width = inner.width.saturating_sub(36).clamp(8, 28) as usize;
 
         lines.push(Line::from(vec![
             Span::styled("Score: ", Style::default().fg(colors.muted)),
@@ -305,7 +305,7 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
             4
         };
         for dim in snapshot.dimensions.iter().take(dimension_limit) {
-            let dim_bar_width = inner.width.saturating_sub(28).max(8).min(24) as usize;
+            let dim_bar_width = inner.width.saturating_sub(28).clamp(8, 24) as usize;
             let warning = if dim.hard_gate_failures.is_empty() {
                 String::new()
             } else {
@@ -365,7 +365,7 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
                     format!("Top {slow_metric_limit} slowest metrics:"),
                     Style::default().fg(colors.text),
                 )]));
-                let metric_bar_width = inner.width.saturating_sub(48).max(8).min(20) as usize;
+                let metric_bar_width = inner.width.saturating_sub(48).clamp(8, 20) as usize;
                 for metric in slowest_metrics {
                     let mut metric_name = metric.name.clone();
                     if metric_name.is_empty() {
