@@ -377,6 +377,15 @@ describe("KanbanTab GitHub import", () => {
   it("imports backlog issues without creating a task-level provider override", async () => {
     desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url === "/api/github/access") {
+        return {
+          ok: true,
+          json: async () => ({
+            available: true,
+            source: "gh",
+          }),
+        } as Response;
+      }
       if (url === "/api/github/issues?workspaceId=workspace-1&codebaseId=codebase-1") {
         return {
           ok: true,
@@ -487,7 +496,7 @@ describe("KanbanTab GitHub import", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /import issues/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /import issues/i }));
 
     expect(await screen.findByRole("link", { name: /imported issue/i })).toBeTruthy();
     fireEvent.click(screen.getAllByRole("checkbox")[1]!);

@@ -37,6 +37,8 @@ export interface KanbanSettingsModalProps {
   availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
   specialistLanguage: KanbanSpecialistLanguage;
+  githubImportAvailable?: boolean;
+  githubAccessSource?: "env" | "gh" | "none";
   onClose: () => void;
   onClearAll: () => Promise<void>;
   onSave: (
@@ -53,6 +55,8 @@ export function KanbanSettingsModal({
   availableProviders,
   specialists,
   specialistLanguage,
+  githubImportAvailable = false,
+  githubAccessSource = "none",
   onClose,
   onClearAll,
   onSave,
@@ -609,6 +613,26 @@ export function KanbanSettingsModal({
                         </div>
                       </div>
                     </div>
+                  </SectionCard>
+
+                  <SectionCard eyebrow={t.kanban.githubLabel} title={t.kanban.githubImportSettings} description={t.kanban.githubImportSettingsHint}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatPill
+                        label={t.kanban.importGithubIssues}
+                        value={githubImportAvailable ? t.common.enabled : t.common.disabled}
+                        tone={githubImportAvailable ? "emerald" : "slate"}
+                      />
+                      <StatPill
+                        label={t.kanban.githubAccessSource}
+                        value={githubImportAvailable
+                          ? (githubAccessSource === "gh" ? t.kanban.githubAccessGh : t.kanban.githubAccessEnv)
+                          : t.common.unavailable}
+                        tone="slate"
+                      />
+                    </div>
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                      {githubImportAvailable ? t.kanban.githubImportEnabledHint : t.kanban.githubImportDisabledHint}
+                    </p>
                   </SectionCard>
 
                   <SectionCard eyebrow={t.common.import} title={t.kanban.boardTransfer} description={t.kanban.boardTransferHint}>

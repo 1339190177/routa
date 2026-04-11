@@ -19,7 +19,7 @@ use axum::{
 use serde::Deserialize;
 
 use crate::api::tasks_github::{
-    list_github_issues, list_github_pulls, resolve_github_repo_for_codebase,
+    github_access_status, list_github_issues, list_github_pulls, resolve_github_repo_for_codebase,
 };
 use crate::error::ServerError;
 use crate::state::AppState;
@@ -27,6 +27,7 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_workspaces))
+        .route("/access", get(github_access))
         .route("/import", post(import_repo))
         .route("/issues", get(list_issues))
         .route("/pulls", get(list_pulls))
@@ -41,6 +42,14 @@ pub fn router() -> Router<AppState> {
 async fn list_workspaces() -> Json<serde_json::Value> {
     // Desktop mode: no in-memory cache yet — return empty list.
     Json(serde_json::json!({ "workspaces": [] }))
+}
+
+async fn github_access() -> Json<serde_json::Value> {
+    let (source, available) = github_access_status();
+    Json(serde_json::json!({
+        "available": available,
+        "source": source,
+    }))
 }
 
 // ─── Import ──────────────────────────────────────────────────────────────────

@@ -64,6 +64,15 @@ describe("KanbanTab GitHub import merge mode", () => {
   it("merges selected GitHub issues into a single backlog card", async () => {
     desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url === "/api/github/access") {
+        return {
+          ok: true,
+          json: async () => ({
+            available: true,
+            source: "gh",
+          }),
+        } as Response;
+      }
       if (url === "/api/github/issues?workspaceId=workspace-1&codebaseId=codebase-1") {
         return {
           ok: true,
@@ -187,7 +196,7 @@ describe("KanbanTab GitHub import merge mode", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /import issues/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /import issues/i }));
 
     expect(await screen.findByRole("link", { name: /imported issue one/i })).toBeTruthy();
 
@@ -219,6 +228,51 @@ describe("KanbanTab GitHub import merge mode", () => {
           codebaseIds: ["codebase-1"],
         }),
       });
+    });
+  });
+
+  it("hides the import button when GitHub access is unavailable", async () => {
+    desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/github/access") {
+        return {
+          ok: true,
+          json: async () => ({
+            available: false,
+            source: "none",
+          }),
+        } as Response;
+      }
+      throw new Error(`Unexpected desktopAwareFetch: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", vi.fn());
+
+    render(
+      <KanbanTab
+        workspaceId="workspace-1"
+        boards={[board]}
+        tasks={[]}
+        sessions={[]}
+        providers={[]}
+        specialists={[]}
+        codebases={[{
+          id: "codebase-1",
+          workspaceId: "workspace-1",
+          repoPath: "/Users/phodal/repos/routa-js",
+          sourceUrl: "https://github.com/phodal/routa-js",
+          isDefault: true,
+          label: "routa-js",
+          branch: "main",
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /import issues/i })).toBeNull();
     });
   });
 });

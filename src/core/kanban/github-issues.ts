@@ -62,6 +62,27 @@ function getGitHubToken(): string | undefined {
   }
 }
 
+export function getGitHubAccessStatus(): { available: boolean; source: "env" | "gh" | "none" } {
+  const envToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (envToken) {
+    return { available: true, source: "env" };
+  }
+
+  try {
+    const token = getServerBridge()
+      .process
+      .execSync("gh auth token")
+      .trim();
+    if (token) {
+      return { available: true, source: "gh" };
+    }
+  } catch {
+    // Ignore gh CLI lookup failures; callers only need the availability status.
+  }
+
+  return { available: false, source: "none" };
+}
+
 function getHeaders(token?: string) {
   return {
     ...(token ? { Authorization: `token ${token}` } : {}),

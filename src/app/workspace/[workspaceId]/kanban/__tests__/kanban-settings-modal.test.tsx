@@ -135,6 +135,28 @@ describe("KanbanSettingsModal", () => {
     expect(screen.getByDisplayValue("2")).not.toBeNull();
   });
 
+  it("shows GitHub import availability in board settings", () => {
+    render(
+      <KanbanSettingsModal
+        board={board}
+        columnAutomation={{}}
+        availableProviders={[{ id: "claude", name: "Claude Code", description: "Claude Code provider", command: "claude" }]}
+        specialists={[{ id: "verify", name: "Verifier", role: "GATE" }]}
+        specialistLanguage="en"
+        githubImportAvailable
+        githubAccessSource="gh"
+        onClose={vi.fn()}
+        onClearAll={vi.fn(async () => {})}
+        onSave={vi.fn(async () => {})}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Board" }));
+    expect(screen.getByText("GitHub import")).not.toBeNull();
+    expect(screen.getByText("GitHub CLI")).not.toBeNull();
+    expect(screen.getAllByText("Enabled").length).toBeGreaterThan(0);
+  });
+
   it("defaults specialist filtering to kanban in board settings", () => {
     const reviewBoard: KanbanBoardInfo = {
       ...board,

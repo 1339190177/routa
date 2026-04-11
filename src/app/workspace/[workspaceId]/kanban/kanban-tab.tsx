@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type { AcpProviderInfo } from "@/client/acp-client";
 import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import type { UseAcpState, UseAcpActions } from "@/client/hooks/use-acp";
+import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import {
   resolveEffectiveTaskAutomation,
 } from "@/core/kanban/effective-task-automation";
@@ -153,7 +154,10 @@ export function KanbanTab({
     () => codebases.find((codebase) => codebase.isDefault) ?? codebases[0] ?? null,
     [codebases],
   );
-  const githubImportEnabled = codebases.length > 0;
+  const hasGitHubCodebase = useMemo(
+    () => codebases.some((codebase) => codebase.sourceUrl?.includes("github.com")),
+    [codebases],
+  );
   const githubAvailable = Boolean(defaultCodebase?.sourceUrl?.includes("github.com"));
 
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(defaultBoardId);
@@ -161,6 +165,8 @@ export function KanbanTab({
   const autoPatchedTasksRef = useRef(new Set<string>());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGitHubImportModal, setShowGitHubImportModal] = useState(false);
+  const [githubAccessAvailable, setGitHubAccessAvailable] = useState(false);
+  const [githubAccessSource, setGitHubAccessSource] = useState<"env" | "gh" | "none">("none");
   const [draft, setDraft] = useState<TaskDraft>({
     ...EMPTY_DRAFT,
     createGitHubIssue: false,
@@ -381,6 +387,37 @@ export function KanbanTab({
     specialistLanguage,
     workspaceId,
   ]);
+
+  useEffect(() => {
+    if (!hasGitHubCodebase) {
+      setGitHubAccessAvailable(false);
+      setGitHubAccessSource("none");
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await desktopAwareFetch("/api/github/access", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (cancelled) return;
+
+        const available = response.ok && payload?.available === true;
+        const source = payload?.source === "env" || payload?.source === "gh" ? payload.source : "none";
+        setGitHubAccessAvailable(available);
+        setGitHubAccessSource(available ? source : "none");
+      } catch {
+        if (cancelled) return;
+        setGitHubAccessAvailable(false);
+        setGitHubAccessSource("none");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasGitHubCodebase]);
 
   useEffect(() => {
     setLocalBoards(boards);
@@ -1514,7 +1551,7 @@ export function KanbanTab({
     boards: visibleBoards,
     selectedBoardId,
     onSelectBoard: setSelectedBoardId,
-    githubImportEnabled,
+    githubImportVisible: hasGitHubCodebase && githubAccessAvailable,
     onOpenGitHubImport: () => setShowGitHubImportModal(true),
     onRefresh,
     onOpenSettings: board ? () => setShowSettings(true) : undefined,
@@ -1545,6 +1582,8 @@ export function KanbanTab({
     availableProviders,
     specialists,
     specialistLanguage,
+    githubImportAvailable: hasGitHubCodebase && githubAccessAvailable,
+    githubAccessSource,
     onClose: () => setShowSettings(false),
     onClearAll: async () => {
       const response = await fetch(`/api/tasks?workspaceId=${encodeURIComponent(workspaceId)}`, {

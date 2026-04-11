@@ -98,6 +98,36 @@ fn github_token() -> Option<String> {
         })
 }
 
+pub fn github_access_status() -> (&'static str, bool) {
+    if std::env::var("GITHUB_TOKEN")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .is_some()
+        || std::env::var("GH_TOKEN")
+            .ok()
+            .filter(|value| !value.is_empty())
+            .is_some()
+    {
+        return ("env", true);
+    }
+
+    let output = match Command::new("gh").args(["auth", "token"]).output() {
+        Ok(output) => output,
+        Err(_) => return ("none", false),
+    };
+
+    if !output.status.success() {
+        return ("none", false);
+    }
+
+    let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if token.is_empty() {
+        ("none", false)
+    } else {
+        ("gh", true)
+    }
+}
+
 fn github_request(
     request: reqwest::RequestBuilder,
     token: Option<String>,

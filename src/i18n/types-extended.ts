@@ -629,6 +629,14 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     exportSuccess: string;
     fileChanges: string;
     fromPath: string;
+    githubAccessEnv: string;
+    githubAccessGh: string;
+    githubAccessSource: string;
+    githubImportDisabledHint: string;
+    githubImportEnabledHint: string;
+    githubImportSettings: string;
+    githubImportSettingsHint: string;
+    githubLabel: string;
     hide: string;
     hiddenFromBoard: string;
     importSuccess: string;
