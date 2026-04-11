@@ -70,29 +70,29 @@ If you want the shortest install path, read [Quick Start](./quick-start).
 ## Documentation Map
 
 <div className="routa-doc-map">
-  <a href="./quick-start">
-    <strong>Quick Start</strong>
-    Install and launch Routa through Desktop, CLI, or Web, with emphasis on Desktop and CLI.
+  <a href="./getting-started">
+    <strong>Getting Started</strong>
+    The start path: overview, quick start, and changelog entry points.
   </a>
-  <a href="./ARCHITECTURE">
-    <strong>Architecture</strong>
-    System boundaries, runtime surfaces, domain model, and cross-backend invariants.
+  <a href="./core-concepts">
+    <strong>Core Concepts</strong>
+    Workspace, sessions, Kanban, Team, providers, and the product model.
   </a>
-  <a href="./design-docs">
-    <strong>Design Docs</strong>
-    Durable design intent, migration rules, and repository-level constraints.
+  <a href="./platforms">
+    <strong>Platforms</strong>
+    Desktop, CLI, and Web as separate runtime surfaces and onboarding paths.
   </a>
-  <a href="./product-specs/FEATURE_TREE">
-    <strong>Product Specs</strong>
-    Generated route and API surface index for the current product.
+  <a href="./configuration">
+    <strong>Configuration</strong>
+    Providers, models, role defaults, and environment variables.
   </a>
-  <a href="./specialists">
-    <strong>Specialists</strong>
-    Built-in agent roles, responsibilities, and generated specialist reference pages.
+  <a href="./deployment">
+    <strong>Deployment</strong>
+    Release artifacts, downloadable builds, and maintainer publishing guidance.
   </a>
-  <a href="./releases/v0.2.5-release-notes">
-    <strong>Releases</strong>
-    Version notes for shipped milestones and notable platform changes.
+  <a href="./reference">
+    <strong>Reference</strong>
+    Product specs, specialists, release process, and coding conventions.
   </a>
 </div>
 

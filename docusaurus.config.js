@@ -60,46 +60,39 @@ module.exports = {
       items: [
         {
           type: "doc",
-          docId: "quick-start",
-          label: "Quick Start",
+          docId: "getting-started/index",
+          label: "Getting Started",
           position: "left",
         },
         {
-          label: "Developer Guide",
+          type: "doc",
+          docId: "core-concepts/index",
+          label: "Core Concepts",
           position: "left",
-          items: [
-            {
-              label: "Project Structure",
-              href: "https://github.com/phodal/routa/blob/main/README.md#repository-map",
-            },
-            {
-              type: "doc",
-              docId: "ARCHITECTURE",
-              label: "Architecture",
-            },
-            {
-              type: "doc",
-              docId: "coding-style",
-              label: "Code Style",
-            },
-            {
-              label: "Git Workflow",
-              href: "https://github.com/phodal/routa/blob/main/AGENTS.md#git-discipline",
-            },
-            {
-              label: "Testing",
-              href: "https://github.com/phodal/routa/blob/main/docs/fitness/README.md",
-            },
-            {
-              type: "doc",
-              docId: "release-guide",
-              label: "Deployment",
-            },
-            {
-              label: "Contributing",
-              href: "https://github.com/phodal/routa/blob/main/CONTRIBUTING.md",
-            },
-          ],
+        },
+        {
+          type: "doc",
+          docId: "platforms/index",
+          label: "Platforms",
+          position: "left",
+        },
+        {
+          type: "doc",
+          docId: "deployment/index",
+          label: "Deployment",
+          position: "left",
+        },
+        {
+          type: "doc",
+          docId: "configuration/index",
+          label: "Configuration",
+          position: "left",
+        },
+        {
+          type: "doc",
+          docId: "reference/index",
+          label: "Reference",
+          position: "left",
         },
         {
           type: "doc",
@@ -123,8 +116,12 @@ module.exports = {
       style: "dark",
       links: [
         {
-          title: "Get Started",
+          title: "Getting Started",
           items: [
+            {
+              label: "Overview",
+              to: "/",
+            },
             {
               label: "Quick Start",
               to: "/quick-start",
@@ -159,7 +156,7 @@ module.exports = {
             },
             {
               label: "Deployment",
-              to: "/release-guide",
+              to: "/deployment",
             },
             {
               label: "Contributing",
@@ -168,19 +165,27 @@ module.exports = {
           ],
         },
         {
-          title: "System",
+          title: "Learn",
           items: [
             {
-              label: "Product Specs",
-              to: "/product-specs/FEATURE_TREE",
+              label: "Core Concepts",
+              to: "/core-concepts",
             },
             {
-              label: "Specialists",
-              to: "/specialists",
+              label: "Platforms",
+              to: "/platforms",
             },
             {
-              label: "Releases",
-              to: "/releases/v0.2.5-release-notes",
+              label: "Configuration",
+              to: "/configuration",
+            },
+            {
+              label: "Deployment",
+              to: "/deployment",
+            },
+            {
+              label: "Reference",
+              to: "/reference",
             },
           ],
         },
