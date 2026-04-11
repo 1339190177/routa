@@ -1131,10 +1131,14 @@ pub(super) fn load_diff_text(
     rel_path: &str,
     state_code: &str,
 ) -> Result<Option<String>> {
-    let path = Path::new(repo_root).join(rel_path);
-    if crate::observe::entry_kind_for_repo_path(Path::new(repo_root), rel_path).is_submodule() {
-        return load_submodule_diff_text(repo_root, rel_path);
+    if let Some((submodule_path, nested_rel_path)) = submodule_context(repo_root, rel_path) {
+        if nested_rel_path.is_empty() {
+            return load_submodule_diff_text(repo_root, &submodule_path);
+        }
+        return load_submodule_nested_diff_text(repo_root, &submodule_path, &nested_rel_path, state_code);
     }
+
+    let path = Path::new(repo_root).join(rel_path);
     if std::fs::metadata(&path)
         .map(|metadata| metadata.is_dir())
         .unwrap_or(false)
@@ -1184,6 +1188,31 @@ pub(super) fn load_diff_text(
     }
 }
 
+fn submodule_context(repo_root: &str, rel_path: &str) -> Option<(String, String)> {
+    let repo_root = Path::new(repo_root);
+    let rel_path = rel_path.replace('\\', "/");
+
+    if crate::observe::entry_kind_for_repo_path(repo_root, &rel_path).is_submodule() {
+        return Some((rel_path, String::new()));
+    }
+
+    let mut current = Path::new(&rel_path).parent();
+    while let Some(parent) = current {
+        let parent_rel = parent.to_string_lossy().replace('\\', "/");
+        if crate::observe::entry_kind_for_repo_path(repo_root, &parent_rel).is_submodule() {
+            let nested_rel = Path::new(&rel_path)
+                .strip_prefix(parent)
+                .ok()?
+                .to_string_lossy()
+                .replace('\\', "/");
+            return Some((parent_rel, nested_rel));
+        }
+        current = parent.parent();
+    }
+
+    None
+}
+
 fn load_submodule_diff_text(repo_root: &str, rel_path: &str) -> Result<Option<String>> {
     let submodule_root = Path::new(repo_root).join(rel_path);
     if !submodule_root.exists() {
@@ -1219,6 +1248,51 @@ fn load_submodule_diff_text(repo_root: &str, rel_path: &str) -> Result<Option<St
     out.push(String::new());
     out.extend(entries.into_iter().map(|line| line.to_string()));
     Ok(Some(out.join("\n")))
+}
+
+fn load_submodule_nested_diff_text(
+    repo_root: &str,
+    submodule_path: &str,
+    nested_rel_path: &str,
+    state_code: &str,
+) -> Result<Option<String>> {
+    let submodule_root = Path::new(repo_root).join(submodule_path);
+    let nested_path = submodule_root.join(nested_rel_path);
+
+    if state_code == "untracked" {
+        if !nested_path.exists() {
+            return Ok(None);
+        }
+        let content = std::fs::read_to_string(&nested_path).context("read untracked submodule file")?;
+        let mut out = Vec::new();
+        out.push(format!("+++ {nested_rel_path}"));
+        for line in content.lines().take(200) {
+            out.push(format!("+{line}"));
+        }
+        return Ok(Some(out.join("\n")));
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&submodule_root)
+        .arg("diff")
+        .arg("--no-ext-diff")
+        .arg("--no-color")
+        .arg("--")
+        .arg(nested_rel_path)
+        .output()
+        .context("run submodule nested git diff")?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let text = String::from_utf8(output.stdout).context("decode submodule nested diff output")?;
+    if text.trim().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(text))
+    }
 }
 
 fn load_file_preview(repo_root: &str, rel_path: &str) -> Result<Option<String>> {

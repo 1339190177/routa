@@ -74,7 +74,10 @@ fn submodule_diff_preview_lists_nested_dirty_entries() {
         .output()
         .expect("register gitlink");
     std::fs::write(
-        submodule_root.join("entrix").join("reporters").join("terminal.py"),
+        submodule_root
+            .join("entrix")
+            .join("reporters")
+            .join("terminal.py"),
         "print('dirty')\n",
     )
     .expect("write dirty file");
@@ -85,6 +88,88 @@ fn submodule_diff_preview_lists_nested_dirty_entries() {
 
     assert!(preview.contains("Submodule: tools/entrix"));
     assert!(preview.contains("terminal.py"));
+}
+
+#[test]
+fn nested_submodule_file_diff_uses_submodule_repo() {
+    let dir = tempdir().expect("tempdir");
+    let repo_root = dir.path();
+    std::process::Command::new("git")
+        .arg("init")
+        .arg(repo_root)
+        .output()
+        .expect("init repo");
+
+    let submodule_root = repo_root.join("tools").join("entrix");
+    std::fs::create_dir_all(submodule_root.join("entrix"))
+        .expect("create submodule dirs");
+    std::process::Command::new("git")
+        .arg("init")
+        .arg(&submodule_root)
+        .output()
+        .expect("init submodule repo");
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(&submodule_root)
+        .arg("config")
+        .arg("user.email")
+        .arg("test@example.com")
+        .output()
+        .expect("config submodule email");
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(&submodule_root)
+        .arg("config")
+        .arg("user.name")
+        .arg("Test User")
+        .output()
+        .expect("config submodule name");
+
+    let nested = submodule_root.join("entrix").join("cli.py");
+    std::fs::write(&nested, "print('before')\n").expect("write initial file");
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(&submodule_root)
+        .arg("add")
+        .arg(".")
+        .output()
+        .expect("stage submodule file");
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(&submodule_root)
+        .arg("commit")
+        .arg("-m")
+        .arg("init")
+        .output()
+        .expect("commit submodule file");
+
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .arg("update-index")
+        .arg("--add")
+        .arg("--info-only")
+        .arg("--cacheinfo")
+        .arg("160000")
+        .arg("a745c6f9664e4525be45e02582e7dc970158ec74")
+        .arg("tools/entrix")
+        .output()
+        .expect("register gitlink");
+
+    std::fs::write(&nested, "print('after')\n").expect("modify nested file");
+
+    let preview = load_diff_text(
+        &repo_root.to_string_lossy(),
+        "tools/entrix/entrix/cli.py",
+        "modify",
+    )
+    .expect("load diff")
+    .expect("preview text");
+
+    assert!(preview.contains("--- a/entrix/cli.py"));
+    assert!(preview.contains("+++ b/entrix/cli.py"));
+    assert!(preview.contains("-print('before')"));
+    assert!(preview.contains("+print('after')"));
 }
 
 #[test]
