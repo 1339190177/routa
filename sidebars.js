@@ -125,14 +125,24 @@ module.exports = {
     },
     {
       type: "category",
-      label: "Deployment",
+      label: "Administration",
       collapsible: false,
       collapsed: false,
       items: [
         {
           type: "doc",
+          id: "administration/index",
+          label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "administration/self-hosting",
+          label: "Self-Hosting",
+        },
+        {
+          type: "doc",
           id: "deployment/index",
-          label: "Deployment Overview",
+          label: "Deployment",
         },
         {
           type: "doc",

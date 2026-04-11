@@ -78,6 +78,12 @@ module.exports = {
         },
         {
           type: "doc",
+          docId: "administration/index",
+          label: "Administration",
+          position: "left",
+        },
+        {
+          type: "doc",
           docId: "configuration/index",
           label: "Configuration",
           position: "left",
@@ -163,6 +169,10 @@ module.exports = {
             {
               label: "Platforms",
               to: "/platforms",
+            },
+            {
+              label: "Administration",
+              to: "/administration",
             },
             {
               label: "Configuration",
