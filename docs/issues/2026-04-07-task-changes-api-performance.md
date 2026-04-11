@@ -3,8 +3,11 @@ date: 2026-04-07
 title: Task Changes API Performance Bottleneck
 status: resolved
 severity: high
+area: kanban
 affected_component: API - /api/tasks/[taskId]/changes
-github_issue: https://github.com/phodal/routa/issues/385
+github_issue: 385
+github_state: closed
+github_url: https://github.com/phodal/routa/issues/385
 ---
 
 # Task Changes API Performance Bottleneck

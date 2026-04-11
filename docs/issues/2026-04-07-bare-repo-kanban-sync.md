@@ -3,8 +3,11 @@ date: 2026-04-07
 title: Bare Git Repository Handling in Kanban Workflow
 status: resolved
 severity: medium
+area: kanban
 affected_component: Kanban - Auto-sync
-github_issue: https://github.com/phodal/routa/issues/386
+github_issue: 386
+github_state: closed
+github_url: https://github.com/phodal/routa/issues/386
 ---
 
 # Bare Git Repository Handling in Kanban Workflow
