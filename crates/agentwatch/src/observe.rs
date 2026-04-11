@@ -1,5 +1,5 @@
 use crate::db::Db;
-use crate::models::{AttributionConfidence, FileEventRecord};
+use crate::models::{AttributionConfidence, EntryKind, FileEventRecord};
 use crate::repo::RepoContext;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
@@ -13,7 +13,7 @@ pub struct Snapshot {
     pub changed_paths: Vec<String>,
 }
 
-pub fn scan_repo(ctx: &RepoContext) -> Result<Vec<(String, String, Option<i64>)>> {
+pub fn scan_repo(ctx: &RepoContext) -> Result<Vec<(String, String, Option<i64>, EntryKind)>> {
     let output = Command::new("git")
         .arg("-C")
         .arg(&ctx.repo_root)
@@ -47,7 +47,12 @@ pub fn scan_repo(ctx: &RepoContext) -> Result<Vec<(String, String, Option<i64>)>
                 .and_then(|m| m.modified().ok())
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|dur| dur.as_millis() as i64);
-            out.push((rel_path, state_code.to_string(), mtime_ms));
+            out.push((
+                rel_path.clone(),
+                state_code.to_string(),
+                mtime_ms,
+                entry_kind_for_path(&ctx.repo_root.join(&rel_path)),
+            ));
         }
     }
     Ok(out)
@@ -212,4 +217,49 @@ fn normalize_rel_path(
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|_| PathBuf::from(fallback));
     Ok(rel.to_string_lossy().replace('\\', "/"))
+}
+
+pub fn entry_kind_for_path(path: &Path) -> EntryKind {
+    match std::fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => EntryKind::Directory,
+        _ => EntryKind::File,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn detects_plain_directories() {
+        let dir = tempdir().expect("tempdir");
+        let nested = dir.path().join("skills").join("developer-onboarding");
+        std::fs::create_dir_all(&nested).expect("directory");
+
+        assert_eq!(entry_kind_for_path(&nested), EntryKind::Directory);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn follows_symlinked_directories() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().expect("tempdir");
+        let target = dir
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join("developer-onboarding");
+        std::fs::create_dir_all(&target).expect("target directory");
+        let link = dir
+            .path()
+            .join(".kiro")
+            .join("skills")
+            .join("developer-onboarding");
+        std::fs::create_dir_all(link.parent().expect("link parent")).expect("link parent");
+        symlink(&target, &link).expect("symlink");
+
+        assert_eq!(entry_kind_for_path(&link), EntryKind::Directory);
+    }
 }

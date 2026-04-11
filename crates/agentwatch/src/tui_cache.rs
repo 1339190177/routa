@@ -22,8 +22,10 @@ pub(super) struct DetailCacheEntry {
 #[derive(Clone, Debug)]
 pub(super) struct FileFactsEntry {
     pub(super) key: String,
+    pub(super) entry_kind: crate::models::EntryKind,
     pub(super) line_count: usize,
     pub(super) byte_size: u64,
+    pub(super) child_count: Option<usize>,
     pub(super) git_change_count: usize,
 }
 
@@ -306,9 +308,20 @@ pub(super) fn short_state_code(state_code: &str) -> &'static str {
 
 fn compute_diff_stat(repo_root: &str, rel_path: &str, state_code: &str) -> DiffStatSummary {
     let status = short_state_code(state_code).to_string();
+    let path = Path::new(repo_root).join(rel_path);
+
+    if std::fs::metadata(&path)
+        .map(|metadata| metadata.is_dir())
+        .unwrap_or(false)
+    {
+        return DiffStatSummary {
+            status,
+            additions: None,
+            deletions: None,
+        };
+    }
 
     if state_code == "untracked" || state_code == "add" {
-        let path = Path::new(repo_root).join(rel_path);
         let added = std::fs::read_to_string(path)
             .ok()
             .map(|text| text.lines().count())
@@ -456,16 +469,35 @@ fn queue_command(pending: &mut PendingCommands, command: BackgroundCommand) {
 
 fn load_file_facts(repo_root: &str, rel_path: &str, version: i64) -> FileFactsEntry {
     let path = Path::new(repo_root).join(rel_path);
+    let entry_kind = if std::fs::metadata(&path)
+        .map(|metadata| metadata.is_dir())
+        .unwrap_or(false)
+    {
+        crate::models::EntryKind::Directory
+    } else {
+        crate::models::EntryKind::File
+    };
     let content = std::fs::read_to_string(&path).ok();
-    let line_count = content
-        .as_ref()
-        .map(|text| text.lines().count())
-        .unwrap_or(0);
+    let line_count = if entry_kind.is_directory() {
+        0
+    } else {
+        content
+            .as_ref()
+            .map(|text| text.lines().count())
+            .unwrap_or(0)
+    };
     let byte_size = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
+    let child_count = if entry_kind.is_directory() {
+        std::fs::read_dir(&path).ok().map(|entries| entries.count())
+    } else {
+        None
+    };
     FileFactsEntry {
         key: facts_cache_key(rel_path, version),
+        entry_kind,
         line_count,
         byte_size,
+        child_count,
         git_change_count: git_file_change_count(repo_root, rel_path).unwrap_or(0),
     }
 }
@@ -499,6 +531,19 @@ pub(super) fn load_diff_text(
     state_code: &str,
 ) -> Result<Option<String>> {
     let path = Path::new(repo_root).join(rel_path);
+    if std::fs::metadata(&path)
+        .map(|metadata| metadata.is_dir())
+        .unwrap_or(false)
+    {
+        let child_count = std::fs::read_dir(&path)
+            .ok()
+            .map(|entries| entries.count())
+            .unwrap_or(0);
+        return Ok(Some(format!(
+            "<directory: {} entries>\n{}",
+            child_count, rel_path
+        )));
+    }
     if state_code == "untracked" {
         if !path.exists() {
             return Ok(None);
@@ -539,6 +584,29 @@ fn load_file_preview(repo_root: &str, rel_path: &str) -> Result<Option<String>> 
     let path = Path::new(repo_root).join(rel_path);
     if !path.exists() {
         return Ok(None);
+    }
+    if std::fs::metadata(&path)
+        .map(|metadata| metadata.is_dir())
+        .unwrap_or(false)
+    {
+        let mut entries = std::fs::read_dir(&path)
+            .context("read directory preview")?
+            .filter_map(|entry| entry.ok())
+            .map(|entry| {
+                let mut name = entry.file_name().to_string_lossy().to_string();
+                if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                    name.push('/');
+                }
+                name
+            })
+            .collect::<Vec<_>>();
+        entries.sort();
+        let preview = if entries.is_empty() {
+            "<directory is empty>".to_string()
+        } else {
+            entries.into_iter().take(200).collect::<Vec<_>>().join("\n")
+        };
+        return Ok(Some(preview));
     }
     let content = std::fs::read_to_string(path).context("read file preview")?;
     let truncated = content.lines().take(400).collect::<Vec<_>>().join("\n");

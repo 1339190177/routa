@@ -26,6 +26,18 @@ impl AttributionConfidence {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryKind {
+    File,
+    Directory,
+}
+
+impl EntryKind {
+    pub fn is_directory(self) -> bool {
+        matches!(self, EntryKind::Directory)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum HookClient {
     Codex,
@@ -185,6 +197,7 @@ pub struct FileView {
     pub rel_path: String,
     pub dirty: bool,
     pub state_code: String,
+    pub entry_kind: EntryKind,
     pub last_modified_at_ms: i64,
     pub last_session_id: Option<String>,
     pub confidence: AttributionConfidence,

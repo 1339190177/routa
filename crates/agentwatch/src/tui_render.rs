@@ -211,7 +211,7 @@ fn render_files(
                     additions: None,
                     deletions: None,
                 });
-            let (file_name, parent_dir) = split_display_path(&file.rel_path);
+            let (file_name, parent_dir) = split_display_path(file);
             let rows = match density {
                 FileRowDensity::SingleLine => vec![render_file_single_line(
                     selected,
@@ -257,7 +257,7 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
     let colors = palette(state.theme_mode);
     let mut lines = Vec::new();
     if let Some(file) = state.selected_file() {
-        let (file_name, parent_dir) = split_display_path(&file.rel_path);
+        let (file_name, parent_dir) = split_display_path(file);
         lines.push(Line::from(Span::styled(
             shorten_path(&file_name, area.width.saturating_sub(4) as usize),
             Style::default()
@@ -287,18 +287,45 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
         ]));
         if let Some(facts) = cache.file_facts(file) {
             lines.push(Line::from(vec![
-                Span::styled("Lines: ", Style::default().fg(colors.muted)),
+                Span::styled("Type: ", Style::default().fg(colors.muted)),
                 Span::styled(
-                    facts.line_count.to_string(),
-                    Style::default().fg(colors.text),
-                ),
-                Span::raw("  "),
-                Span::styled("Size: ", Style::default().fg(colors.muted)),
-                Span::styled(
-                    format_bytes(facts.byte_size),
+                    if facts.entry_kind.is_directory() {
+                        "directory"
+                    } else {
+                        "file"
+                    },
                     Style::default().fg(colors.text),
                 ),
             ]));
+            if facts.entry_kind.is_directory() {
+                lines.push(Line::from(vec![
+                    Span::styled("Entries: ", Style::default().fg(colors.muted)),
+                    Span::styled(
+                        facts.child_count.unwrap_or(0).to_string(),
+                        Style::default().fg(colors.text),
+                    ),
+                    Span::raw("  "),
+                    Span::styled("Size: ", Style::default().fg(colors.muted)),
+                    Span::styled(
+                        format_bytes(facts.byte_size),
+                        Style::default().fg(colors.text),
+                    ),
+                ]));
+            } else {
+                lines.push(Line::from(vec![
+                    Span::styled("Lines: ", Style::default().fg(colors.muted)),
+                    Span::styled(
+                        facts.line_count.to_string(),
+                        Style::default().fg(colors.text),
+                    ),
+                    Span::raw("  "),
+                    Span::styled("Size: ", Style::default().fg(colors.muted)),
+                    Span::styled(
+                        format_bytes(facts.byte_size),
+                        Style::default().fg(colors.text),
+                    ),
+                ]));
+            }
             lines.push(Line::from(vec![
                 Span::styled("Git changes: ", Style::default().fg(colors.muted)),
                 Span::styled(
@@ -735,7 +762,7 @@ fn render_file_single_line(
     focused: bool,
     area_width: usize,
 ) -> Line<'static> {
-    let (_, parent_dir) = split_display_path(&file.rel_path);
+    let (_, parent_dir) = split_display_path(file);
     let name_width = area_width.saturating_sub(25).clamp(30, 56);
     let dir_width = area_width.saturating_sub(name_width + 21).clamp(8, 12);
     let mut spans = vec![Span::styled(
@@ -799,12 +826,15 @@ fn file_window_start(total: usize, selected: usize, page_size: usize) -> usize {
     centered.min(total.saturating_sub(page_size))
 }
 
-fn split_display_path(path: &str) -> (String, String) {
-    let path = Path::new(path);
-    let file_name = path
+fn split_display_path(file: &crate::models::FileView) -> (String, String) {
+    let path = Path::new(&file.rel_path);
+    let mut file_name = path
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string_lossy().to_string());
+    if file.entry_kind.is_directory() && !file_name.ends_with('/') {
+        file_name.push('/');
+    }
     let parent = path
         .parent()
         .map(|parent| {
@@ -901,4 +931,32 @@ fn shorten_path(path: &str, max_len: usize) -> String {
     }
     let keep = max_len.saturating_sub(3);
     format!("...{}", &path[path.len().saturating_sub(keep)..])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_display_path;
+    use crate::models::{AttributionConfidence, EntryKind, FileView};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn split_display_path_marks_directories() {
+        let file = FileView {
+            rel_path: ".kiro/skills/developer-onboarding".to_string(),
+            dirty: true,
+            state_code: "untracked".to_string(),
+            entry_kind: EntryKind::Directory,
+            last_modified_at_ms: 0,
+            last_session_id: None,
+            confidence: AttributionConfidence::Unknown,
+            conflicted: false,
+            touched_by: BTreeSet::new(),
+            recent_events: Vec::new(),
+        };
+
+        let (name, parent) = split_display_path(&file);
+
+        assert_eq!(name, "developer-onboarding/");
+        assert_eq!(parent, ".kiro/skills");
+    }
 }

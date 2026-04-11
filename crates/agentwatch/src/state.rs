@@ -1,7 +1,7 @@
 use crate::models::{
-    AgentStats, AttributionConfidence, AttributionEvent, DetectedAgent, EventLogEntry, EventSource,
-    FileView, GitEvent, HookEvent, RuntimeMessage, SessionView, DEFAULT_INFERENCE_WINDOW_MS,
-    EVENT_LOG_LIMIT,
+    AgentStats, AttributionConfidence, AttributionEvent, DetectedAgent, EntryKind, EventLogEntry,
+    EventSource, FileView, GitEvent, HookEvent, RuntimeMessage, SessionView,
+    DEFAULT_INFERENCE_WINDOW_MS, EVENT_LOG_LIMIT,
 };
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -149,10 +149,10 @@ impl RuntimeState {
         self.clamp_selection();
     }
 
-    pub fn sync_dirty_files(&mut self, dirty: Vec<(String, String, Option<i64>)>) {
+    pub fn sync_dirty_files(&mut self, dirty: Vec<(String, String, Option<i64>, EntryKind)>) {
         let now_ms = Utc::now().timestamp_millis();
         let inferred_session_id = self.single_active_session_id(now_ms);
-        let seen: BTreeSet<String> = dirty.iter().map(|(p, _, _)| p.clone()).collect();
+        let seen: BTreeSet<String> = dirty.iter().map(|(p, _, _, _)| p.clone()).collect();
         let mut watch_events = Vec::new();
         let mut attrib_events = Vec::new();
 
@@ -164,7 +164,7 @@ impl RuntimeState {
             }
         }
 
-        for (rel_path, state_code, mtime_ms) in dirty {
+        for (rel_path, state_code, mtime_ms, entry_kind) in dirty {
             let file = self
                 .files
                 .entry(rel_path.clone())
@@ -172,6 +172,7 @@ impl RuntimeState {
                     rel_path: rel_path.clone(),
                     dirty: true,
                     state_code: state_code.clone(),
+                    entry_kind,
                     last_modified_at_ms: now_ms,
                     last_session_id: None,
                     confidence: AttributionConfidence::Unknown,
@@ -184,6 +185,7 @@ impl RuntimeState {
             let previous_mtime = file.last_modified_at_ms;
             file.dirty = true;
             file.state_code = state_code.clone();
+            file.entry_kind = entry_kind;
             if let Some(mtime) = mtime_ms {
                 file.last_modified_at_ms = mtime;
             }
@@ -628,6 +630,7 @@ impl RuntimeState {
                     rel_path: rel_path.clone(),
                     dirty: true,
                     state_code: "modify".to_string(),
+                    entry_kind: EntryKind::File,
                     last_modified_at_ms: event.observed_at_ms,
                     last_session_id: Some(event.session_id.clone()),
                     confidence: AttributionConfidence::Exact,
@@ -687,6 +690,7 @@ impl RuntimeState {
                 rel_path: event.rel_path.clone(),
                 dirty: true,
                 state_code: "modify".to_string(),
+                entry_kind: EntryKind::File,
                 last_modified_at_ms: event.observed_at_ms,
                 last_session_id: Some(event.session_id.clone()),
                 confidence: AttributionConfidence::from_str(&event.confidence),

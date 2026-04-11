@@ -1,7 +1,7 @@
 use super::*;
 use crate::models::{
-    AttributionConfidence, DetectedAgent, EventLogEntry, EventSource, FileView, RuntimeMessage,
-    RuntimeServiceInfo, SessionView,
+    AttributionConfidence, DetectedAgent, EntryKind, EventLogEntry, EventSource, FileView,
+    RuntimeMessage, RuntimeServiceInfo, SessionView,
 };
 use crate::state::{DetailMode, FileListMode, FocusPane, ThemeMode, UNKNOWN_SESSION_ID};
 use crate::tui::highlight::highlight_code_text;
@@ -62,6 +62,7 @@ fn sample_state() -> RuntimeState {
             rel_path: "crates/agentwatch/src/tui.rs".to_string(),
             dirty: true,
             state_code: "modify".to_string(),
+            entry_kind: EntryKind::File,
             last_modified_at_ms: now - 240_000,
             last_session_id: Some("live-hook-check".to_string()),
             confidence: AttributionConfidence::Exact,
@@ -76,6 +77,7 @@ fn sample_state() -> RuntimeState {
             rel_path: "src/app/api/a2a/card/route.ts".to_string(),
             dirty: true,
             state_code: "delete".to_string(),
+            entry_kind: EntryKind::File,
             last_modified_at_ms: now - 300_000,
             last_session_id: None,
             confidence: AttributionConfidence::Unknown,
@@ -330,6 +332,7 @@ fn sync_dirty_files_rebuilds_unknown_session_and_file_views() {
         "src/app/globals.css".to_string(),
         "modify".to_string(),
         Some(1_700_000_000_000),
+        EntryKind::File,
     )]);
 
     assert_eq!(state.session_items().len(), 1);
