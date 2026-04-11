@@ -4,7 +4,7 @@ module.exports = {
     {
       type: "category",
       label: "Getting Started",
-      collapsible: false,
+      collapsible: true,
       collapsed: false,
       items: [
         {
@@ -27,8 +27,8 @@ module.exports = {
     {
       type: "category",
       label: "Use Routa",
-      collapsible: false,
-      collapsed: false,
+      collapsible: true,
+      collapsed: true,
       items: [
         {
           type: "doc",
@@ -65,8 +65,8 @@ module.exports = {
     {
       type: "category",
       label: "Developer Guide",
-      collapsible: false,
-      collapsed: false,
+      collapsible: true,
+      collapsed: true,
       items: [
         {
           type: "doc",
@@ -128,8 +128,8 @@ module.exports = {
     {
       type: "category",
       label: "Design Docs",
-      collapsible: false,
-      collapsed: false,
+      collapsible: true,
+      collapsed: true,
       items: [
         {
           type: "doc",
@@ -176,8 +176,8 @@ module.exports = {
     {
       type: "category",
       label: "Reference",
-      collapsible: false,
-      collapsed: false,
+      collapsible: true,
+      collapsed: true,
       items: [
         {
           type: "doc",
@@ -209,8 +209,8 @@ module.exports = {
     {
       type: "category",
       label: "What's New",
-      collapsible: false,
-      collapsed: false,
+      collapsible: true,
+      collapsed: true,
       items: [
         {
           type: "doc",
