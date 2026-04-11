@@ -1,50 +1,77 @@
+---
+title: Design Docs
+hide_table_of_contents: true
+---
+
 # Design Docs
 
-Design docs are the canonical home for durable implementation intent in Routa. Use them when
-you need to understand why the system is shaped the way it is, which invariants matter, and
-which product concepts must survive refactors.
+Design docs explain why Routa is shaped the way it is. Read this section when product behavior,
+system boundaries, or long-lived invariants matter more than install steps.
 
-If you are still trying to get Routa running, this is not the right first stop. Go back to
-[Quick Start](/quick-start), [Platforms](/platforms), or [Use Routa](/use-routa).
+If you are still trying to get Routa running, go back to [Quick Start](/quick-start),
+[Platforms](/platforms), or [Use Routa](/use-routa).
 
-## Start Here
+## Choose A Reading Path
 
-If you only want the highest-signal reading path:
+<div className="routa-doc-map">
+  <a href="/routa/ARCHITECTURE">
+    <strong>Architecture</strong>
+    Start here when you need system boundaries, runtime topology, and the web/desktop parity
+    model.
+  </a>
+  <a href="/routa/adr">
+    <strong>Architecture Decisions</strong>
+    Read the ADR index when you need the durable decisions behind providers, workspaces,
+    Kanban automation, and specialist loading.
+  </a>
+  <a href="/routa/design-docs/execution-modes">
+    <strong>Execution Modes</strong>
+    Understand the product meaning of `Session`, `Kanban`, and `Team` before changing workflow
+    behavior.
+  </a>
+  <a href="/routa/design-docs/workspace-centric-redesign">
+    <strong>Workspace-Centric Redesign</strong>
+    Use this to understand the current product shape, shipped changes, and remaining transition
+    debt.
+  </a>
+  <a href="/routa/design-docs/core-beliefs">
+    <strong>Core Beliefs</strong>
+    Read the product and repository principles that should survive refactors and UI changes.
+  </a>
+</div>
 
-1. Read [Architecture](/ARCHITECTURE) for system boundaries.
-2. Read [ADR Index](/adr) for durable decisions and their context.
-3. Read [Execution Modes](./execution-modes.md) for `Session`, `Kanban`, and `Team`.
-4. Read [Workspace-Centric Redesign](./workspace-centric-redesign.md) for the current product shape and transition debt.
+## What You Get From This Section
 
-## Canonical Docs
+<div className="routa-start-grid">
+  <div className="routa-start-card">
+    <span className="routa-start-card__badge">Boundaries</span>
+    <h3>System Shape</h3>
+    <p>Learn which responsibilities belong to the web app, desktop runtime, server, and ACP layer.</p>
+  </div>
+  <div className="routa-start-card">
+    <span className="routa-start-card__badge">Product Model</span>
+    <h3>Core Concepts That Matter</h3>
+    <p>Understand workspaces, repositories, providers, Sessions, Kanban, and Team as durable product objects.</p>
+  </div>
+  <div className="routa-start-card">
+    <span className="routa-start-card__badge">Decision History</span>
+    <h3>Why It Works This Way</h3>
+    <p>Use ADRs and redesign notes when a change would otherwise fight an intentional system decision.</p>
+  </div>
+</div>
 
-### Product Meaning
+## Focused Design Material
 
-| Document | Why read it |
-|---|---|
-| [execution-modes.md](./execution-modes.md) | Defines the product meaning of Sessions, Kanban, and Team |
-| [workspace-centric-redesign.md](./workspace-centric-redesign.md) | Summarizes the workspace-first redesign, shipped surface, and remaining transition debt |
-| [core-beliefs.md](./core-beliefs.md) | Captures the agent-first principles behind repository and product decisions |
+Use these when you already know the main product model and need a narrower topic:
 
-### Repository And Governance
-
-| Document | Why read it |
-|---|---|
-| [golden-rules.md](./golden-rules.md) | Repository-level rules for architecture, documentation, and maintainability |
-| [architecture-rule-dsl.md](./architecture-rule-dsl.md) | Defines the cross-language architecture rule model for validation and fitness tooling |
-
-### Focused Design Work
-
-| Document | Why read it |
-|---|---|
-| [agentwatch-tui.md](./agentwatch-tui.md) | TUI-first runtime model, information architecture, and keybindings for Routa Watch |
-| [harness-trace-learning-phase2.md](./harness-trace-learning-phase2.md) | Next-step design for trace learning and playbook-driven guidance |
+- [agentwatch-tui.md](./agentwatch-tui.md): TUI-first runtime model, information architecture, and keybindings for Routa Watch
+- [harness-trace-learning-phase2.md](./harness-trace-learning-phase2.md): trace learning and playbook-driven guidance
 
 ## Legacy Specs And Migration Status
 
-The repository still contains historical design material under `.kiro/specs/`. Those files are
-useful context, but they are not automatically canonical. This section exists so the public
-design-docs area stays curated instead of turning into a raw archive.
+Historical design material still exists under `.kiro/specs/`, but it is not automatically
+canonical. Keep using this page as the curated entry point instead of treating the raw archive as
+the source of truth.
 
 <details>
 <summary>Legacy Specs Inventory</summary>

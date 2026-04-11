@@ -1,5 +1,6 @@
 ---
 title: Resources
+hide_table_of_contents: true
 ---
 
 # Resources
@@ -7,27 +8,20 @@ title: Resources
 This page collects deeper material that is useful after you already understand the main product
 path.
 
-## Product And Architecture
+## Public Resources
 
 - [Architecture](/ARCHITECTURE)
 - [Design Docs Index](/design-docs)
 - [Architecture Decisions](/adr)
 - [Product Specs](/product-specs/FEATURE_TREE)
-
-## Specialists And Workflows
-
 - [Specialists](/specialists)
-- [Execution Modes](/design-docs/execution-modes)
 - [Common Workflows](/use-routa/common-workflows)
 
-## Release And Maintenance
+## Maintainer Resources
 
 - [Release Guide](/release-guide)
 - [GitHub Releases](https://github.com/phodal/routa/releases)
-- [Contributing](https://github.com/phodal/routa/blob/main/CONTRIBUTING.md)
-
-## Repository References
-
 - [Repository Map](https://github.com/phodal/routa/blob/main/README.md#repository-map)
 - [Code Style](/coding-style)
+- [Contributing](https://github.com/phodal/routa/blob/main/CONTRIBUTING.md)
 - [Git Discipline](https://github.com/phodal/routa/blob/main/AGENTS.md#git-discipline)

@@ -133,6 +133,11 @@ module.exports = {
         },
         {
           type: "doc",
+          id: "adr/README",
+          label: "Architecture Decisions",
+        },
+        {
+          type: "doc",
           id: "design-docs/workspace-centric-redesign",
           label: "Workspace-Centric Redesign",
         },
@@ -162,7 +167,7 @@ module.exports = {
         {
           type: "doc",
           id: "release-guide",
-          label: "Release Guide",
+          label: "Release Guide (Maintainer)",
         },
         {
           type: "doc",

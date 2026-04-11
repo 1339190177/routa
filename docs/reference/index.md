@@ -1,5 +1,6 @@
 ---
 title: Reference Overview
+hide_table_of_contents: true
 ---
 
 # Reference
@@ -7,22 +8,47 @@ title: Reference Overview
 Reference docs are for looking things up after you already know what part of Routa you are
 working with.
 
-## Public Reference
+## Public Lookup
 
-These are the docs most readers should use first:
+These are the reference pages most readers should reach first:
 
-- [Product Specs](/product-specs/FEATURE_TREE): route and endpoint inventory
-- [Specialists](/specialists): built-in specialist catalog
-- [Release Guide](/release-guide): maintainer release flow and distribution details
-- [Resources](/reference/resources): curated external references and supporting material
+<div className="routa-doc-map">
+  <a href="/routa/product-specs/FEATURE_TREE">
+    <strong>Product Specs</strong>
+    Use this when you need route, endpoint, or API surface inventory rather than narrative docs.
+  </a>
+  <a href="/routa/specialists">
+    <strong>Specialists</strong>
+    Look up the built-in specialist catalog and how specialist roles are described.
+  </a>
+  <a href="/routa/reference/resources">
+    <strong>Resources</strong>
+    Open the curated link hub when you already know the area and want deeper supporting material.
+  </a>
+</div>
 
-## Maintainer And Repository Docs
+## Maintainer References
 
-These are useful only when you are extending Routa itself or working on repository process:
+These are useful when you are operating the repository or shipping Routa itself:
 
-- [Code Style](/coding-style): implementation and testing conventions
-- [Contributing](https://github.com/phodal/routa/blob/main/CONTRIBUTING.md): branch, PR, and contribution expectations
-- [Repository Map](https://github.com/phodal/routa/blob/main/README.md#repository-map): quick path-to-purpose inventory
+<div className="routa-doc-map">
+  <a href="/routa/release-guide">
+    <strong>Release Guide</strong>
+    Maintainer release flow, package distribution, and publication steps.
+  </a>
+  <a href="/routa/coding-style">
+    <strong>Code Style</strong>
+    Implementation and testing conventions for repository changes.
+  </a>
+  <a href="https://github.com/phodal/routa/blob/main/CONTRIBUTING.md">
+    <strong>Contributing</strong>
+    Branch, PR, and contribution expectations for Routa itself.
+  </a>
+  <a href="https://github.com/phodal/routa/blob/main/README.md#repository-map">
+    <strong>Repository Map</strong>
+    Fast path-to-purpose inventory for repository areas.
+  </a>
+</div>
 
 ## What Belongs Here
 

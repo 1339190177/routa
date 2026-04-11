@@ -105,11 +105,6 @@ module.exports = {
             },
             {
               type: "doc",
-              docId: "platforms/index",
-              label: "Platforms",
-            },
-            {
-              type: "doc",
               docId: "configuration/index",
               label: "Configuration",
             },
@@ -130,11 +125,6 @@ module.exports = {
             },
             {
               type: "doc",
-              docId: "coding-style",
-              label: "Code Style",
-            },
-            {
-              type: "doc",
               docId: "developer-guide/testing",
               label: "Testing",
             },
@@ -142,16 +132,6 @@ module.exports = {
               type: "doc",
               docId: "deployment/index",
               label: "Deployment",
-            },
-            {
-              type: "doc",
-              docId: "developer-guide/git-workflow",
-              label: "Git Workflow",
-            },
-            {
-              type: "doc",
-              docId: "developer-guide/contributing",
-              label: "Contributing",
             },
           ],
         },

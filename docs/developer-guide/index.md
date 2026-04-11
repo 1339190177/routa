@@ -1,5 +1,6 @@
 ---
 title: Developer Guide Overview
+hide_table_of_contents: true
 ---
 
 # Developer Guide
@@ -10,11 +11,6 @@ first-run path, or running it in their own environment.
 ## Start Here
 
 <div className="routa-doc-map">
-  <a href="/routa/platforms">
-    <strong>Platforms</strong>
-    Compare Desktop, CLI, and Web if you are still choosing the best developer experience for
-    your workflow.
-  </a>
   <a href="/routa/configuration">
     <strong>Configuration</strong>
     Set up providers, models, and environment variables so Routa can actually run useful work.
@@ -32,14 +28,13 @@ first-run path, or running it in their own environment.
     <strong>Architecture</strong>
     Read the canonical system boundaries, runtime topology, and dual-backend invariants.
   </a>
-  <a href="/routa/coding-style">
-    <strong>Code Style</strong>
-    Review naming, file-organization, frontend, Rust, and testing conventions when extending
-    or integrating with Routa.
-  </a>
   <a href="/routa/developer-guide/testing">
     <strong>Testing</strong>
     Understand the validation flow and fitness tiers when changing or running Routa yourself.
+  </a>
+  <a href="/routa/deployment">
+    <strong>Deployment</strong>
+    Use this when you are taking the web surface or supporting services into a real environment.
   </a>
 </div>
 
@@ -47,15 +42,22 @@ first-run path, or running it in their own environment.
 
 Use this section when you need more than the normal end-user path:
 
-- choosing the right runtime surface for your team
 - configuring providers and deployment environments
 - understanding how the product surfaces fit together technically
-- extending Routa or contributing back to the project
+- running Routa in a team or self-hosted environment
+- extending Routa after the user-facing path is already clear
 
 ## Recommended Reading Order
 
-1. Read [Platforms](/platforms) if you are still choosing where to run Routa.
-2. Read [Configuration](/configuration) to get providers and models working.
-3. Read [Administration](/administration) if you are self-hosting or deploying Routa for a team.
-4. Read [Project Structure](/developer-guide/project-structure) and [Architecture](/ARCHITECTURE) for deeper technical context.
-5. Read [Contributing](/developer-guide/contributing) only if you plan to contribute to Routa itself.
+1. Read [Configuration](/configuration) to get one provider and one working model path.
+2. Read [Administration](/administration) if you are operating Routa for a team or internal environment.
+3. Read [Project Structure](/developer-guide/project-structure) and [Architecture](/ARCHITECTURE) for deeper technical context.
+4. Read [Testing](/developer-guide/testing) and [Deployment](/deployment) when you need validation or rollout guidance.
+
+## Maintainer-Only Material
+
+Most readers do not need these on day one:
+
+- [Code Style](/coding-style): implementation and testing conventions for repository changes
+- [Git Workflow](/developer-guide/git-workflow): commit and branch discipline
+- [Contributing](/developer-guide/contributing): contribution flow for Routa itself
