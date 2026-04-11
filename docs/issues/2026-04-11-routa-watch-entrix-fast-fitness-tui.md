@@ -2,9 +2,9 @@
 title: "Routa-watch 增加 Entrix fast fitness 图表面板"
 date: "2026-04-11"
 kind: issue
-status: open
+status: closed
 github_issue: 410
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/410"
 severity: medium
 area: "ui"
@@ -39,7 +39,7 @@ related_issues: []
 - Fast 执行时长较高，直接放在主循环会阻塞交互，需要后台异步计算与缓存。
 - 规则侧写中 fast 模式主要覆盖 lint/typecheck/contract/security 等可执行检查，缺少标准化覆盖率指标。
 
-## Progress Update (2026-04-11)
+## Resolution Update (2026-04-11)
 
 - 已完成：
   - 在 `crates/routa-watch` 增加 `Entrix` fast 健康快照获取与展示。
@@ -50,11 +50,13 @@ related_issues: []
   - `Fitness` 面板现已支持焦点切换与滚动；中小屏会优先展示摘要并允许继续滚动查看更多维度/TopN。
   - `routa-watch` 的 fast fitness 执行已对 `eslint_pass` / `clippy_pass` 做本地变更增量化：优先只检查当前分支相对 upstream/main 的变更文件或受影响 Rust crate。
   - visible files 的 diff stat 已改成批量 `git diff --numstat`，减少每个文件单独 spawn 的开销。
+  - 后续继续扩展为 `Fast / Full` 视图切换，允许在同一面板里查看完整维度集。
 - 已验证：
   - `cargo check -p routa-watch`、`cargo test -p routa-watch` 正常。
   - 快照渲染测试覆盖面可见，当前面板可在无快照数据时回退到 `idle`。
-- 风险：
-  - 已在 UI 上补齐 TopN 和趋势展示，后续可考虑增加趋势窗口配置与导出快照。
+- 当前状态：
+  - GitHub issue #410 已与本地 tracker 同步关闭。
+  - 剩余优化项转为后续体验增强，不再作为该问题的阻断项。
 
 ## Next Actions
 

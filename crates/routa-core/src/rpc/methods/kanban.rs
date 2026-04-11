@@ -220,7 +220,10 @@ mod tests {
             .expect("task should exist");
         assert_eq!(task.workspace_id, "default");
         assert_eq!(task.board_id.as_deref(), Some(default_board_id.as_str()));
-        assert_ne!(task.board_id.as_deref(), Some(foreign_board.board.id.as_str()));
+        assert_ne!(
+            task.board_id.as_deref(),
+            Some(foreign_board.board.id.as_str())
+        );
     }
 
     #[test]
