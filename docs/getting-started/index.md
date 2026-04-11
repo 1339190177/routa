@@ -1,5 +1,6 @@
 ---
 title: Getting Started Overview
+hide_table_of_contents: true
 ---
 
 # Getting Started
@@ -22,13 +23,38 @@ what "working" should look like after setup.
   </a>
   <a href="/routa/platforms/web">
     <strong>Web</strong>
-    Best for contributors and self-hosting. Run from source when you need the browser runtime
-    rather than the packaged product path.
+    Best for browser-based access and self-hosting. Run from source when you want the browser
+    runtime rather than the packaged desktop path.
   </a>
 </div>
 
 If you only want the shortest path to a successful first run, start with [Quick Start](/quick-start)
 and choose `Desktop` or `CLI`.
+
+## What To Do First
+
+Do not try to learn the whole product on day one. Reach one useful outcome first:
+
+<div className="routa-start-grid">
+  <div className="routa-start-card">
+    <span className="routa-start-card__badge">Step 1</span>
+    <h3>Pick One Surface</h3>
+    <p>Choose Desktop, CLI, or Web based on how you already work.</p>
+    <a className="routa-inline-link" href="/routa/quick-start">Open Quick Start</a>
+  </div>
+  <div className="routa-start-card">
+    <span className="routa-start-card__badge">Step 2</span>
+    <h3>Enable One Provider</h3>
+    <p>You only need one working provider and one valid model path to get moving.</p>
+    <a className="routa-inline-link" href="/routa/configuration">Open Configuration</a>
+  </div>
+  <div className="routa-start-card">
+    <span className="routa-start-card__badge">Step 3</span>
+    <h3>Run Against A Real Repo</h3>
+    <p>Attach a codebase or open a repository, then start with a Session or one CLI prompt.</p>
+    <a className="routa-inline-link" href="/routa/use-routa">Open Use Routa</a>
+  </div>
+</div>
 
 ## Recommended Reading Order
 
