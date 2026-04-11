@@ -858,10 +858,11 @@ fn render_files(
                     deletions: None,
                 });
             let (file_name, parent_dir) = split_display_path(file);
+            let display_name = display_file_name(state, file, &file_name);
             let rows = match density {
                 FileRowDensity::SingleLine => vec![render_file_single_line(
                     selected,
-                    &file_name,
+                    &display_name,
                     file,
                     &diff_stat,
                     colors,
@@ -873,7 +874,10 @@ fn render_files(
                         format!(
                             "{} {}",
                             if selected { ">" } else { " " },
-                            shorten_path(&file_name, split[1].width.saturating_sub(6) as usize)
+                            shorten_path(
+                                &display_name,
+                                split[1].width.saturating_sub(6) as usize
+                            )
                         ),
                         row_style(selected, state.focus == FocusPane::Files, colors)
                             .add_modifier(Modifier::BOLD),
@@ -931,7 +935,9 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
             lines.push(Line::from(vec![
                 Span::styled("Type: ", Style::default().fg(colors.muted)),
                 Span::styled(
-                    if facts.entry_kind.is_directory() {
+                    if facts.entry_kind.is_submodule() {
+                        "submodule"
+                    } else if facts.entry_kind.is_directory() {
                         "directory"
                     } else {
                         "file"
@@ -939,7 +945,7 @@ fn render_details_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
                     Style::default().fg(colors.text),
                 ),
             ]));
-            if facts.entry_kind.is_directory() {
+            if facts.entry_kind.is_container() {
                 lines.push(Line::from(vec![
                     Span::styled("Entries: ", Style::default().fg(colors.muted)),
                     Span::styled(
@@ -2375,7 +2381,7 @@ fn split_display_path(file: &crate::models::FileView) -> (String, String) {
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
         .unwrap_or_else(|| path.to_string_lossy().to_string());
-    if file.entry_kind.is_directory() && !file_name.ends_with('/') {
+    if file.entry_kind.is_container() && !file_name.ends_with('/') {
         file_name.push('/');
     }
     let parent = path
@@ -2401,6 +2407,39 @@ fn compact_folder_label(parent_dir: &str) -> String {
         .map(|name| name.to_string_lossy().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| parent_dir.to_string())
+}
+
+fn display_file_name(
+    state: &RuntimeState,
+    file: &crate::models::FileView,
+    file_name: &str,
+) -> String {
+    if file.entry_kind.is_submodule() {
+        return file_name.to_string();
+    }
+    if nearest_submodule_parent_path(state, file).is_some() {
+        return format!("  {file_name}");
+    }
+    file_name.to_string()
+}
+
+fn nearest_submodule_parent_path(
+    state: &RuntimeState,
+    file: &crate::models::FileView,
+) -> Option<String> {
+    let mut current = Path::new(&file.rel_path).parent();
+    while let Some(parent) = current {
+        let key = parent.to_string_lossy().replace('\\', "/");
+        if state
+            .files
+            .get(&key)
+            .is_some_and(|candidate| candidate.entry_kind.is_submodule())
+        {
+            return Some(key);
+        }
+        current = parent.parent();
+    }
+    None
 }
 
 fn pad_right(value: &str, width: usize) -> String {
@@ -2466,6 +2505,7 @@ fn change_color_from_status(status: &str) -> Color {
     match status {
         "D" => STOPPED,
         "A" => ACTIVE,
+        "SUB" => Color::Rgb(111, 170, 189),
         "DIR" => Color::Rgb(126, 156, 181),
         _ => INFERRED,
     }

@@ -30,6 +30,7 @@ impl AttributionConfidence {
 pub enum EntryKind {
     File,
     Directory,
+    Submodule,
 }
 
 pub type DirtyRepoEntry = (String, String, Option<i64>, EntryKind);
@@ -37,6 +38,14 @@ pub type DirtyRepoEntry = (String, String, Option<i64>, EntryKind);
 impl EntryKind {
     pub fn is_directory(self) -> bool {
         matches!(self, EntryKind::Directory)
+    }
+
+    pub fn is_submodule(self) -> bool {
+        matches!(self, EntryKind::Submodule)
+    }
+
+    pub fn is_container(self) -> bool {
+        matches!(self, EntryKind::Directory | EntryKind::Submodule)
     }
 }
 

@@ -499,8 +499,9 @@ impl RuntimeState {
             }
         }
         items.sort_by(|a, b| {
-            b.last_modified_at_ms
-                .cmp(&a.last_modified_at_ms)
+            file_group_sort_key(a, &self.files)
+                .cmp(&file_group_sort_key(b, &self.files))
+                .then_with(|| b.last_modified_at_ms.cmp(&a.last_modified_at_ms))
                 .then_with(|| a.rel_path.cmp(&b.rel_path))
         });
         items
@@ -1298,6 +1299,38 @@ fn focus_panes_for_width(width: u16) -> &'static [FocusPane] {
     } else {
         &RESPONSIVE_FOCUS_FULL
     }
+}
+
+fn file_group_sort_key(
+    file: &FileView,
+    files: &BTreeMap<String, FileView>,
+) -> (String, u8, String) {
+    if file.entry_kind.is_submodule() {
+        return (file.rel_path.clone(), 0, String::new());
+    }
+
+    if let Some(parent) = nearest_submodule_parent(file, files) {
+        return (parent.rel_path.clone(), 1, file.rel_path.clone());
+    }
+
+    (file.rel_path.clone(), 0, String::new())
+}
+
+fn nearest_submodule_parent<'a>(
+    file: &FileView,
+    files: &'a BTreeMap<String, FileView>,
+) -> Option<&'a FileView> {
+    let mut current = Path::new(&file.rel_path).parent();
+    while let Some(parent) = current {
+        let key = parent.to_string_lossy().replace('\\', "/");
+        if let Some(candidate) = files.get(&key) {
+            if candidate.entry_kind.is_submodule() {
+                return Some(candidate);
+            }
+        }
+        current = parent.parent();
+    }
+    None
 }
 
 #[derive(Debug, Default)]

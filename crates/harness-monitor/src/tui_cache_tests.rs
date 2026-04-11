@@ -26,6 +26,24 @@ fn directory_entries_use_dir_status_label() {
 }
 
 #[test]
+fn submodule_entries_use_sub_status_label() {
+    let file = FileView {
+        rel_path: "tools/entrix".to_string(),
+        dirty: true,
+        state_code: "modify".to_string(),
+        entry_kind: EntryKind::Submodule,
+        last_modified_at_ms: 0,
+        last_session_id: None,
+        confidence: AttributionConfidence::Unknown,
+        conflicted: false,
+        touched_by: BTreeSet::new(),
+        recent_events: Vec::new(),
+    };
+
+    assert_eq!(display_status_code(&file), "SUB");
+}
+
+#[test]
 fn app_cache_restores_fitness_history_on_startup() {
     let dir = tempdir().expect("tempdir");
     let repo_root = dir.path().to_string_lossy().to_string();

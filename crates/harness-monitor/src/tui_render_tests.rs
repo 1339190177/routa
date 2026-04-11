@@ -47,3 +47,27 @@ fn directory_diff_stat_uses_dir_label() {
 
     assert_eq!(spans[0].content.as_ref(), "DIR");
 }
+
+#[test]
+fn submodule_diff_stat_uses_sub_label() {
+    let file = FileView {
+        rel_path: "tools/entrix".to_string(),
+        dirty: true,
+        state_code: "modify".to_string(),
+        entry_kind: EntryKind::Submodule,
+        last_modified_at_ms: 0,
+        last_session_id: None,
+        confidence: AttributionConfidence::Unknown,
+        conflicted: false,
+        touched_by: BTreeSet::new(),
+        recent_events: Vec::new(),
+    };
+
+    let spans = render_diff_stat_spans(&DiffStatSummary {
+        status: display_status_code(&file),
+        additions: None,
+        deletions: None,
+    });
+
+    assert_eq!(spans[0].content.as_ref(), "SUB");
+}

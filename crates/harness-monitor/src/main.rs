@@ -663,7 +663,7 @@ fn build_cli_run_summaries(
             integrity_warning.as_deref(),
         );
         let operator_state =
-            infer_cli_run_state(&status, latest_eval.as_ref(), block_reason.as_str());
+            infer_cli_run_state(status, latest_eval.as_ref(), block_reason.as_str());
         let next_action = infer_cli_next_action(
             false,
             false,
@@ -870,7 +870,7 @@ fn infer_cli_run_state(
 fn infer_cli_workspace_state(
     dirty_files: usize,
     latest_eval: Option<&crate::domain::EvalSnapshot>,
-    detached: bool,
+    _detached: bool,
     missing_path: bool,
 ) -> &'static str {
     if missing_path {
@@ -879,8 +879,6 @@ fn infer_cli_workspace_state(
         "dirty"
     } else if latest_eval.is_some_and(|eval| !eval.hard_gate_blocked && !eval.score_blocked) {
         "validated"
-    } else if detached {
-        "ready"
     } else {
         "ready"
     }

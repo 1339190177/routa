@@ -586,7 +586,9 @@ pub(super) fn short_state_code(state_code: &str) -> &'static str {
 }
 
 pub(super) fn display_status_code(file: &crate::models::FileView) -> String {
-    if file.entry_kind.is_directory() {
+    if file.entry_kind.is_submodule() {
+        "SUB".to_string()
+    } else if file.entry_kind.is_directory() {
         "DIR".to_string()
     } else {
         short_state_code(&file.state_code).to_string()
@@ -594,20 +596,17 @@ pub(super) fn display_status_code(file: &crate::models::FileView) -> String {
 }
 
 fn compute_diff_stat(repo_root: &str, rel_path: &str, state_code: &str) -> DiffStatSummary {
-    let status = if std::fs::metadata(Path::new(repo_root).join(rel_path))
-        .map(|metadata| metadata.is_dir())
-        .unwrap_or(false)
-    {
+    let path = Path::new(repo_root).join(rel_path);
+    let entry_kind = crate::observe::entry_kind_for_repo_path(Path::new(repo_root), rel_path);
+    let status = if entry_kind.is_submodule() {
+        "SUB".to_string()
+    } else if entry_kind.is_directory() {
         "DIR".to_string()
     } else {
         short_state_code(state_code).to_string()
     };
-    let path = Path::new(repo_root).join(rel_path);
 
-    if std::fs::metadata(&path)
-        .map(|metadata| metadata.is_dir())
-        .unwrap_or(false)
-    {
+    if entry_kind.is_container() {
         return DiffStatSummary {
             status,
             additions: None,
@@ -868,16 +867,9 @@ fn queue_command(pending: &mut PendingCommands, command: BackgroundCommand) {
 
 fn load_file_facts(repo_root: &str, rel_path: &str, version: i64) -> FileFactsEntry {
     let path = Path::new(repo_root).join(rel_path);
-    let entry_kind = if std::fs::metadata(&path)
-        .map(|metadata| metadata.is_dir())
-        .unwrap_or(false)
-    {
-        crate::models::EntryKind::Directory
-    } else {
-        crate::models::EntryKind::File
-    };
+    let entry_kind = crate::observe::entry_kind_for_repo_path(Path::new(repo_root), rel_path);
     let content = std::fs::read_to_string(&path).ok();
-    let line_count = if entry_kind.is_directory() {
+    let line_count = if entry_kind.is_container() {
         0
     } else {
         content
@@ -886,7 +878,7 @@ fn load_file_facts(repo_root: &str, rel_path: &str, version: i64) -> FileFactsEn
             .unwrap_or(0)
     };
     let byte_size = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
-    let child_count = if entry_kind.is_directory() {
+    let child_count = if entry_kind.is_container() {
         std::fs::read_dir(&path).ok().map(|entries| entries.count())
     } else {
         None

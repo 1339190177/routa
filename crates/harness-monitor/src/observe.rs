@@ -41,17 +41,10 @@ pub fn scan_repo(ctx: &RepoContext) -> Result<Vec<DirtyRepoEntry>> {
                 continue;
             }
             let rel_path = normalize_rel_path(&ctx.repo_root, &ctx.repo_root.join(&rel), &rel)?;
-            let abs_path = ctx.repo_root.join(&rel_path);
-            let mtime_ms = std::fs::metadata(abs_path)
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|dur| dur.as_millis() as i64);
-            out.push((
-                rel_path.clone(),
-                state_code.to_string(),
-                mtime_ms,
-                entry_kind_for_path(&ctx.repo_root.join(&rel_path)),
+            out.extend(collect_dirty_entries_for_path(
+                &ctx.repo_root,
+                &rel_path,
+                state_code,
             ));
         }
     }
@@ -95,57 +88,61 @@ pub fn poll_repo(
                 continue;
             }
             let rel_path = normalize_rel_path(&ctx.repo_root, &ctx.repo_root.join(&rel), &rel)?;
-            let abs_path = ctx.repo_root.join(&rel_path);
-            let metadata = std::fs::metadata(&abs_path).ok();
-            let (mtime_ms, size_bytes) = metadata
-                .and_then(|m| {
-                    m.modified()
-                        .ok()
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|dur| (Some(dur.as_millis() as i64), Some(m.len() as i64)))
-                })
-                .unwrap_or((None, None));
+            for (expanded_rel_path, expanded_state_code, mtime_ms, _entry_kind) in
+                collect_dirty_entries_for_path(&ctx.repo_root, &rel_path, state_code)
+            {
+                let abs_path = ctx.repo_root.join(&expanded_rel_path);
+                let metadata = std::fs::metadata(&abs_path).ok();
+                let (mtime_ms, size_bytes) = metadata
+                    .and_then(|m| {
+                        m.modified()
+                            .ok()
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|dur| (Some(dur.as_millis() as i64), Some(m.len() as i64)))
+                    })
+                    .unwrap_or((mtime_ms, None));
 
-            let should_update =
-                match db.get_file_state(&ctx.repo_root.to_string_lossy(), &rel_path)? {
-                    Some((prev_mtime, prev_size, was_dirty)) => {
-                        prev_mtime != mtime_ms || prev_size != size_bytes || !was_dirty
-                    }
-                    None => true,
-                };
+                let should_update =
+                    match db.get_file_state(&ctx.repo_root.to_string_lossy(), &expanded_rel_path)? {
+                        Some((prev_mtime, prev_size, was_dirty)) => {
+                            prev_mtime != mtime_ms || prev_size != size_bytes || !was_dirty
+                        }
+                        None => true,
+                    };
 
-            if should_update {
-                let _ = db.insert_file_event(&FileEventRecord {
-                    id: None,
-                    repo_root: ctx.repo_root.to_string_lossy().to_string(),
-                    rel_path: rel_path.clone(),
-                    event_kind: state_code.to_string(),
-                    observed_at_ms: now_ms,
-                    session_id: None,
-                    turn_id: None,
-                    confidence: AttributionConfidence::Unknown,
-                    source: source.to_string(),
-                    metadata_json: json!({ "via": "git-status" }).to_string(),
-                })?;
+                if should_update {
+                    let _ = db.insert_file_event(&FileEventRecord {
+                        id: None,
+                        repo_root: ctx.repo_root.to_string_lossy().to_string(),
+                        rel_path: expanded_rel_path.clone(),
+                        event_kind: expanded_state_code.to_string(),
+                        observed_at_ms: now_ms,
+                        session_id: None,
+                        turn_id: None,
+                        confidence: AttributionConfidence::Unknown,
+                        source: source.to_string(),
+                        metadata_json: json!({ "via": "git-status" }).to_string(),
+                    })?;
 
-                db.update_file_state(
-                    &ctx.repo_root.to_string_lossy(),
-                    &rel_path,
-                    true,
-                    state_code,
-                    mtime_ms,
-                    size_bytes,
-                    now_ms,
-                    None,
-                    None,
-                    Some(AttributionConfidence::Unknown),
-                    Some(source),
-                )?;
+                    db.update_file_state(
+                        &ctx.repo_root.to_string_lossy(),
+                        &expanded_rel_path,
+                        true,
+                        &expanded_state_code,
+                        mtime_ms,
+                        size_bytes,
+                        now_ms,
+                        None,
+                        None,
+                        Some(AttributionConfidence::Unknown),
+                        Some(source),
+                    )?;
 
-                changed_paths.push(rel_path.clone());
+                    changed_paths.push(expanded_rel_path.clone());
+                }
+
+                seen.insert(expanded_rel_path);
             }
-
-            seen.insert(rel_path);
         }
     }
 
@@ -226,6 +223,99 @@ pub fn entry_kind_for_path(path: &Path) -> EntryKind {
     }
 }
 
+pub fn entry_kind_for_repo_path(repo_root: &Path, rel_path: &str) -> EntryKind {
+    if is_git_submodule_path(repo_root, rel_path) {
+        return EntryKind::Submodule;
+    }
+    entry_kind_for_path(&repo_root.join(rel_path))
+}
+
+fn collect_dirty_entries_for_path(
+    repo_root: &Path,
+    rel_path: &str,
+    state_code: &str,
+) -> Vec<DirtyRepoEntry> {
+    let entry_kind = entry_kind_for_repo_path(repo_root, rel_path);
+    let abs_path = repo_root.join(rel_path);
+    let mtime_ms = std::fs::metadata(&abs_path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|dur| dur.as_millis() as i64);
+    let mut entries = vec![(rel_path.to_string(), state_code.to_string(), mtime_ms, entry_kind)];
+
+    if entry_kind.is_submodule() {
+        entries.extend(collect_submodule_dirty_entries(repo_root, rel_path));
+    }
+
+    entries
+}
+
+fn collect_submodule_dirty_entries(repo_root: &Path, rel_path: &str) -> Vec<DirtyRepoEntry> {
+    let submodule_root = repo_root.join(rel_path);
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&submodule_root)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=all")
+        .output();
+
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    let mut entries = Vec::new();
+    let lines = String::from_utf8_lossy(&output.stdout);
+    for line in lines.lines() {
+        if line.len() < 4 {
+            continue;
+        }
+        let index_code = &line[0..1];
+        let worktree_code = &line[1..2];
+        let path_part = line.get(3..).unwrap_or("");
+        let (state_code, path_raws) = classify_status(index_code, worktree_code, path_part);
+        for nested_rel in path_raws {
+            if nested_rel.is_empty() {
+                continue;
+            }
+            let prefixed_rel = format!("{}/{}", rel_path.trim_end_matches('/'), nested_rel);
+            let nested_abs = submodule_root.join(&nested_rel);
+            let mtime_ms = std::fs::metadata(&nested_abs)
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|dur| dur.as_millis() as i64);
+            let entry_kind = entry_kind_for_path(&nested_abs);
+            entries.push((prefixed_rel, state_code.to_string(), mtime_ms, entry_kind));
+        }
+    }
+
+    entries
+}
+
+fn is_git_submodule_path(repo_root: &Path, rel_path: &str) -> bool {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .arg("ls-files")
+        .arg("--stage")
+        .arg("--")
+        .arg(rel_path)
+        .output();
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.lines().any(|line| line.starts_with("160000 "))
+        }
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,6 +328,75 @@ mod tests {
         std::fs::create_dir_all(&nested).expect("directory");
 
         assert_eq!(entry_kind_for_path(&nested), EntryKind::Directory);
+    }
+
+    #[test]
+    fn detects_git_submodules_from_index_mode() {
+        let dir = tempdir().expect("tempdir");
+        Command::new("git")
+            .arg("init")
+            .arg(dir.path())
+            .output()
+            .expect("init repo");
+        let modules = dir.path().join("tools").join("entrix");
+        std::fs::create_dir_all(&modules).expect("create submodule path");
+
+        Command::new("git")
+            .arg("-C")
+            .arg(dir.path())
+            .arg("update-index")
+            .arg("--add")
+            .arg("--cacheinfo")
+            .arg("160000")
+            .arg("a745c6f9664e4525be45e02582e7dc970158ec74")
+            .arg("tools/entrix")
+            .output()
+            .expect("register gitlink");
+
+        assert_eq!(
+            entry_kind_for_repo_path(dir.path(), "tools/entrix"),
+            EntryKind::Submodule
+        );
+    }
+
+    #[test]
+    fn expands_dirty_submodule_children() {
+        let dir = tempdir().expect("tempdir");
+        Command::new("git")
+            .arg("init")
+            .arg(dir.path())
+            .output()
+            .expect("init repo");
+        let submodule_root = dir.path().join("tools").join("entrix");
+        std::fs::create_dir_all(submodule_root.join("entrix").join("reporters"))
+            .expect("create nested dirs");
+        Command::new("git")
+            .arg("init")
+            .arg(&submodule_root)
+            .output()
+            .expect("init submodule repo");
+        std::fs::write(
+            submodule_root.join("entrix").join("reporters").join("visual.py"),
+            "print('dirty')\n",
+        )
+        .expect("write dirty file");
+        Command::new("git")
+            .arg("-C")
+            .arg(dir.path())
+            .arg("update-index")
+            .arg("--add")
+            .arg("--cacheinfo")
+            .arg("160000")
+            .arg("a745c6f9664e4525be45e02582e7dc970158ec74")
+            .arg("tools/entrix")
+            .output()
+            .expect("register gitlink");
+
+        let entries = collect_dirty_entries_for_path(dir.path(), "tools/entrix", "modify");
+        let paths = entries.into_iter().map(|(path, _, _, _)| path).collect::<Vec<_>>();
+
+        assert!(paths.contains(&"tools/entrix".to_string()));
+        assert!(paths.contains(&"tools/entrix/entrix/reporters/visual.py".to_string()));
     }
 
     #[cfg(unix)]
