@@ -19,11 +19,11 @@ routa.js  2 dirty  1 unattributed  loc: --  fitness: fast  transport: socket
 └───────────────────────────────────────────┘│                                                                          │└─────────────────────────────────────────────────────────┘
 ┌Agents─────────────────────────────────────┐│                                                                          │┌Fitness (Entrix Fast)────────────────────────────────────┐
 │4211 ◈ Codex  ACTIVE                       │└──────────────────────────────────────────────────────────────────────────┘│Score: PASS 91.0% (0/12) 4200ms                          │
-│cpu  2.5%  mem 128MB  up 01:35             │┌Run Details───────────────────────────────────────────────────────────────┐│[ 91.0%] ███████████████████░░                           │
-│proj project  conf 80%                     ││impl-buddy                                                                ││mode: Entrix Fast  press m to switch                     │
-│                                           ││live-hook-check  builder  hook-backed                                     ││Dimension scores:                                        │
-│9001 ◆ Claude  IDLE                        ││State: executing  Block: missing coverage_report  Mode: unmanaged         ││92% code_quality          w18  4/4  ██████████████████░░ │
-│cpu  0.1%  mem 96MB  up <ts>           ││Workspace: dirty  Path: <repo>                                      ││95% api_contract          w10  2/2  ███████████████████░ │
+│cpu  2.5%  mem 128MB  up 01:35             │┌Run Details───────────────────────────────────────────────────────────────┐│Dimension scores:                                        │
+│proj project  conf 80%                     ││impl-buddy                                                                ││92% code_quality          w18  4/4  ██████████████████░░ │
+│                                           ││live-hook-check  builder  hook-backed                                     ││95% api_contract          w10  2/2  ███████████████████░ │
+│9001 ◆ Claude  IDLE                        ││State: executing  Block: missing coverage_report  Mode: unmanaged         ││                                                         │
+│cpu  0.1%  mem 96MB  up <ts>           ││Workspace: dirty  Path: <repo>                                      ││                                                         │
 └───────────────────────────────────────────┘└──────────────────────────────────────────────────────────────────────────┘└─────────────────────────────────────────────────────────┘
 ┌Event Stream (all)────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │<ts>  WATCH  modify   crates/harness-monitor/src/tui.rs                                                                                                                       │

@@ -206,6 +206,7 @@ fn handle_event(state: &mut RuntimeState, cache: &mut AppCache) -> Result<bool> 
             }
             match key.code {
                 KeyCode::Char('q') => return Ok(true),
+                KeyCode::BackTab => state.cycle_focus_backward_for_width(viewport_width),
                 KeyCode::Tab => state.cycle_focus_for_width(viewport_width),
                 KeyCode::Char('j') | KeyCode::Down => state.move_selection_down(),
                 KeyCode::Char('k') | KeyCode::Up => state.move_selection_up(),

@@ -109,32 +109,42 @@ fn render_main_area(
     layout_mode: LayoutMode,
 ) {
     if layout_mode == LayoutMode::Compact {
-        let split = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(46), Constraint::Percentage(54)])
-            .split(area);
-        let lower = Layout::default()
+        let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
-            .split(split[1]);
-        render_files(frame, split[0], state, cache, FileRowDensity::TwoLine);
-        render_preview_panel(frame, lower[0], state, cache);
-        render_details_panel(frame, lower[1], state, cache);
+            .split(area);
+        let top = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .split(rows[0]);
+        let bottom = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .split(rows[1]);
+        render_files(frame, top[0], state, cache, FileRowDensity::TwoLine);
+        render_preview_panel(frame, top[1], state, cache);
+        render_fitness_panel(frame, bottom[0], state, cache);
+        render_details_panel(frame, bottom[1], state, cache);
         return;
     }
 
     if layout_mode == LayoutMode::Medium {
-        let columns = Layout::default()
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+            .split(area);
+        let top = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(72), Constraint::Percentage(28)])
-            .split(area);
-        let right = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(62), Constraint::Percentage(38)])
-            .split(columns[1]);
-        render_files(frame, columns[0], state, cache, FileRowDensity::SingleLine);
-        render_preview_panel(frame, right[0], state, cache);
-        render_details_panel(frame, right[1], state, cache);
+            .split(rows[0]);
+        let bottom = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(72), Constraint::Percentage(28)])
+            .split(rows[1]);
+        render_files(frame, top[0], state, cache, FileRowDensity::SingleLine);
+        render_preview_panel(frame, top[1], state, cache);
+        render_fitness_panel(frame, bottom[0], state, cache);
+        render_details_panel(frame, bottom[1], state, cache);
         return;
     }
 
@@ -211,7 +221,6 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
         };
         let compact_height = inner.height <= 8;
         let medium_height = inner.height <= 13;
-        let bar_width = inner.width.saturating_sub(36).clamp(8, 28) as usize;
 
         lines.push(Line::from(vec![
             Span::styled("Score: ", Style::default().fg(colors.muted)),
@@ -233,12 +242,6 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
                 Style::default().fg(colors.muted),
             ),
         ]));
-        lines.push(Line::from(vec![
-            fitness_bar_label(score),
-            Span::raw(" "),
-            render_score_bar(score, bar_width),
-        ]));
-
         if let Some(last_run_ms) = cache.fitness_last_run_ms() {
             lines.push(Line::from(vec![
                 Span::styled(
@@ -269,14 +272,6 @@ fn render_fitness_panel(frame: &mut Frame, area: Rect, state: &RuntimeState, cac
                 ]));
             }
         }
-        lines.push(Line::from(vec![
-            Span::styled("mode: ", Style::default().fg(colors.muted)),
-            Span::styled(snapshot.mode.label(), Style::default().fg(colors.accent)),
-            Span::raw("  "),
-            Span::styled("press ", Style::default().fg(colors.muted)),
-            Span::styled("m", Style::default().fg(colors.accent)),
-            Span::styled(" to switch", Style::default().fg(colors.muted)),
-        ]));
         let trend = cache.fitness_trend();
         if trend.len() >= 2 && !compact_height {
             let latest = trend.last().copied().unwrap_or(0.0);
@@ -516,13 +511,6 @@ fn render_score_bar(score: f64, width: usize) -> Span<'static> {
     let bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
     Span::styled(
         format!("{bar:>width$}"),
-        Style::default().fg(score_color_for_value(score)),
-    )
-}
-
-fn fitness_bar_label(score: f64) -> Span<'static> {
-    Span::styled(
-        format!("[{score:>5.1}%]"),
         Style::default().fg(score_color_for_value(score)),
     )
 }

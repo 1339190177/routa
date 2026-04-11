@@ -15,7 +15,8 @@ pub enum FocusPane {
     Fitness,
 }
 
-const RESPONSIVE_FOCUS_COMPACT: [FocusPane; 2] = [FocusPane::Files, FocusPane::Detail];
+const RESPONSIVE_FOCUS_COMPACT: [FocusPane; 3] =
+    [FocusPane::Files, FocusPane::Detail, FocusPane::Fitness];
 const RESPONSIVE_FOCUS_FULL: [FocusPane; 4] = [
     FocusPane::Runs,
     FocusPane::Files,

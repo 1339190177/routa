@@ -26,13 +26,6 @@ impl FitnessRunMode {
             FitnessRunMode::Full => "full",
         }
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            FitnessRunMode::Fast => "Entrix Fast",
-            FitnessRunMode::Full => "Entrix Full",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

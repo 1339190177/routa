@@ -10,6 +10,15 @@ impl RuntimeState {
         self.focus = panes[(index + 1) % panes.len()];
     }
 
+    pub fn cycle_focus_backward_for_width(&mut self, width: u16) {
+        let panes = focus_panes_for_width(width);
+        let index = panes
+            .iter()
+            .position(|pane| *pane == self.focus)
+            .unwrap_or(0);
+        self.focus = panes[(index + panes.len() - 1) % panes.len()];
+    }
+
     pub fn sync_focus_for_width(&mut self, width: u16) {
         let panes = focus_panes_for_width(width);
         if !panes.contains(&self.focus) {

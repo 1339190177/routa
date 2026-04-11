@@ -440,6 +440,28 @@ fn page_down_scrolls_fitness_panel_when_fitness_has_focus() {
 }
 
 #[test]
+fn compact_focus_cycle_includes_fitness_panel() {
+    let mut state = sample_state();
+    state.focus = FocusPane::Files;
+
+    state.cycle_focus_for_width(120);
+    assert_eq!(state.focus, FocusPane::Detail);
+
+    state.cycle_focus_for_width(120);
+    assert_eq!(state.focus, FocusPane::Fitness);
+}
+
+#[test]
+fn focus_cycle_backward_wraps_to_fitness_panel() {
+    let mut state = sample_state();
+    state.focus = FocusPane::Files;
+
+    state.cycle_focus_backward_for_width(120);
+
+    assert_eq!(state.focus, FocusPane::Fitness);
+}
+
+#[test]
 fn toggling_fitness_mode_updates_cache_key_prefix() {
     let mut state = sample_state();
 
