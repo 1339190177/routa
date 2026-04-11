@@ -828,6 +828,17 @@ fn render_files(
                     split[1].width as usize,
                 )],
                 FileRowDensity::TwoLine => {
+                    if file.entry_kind.is_submodule() {
+                        vec![render_file_single_line(
+                            selected,
+                            &display_name,
+                            file,
+                            &diff_stat,
+                            colors,
+                            state.focus == FocusPane::Files,
+                            split[1].width as usize,
+                        )]
+                    } else {
                     let primary = Line::from(vec![Span::styled(
                         format!(
                             "{} {}",
@@ -839,6 +850,7 @@ fn render_files(
                     )]);
                     let secondary = render_file_meta_line(file, &parent_dir, &diff_stat, colors);
                     vec![primary, secondary]
+                    }
                 }
             };
             let mut item = ListItem::new(rows);
