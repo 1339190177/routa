@@ -1,4 +1,4 @@
-name: Routa CLI Release
+name: Harness Monitor Release
 
 on:
   workflow_call:
@@ -25,7 +25,7 @@ on:
 
 jobs:
   build:
-    name: Build CLI binaries
+    name: Build Harness Monitor binaries
     strategy:
       fail-fast: false
       matrix:
@@ -57,7 +57,6 @@ jobs:
       - name: Verify synced release files
         shell: bash
         run: |
-          # Use while read loop instead of mapfile for Bash 3 compatibility
           changed_files=()
           while IFS= read -r line; do
             changed_files+=("$line")
@@ -94,25 +93,25 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build routa CLI
+      - name: Build Harness Monitor
         run: |
-          cargo build --release --package routa-cli --target ${{ matrix.target }}
+          cargo build --release --package harness-monitor --target ${{ matrix.target }}
 
       - name: Prepare artifact
         shell: bash
         run: |
           mkdir -p dist/${{ matrix.key }}
           if [[ "${{ matrix.key }}" == "win32-x64" ]]; then
-            cp target/${{ matrix.target }}/release/routa.exe dist/${{ matrix.key }}/routa.exe
+            cp target/${{ matrix.target }}/release/harness-monitor.exe dist/${{ matrix.key }}/harness-monitor.exe
           else
-            cp target/${{ matrix.target }}/release/routa dist/${{ matrix.key }}/routa
-            chmod +x dist/${{ matrix.key }}/routa
+            cp target/${{ matrix.target }}/release/harness-monitor dist/${{ matrix.key }}/harness-monitor
+            chmod +x dist/${{ matrix.key }}/harness-monitor
           fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: routa-cli-${{ matrix.key }}
+          name: harness-monitor-${{ matrix.key }}
           path: dist/${{ matrix.key }}
           if-no-files-found: error
 
@@ -162,25 +161,24 @@ jobs:
             esac
           done
 
-      - name: Download CLI artifacts
+      - name: Download Harness Monitor artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist/cli-artifacts
+          path: dist/harness-monitor-artifacts
 
       - name: Resolve version
         id: version
         env:
-          EVENT_NAME: ${{ github.event_name }}
           INPUT_VERSION: ${{ inputs.version || github.event.inputs.version }}
         shell: bash
         run: |
           if [[ -n "$INPUT_VERSION" ]]; then
             version="$INPUT_VERSION"
             version="${version#v}"
-            version="${version#cli-v}"
+            version="${version#harness-monitor-v}"
           else
             version="${GITHUB_REF_NAME#v}"
-            version="${version#cli-v}"
+            version="${version#harness-monitor-v}"
           fi
 
           if [[ -z "${version}" ]]; then
@@ -198,15 +196,15 @@ jobs:
 
       - name: Stage npm tarballs
         run: |
-          node scripts/release/stage-routa-cli-npm.mjs \
+          node scripts/release/stage-harness-monitor-npm.mjs \
             --version "${{ steps.version.outputs.value }}" \
-            --artifacts dist/cli-artifacts \
+            --artifacts dist/harness-monitor-artifacts \
             --out dist/npm
 
       - name: Generate release manifest
         run: |
           node scripts/release/generate-release-manifest.mjs \
-            --cli-artifacts dist/cli-artifacts \
+            --cli-artifacts dist/harness-monitor-artifacts \
             --npm-dir dist/npm \
             --channel latest \
             --out dist/release/manifest.json
@@ -217,8 +215,8 @@ jobs:
         run: |
           python scripts/release/fetch-release-baseline.py \
             --repo phodal/routa \
-            --workflow cli-release.yml \
-            --artifact-name routa-release-manifest-cli \
+            --workflow harness-monitor-release.yml \
+            --artifact-name routa-release-manifest-harness-monitor \
             --exclude-run-id "${{ github.run_id }}" \
             --out dist/release/baseline-manifest.json
 
@@ -241,17 +239,17 @@ jobs:
       - name: Upload release manifest
         uses: actions/upload-artifact@v4
         with:
-          name: routa-release-manifest-cli
+          name: routa-release-manifest-harness-monitor
           path: dist/release/manifest.json
 
       - name: Upload npm artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: routa-cli-npm-${{ steps.version.outputs.value }}
+          name: harness-monitor-npm-${{ steps.version.outputs.value }}
           path: dist/npm
 
   verify:
-    name: Verify staged CLI release
+    name: Verify staged Harness Monitor release
     needs:
       - build
       - stage
@@ -264,13 +262,13 @@ jobs:
       - name: Download npm artifacts
         uses: actions/download-artifact@v4
         with:
-          name: routa-cli-npm-${{ needs.stage.outputs.version }}
+          name: harness-monitor-npm-${{ needs.stage.outputs.version }}
           path: dist/npm
 
       - name: Download release manifest
         uses: actions/download-artifact@v4
         with:
-          name: routa-release-manifest-cli
+          name: routa-release-manifest-harness-monitor
           path: dist/release
 
       - name: Set up Node.js
@@ -289,16 +287,16 @@ jobs:
 
       - name: Verify install smoke
         run: |
-          node scripts/release/verify-cli-tarballs.mjs \
+          node scripts/release/verify-harness-monitor-tarballs.mjs \
             --tarball-dir dist/npm \
             --platform linux-x64 \
-            --out dist/release/cli-verification.json
+            --out dist/release/harness-monitor-verification.json
 
       - name: Upload verification report
         uses: actions/upload-artifact@v4
         with:
-          name: routa-cli-release-verification
-          path: dist/release/cli-verification.json
+          name: harness-monitor-release-verification
+          path: dist/release/harness-monitor-verification.json
 
   publish:
     name: Publish to npm
@@ -319,7 +317,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: routa-cli-npm-${{ needs.stage.outputs.version }}
+          name: harness-monitor-npm-${{ needs.stage.outputs.version }}
           path: dist/npm
 
       - name: Set up Node.js
@@ -331,7 +329,7 @@ jobs:
       - name: Download release manifest
         uses: actions/download-artifact@v4
         with:
-          name: routa-release-manifest-cli
+          name: routa-release-manifest-harness-monitor
           path: dist/release
 
       - name: Install Entrix

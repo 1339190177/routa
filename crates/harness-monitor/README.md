@@ -2,6 +2,12 @@
 
 `harness-monitor` is a Rust terminal tool for tracking multiple coding-agent sessions inside one git repository.
 
+Install from npm if you want the prebuilt binary wrapper instead of `cargo install`:
+
+```bash
+npm install -g harness-monitor
+```
+
 It is `TUI-first`: the main path is a live terminal view that answers:
 
 - which sessions are active

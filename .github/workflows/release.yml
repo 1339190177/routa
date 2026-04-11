@@ -28,6 +28,11 @@ on:
         required: false
         default: true
         type: boolean
+      publish_harness_monitor:
+        description: "Publish Harness Monitor npm packages"
+        required: false
+        default: true
+        type: boolean
       publish_desktop:
         description: "Publish desktop release assets"
         required: false
@@ -104,6 +109,21 @@ jobs:
     with:
       version: ${{ needs.resolve-version.outputs.version }}
       publish: ${{ github.event_name == 'push' || ((github.event.inputs.dry_run != 'true' && github.event.inputs.dry_run != true) && (github.event.inputs.publish_cli == 'true' || github.event.inputs.publish_cli == true)) }}
+    secrets: inherit
+
+  release-harness-monitor:
+    name: Release Harness Monitor
+    needs: resolve-version
+    if: |
+      github.event_name == 'push' ||
+      github.event.inputs.dry_run == 'true' ||
+      github.event.inputs.dry_run == true ||
+      github.event.inputs.publish_harness_monitor == 'true' ||
+      github.event.inputs.publish_harness_monitor == true
+    uses: ./.github/workflows/harness-monitor-release.yml
+    with:
+      version: ${{ needs.resolve-version.outputs.version }}
+      publish: ${{ github.event_name == 'push' || ((github.event.inputs.dry_run != 'true' && github.event.inputs.dry_run != true) && (github.event.inputs.publish_harness_monitor == 'true' || github.event.inputs.publish_harness_monitor == true)) }}
     secrets: inherit
 
   release-crates:

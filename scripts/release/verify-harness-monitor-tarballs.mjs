@@ -7,10 +7,10 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const PLATFORM_PACKAGE_NAMES = {
-  "darwin-arm64": "routa-cli-darwin-arm64",
-  "darwin-x64": "routa-cli-darwin-x64",
-  "linux-x64": "routa-cli-linux-x64",
-  "win32-x64": "routa-cli-windows-x64",
+  "darwin-arm64": "harness-monitor-darwin-arm64",
+  "darwin-x64": "harness-monitor-darwin-x64",
+  "linux-x64": "harness-monitor-linux-x64",
+  "win32-x64": "harness-monitor-windows-x64",
 };
 
 function parseArgs(argv) {
@@ -66,7 +66,9 @@ function findTarball(directory, predicate) {
 
 const args = parseArgs(process.argv.slice(2));
 const tarballDir = path.resolve(args["tarball-dir"] || "dist/npm");
-const outPath = path.resolve(args.out || "dist/release/cli-verification.json");
+const outPath = path.resolve(
+  args.out || "dist/release/harness-monitor-verification.json",
+);
 const platformKey = resolvePlatformKey(args.platform);
 const platformPackageName = PLATFORM_PACKAGE_NAMES[platformKey];
 
@@ -74,17 +76,28 @@ if (!platformPackageName) {
   throw new Error(`Unsupported verification platform: ${platformKey}`);
 }
 
-const mainTarball = findTarball(tarballDir, (file) => file.startsWith("routa-cli-") && !file.includes("darwin") && !file.includes("linux") && !file.includes("windows") && !file.includes("win32"));
-const platformTarball = findTarball(tarballDir, (file) => file.startsWith(`${platformPackageName}-`));
+const mainTarball = findTarball(
+  tarballDir,
+  (file) =>
+    file.startsWith("harness-monitor-") &&
+    !file.includes("darwin") &&
+    !file.includes("linux") &&
+    !file.includes("windows") &&
+    !file.includes("win32"),
+);
+const platformTarball = findTarball(
+  tarballDir,
+  (file) => file.startsWith(`${platformPackageName}-`),
+);
 
 if (!mainTarball) {
-  throw new Error(`Unable to find routa-cli tarball in ${tarballDir}`);
+  throw new Error(`Unable to find harness-monitor tarball in ${tarballDir}`);
 }
 if (!platformTarball) {
   throw new Error(`Unable to find ${platformPackageName} tarball in ${tarballDir}`);
 }
 
-const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "routa-cli-verify-"));
+const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "harness-monitor-verify-"));
 try {
   const npmCacheDir = path.join(tempRoot, ".npm-cache");
   const commandEnv = {
@@ -94,7 +107,7 @@ try {
 
   await fsp.writeFile(
     path.join(tempRoot, "package.json"),
-    `${JSON.stringify({ name: "routa-cli-release-verify", private: true }, null, 2)}\n`,
+    `${JSON.stringify({ name: "harness-monitor-release-verify", private: true }, null, 2)}\n`,
     "utf8",
   );
   await fsp.mkdir(npmCacheDir, { recursive: true });
@@ -117,10 +130,14 @@ try {
     },
   );
 
-  const cliResult = run("npx", ["--no-install", "routa", "--version"], {
-    cwd: tempRoot,
-    env: commandEnv,
-  });
+  const cliResult = run(
+    "npx",
+    ["--no-install", "harness-monitor", "--version"],
+    {
+      cwd: tempRoot,
+      env: commandEnv,
+    },
+  );
   const report = {
     status: "passed",
     platform: platformKey,
@@ -131,7 +148,7 @@ try {
 
   await fsp.mkdir(path.dirname(outPath), { recursive: true });
   await fsp.writeFile(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  console.log(`CLI tarball verification passed for ${platformKey}`);
+  console.log(`Harness Monitor tarball verification passed for ${platformKey}`);
 } finally {
   await fsp.rm(tempRoot, { recursive: true, force: true });
 }
