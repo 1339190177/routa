@@ -1,7 +1,7 @@
 use super::*;
 use crate::models::{
     AttributionConfidence, DetectedAgent, EntryKind, EventLogEntry, EventSource, FileView,
-    RuntimeMessage, RuntimeServiceInfo, SessionView,
+    FitnessEvent, RuntimeMessage, RuntimeServiceInfo, SessionView,
 };
 use crate::state::{DetailMode, FileListMode, FocusPane, ThemeMode, UNKNOWN_SESSION_ID};
 use crate::tui::highlight::highlight_code_text;
@@ -416,6 +416,29 @@ fn selected_file_assignment_message_is_attribution_event() {
         }
         other => panic!("unexpected runtime message: {other:?}"),
     }
+}
+
+#[test]
+fn fitness_event_is_logged_in_event_stream() {
+    let mut state = sample_state();
+    state.apply_message(RuntimeMessage::Fitness(FitnessEvent {
+        repo_root: state.repo_root.clone(),
+        observed_at_ms: chrono::Utc::now().timestamp_millis(),
+        mode: "fast".to_string(),
+        status: "passed".to_string(),
+        final_score: Some(97.0),
+        hard_gate_blocked: Some(false),
+        score_blocked: Some(false),
+        duration_ms: Some(10_200.0),
+        dimension_count: Some(2),
+        metric_count: Some(8),
+    }));
+
+    assert!(state
+        .visible_event_log_items()
+        .iter()
+        .any(|entry| entry.source == EventSource::Fitness
+            && entry.message.contains("fitness fast passed 97.0%")));
 }
 
 #[test]

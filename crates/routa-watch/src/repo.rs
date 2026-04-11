@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use sha2::{Digest, Sha256};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -165,22 +164,18 @@ fn runtime_runtime_dir(repo_root: &Path) -> PathBuf {
 }
 
 fn runtime_marker(repo_root: &Path) -> String {
-    let mut hasher = DefaultHasher::new();
-    repo_root.to_string_lossy().hash(&mut hasher);
-    format!("{:x}", hasher.finish())
+    let digest = Sha256::digest(repo_root.to_string_lossy().as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn runtime_port(repo_root: &Path) -> u16 {
-    let mut hasher = DefaultHasher::new();
-    repo_root.to_string_lossy().hash(&mut hasher);
-    let seed = hasher.finish();
-    43000 + (seed % 10000) as u16
+    let digest = Sha256::digest(repo_root.to_string_lossy().as_bytes());
+    let seed = u16::from_be_bytes([digest[0], digest[1]]);
+    43000 + (seed % 10000)
 }
 
 fn fallback_db_path(repo_root: &Path) -> Result<PathBuf> {
-    let mut hasher = DefaultHasher::new();
-    repo_root.to_string_lossy().hash(&mut hasher);
-    let marker = format!("{:x}", hasher.finish());
+    let marker = runtime_marker(repo_root);
 
     let mut candidate_bases = Vec::new();
     if let Ok(custom_base) = std::env::var("ROUTA_WATCH_DB_DIR") {

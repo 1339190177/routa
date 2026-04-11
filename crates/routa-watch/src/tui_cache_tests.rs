@@ -69,6 +69,9 @@ fn app_cache_restores_fitness_history_on_startup() {
     let cache = AppCache::new(&repo_root);
     assert!(cache.has_fitness_data());
     assert_eq!(cache.fitness_last_run_ms(), Some(12_345));
-    assert_eq!(cache.fitness_snapshot().expect("snapshot").final_score, 88.5);
+    assert_eq!(
+        cache.fitness_snapshot().expect("snapshot").final_score,
+        88.5
+    );
     assert_eq!(cache.fitness_trend(), &[88.5, 89.0]);
 }

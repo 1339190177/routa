@@ -1325,6 +1325,7 @@ fn source_color(source: crate::models::EventSource) -> Color {
         crate::models::EventSource::Git => INFERRED,
         crate::models::EventSource::Watch => ACTIVE,
         crate::models::EventSource::Attribution => Color::Rgb(188, 162, 104),
+        crate::models::EventSource::Fitness => Color::Rgb(91, 192, 190),
     }
 }
 

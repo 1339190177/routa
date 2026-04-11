@@ -1,7 +1,7 @@
 use crate::models::{
     AgentStats, AttributionConfidence, AttributionEvent, DetectedAgent, DirtyRepoEntry, EntryKind,
-    EventLogEntry, EventSource, FileView, GitEvent, HookEvent, RuntimeMessage, SessionView,
-    DEFAULT_INFERENCE_WINDOW_MS, EVENT_LOG_LIMIT,
+    EventLogEntry, EventSource, FileView, FitnessEvent, GitEvent, HookEvent, RuntimeMessage,
+    SessionView, DEFAULT_INFERENCE_WINDOW_MS, EVENT_LOG_LIMIT,
 };
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -156,6 +156,7 @@ impl RuntimeState {
             RuntimeMessage::Hook(event) => self.apply_hook_event(event),
             RuntimeMessage::Git(event) => self.apply_git_event(event),
             RuntimeMessage::Attribution(event) => self.apply_attribution_event(event),
+            RuntimeMessage::Fitness(event) => self.apply_fitness_event(event),
         }
         self.clamp_selection();
     }
@@ -745,6 +746,18 @@ impl RuntimeState {
                 short_session(&event.session_id),
                 event.rel_path
             ),
+        );
+    }
+
+    fn apply_fitness_event(&mut self, event: FitnessEvent) {
+        let score = event
+            .final_score
+            .map(|value| format!("{value:.1}%"))
+            .unwrap_or_else(|| "-".to_string());
+        self.push_event(
+            event.observed_at_ms,
+            EventSource::Fitness,
+            format!("fitness {} {} {}", event.mode, event.status, score),
         );
     }
 

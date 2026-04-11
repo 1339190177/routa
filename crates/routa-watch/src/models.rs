@@ -71,6 +71,7 @@ impl RuntimeMessage {
             RuntimeMessage::Hook(event) => event.observed_at_ms,
             RuntimeMessage::Git(event) => event.observed_at_ms,
             RuntimeMessage::Attribution(event) => event.observed_at_ms,
+            RuntimeMessage::Fitness(event) => event.observed_at_ms,
         }
     }
 }
@@ -133,6 +134,7 @@ pub enum RuntimeMessage {
     Hook(HookEvent),
     Git(GitEvent),
     Attribution(AttributionEvent),
+    Fitness(FitnessEvent),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +176,20 @@ pub struct AttributionEvent {
     pub session_id: String,
     pub confidence: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FitnessEvent {
+    pub repo_root: String,
+    pub observed_at_ms: i64,
+    pub mode: String,
+    pub status: String,
+    pub final_score: Option<f64>,
+    pub hard_gate_blocked: Option<bool>,
+    pub score_blocked: Option<bool>,
+    pub duration_ms: Option<f64>,
+    pub dimension_count: Option<usize>,
+    pub metric_count: Option<usize>,
 }
 
 #[allow(dead_code)]
@@ -221,6 +237,7 @@ pub enum EventSource {
     Git,
     Watch,
     Attribution,
+    Fitness,
 }
 
 impl EventSource {
@@ -230,6 +247,7 @@ impl EventSource {
             EventSource::Git => "git",
             EventSource::Watch => "watch",
             EventSource::Attribution => "attrib",
+            EventSource::Fitness => "fitness",
         }
     }
 }

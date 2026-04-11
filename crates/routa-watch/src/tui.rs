@@ -1,5 +1,5 @@
 use crate::ipc::RuntimeFeed;
-use crate::models::DEFAULT_TUI_POLL_MS;
+use crate::models::{FitnessEvent, RuntimeMessage, DEFAULT_TUI_POLL_MS};
 use crate::observe;
 use crate::repo::RepoContext;
 use crate::state::{DetailMode, EventLogFilter, RuntimeState, ThemeMode};
@@ -119,8 +119,12 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
         }
 
         for message in feed.read_new()? {
-            if matches!(message, crate::models::RuntimeMessage::Git(_)) {
+            if matches!(message, RuntimeMessage::Git(_)) {
                 force_scan = true;
+            }
+            if let RuntimeMessage::Fitness(event) = &message {
+                refresh_fitness_from_event(&mut state, &mut cache, event);
+                last_fitness_refresh = Instant::now();
             }
             state.apply_message(message);
         }
@@ -252,6 +256,27 @@ fn fitness_run_mode_for(state: &RuntimeState) -> fitness::FitnessRunMode {
         crate::state::FitnessViewMode::Fast => fitness::FitnessRunMode::Fast,
         crate::state::FitnessViewMode::Full => fitness::FitnessRunMode::Full,
     }
+}
+
+fn refresh_fitness_from_event(
+    state: &mut RuntimeState,
+    cache: &mut AppCache,
+    event: &FitnessEvent,
+) {
+    let matches_current_mode = matches!(
+        (state.fitness_view_mode, event.mode.as_str()),
+        (crate::state::FitnessViewMode::Fast, "fast")
+            | (crate::state::FitnessViewMode::Full, "full")
+    );
+    if !matches_current_mode {
+        return;
+    }
+    cache.request_fitness_refresh(
+        state.repo_root.clone(),
+        state.fitness_cache_key(),
+        true,
+        fitness_run_mode_for(state),
+    );
 }
 
 fn current_branch(ctx: &RepoContext) -> Result<String> {

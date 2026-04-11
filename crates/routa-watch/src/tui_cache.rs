@@ -455,7 +455,8 @@ impl AppCache {
     }
 
     pub(super) fn fitness_last_run_ms(&self) -> Option<i64> {
-        self.active_fitness_history().and_then(|entry| entry.last_run_ms)
+        self.active_fitness_history()
+            .and_then(|entry| entry.last_run_ms)
     }
 
     pub(super) fn fitness_trend(&self) -> &[f64] {
