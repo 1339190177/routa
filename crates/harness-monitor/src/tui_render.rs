@@ -1,10 +1,12 @@
 use super::fitness;
 use super::*;
-use crate::domain::evidence::{EvidenceRequirement, EvidenceType};
-use crate::domain::policy::{EffectClass, PolicyDecisionKind};
 use crate::domain::run::Role;
 use crate::domain::workspace::WorkspaceState;
 use crate::models::{AttributionConfidence, FileView};
+use crate::operator_guardrails::{
+    assess_run_guardrails, effect_classes_summary, evidence_inline_summary,
+    EvidenceRequirementStatus, RunGuardrailsInput,
+};
 use crate::state::FocusPane;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -37,12 +39,6 @@ pub(super) struct UiPalette {
     selection_blur: Color,
 }
 
-#[derive(Clone)]
-struct EvidenceRequirementStatus {
-    requirement: EvidenceRequirement,
-    satisfied: bool,
-}
-
 struct RunOperatorModel {
     role: Role,
     origin_label: &'static str,
@@ -50,8 +46,8 @@ struct RunOperatorModel {
     workspace_path: String,
     process_cwd: Option<String>,
     workspace_state: WorkspaceState,
-    effect_classes: Vec<EffectClass>,
-    policy_decision: PolicyDecisionKind,
+    effect_classes: Vec<crate::domain::policy::EffectClass>,
+    policy_decision: crate::domain::policy::PolicyDecisionKind,
     approval_label: String,
     block_reason: Option<String>,
     eval_summary: Option<String>,
@@ -1084,11 +1080,10 @@ fn render_file_header_line(state: &RuntimeState, cache: &AppCache, _width: u16) 
         .map(|count| count.to_string())
         .unwrap_or_else(|| "...".to_string());
     let summary = format!(
-        "{}, {}, {}, workspace: {}, {} agent{}, branch: {}, {}",
+        "{}, {}, {}, {} agent{}, branch: {}, {}",
         pluralize(files.len(), "file"),
         count_label(untracked, "untracked"),
         pluralize_count_text(&commit_total, "commit"),
-        state.selected_workspace_scope_label(),
         workspace_agents,
         if workspace_agents == 1 { "" } else { "s" },
         state.branch,
@@ -2160,10 +2155,6 @@ fn render_title_bar(frame: &mut Frame, area: Rect, state: &RuntimeState) {
     let colors = palette(state.theme_mode);
     let files = state.file_items();
     let dirty = files.len();
-    let untracked = files
-        .iter()
-        .filter(|file| file.state_code == "untracked")
-        .count();
     let unattributed = files
         .iter()
         .into_iter()
@@ -2196,10 +2187,7 @@ fn render_title_bar(frame: &mut Frame, area: Rect, state: &RuntimeState) {
             Style::default().fg(colors.text).bg(colors.surface),
         ),
         Span::styled(
-            format!(
-                "dirty:{}  untracked:{}  unattributed:{}  ",
-                dirty, untracked, unattributed
-            ),
+            format!("dirty:{}  unattributed:{}  ", dirty, unattributed),
             Style::default().fg(colors.text).bg(colors.surface),
         ),
         Span::styled(
