@@ -1132,6 +1132,9 @@ pub(super) fn load_diff_text(
     state_code: &str,
 ) -> Result<Option<String>> {
     let path = Path::new(repo_root).join(rel_path);
+    if crate::observe::entry_kind_for_repo_path(Path::new(repo_root), rel_path).is_submodule() {
+        return load_submodule_diff_text(repo_root, rel_path);
+    }
     if std::fs::metadata(&path)
         .map(|metadata| metadata.is_dir())
         .unwrap_or(false)
@@ -1179,6 +1182,43 @@ pub(super) fn load_diff_text(
     } else {
         Ok(Some(text))
     }
+}
+
+fn load_submodule_diff_text(repo_root: &str, rel_path: &str) -> Result<Option<String>> {
+    let submodule_root = Path::new(repo_root).join(rel_path);
+    if !submodule_root.exists() {
+        return Ok(Some(format!("<submodule missing>\n{rel_path}")));
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&submodule_root)
+        .arg("status")
+        .arg("--short")
+        .arg("--untracked-files=all")
+        .output()
+        .context("run submodule git status")?;
+
+    if !output.status.success() {
+        return Ok(Some(format!("<submodule status unavailable>\n{rel_path}")));
+    }
+
+    let stdout = String::from_utf8(output.stdout).context("decode submodule status output")?;
+    let entries = stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .take(200)
+        .collect::<Vec<_>>();
+
+    if entries.is_empty() {
+        return Ok(Some(format!("<submodule clean>\n{rel_path}")));
+    }
+
+    let mut out = Vec::with_capacity(entries.len() + 2);
+    out.push(format!("Submodule: {rel_path}"));
+    out.push(String::new());
+    out.extend(entries.into_iter().map(|line| line.to_string()));
+    Ok(Some(out.join("\n")))
 }
 
 fn load_file_preview(repo_root: &str, rel_path: &str) -> Result<Option<String>> {

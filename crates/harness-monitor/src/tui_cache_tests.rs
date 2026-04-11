@@ -1,6 +1,6 @@
 use super::{
-    display_status_code, fitness, AppCache, FitnessHistoryEntry, FitnessHistoryRecord,
-    FITNESS_HISTORY_FILE, FITNESS_HISTORY_SCHEMA_VERSION,
+    display_status_code, fitness, load_diff_text, AppCache, FitnessHistoryEntry,
+    FitnessHistoryRecord, FITNESS_HISTORY_FILE, FITNESS_HISTORY_SCHEMA_VERSION,
 };
 use crate::models::{AttributionConfidence, EntryKind, FileView};
 use crate::repo;
@@ -41,6 +41,50 @@ fn submodule_entries_use_sub_status_label() {
     };
 
     assert_eq!(display_status_code(&file), "SUB");
+}
+
+#[test]
+fn submodule_diff_preview_lists_nested_dirty_entries() {
+    let dir = tempdir().expect("tempdir");
+    let repo_root = dir.path();
+    std::process::Command::new("git")
+        .arg("init")
+        .arg(repo_root)
+        .output()
+        .expect("init repo");
+
+    let submodule_root = repo_root.join("tools").join("entrix");
+    std::fs::create_dir_all(submodule_root.join("entrix").join("reporters"))
+        .expect("create submodule dirs");
+    std::process::Command::new("git")
+        .arg("init")
+        .arg(&submodule_root)
+        .output()
+        .expect("init submodule repo");
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .arg("update-index")
+        .arg("--add")
+        .arg("--info-only")
+        .arg("--cacheinfo")
+        .arg("160000")
+        .arg("a745c6f9664e4525be45e02582e7dc970158ec74")
+        .arg("tools/entrix")
+        .output()
+        .expect("register gitlink");
+    std::fs::write(
+        submodule_root.join("entrix").join("reporters").join("terminal.py"),
+        "print('dirty')\n",
+    )
+    .expect("write dirty file");
+
+    let preview = load_diff_text(&repo_root.to_string_lossy(), "tools/entrix", "modify")
+        .expect("load diff")
+        .expect("preview text");
+
+    assert!(preview.contains("Submodule: tools/entrix"));
+    assert!(preview.contains("terminal.py"));
 }
 
 #[test]
