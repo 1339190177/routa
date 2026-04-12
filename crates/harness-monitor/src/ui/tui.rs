@@ -1,7 +1,7 @@
-use crate::observe::ipc::RuntimeFeed;
-use crate::shared::models::{FitnessEvent, RuntimeMessage, DEFAULT_TUI_POLL_MS};
 use crate::observe;
+use crate::observe::ipc::RuntimeFeed;
 use crate::observe::repo::RepoContext;
+use crate::shared::models::{FitnessEvent, RuntimeMessage, DEFAULT_TUI_POLL_MS};
 use crate::ui::state::{DetailMode, EventLogFilter, RuntimeState, ThemeMode};
 use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
@@ -370,7 +370,10 @@ fn read_branch_resolution(ctx: &RepoContext) -> Result<BranchResolution> {
 }
 
 fn parse_branch_resolution(output: &str) -> BranchResolution {
-    let mut lines = output.lines().map(str::trim).filter(|line| !line.is_empty());
+    let mut lines = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty());
 
     BranchResolution {
         branch: lines.next().and_then(normalize_branch_name),
@@ -477,7 +480,9 @@ fn read_runtime_transport(ctx: &RepoContext) -> String {
     };
 
     match info.transport.as_str() {
-        "socket" if crate::observe::ipc::socket_reachable(&ctx.runtime_socket_path) => "socket".to_string(),
+        "socket" if crate::observe::ipc::socket_reachable(&ctx.runtime_socket_path) => {
+            "socket".to_string()
+        }
         "tcp" if crate::observe::ipc::tcp_reachable(&ctx.runtime_tcp_addr) => "tcp".to_string(),
         "socket" | "tcp" => fallback_runtime_transport(ctx),
         "feed" => "feed".to_string(),

@@ -1,9 +1,9 @@
-use crate::run::policy::{EffectClass, PolicyDecisionKind};
-use crate::run::run::{Role, RunMode};
-use crate::run::workspace::WorkspaceState;
 use crate::evaluate::gates::{
     assess_run_guardrails, EvidenceRequirementStatus, RunGuardrailsInput,
 };
+use crate::run::policy::{EffectClass, PolicyDecisionKind};
+use crate::run::run::{Role, RunMode};
+use crate::run::workspace::WorkspaceState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkspaceType {

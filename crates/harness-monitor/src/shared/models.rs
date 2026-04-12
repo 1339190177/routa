@@ -262,8 +262,8 @@ impl SessionView {
     /// Map this session to an unmanaged domain Run (Architecture §9.1).
     #[allow(dead_code)]
     pub fn as_unmanaged_run(&self) -> crate::run::run::Run {
-        use crate::shared::ids::RunId;
         use crate::run::run::{Role, Run, RunMode, RunState};
+        use crate::shared::ids::RunId;
 
         let state = match self.status.as_str() {
             "active" => RunState::Executing,

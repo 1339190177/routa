@@ -1,14 +1,14 @@
 use crate::attribute::attribution::{
     assess_run, summarize_planes, PlaneAssessment, RunAssessmentInput, RunOrigin, WorkspaceType,
 };
-use crate::shared::db::{Db, SessionListRow};
-use crate::observe::detect::scan_agents;
-use crate::run::run::{Role, RunMode};
-use crate::run::workspace::WorkspaceState;
-use crate::shared::models::{self, DetectedAgent};
 use crate::evaluate::gates::{
     effect_classes_summary, evidence_inline_summary, EvidenceRequirementStatus,
 };
+use crate::observe::detect::scan_agents;
+use crate::run::run::{Role, RunMode};
+use crate::run::workspace::WorkspaceState;
+use crate::shared::db::{Db, SessionListRow};
+use crate::shared::models::{self, DetectedAgent};
 use crate::{RunCommand, WorkspaceCommand};
 use anyhow::{bail, Context, Result};
 use std::collections::{BTreeMap, BTreeSet};

@@ -1,6 +1,6 @@
+use crate::observe::repo::RepoContext;
 use crate::shared::db::Db;
 use crate::shared::models::{AttributionConfidence, DirtyRepoEntry, EntryKind, FileEventRecord};
-use crate::observe::repo::RepoContext;
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
 use serde_json::json;

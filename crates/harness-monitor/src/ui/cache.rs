@@ -120,7 +120,10 @@ struct PendingCommands {
     scc: Option<String>,
 }
 
-type PendingStats = (String, Vec<(String, String, i64, crate::shared::models::EntryKind)>);
+type PendingStats = (
+    String,
+    Vec<(String, String, i64, crate::shared::models::EntryKind)>,
+);
 type PendingDetail = (String, String, String, i64, DetailMode);
 type PendingFacts = (String, String, i64, crate::shared::models::EntryKind);
 
@@ -347,8 +350,7 @@ impl AppCache {
                         self.pending_test_mapping_key = None;
                         self.test_mapping_snapshot = None;
                         self.test_mapping_not_before_ms = Some(
-                            chrono::Utc::now().timestamp_millis()
-                                + TEST_MAPPING_FAILURE_BACKOFF_MS,
+                            chrono::Utc::now().timestamp_millis() + TEST_MAPPING_FAILURE_BACKOFF_MS,
                         );
                     }
                 },
@@ -519,7 +521,10 @@ impl AppCache {
         }
     }
 
-    pub(super) fn file_facts(&self, file: &crate::shared::models::FileView) -> Option<&FileFactsEntry> {
+    pub(super) fn file_facts(
+        &self,
+        file: &crate::shared::models::FileView,
+    ) -> Option<&FileFactsEntry> {
         self.facts_cache.get(&facts_cache_key(
             &file.rel_path,
             file.last_modified_at_ms,
@@ -686,7 +691,10 @@ impl AppCache {
         self.review_triggers.review_hint(file)
     }
 
-    pub(super) fn test_mapping(&self, file: &crate::shared::models::FileView) -> Option<&TestMappingEntry> {
+    pub(super) fn test_mapping(
+        &self,
+        file: &crate::shared::models::FileView,
+    ) -> Option<&TestMappingEntry> {
         self.test_mapping_snapshot
             .as_ref()
             .and_then(|snapshot| snapshot.by_file.get(&file.rel_path))
@@ -1266,9 +1274,9 @@ mod tests;
 
 #[path = "cache_test_mapping.rs"]
 mod test_mapping;
-use self::test_mapping::{load_test_mapping_snapshot, test_mapping_cache_key};
 #[cfg(test)]
 use self::test_mapping::build_test_mapping_snapshot;
+use self::test_mapping::{load_test_mapping_snapshot, test_mapping_cache_key};
 pub(super) use self::test_mapping::{TestMappingEntry, TestMappingSnapshot};
 
 #[path = "cache_history.rs"]

@@ -2,8 +2,8 @@
 
 use crate::evaluate::eval::EvalSnapshot;
 use crate::govern::evidence::EvidenceRequirement;
-use crate::shared::ids::{RunId, TaskId};
 use crate::run::policy::EffectClass;
+use crate::shared::ids::{RunId, TaskId};
 use serde::{Deserialize, Serialize};
 
 /// Risk level used to set default policy strictness.

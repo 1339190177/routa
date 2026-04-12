@@ -1,10 +1,10 @@
-use crate::shared::db::Db;
 use crate::observe::ipc;
+use crate::observe::repo::{resolve, resolve_runtime, RepoContext};
+use crate::shared::db::Db;
 use crate::shared::models::{
     AttributionConfidence, FileEventRecord, GitEvent, HookClient, HookEvent, RuntimeMessage,
     SessionRecord,
 };
-use crate::observe::repo::{resolve, resolve_runtime, RepoContext};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::{json, Value};

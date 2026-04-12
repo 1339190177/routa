@@ -2,7 +2,7 @@
 
 pub mod attribution;
 pub mod confidence;
-pub mod matching;
 pub mod conflicts;
+pub mod matching;
 
 pub(crate) use self::attribution::*;

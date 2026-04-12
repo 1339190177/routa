@@ -3,12 +3,12 @@ use super::*;
 use crate::attribute::attribution::{
     assess_run, summarize_planes, PlaneAssessment, RunAssessmentInput, RunOrigin, WorkspaceType,
 };
-use crate::run::run::{Role, RunMode};
-use crate::run::workspace::WorkspaceState;
-use crate::shared::models::{AttributionConfidence, FileView};
 use crate::evaluate::gates::{
     effect_classes_summary, evidence_inline_summary, EvidenceRequirementStatus,
 };
+use crate::run::run::{Role, RunMode};
+use crate::run::workspace::WorkspaceState;
+use crate::shared::models::{AttributionConfidence, FileView};
 use crate::ui::state::{FitnessViewMode, FocusPane};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -904,7 +904,10 @@ pub(super) fn build_run_operator_model(
     }
 }
 
-fn changed_files_for_run(state: &RuntimeState, run: &crate::ui::state::SessionListItem) -> Vec<String> {
+fn changed_files_for_run(
+    state: &RuntimeState,
+    run: &crate::ui::state::SessionListItem,
+) -> Vec<String> {
     let mut files: Vec<&FileView> = state
         .files
         .values()
@@ -961,7 +964,10 @@ fn process_cwd_for_run(
         .map(|session| session.cwd.clone())
 }
 
-fn is_auggie_mcp_service_run(state: &RuntimeState, run: &crate::ui::state::SessionListItem) -> bool {
+fn is_auggie_mcp_service_run(
+    state: &RuntimeState,
+    run: &crate::ui::state::SessionListItem,
+) -> bool {
     run.attached_agent_key
         .as_ref()
         .and_then(|key| state.detected_agents.iter().find(|agent| &agent.key == key))

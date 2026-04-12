@@ -9,8 +9,13 @@ pub mod observe;
 pub mod repo;
 
 // Re-export commonly used types at this module level
-pub use self::observe::{Snapshot, scan_repo, poll_repo, entry_kind_for_repo_path, entry_kind_for_path};
-pub use self::repo::{RepoContext, resolve, resolve_runtime, runtime_event_path, runtime_socket_path, runtime_info_path, runtime_tcp_addr};
+pub use self::detect::{calculate_stats, scan_agents};
+pub use self::hooks::{handle_git_event, handle_hook, parse_stdin_payload};
 pub use self::ipc::{RuntimeFeed, RuntimeSocket, RuntimeTcp};
-pub use self::detect::{scan_agents, calculate_stats};
-pub use self::hooks::{parse_stdin_payload, handle_hook, handle_git_event};
+pub use self::observe::{
+    entry_kind_for_path, entry_kind_for_repo_path, poll_repo, scan_repo, Snapshot,
+};
+pub use self::repo::{
+    resolve, resolve_runtime, runtime_event_path, runtime_info_path, runtime_socket_path,
+    runtime_tcp_addr, RepoContext,
+};

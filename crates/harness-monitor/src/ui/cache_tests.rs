@@ -2,8 +2,8 @@ use super::{
     display_status_code, fitness, load_diff_text, AppCache, FitnessHistoryEntry,
     FitnessHistoryRecord, FITNESS_HISTORY_FILE, FITNESS_HISTORY_SCHEMA_VERSION,
 };
-use crate::shared::models::{AttributionConfidence, EntryKind, FileView};
 use crate::observe as repo;
+use crate::shared::models::{AttributionConfidence, EntryKind, FileView};
 use crate::ui::state::RuntimeState;
 use std::collections::BTreeSet;
 use tempfile::tempdir;

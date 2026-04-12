@@ -1,18 +1,18 @@
+mod attribute;
 #[allow(dead_code)]
 mod context;
-mod run;
-mod observe;
-mod attribute;
 mod evaluate;
 mod govern;
+mod observe;
+mod run;
 mod shared;
 mod ui;
 
-use crate::shared::db::Db;
 use crate::observe::ipc::{RuntimeSocket, RuntimeTcp};
-use crate::shared::models::RuntimeServiceInfo;
 use crate::observe::Snapshot;
 use crate::observe::{resolve, resolve_runtime};
+use crate::shared::db::Db;
+use crate::shared::models::RuntimeServiceInfo;
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use std::collections::BTreeMap;
@@ -615,7 +615,10 @@ fn handle_eval_command(action: EvalCommand, db: &Db, repo_root: &str) -> Result<
             )?;
             db.insert_eval_snapshot(repo_root, &snapshot)?;
             println!("repo:        {}", repo_root);
-            println!("eval:        {}", run::orchestrator::summarize_eval(&snapshot));
+            println!(
+                "eval:        {}",
+                run::orchestrator::summarize_eval(&snapshot)
+            );
             println!("duration_ms: {:.1}", snapshot.duration_ms);
             println!("dimensions:  {}", snapshot.dimensions.len());
         }
