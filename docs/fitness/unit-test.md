@@ -20,6 +20,11 @@ metrics:
     hard_gate: true
     tier: normal
 
+  - name: ts_test_coverage
+    command: npm run test:cov:ts 2>&1
+    tier: normal
+    description: "Vitest V8 line coverage must stay at or above 80%."
+
   - name: rust_test_pass
     command: cargo test --workspace --exclude routa-desktop 2>&1
     pattern: "test result: ok"

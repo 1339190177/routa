@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { fromRoot } from "../lib/paths";
 
-type SourceSummary = {
+export type SourceSummary = {
   status: "sampled" | "missing";
   generated_at_ms: number | null;
   artifact_path: string | null;
@@ -16,7 +16,7 @@ type SourceSummary = {
   region_percent: number | null;
 };
 
-type CoverageSummaryRecord = {
+export type CoverageSummaryRecord = {
   schema_version: number;
   generated_at_ms: number;
   sources: {
@@ -25,7 +25,7 @@ type CoverageSummaryRecord = {
   };
 };
 
-function readJson(filePath: string): unknown | null {
+export function readJson(filePath: string): unknown | null {
   if (!fs.existsSync(filePath)) {
     return null;
   }
@@ -36,35 +36,35 @@ function readJson(filePath: string): unknown | null {
   }
 }
 
-function fileMtimeMs(filePath: string): number | null {
+export function fileMtimeMs(filePath: string): number | null {
   try {
-    return fs.statSync(filePath).mtimeMs;
+    return Math.trunc(fs.statSync(filePath).mtimeMs);
   } catch {
     return null;
   }
 }
 
-function asPercent(value: unknown): number | null {
+export function asPercent(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.max(0, Math.min(100, value));
   }
   return null;
 }
 
-function asObject(value: unknown): Record<string, unknown> | null {
+export function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
-function pickPercent(candidate: Record<string, unknown> | null): number | null {
+export function pickPercent(candidate: Record<string, unknown> | null): number | null {
   if (!candidate) {
     return null;
   }
   return asPercent(candidate.percent) ?? asPercent(candidate.pct);
 }
 
-function parseTypescriptSummary(filePath: string): SourceSummary {
+export function parseTypescriptSummary(filePath: string): SourceSummary {
   const payload = asObject(readJson(filePath));
   const total = asObject(payload?.total);
   const lines = pickPercent(asObject(total?.lines));
@@ -84,7 +84,7 @@ function parseTypescriptSummary(filePath: string): SourceSummary {
   };
 }
 
-function extractRustSummaryCandidate(value: unknown): Record<string, unknown> | null {
+export function extractRustSummaryCandidate(value: unknown): Record<string, unknown> | null {
   if (Array.isArray(value)) {
     for (const nested of value) {
       const found = extractRustSummaryCandidate(nested);
@@ -130,7 +130,7 @@ function extractRustSummaryCandidate(value: unknown): Record<string, unknown> | 
   return null;
 }
 
-function parseRustSummary(filePath: string): SourceSummary {
+export function parseRustSummary(filePath: string): SourceSummary {
   const payload = readJson(filePath);
   const totals = extractRustSummaryCandidate(payload);
   const lines = pickPercent(asObject(totals?.lines));
@@ -149,7 +149,7 @@ function parseRustSummary(filePath: string): SourceSummary {
   };
 }
 
-function missingSummary(): SourceSummary {
+export function missingSummary(): SourceSummary {
   return {
     status: "missing",
     generated_at_ms: null,
@@ -162,14 +162,14 @@ function missingSummary(): SourceSummary {
   };
 }
 
-function main(): void {
+export function buildCoverageSummaryRecord(): CoverageSummaryRecord {
   const targetDir = fromRoot("target", "coverage");
   fs.mkdirSync(targetDir, { recursive: true });
 
   const tsSummaryPath = fromRoot("coverage", "coverage-summary.json");
   const rustSummaryPath = fromRoot("target", "coverage", "routa-core.summary.json");
 
-  const record: CoverageSummaryRecord = {
+  return {
     schema_version: 1,
     generated_at_ms: Date.now(),
     sources: {
@@ -181,10 +181,20 @@ function main(): void {
         : missingSummary(),
     },
   };
+}
 
+export function writeCoverageSummary(): string {
+  const record = buildCoverageSummaryRecord();
   const outputPath = fromRoot("target", "coverage", "fitness-summary.json");
   fs.writeFileSync(outputPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  return outputPath;
+}
+
+function main(): void {
+  const outputPath = writeCoverageSummary();
   console.log(`Coverage summary written to ${path.relative(fromRoot(), outputPath)}`);
 }
 
-main();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}
