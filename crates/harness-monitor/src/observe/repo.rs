@@ -8,6 +8,7 @@ const APP_SLUG: &str = "harness-monitor";
 const DB_FILE_NAME: &str = "harness-monitor.db";
 
 #[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct RepoContext {
     pub repo_root: PathBuf,
     pub git_dir: PathBuf,

@@ -6,7 +6,7 @@ use crate::shared::models::{
     SessionRecord,
 };
 use anyhow::{Context, Result};
-use chrono::Utc;
+use chrono::{Datelike, Utc};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Read};
@@ -1023,7 +1023,7 @@ fn current_branch(repo_root: &std::path::Path) -> Result<String> {
 }
 
 fn collect_recent_transcripts(root: &std::path::Path) -> Result<Vec<(std::path::PathBuf, i64)>> {
-    let mut stack = vec![root.to_path_buf()];
+    let mut stack = recent_transcript_dirs(root);
     let mut files = Vec::new();
     while let Some(dir) = stack.pop() {
         let entries = match std::fs::read_dir(&dir) {
@@ -1053,6 +1053,21 @@ fn collect_recent_transcripts(root: &std::path::Path) -> Result<Vec<(std::path::
         }
     }
     Ok(files)
+}
+
+fn recent_transcript_dirs(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let today = chrono::Local::now().date_naive();
+    let yesterday = today.pred_opt();
+    [Some(today), yesterday]
+        .into_iter()
+        .flatten()
+        .map(|date| {
+            root.join(format!("{:04}", date.year()))
+                .join(format!("{:02}", date.month()))
+                .join(format!("{:02}", date.day()))
+        })
+        .filter(|path| path.exists())
+        .collect()
 }
 
 fn parse_transcript_backfill(

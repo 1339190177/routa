@@ -254,6 +254,10 @@ impl RuntimeState {
         self.push_event(observed_at_ms, EventSource::Watch, message);
     }
 
+    pub(crate) fn push_hook_status_event(&mut self, observed_at_ms: i64, message: String) {
+        self.push_event(observed_at_ms, EventSource::Hook, message);
+    }
+
     pub(super) fn push_attribution_event(&mut self, observed_at_ms: i64, message: String) {
         self.push_event(observed_at_ms, EventSource::Attribution, message);
     }

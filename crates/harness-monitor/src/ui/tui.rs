@@ -14,7 +14,9 @@ use ratatui::{DefaultTerminal, Frame};
 use std::env;
 use std::io::stdout;
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::sync::LazyLock;
+use std::thread;
 use std::time::{Duration, Instant};
 use syntect::highlighting::{Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -96,9 +98,15 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     cache.set_fitness_mode(state.fitness_view_mode);
     cache.request_scc_refresh(state.repo_root.clone(), false);
     let bootstrap_cutoff = bootstrap_history_cutoff(chrono::Utc::now().timestamp_millis());
-    for message in crate::observe::hooks::bootstrap_codex_transcript_messages(&ctx.repo_root)? {
-        state.apply_message(message);
-    }
+    let (transcript_tx, transcript_rx) = mpsc::channel();
+    let transcript_ctx = ctx.clone();
+    thread::spawn(move || {
+        let result = crate::observe::hooks::bootstrap_codex_transcript_messages(
+            &transcript_ctx.repo_root,
+        )
+        .unwrap_or_default();
+        let _ = transcript_tx.send(result);
+    });
     for message in feed.read_recent_since(bootstrap_cutoff)? {
         state.apply_message(message);
     }
@@ -146,6 +154,28 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
                 last_fitness_refresh = Instant::now();
             }
             state.apply_message(message);
+        }
+        if let Ok(messages) = transcript_rx.try_recv() {
+            let recovered_session_count = messages
+                .iter()
+                .filter_map(|message| match message {
+                    RuntimeMessage::Hook(event) if event.event_name == "TranscriptRecover" => {
+                        Some(event.session_id.clone())
+                    }
+                    _ => None,
+                })
+                .collect::<std::collections::BTreeSet<_>>()
+                .len();
+            for message in messages {
+                if matches!(message, RuntimeMessage::Git(_)) {
+                    force_scan = true;
+                }
+                state.apply_message(message);
+            }
+            state.push_hook_status_event(
+                chrono::Utc::now().timestamp_millis(),
+                format!("transcript backfill complete ({recovered_session_count} sessions)"),
+            );
         }
         if force_scan {
             let dirty = observe::scan_repo(&ctx)?;
