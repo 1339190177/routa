@@ -813,6 +813,45 @@ fn bootstrap_history_cutoff_uses_day_scale_window() {
 }
 
 #[test]
+fn parse_branch_resolution_reads_branch_and_upstream() {
+    let status = parse_branch_resolution("main\norigin/main\n");
+
+    assert_eq!(
+        status,
+        BranchResolution {
+            branch: Some("main".to_string()),
+            upstream: Some("origin/main".to_string()),
+        }
+    );
+}
+
+#[test]
+fn parse_ahead_count_reads_left_side_count() {
+    assert_eq!(parse_ahead_count("7\t2\n"), Some(7));
+}
+
+#[test]
+fn current_worktree_count_reads_git_worktrees_directory() {
+    let dir = tempdir().expect("tempdir");
+    let repo_root = dir.path().join("repo");
+    let git_dir = repo_root.join(".git");
+    std::fs::create_dir_all(git_dir.join("worktrees").join("feature-a")).expect("feature-a");
+    std::fs::create_dir_all(git_dir.join("worktrees").join("feature-b")).expect("feature-b");
+
+    let ctx = RepoContext {
+        repo_root,
+        git_dir,
+        db_path: dir.path().join("harness-monitor.db"),
+        runtime_event_path: dir.path().join("runtime").join("events.jsonl"),
+        runtime_socket_path: dir.path().join("runtime").join("events.sock"),
+        runtime_info_path: dir.path().join("runtime").join("service.json"),
+        runtime_tcp_addr: "127.0.0.1:49123".to_string(),
+    };
+
+    assert_eq!(current_worktree_count(&ctx).expect("worktree count"), 3);
+}
+
+#[test]
 fn detected_agents_attach_to_session_when_match_is_unique() {
     let mut state = sample_state();
     if let Some(session) = state.sessions.get_mut("idle-review") {

@@ -54,6 +54,18 @@ const SCC_REFRESH_MS: u64 = 60 * 1000;
 const FALLBACK_SCAN_REFRESH_MS: u64 = 15_000;
 const FALLBACK_SCAN_IDLE_WINDOW_MS: i64 = 15_000;
 
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct RepoStatusSummary {
+    branch: Option<String>,
+    ahead_count: Option<usize>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct BranchResolution {
+    branch: Option<String>,
+    upstream: Option<String>,
+}
+
 pub fn run(ctx: RepoContext, poll_interval_ms: u64) -> Result<()> {
     enable_raw_mode().context("enable raw mode")?;
     execute!(stdout(), EnterAlternateScreen).context("enter alternate screen")?;
@@ -73,11 +85,12 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     let mut feed = RuntimeFeed::open(&ctx.runtime_event_path)?;
     ensure_runtime_service(&ctx)?;
     let repo_root = ctx.repo_root.to_string_lossy().to_string();
-    let branch = current_branch(&ctx).unwrap_or_else(|_| "-".to_string());
+    let repo_status = read_repo_status(&ctx).unwrap_or_default();
+    let branch = repo_status.branch.unwrap_or_else(|| "-".to_string());
     let mut state = RuntimeState::new(repo_root.clone(), branch);
     state.sync_focus_for_width(terminal.size()?.width);
     state.set_runtime_transport(read_runtime_transport(&ctx));
-    state.set_ahead_count(current_ahead_count(&ctx).ok());
+    state.set_ahead_count(repo_status.ahead_count);
     state.set_worktree_count(current_worktree_count(&ctx).ok());
     let mut cache = AppCache::new(&repo_root);
     cache.set_fitness_mode(state.fitness_view_mode);
@@ -134,7 +147,7 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
         if force_scan {
             let dirty = observe::scan_repo(&ctx)?;
             state.sync_dirty_files(dirty);
-            state.set_ahead_count(current_ahead_count(&ctx).ok());
+            apply_repo_status(&mut state, read_repo_status(&ctx).ok());
             last_poll = Instant::now();
         }
 
@@ -143,10 +156,7 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
             last_transport_refresh = Instant::now();
         }
         if last_repo_status_refresh.elapsed() >= Duration::from_millis(REPO_STATUS_REFRESH_MS) {
-            if let Ok(branch) = current_branch(&ctx) {
-                state.branch = branch;
-            }
-            state.set_ahead_count(current_ahead_count(&ctx).ok());
+            apply_repo_status(&mut state, read_repo_status(&ctx).ok());
             state.set_worktree_count(current_worktree_count(&ctx).ok());
             last_repo_status_refresh = Instant::now();
         }
@@ -306,102 +316,127 @@ fn refresh_fitness_from_event(
     );
 }
 
-fn current_branch(ctx: &RepoContext) -> Result<String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&ctx.repo_root)
-        .arg("branch")
-        .arg("--show-current")
-        .output()
-        .context("run git branch --show-current")?;
-    if !output.status.success() {
-        anyhow::bail!("git branch --show-current failed");
-    }
-    Ok(String::from_utf8(output.stdout)
-        .context("decode branch output")?
-        .trim()
-        .to_string())
+fn apply_repo_status(state: &mut RuntimeState, repo_status: Option<RepoStatusSummary>) {
+    let repo_status = repo_status.unwrap_or_default();
+    state.branch = repo_status.branch.unwrap_or_else(|| "-".to_string());
+    state.set_ahead_count(repo_status.ahead_count);
 }
 
-fn current_ahead_count(ctx: &RepoContext) -> Result<usize> {
-    let base_ref = upstream_or_main_ref(ctx)?;
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&ctx.repo_root)
-        .arg("rev-list")
-        .arg("--count")
-        .arg(format!("{base_ref}..HEAD"))
-        .output()
-        .context("run git rev-list --count base..HEAD")?;
-    if !output.status.success() {
-        anyhow::bail!("git rev-list --count failed");
-    }
-    Ok(String::from_utf8(output.stdout)
-        .context("decode rev-list output")?
-        .trim()
-        .parse::<usize>()
-        .unwrap_or(0))
+fn read_repo_status(ctx: &RepoContext) -> Result<RepoStatusSummary> {
+    let branch_resolution = read_branch_resolution(ctx)?;
+    let ahead_count = match branch_resolution.upstream.as_deref() {
+        Some(upstream) => read_ahead_count(ctx, upstream).ok(),
+        None => None,
+    };
+
+    Ok(RepoStatusSummary {
+        branch: branch_resolution.branch,
+        ahead_count,
+    })
 }
 
-fn current_worktree_count(ctx: &RepoContext) -> Result<usize> {
+fn read_branch_resolution(ctx: &RepoContext) -> Result<BranchResolution> {
     let output = Command::new("git")
-        .arg("-C")
-        .arg(&ctx.repo_root)
-        .arg("worktree")
-        .arg("list")
-        .arg("--porcelain")
-        .output()
-        .context("run git worktree list --porcelain")?;
-    if !output.status.success() {
-        anyhow::bail!("git worktree list --porcelain failed");
-    }
-
-    let count = String::from_utf8(output.stdout)
-        .context("decode worktree list output")?
-        .lines()
-        .filter(|line| line.starts_with("worktree "))
-        .count();
-
-    Ok(count.max(1))
-}
-
-fn upstream_or_main_ref(ctx: &RepoContext) -> Result<String> {
-    let upstream = Command::new("git")
         .arg("-C")
         .arg(&ctx.repo_root)
         .arg("rev-parse")
         .arg("--abbrev-ref")
-        .arg("--symbolic-full-name")
+        .arg("HEAD")
         .arg("@{upstream}")
         .output()
-        .context("run git rev-parse @{upstream}")?;
-    if upstream.status.success() {
-        let value = String::from_utf8(upstream.stdout)
-            .context("decode upstream output")?
-            .trim()
-            .to_string();
-        if !value.is_empty() {
-            return Ok(value);
-        }
+        .context("run git rev-parse branch and upstream")?;
+    if output.status.success() {
+        let status = String::from_utf8(output.stdout).context("decode rev-parse output")?;
+        return Ok(parse_branch_resolution(&status));
     }
 
-    for candidate in ["origin/main", "main", "origin/master", "master"] {
-        let status = Command::new("git")
-            .arg("-C")
-            .arg(&ctx.repo_root)
-            .arg("rev-parse")
-            .arg("--verify")
-            .arg(candidate)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .with_context(|| format!("verify git ref {candidate}"))?;
-        if status.success() {
-            return Ok(candidate.to_string());
-        }
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&ctx.repo_root)
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .output()
+        .context("run git rev-parse branch")?;
+    if !output.status.success() {
+        anyhow::bail!("git rev-parse branch failed");
     }
 
-    anyhow::bail!("no upstream or main ref found")
+    let branch = String::from_utf8(output.stdout).context("decode branch output")?;
+    Ok(BranchResolution {
+        branch: normalize_branch_name(branch.trim()),
+        upstream: None,
+    })
+}
+
+fn parse_branch_resolution(output: &str) -> BranchResolution {
+    let mut lines = output.lines().map(str::trim).filter(|line| !line.is_empty());
+
+    BranchResolution {
+        branch: lines.next().and_then(normalize_branch_name),
+        upstream: lines.next().map(str::to_string),
+    }
+}
+
+fn normalize_branch_name(branch: &str) -> Option<String> {
+    match branch.trim() {
+        "" | "HEAD" | "(detached)" => None,
+        value => Some(value.to_string()),
+    }
+}
+
+fn read_ahead_count(ctx: &RepoContext, upstream: &str) -> Result<usize> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&ctx.repo_root)
+        .arg("rev-list")
+        .arg("--left-right")
+        .arg("--count")
+        .arg(format!("HEAD...{upstream}"))
+        .output()
+        .context("run git rev-list --left-right --count HEAD...upstream")?;
+    if !output.status.success() {
+        anyhow::bail!("git rev-list --left-right --count failed");
+    }
+
+    let counts = String::from_utf8(output.stdout).context("decode rev-list output")?;
+    Ok(parse_ahead_count(&counts).unwrap_or(0))
+}
+
+fn parse_ahead_count(counts: &str) -> Option<usize> {
+    counts
+        .split_whitespace()
+        .next()
+        .and_then(|count| count.parse::<usize>().ok())
+}
+
+fn current_worktree_count(ctx: &RepoContext) -> Result<usize> {
+    let common_git_dir = common_git_dir(&ctx.git_dir);
+    let worktrees_dir = common_git_dir.join("worktrees");
+    let extra_worktrees = std::fs::read_dir(&worktrees_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(|entry| entry.ok()))
+        .filter(|entry| entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
+        .count();
+
+    Ok(extra_worktrees + 1)
+}
+
+fn common_git_dir(git_dir: &std::path::Path) -> std::path::PathBuf {
+    if git_dir
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .is_some_and(|name| name == "worktrees")
+    {
+        return git_dir
+            .parent()
+            .and_then(|parent| parent.parent())
+            .unwrap_or(git_dir)
+            .to_path_buf();
+    }
+
+    git_dir.to_path_buf()
 }
 
 fn ensure_runtime_service(ctx: &RepoContext) -> Result<()> {
