@@ -231,7 +231,7 @@ describe("RoutaOrchestrator", () => {
   it("creates after_all delegation groups and assigns roster metadata for team leads", async () => {
     const { orchestrator, system, callerAgent, task } = createOrchestratorFixture();
     callerAgent.metadata.specialist = "team-agent-lead";
-    (orchestrator as { spawnChildAgent: () => Promise<{ sandboxId?: string }> }).spawnChildAgent =
+    (orchestrator as unknown as { spawnChildAgent: () => Promise<{ sandboxId?: string }> }).spawnChildAgent =
       vi.fn(async () => ({ sandboxId: "sandbox-1" }));
     const sessionRegistrationHandler = vi.fn();
     orchestrator.setSessionRegistrationHandler(sessionRegistrationHandler);
@@ -290,7 +290,7 @@ describe("RoutaOrchestrator", () => {
       }),
     ]);
     expect(
-      (orchestrator as { activeGroupByAgent: Map<string, string> }).activeGroupByAgent.get(
+      (orchestrator as unknown as { activeGroupByAgent: Map<string, string> }).activeGroupByAgent.get(
         "caller-agent",
       ),
     ).toBe("delegation-group-group-uuid-1");
@@ -298,7 +298,7 @@ describe("RoutaOrchestrator", () => {
 
   it("rolls back task and agent state when spawning the child process fails", async () => {
     const { orchestrator, system, task } = createOrchestratorFixture();
-    (orchestrator as { spawnChildAgent: () => Promise<{ sandboxId?: string }> }).spawnChildAgent =
+    (orchestrator as unknown as { spawnChildAgent: () => Promise<{ sandboxId?: string }> }).spawnChildAgent =
       vi.fn(async () => {
         throw new Error("spawn exploded");
       });

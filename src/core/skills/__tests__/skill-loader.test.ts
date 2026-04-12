@@ -7,7 +7,7 @@ const fsState = vi.hoisted(() => ({
   dirEntries: new Map<string, DirEntry[]>(),
   fileContents: new Map<string, string>(),
   env: {
-    HOME: "/home/tester",
+    HOME: "/home/tester" as string | undefined,
     USERPROFILE: undefined as string | undefined,
   },
 }));
