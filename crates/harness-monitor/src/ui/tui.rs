@@ -153,6 +153,9 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
             state.apply_message(message);
         }
         if let Ok(messages) = transcript_rx.try_recv() {
+            if !messages.is_empty() {
+                force_scan = true;
+            }
             let recovered_session_count = messages
                 .iter()
                 .filter_map(|message| match message {
