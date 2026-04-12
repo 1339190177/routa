@@ -101,7 +101,7 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     let (transcript_tx, transcript_rx) = mpsc::channel();
     let transcript_ctx = ctx.clone();
     thread::spawn(move || {
-        let result = crate::observe::hooks::bootstrap_codex_transcript_messages(
+        let result = crate::observe::codex_transcript::bootstrap_codex_transcript_messages(
             &transcript_ctx.repo_root,
         )
         .unwrap_or_default();

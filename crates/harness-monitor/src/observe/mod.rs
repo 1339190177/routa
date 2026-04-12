@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 #![allow(clippy::module_inception)]
 
+pub mod codex_transcript;
 pub mod detect;
 pub mod events;
 pub mod hooks;
