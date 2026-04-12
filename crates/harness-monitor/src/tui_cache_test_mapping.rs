@@ -42,6 +42,7 @@ struct TestMappingCliPayload {
     status_counts: BTreeMap<String, usize>,
 }
 
+#[cfg(test)]
 pub(super) fn build_test_mapping_snapshot(
     cache_key: String,
     entries: Vec<TestMappingEntry>,

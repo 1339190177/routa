@@ -1247,9 +1247,9 @@ mod tests;
 
 #[path = "tui_cache_test_mapping.rs"]
 mod test_mapping;
-use self::test_mapping::{
-    build_test_mapping_snapshot, load_test_mapping_snapshot, test_mapping_cache_key,
-};
+use self::test_mapping::{load_test_mapping_snapshot, test_mapping_cache_key};
+#[cfg(test)]
+use self::test_mapping::build_test_mapping_snapshot;
 pub(super) use self::test_mapping::{TestMappingEntry, TestMappingSnapshot};
 
 #[path = "tui_cache_history.rs"]
