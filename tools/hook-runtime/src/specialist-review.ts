@@ -299,27 +299,37 @@ async function callReviewProvider(params: {
   prompt: string;
   model: string;
   defaultAdapter?: string;
+  validate?: (raw: string) => boolean;
 }): Promise<string> {
   const primaryProvider = resolveReviewProvider(params.defaultAdapter);
   const fallbackProvider = resolveFallbackReviewProvider(primaryProvider, params.defaultAdapter);
+  const validate = params.validate;
 
   try {
-    return await callReviewProviderOnce({
+    const raw = await callReviewProviderOnce({
       prompt: params.prompt,
       model: params.model,
       provider: primaryProvider,
     });
+    if (validate && !validate(raw)) {
+      throw new Error(`Automatic review specialist returned an invalid verdict: ${raw || "(empty response)"}`);
+    }
+    return raw;
   } catch (primaryError) {
     if (!fallbackProvider) {
       throw primaryError;
     }
 
     try {
-      return await callReviewProviderOnce({
+      const raw = await callReviewProviderOnce({
         prompt: params.prompt,
         model: params.model,
         provider: fallbackProvider,
       });
+      if (validate && !validate(raw)) {
+        throw new Error(`Automatic review specialist returned an invalid verdict: ${raw || "(empty response)"}`);
+      }
+      return raw;
     } catch (fallbackError) {
       const primaryDetail = primaryError instanceof Error ? primaryError.message : String(primaryError);
       const fallbackDetail = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
@@ -380,6 +390,11 @@ export async function runReviewTriggerSpecialist(params: {
     prompt,
     model,
     defaultAdapter: specialist.defaultAdapter,
+    validate: (candidate) => {
+      const parsed = parseJsonLoose(candidate);
+      const verdict = parsed.verdict?.toLowerCase();
+      return verdict === "pass" || verdict === "fail";
+    },
   });
   const parsed = parseJsonLoose(raw);
   const verdict = parsed.verdict?.toLowerCase();
