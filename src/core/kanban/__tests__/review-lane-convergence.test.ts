@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createTask } from "../../models/task";
+import { VerificationVerdict } from "../../models/task";
 import { createKanbanBoard } from "../../models/kanban";
 import { resolveReviewLaneConvergenceTarget } from "../review-lane-convergence";
 
@@ -52,7 +53,7 @@ describe("review lane convergence", () => {
     });
     task.assignedSpecialistId = "kanban-review-guard";
     task.assignedSpecialistName = "Review Guard";
-    task.verificationVerdict = "APPROVED";
+    task.verificationVerdict = VerificationVerdict.APPROVED;
 
     expect(resolveReviewLaneConvergenceTarget(task, board.columns)).toBe("done");
   });
@@ -101,7 +102,7 @@ describe("review lane convergence", () => {
     });
     task.assignedSpecialistId = "kanban-qa-frontend";
     task.assignedSpecialistName = "QA Frontend";
-    task.verificationVerdict = "NOT_APPROVED";
+    task.verificationVerdict = VerificationVerdict.NOT_APPROVED;
 
     expect(resolveReviewLaneConvergenceTarget(task, board.columns)).toBeUndefined();
   });
