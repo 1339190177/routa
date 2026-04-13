@@ -15,10 +15,20 @@ import { runWithSpan } from "../telemetry/tracing";
 let schedulerTask: ScheduledTask | null = null;
 let isStarted = false;
 
-const TICK_URL =
-  process.env.NEXT_PUBLIC_APP_URL
-    ? `${process.env.NEXT_PUBLIC_APP_URL}/api/schedules/tick`
-    : "http://localhost:3000/api/schedules/tick";
+export function resolveSchedulerTickUrl(): string {
+  const configuredOrigin =
+    process.env.ROUTA_INTERNAL_API_ORIGIN
+    ?? process.env.ROUTA_BASE_URL
+    ?? process.env.NEXT_PUBLIC_APP_URL
+    ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined);
+
+  if (configuredOrigin) {
+    return `${configuredOrigin.replace(/\/$/, "")}/api/schedules/tick`;
+  }
+
+  const port = process.env.PORT ?? "3000";
+  return `http://127.0.0.1:${port}/api/schedules/tick`;
+}
 
 export function startSchedulerService(): void {
   if (isStarted) return;
@@ -32,17 +42,18 @@ export function startSchedulerService(): void {
   }
 
   console.log("[Scheduler] Starting in-process cron scheduler (every minute)");
+  const tickUrl = resolveSchedulerTickUrl();
 
   schedulerTask = nodeCron.schedule("* * * * *", () => {
     void runWithSpan(
       "routa.scheduler.tick_cycle",
       {
         attributes: {
-          "routa.scheduler.tick_url": TICK_URL,
+          "routa.scheduler.tick_url": tickUrl,
         },
       },
       async (span) => {
-        const resp = await fetch(TICK_URL, { method: "POST" });
+        const resp = await fetch(tickUrl, { method: "POST" });
         span.setAttribute("http.response.status_code", resp.status);
 
         if (!resp.ok) {
