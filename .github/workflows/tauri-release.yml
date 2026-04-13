@@ -147,7 +147,7 @@ jobs:
         run: node scripts/prepare-frontend.mjs
 
       - name: Install Entrix
-        run: python -m pip install -e tools/entrix
+        run: python -m pip install entrix
 
       - name: Clean previous Tauri bundle outputs
         shell: bash
@@ -350,7 +350,7 @@ jobs:
           merge-multiple: true
 
       - name: Install Entrix
-        run: python -m pip install -e tools/entrix
+        run: python -m pip install entrix
 
       - name: Verify all release manifests
         shell: bash
