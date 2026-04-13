@@ -504,3 +504,48 @@ fn query_current_graph_returns_tests_for_target() {
     assert_eq!(result.edges.len(), 1);
     assert_eq!(result.edges[0].kind, "TESTED_BY");
 }
+
+#[test]
+fn query_current_graph_returns_children_for_file() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/service.ts"),
+        "export class Service {}\nexport function run() { return 1; }\n",
+    )
+    .unwrap();
+
+    let result = query_current_graph(root, "src/service.ts", "children_of", ReviewBuildMode::Auto);
+
+    assert_eq!(result.status, "ok");
+    assert_eq!(result.results.len(), 2);
+    assert!(result.edges.iter().all(|edge| edge.kind == "CONTAINS"));
+}
+
+#[test]
+fn query_current_graph_returns_inheritors_for_class() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(
+        root.join("src/service.ts"),
+        "class BaseService {}\nclass ChildService extends BaseService {}\n",
+    )
+    .unwrap();
+
+    let result = query_current_graph(
+        root,
+        "src/service.ts:BaseService",
+        "inheritors_of",
+        ReviewBuildMode::Auto,
+    );
+
+    assert_eq!(result.status, "ok");
+    assert_eq!(result.results.len(), 1);
+    assert_eq!(
+        result.results[0].qualified_name,
+        "src/service.ts:ChildService"
+    );
+    assert_eq!(result.edges[0].kind, "INHERITS");
+}

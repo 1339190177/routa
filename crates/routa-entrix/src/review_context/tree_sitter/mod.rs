@@ -150,6 +150,8 @@ pub fn query_graph(graph: &ParsedReviewGraph, query_type: &str, target: &str) ->
         "tests_for" => query_tests_for(graph, target),
         "callers_of" => query_neighbors(graph, target, true),
         "callees_of" => query_neighbors(graph, target, false),
+        "children_of" => query_children_of(graph, target),
+        "inheritors_of" => query_inheritors_of(graph, target),
         "file_summary" => query_file_summary(graph, target),
         _ => QueryResult::Err {
             status: "error".to_string(),
@@ -249,6 +251,20 @@ fn derive_graph_edges(
         for target in &symbol_nodes {
             if source.qualified_name == target.qualified_name {
                 continue;
+            }
+            if extends_target(source, target) {
+                push_edge(
+                    &mut edges,
+                    &mut seen,
+                    GraphEdge {
+                        kind: "INHERITS",
+                        source_qualified: source.qualified_name.clone(),
+                        target_qualified: target.qualified_name.clone(),
+                        file_path: source.file_path.clone(),
+                        source_file: source.file_path.clone(),
+                        target_file: target.file_path.clone(),
+                    },
+                );
             }
             let matches = source
                 .mentions
@@ -415,6 +431,57 @@ fn query_file_summary(graph: &ParsedReviewGraph, target: &str) -> QueryResult {
     }
 }
 
+fn query_children_of(graph: &ParsedReviewGraph, target: &str) -> QueryResult {
+    let results = graph
+        .changed_nodes
+        .iter()
+        .chain(graph.related_test_nodes.iter())
+        .filter(|node| node.file_path == target && node.kind != "File")
+        .map(symbol_to_payload)
+        .collect::<Vec<_>>();
+    QueryResult::Ok {
+        results,
+        edges: graph
+            .graph_edges
+            .iter()
+            .filter(|edge| edge.kind == "CONTAINS" && edge.source_qualified == target)
+            .cloned()
+            .collect(),
+    }
+}
+
+fn query_inheritors_of(graph: &ParsedReviewGraph, target: &str) -> QueryResult {
+    let symbol_nodes = graph
+        .changed_nodes
+        .iter()
+        .chain(graph.related_test_nodes.iter())
+        .filter(|node| node.kind != "File")
+        .map(|node| (node.qualified_name.clone(), node))
+        .collect::<BTreeMap<_, _>>();
+    let mut results = BTreeMap::<String, SymbolGraphNode>::new();
+    for edge in graph
+        .graph_edges
+        .iter()
+        .filter(|edge| edge.kind == "INHERITS")
+    {
+        if edge.target_qualified != target {
+            continue;
+        }
+        if let Some(node) = symbol_nodes.get(&edge.source_qualified) {
+            results.insert(edge.source_qualified.clone(), symbol_to_payload(node));
+        }
+    }
+    QueryResult::Ok {
+        results: results.into_values().collect(),
+        edges: graph
+            .graph_edges
+            .iter()
+            .filter(|edge| edge.kind == "INHERITS" && edge.target_qualified == target)
+            .cloned()
+            .collect(),
+    }
+}
+
 fn symbol_to_payload(node: &ChangedNode) -> SymbolGraphNode {
     SymbolGraphNode {
         qualified_name: node.qualified_name.clone(),
@@ -429,6 +496,31 @@ fn symbol_to_payload(node: &ChangedNode) -> SymbolGraphNode {
         references: node.references.clone(),
         extends: node.extends.clone(),
     }
+}
+
+fn extends_target(source: &ChangedNode, target: &ChangedNode) -> bool {
+    let extends = source.extends.trim();
+    if extends.is_empty() {
+        return false;
+    }
+    let normalized = extends
+        .trim_start_matches("extends")
+        .trim_start_matches("implements")
+        .trim()
+        .trim_start_matches("superclass")
+        .trim();
+    if normalized.is_empty() {
+        return false;
+    }
+    let qualified_tail = target
+        .qualified_name
+        .split(':')
+        .next_back()
+        .unwrap_or(target.name.as_str());
+    normalized == target.name
+        || normalized.ends_with(&target.name)
+        || normalized == qualified_tail
+        || normalized.ends_with(qualified_tail)
 }
 
 fn test_targets_node(test: &ChangedNode, target: &ChangedNode) -> bool {
@@ -650,7 +742,10 @@ fn collect_repo_files_inner(root: &Path, dir: &Path, out: &mut Vec<String>) {
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            let name = path.file_name().and_then(|value| value.to_str()).unwrap_or_default();
+            let name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default();
             if matches!(
                 name,
                 ".git" | "target" | "node_modules" | ".next" | "dist" | "build"
