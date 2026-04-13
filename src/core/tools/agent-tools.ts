@@ -51,6 +51,7 @@ import {
   PermissionRequestOptions,
   PermissionUrgency,
 } from './permission-store';
+import { getTaskLaneSession } from "../kanban/task-lane-history";
 
 function extractSandboxId(options?: PermissionRequestOptions): string | undefined {
   const sandboxId = options?.sandboxId;
@@ -94,6 +95,50 @@ function notifyKanbanArtifactChanged(workspaceId: string, taskId: string): void 
     resourceId: taskId,
     source: "agent",
   });
+}
+
+function shouldEmitSyntheticCompletion(params: {
+  task: Task;
+  agentId: string;
+  updates: {
+    completionSummary?: string;
+    verificationVerdict?: string;
+    verificationReport?: string;
+  };
+}): boolean {
+  const { task, agentId, updates } = params;
+  const laneSession = getTaskLaneSession(task, agentId);
+  if (!laneSession || laneSession.status !== "running") {
+    return false;
+  }
+  if (laneSession.columnId !== task.columnId) {
+    return false;
+  }
+
+  if (
+    laneSession.completionRequirement === "completion_summary"
+    && updates.completionSummary?.trim()
+  ) {
+    return true;
+  }
+
+  if (
+    laneSession.completionRequirement === "verification_report"
+    && updates.verificationReport?.trim()
+  ) {
+    return true;
+  }
+
+  if (
+    laneSession.columnId === "review"
+    && laneSession.role === "GATE"
+    && updates.verificationVerdict
+    && updates.verificationReport?.trim()
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 export class AgentTools {
@@ -808,6 +853,22 @@ export class AgentTools {
     task.updatedAt = new Date();
 
     await this.taskStore.save(task);
+
+    if (shouldEmitSyntheticCompletion({ task, agentId, updates })) {
+      this.eventBus.emit({
+        type: AgentEventType.AGENT_COMPLETED,
+        agentId,
+        workspaceId: task.workspaceId,
+        data: {
+          sessionId: agentId,
+          success: true,
+          synthesizedBy: "updateTask",
+          trigger: updates.verificationReport !== undefined ? "verification_report" : "completion_summary",
+          taskId,
+        },
+        timestamp: new Date(),
+      });
+    }
 
     // Emit events if status changed
     if (updates.status && oldStatus !== task.status) {
