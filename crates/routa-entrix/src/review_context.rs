@@ -248,6 +248,7 @@ fn build_targets(graph: &ParsedReviewGraph, max_targets: usize) -> Vec<ReviewTar
     let test_nodes = graph
         .changed_nodes
         .iter()
+        .chain(graph.related_test_nodes.iter())
         .filter(|node| node.is_test)
         .map(|node| (node.qualified_name.clone(), node))
         .collect::<std::collections::BTreeMap<_, _>>();
@@ -734,5 +735,107 @@ mod tests {
         );
 
         assert!(result.context.source_snippets.is_none());
+    }
+
+    #[test]
+    fn review_context_links_java_companion_test_file() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src/main/java/com/example")).unwrap();
+        fs::create_dir_all(root.join("src/test/java/com/example")).unwrap();
+        fs::write(
+            root.join("src/main/java/com/example/Service.java"),
+            "package com.example;\nclass Service {\n  String run() { return \"ok\"; }\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("src/test/java/com/example/ServiceTest.java"),
+            "package com.example;\nclass ServiceTest {\n  @Test\n  void testRun() { new Service().run(); }\n}\n",
+        )
+        .unwrap();
+
+        let result = build_review_context(
+            root,
+            &["src/main/java/com/example/Service.java".to_string()],
+            ReviewContextOptions {
+                base: "HEAD",
+                include_source: true,
+                max_files: 12,
+                max_lines_per_file: 120,
+                build_mode: ReviewBuildMode::Auto,
+                max_targets: 25,
+            },
+        );
+
+        assert_eq!(result.context.targets.len(), 2);
+        let run_target = result
+            .context
+            .targets
+            .iter()
+            .find(|target| target.qualified_name.ends_with(".Service.run"))
+            .unwrap();
+        assert_eq!(run_target.tests_count, 1);
+        assert_eq!(
+            run_target.tests[0].qualified_name,
+            "src/test/java/com/example/ServiceTest.java:com.example.ServiceTest.testRun"
+        );
+        assert_eq!(
+            result.context.tests.test_files,
+            vec!["src/test/java/com/example/ServiceTest.java".to_string()]
+        );
+        assert!(result
+            .context
+            .review_guidance
+            .contains("Changes appear locally test-covered"));
+    }
+
+    #[test]
+    fn review_context_links_go_companion_test_file() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("pkg/demo")).unwrap();
+        fs::write(
+            root.join("pkg/demo/service.go"),
+            "package demo\n\ntype Service struct{}\n\nfunc (s *Service) Run() int { return 1 }\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("pkg/demo/service_test.go"),
+            "package demo\n\nfunc TestRun(t *testing.T) {\n  var service Service\n  _ = service.Run()\n}\n",
+        )
+        .unwrap();
+
+        let result = build_review_context(
+            root,
+            &["pkg/demo/service.go".to_string()],
+            ReviewContextOptions {
+                base: "HEAD",
+                include_source: true,
+                max_files: 12,
+                max_lines_per_file: 120,
+                build_mode: ReviewBuildMode::Auto,
+                max_targets: 25,
+            },
+        );
+
+        let run_target = result
+            .context
+            .targets
+            .iter()
+            .find(|target| target.qualified_name == "pkg/demo/service.go:Service.Run")
+            .unwrap();
+        assert_eq!(run_target.tests_count, 1);
+        assert_eq!(
+            run_target.tests[0].qualified_name,
+            "pkg/demo/service_test.go:TestRun"
+        );
+        assert_eq!(
+            result.context.tests.test_files,
+            vec!["pkg/demo/service_test.go".to_string()]
+        );
+        assert!(result
+            .context
+            .review_guidance
+            .contains("Changes appear locally test-covered"));
     }
 }

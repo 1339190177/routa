@@ -7,10 +7,12 @@ use tree_sitter::{Language, Node, Parser};
 #[derive(Debug, Clone)]
 pub struct ParsedReviewGraph {
     pub changed_nodes: Vec<ChangedNode>,
+    pub related_test_nodes: Vec<ChangedNode>,
     pub target_tests: Vec<(String, String)>,
     pub files_updated: usize,
     pub total_edges: usize,
     pub languages: Vec<String>,
+    pub related_test_files: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -63,9 +65,11 @@ pub struct SymbolGraphNode {
 
 pub fn parse_changed_files(repo_root: &Path, changed_files: &[String]) -> ParsedReviewGraph {
     let mut changed_nodes = Vec::new();
+    let mut related_test_nodes = Vec::new();
     let mut files_updated = 0usize;
     let mut languages = BTreeSet::new();
     let mut total_edges = 0usize;
+    let mut related_test_files = BTreeSet::new();
 
     for relative_path in changed_files {
         let full_path = repo_root.join(relative_path);
@@ -111,17 +115,59 @@ pub fn parse_changed_files(repo_root: &Path, changed_files: &[String]) -> Parsed
         };
         total_edges += file_nodes.len();
         changed_nodes.append(&mut file_nodes);
+
+        if !is_test_file(relative_path) {
+            for candidate in companion_test_candidates(relative_path) {
+                if changed_files.contains(&candidate) || !repo_root.join(&candidate).is_file() {
+                    continue;
+                }
+                if !related_test_files.insert(candidate.clone()) {
+                    continue;
+                }
+                let Ok(test_source) = fs::read_to_string(repo_root.join(&candidate)) else {
+                    continue;
+                };
+                let Some(test_language) = language_for_path(&candidate) else {
+                    continue;
+                };
+                let mut parser = Parser::new();
+                if parser.set_language(&test_language.ts_language()).is_err() {
+                    continue;
+                }
+                let Some(test_tree) = parser.parse(&test_source, None) else {
+                    continue;
+                };
+                let mut test_nodes = match test_language {
+                    SupportedLanguage::Rust => {
+                        parse_rust_nodes(&candidate, &test_source, test_tree.root_node())
+                    }
+                    SupportedLanguage::TypeScript => {
+                        parse_typescript_nodes(&candidate, &test_source, test_tree.root_node())
+                    }
+                    SupportedLanguage::Java => {
+                        parse_java_nodes(&candidate, &test_source, test_tree.root_node())
+                    }
+                    SupportedLanguage::Go => {
+                        parse_go_nodes(&candidate, &test_source, test_tree.root_node())
+                    }
+                };
+                total_edges += test_nodes.len();
+                related_test_nodes.append(&mut test_nodes);
+            }
+        }
     }
 
-    let target_tests = derive_target_tests(&changed_nodes);
+    let target_tests = derive_target_tests(&changed_nodes, &related_test_nodes);
     total_edges += target_tests.len();
 
     ParsedReviewGraph {
         changed_nodes,
+        related_test_nodes,
         target_tests,
         files_updated,
         total_edges,
         languages: languages.into_iter().collect(),
+        related_test_files: related_test_files.into_iter().collect(),
     }
 }
 
@@ -152,24 +198,53 @@ pub fn node_to_payload(node: &ChangedNode) -> GraphNodePayload {
     })
 }
 
-fn derive_target_tests(nodes: &[ChangedNode]) -> Vec<(String, String)> {
-    let targets: Vec<&ChangedNode> = nodes
+fn derive_target_tests(
+    changed_nodes: &[ChangedNode],
+    related_test_nodes: &[ChangedNode],
+) -> Vec<(String, String)> {
+    let targets: Vec<&ChangedNode> = changed_nodes
         .iter()
         .filter(|node| node.kind != "File" && !node.is_test)
         .collect();
-    let tests: Vec<&ChangedNode> = nodes.iter().filter(|node| node.is_test).collect();
+    let tests: Vec<&ChangedNode> = changed_nodes
+        .iter()
+        .chain(related_test_nodes.iter())
+        .filter(|node| node.is_test)
+        .collect();
     let mut edges = Vec::new();
     for target in targets {
         for test in &tests {
-            if test.file_path != target.file_path {
-                continue;
-            }
-            if test.mentions.iter().any(|name| name == &target.name) {
+            if test_targets_node(test, target) {
                 edges.push((target.qualified_name.clone(), test.qualified_name.clone()));
             }
         }
     }
     edges
+}
+
+fn test_targets_node(test: &ChangedNode, target: &ChangedNode) -> bool {
+    if test.file_path == target.file_path && test.mentions.iter().any(|name| name == &target.name) {
+        return true;
+    }
+
+    if test.mentions.iter().any(|name| name == &target.name) {
+        return true;
+    }
+
+    let test_name_lower = test.name.to_ascii_lowercase();
+    let target_name_lower = target.name.to_ascii_lowercase();
+    if test_name_lower.contains(&target_name_lower) {
+        return true;
+    }
+
+    if let Some(parent_name) = target.parent_name.as_deref() {
+        let parent_lower = parent_name.to_ascii_lowercase();
+        if test_name_lower.contains(&parent_lower) {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn parse_rust_nodes(relative_path: &str, source: &str, root: Node<'_>) -> Vec<ChangedNode> {
@@ -814,6 +889,65 @@ fn simplify_go_receiver(text: &str) -> String {
         .unwrap_or(trimmed)
         .trim_start_matches('*')
         .to_string()
+}
+
+fn companion_test_candidates(relative_path: &str) -> Vec<String> {
+    match Path::new(relative_path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "java" => java_companion_test_candidates(relative_path),
+        "go" => go_companion_test_candidates(relative_path),
+        _ => Vec::new(),
+    }
+}
+
+fn java_companion_test_candidates(relative_path: &str) -> Vec<String> {
+    if let Some(rest) = relative_path.strip_prefix("src/main/java/") {
+        let stem = Path::new(rest)
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        let parent = Path::new(rest).parent().unwrap_or_else(|| Path::new(""));
+        return ["Test", "Tests", "IT"]
+            .into_iter()
+            .map(|suffix| {
+                Path::new("src/test/java")
+                    .join(parent)
+                    .join(format!("{stem}{suffix}.java"))
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+    }
+    Vec::new()
+}
+
+fn go_companion_test_candidates(relative_path: &str) -> Vec<String> {
+    let path = Path::new(relative_path);
+    let parent = path.parent().unwrap_or_else(|| Path::new(""));
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if stem.ends_with("_test") || stem.is_empty() {
+        return Vec::new();
+    }
+    vec![parent
+        .join(format!("{stem}_test.go"))
+        .to_string_lossy()
+        .replace('\\', "/")]
+}
+
+fn is_test_file(relative_path: &str) -> bool {
+    let lowered = relative_path.to_ascii_lowercase();
+    lowered.contains("/src/test/java/")
+        || lowered.ends_with("_test.go")
+        || lowered.contains(".test.")
+        || lowered.contains(".spec.")
 }
 
 fn parse_named_node(
