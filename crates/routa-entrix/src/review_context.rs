@@ -36,6 +36,7 @@ pub struct GraphContext {
 #[derive(Debug, Clone, Serialize)]
 pub struct ReviewTarget {
     pub qualified_name: String,
+    pub name: String,
     pub kind: String,
     pub file_path: String,
     pub tests: Vec<TestTarget>,
@@ -102,6 +103,8 @@ pub fn build_review_context(
     let impacted_files = collect_impacted_files(&mapping.changed_files, &test_files);
     let targets = build_targets(&mapping.mappings);
     let untested_targets = build_untested_targets(&mapping.mappings);
+    let changed_node_count = targets.len();
+    let impacted_node_count = changed_node_count + test_files.len();
     let review_guidance =
         generate_review_guidance(&untested_targets, test_files.len(), impacted_files.len());
     let source_snippets = options.include_source.then(|| {
@@ -118,8 +121,8 @@ pub fn build_review_context(
     let summary = format!(
         "Review context for {} changed file(s):\n  - {} directly changed nodes\n  - {} impacted nodes in {} files\n\nReview guidance:\n{}",
         mapping.changed_files.len(),
-        0,
-        0,
+        changed_node_count,
+        impacted_node_count,
         impacted_files.len(),
         review_guidance
     );
@@ -183,20 +186,29 @@ fn build_targets(mappings: &[TestMappingRecord]) -> Vec<ReviewTarget> {
     mappings
         .iter()
         .map(|record| {
-            let tests: Vec<TestTarget> = record
+            let mut tests: Vec<TestTarget> = record
                 .related_test_files
                 .iter()
-                .map(|path| TestTarget {
-                    qualified_name: path.clone(),
-                    name: file_name(path),
-                    kind: "File".to_string(),
-                    file_path: path.clone(),
-                    is_test: true,
-                })
+                .map(|path| build_test_target(path))
                 .collect();
+            if record.has_inline_tests {
+                tests.push(TestTarget {
+                    qualified_name: format!("{}::inline_tests", record.source_file),
+                    name: "inline_tests".to_string(),
+                    kind: "InlineTest".to_string(),
+                    file_path: record.source_file.clone(),
+                    is_test: true,
+                });
+            }
+            tests.sort_by(|a, b| {
+                a.file_path
+                    .cmp(&b.file_path)
+                    .then_with(|| a.qualified_name.cmp(&b.qualified_name))
+            });
             ReviewTarget {
                 qualified_name: record.source_file.clone(),
-                kind: "File".to_string(),
+                name: file_stem(&record.source_file),
+                kind: target_kind(record),
                 file_path: record.source_file.clone(),
                 tests_count: tests.len(),
                 tests,
@@ -206,6 +218,16 @@ fn build_targets(mappings: &[TestMappingRecord]) -> Vec<ReviewTarget> {
             }
         })
         .collect()
+}
+
+fn build_test_target(path: &str) -> TestTarget {
+    TestTarget {
+        qualified_name: path.to_string(),
+        name: file_name(path),
+        kind: "File".to_string(),
+        file_path: path.to_string(),
+        is_test: true,
+    }
 }
 
 fn build_untested_targets(mappings: &[TestMappingRecord]) -> Vec<UntestedTarget> {
@@ -219,7 +241,7 @@ fn build_untested_targets(mappings: &[TestMappingRecord]) -> Vec<UntestedTarget>
         })
         .map(|record| UntestedTarget {
             qualified_name: record.source_file.clone(),
-            kind: "File".to_string(),
+            kind: target_kind(record),
             file_path: record.source_file.clone(),
         })
         .collect()
@@ -333,6 +355,24 @@ fn file_name(path: &str) -> String {
         .to_string()
 }
 
+fn file_stem(path: &str) -> String {
+    Path::new(path)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or(path)
+        .to_string()
+}
+
+fn target_kind(record: &TestMappingRecord) -> String {
+    match record.language.as_str() {
+        "rust" => "Module",
+        "typescript" | "tsx" | "javascript" | "jsx" => "SourceFile",
+        "java" => "ClassFile",
+        _ => "File",
+    }
+    .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{build_review_context, ReviewContextOptions};
@@ -372,6 +412,10 @@ mod tests {
             result.context.tests.test_files,
             vec!["src/service.test.ts".to_string()]
         );
+        assert_eq!(result.context.targets.len(), 1);
+        assert_eq!(result.context.targets[0].name, "service");
+        assert_eq!(result.context.targets[0].kind, "SourceFile");
+        assert_eq!(result.context.targets[0].tests_count, 1);
         assert_eq!(
             result.context.source_snippets.as_ref().unwrap()[0].file_path,
             "src/service.ts"
@@ -380,6 +424,7 @@ mod tests {
             .context
             .review_guidance
             .contains("Changes appear locally test-covered"));
+        assert!(result.summary.contains("1 directly changed nodes"));
     }
 
     #[test]
@@ -401,10 +446,42 @@ mod tests {
         );
 
         assert_eq!(result.context.tests.untested_targets.len(), 1);
+        assert_eq!(result.context.targets[0].status.as_deref(), Some("missing"));
         assert!(result
             .context
             .review_guidance
             .contains("lack direct or inherited tests"));
         assert!(result.context.source_snippets.is_none());
+    }
+
+    #[test]
+    fn review_context_surfaces_inline_tests_as_explicit_targets() {
+        let temp = tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("crates/demo/src")).unwrap();
+        fs::write(
+            root.join("crates/demo/src/lib.rs"),
+            "#[cfg(test)]\nmod tests {\n    #[test]\n    fn works() {}\n}\n",
+        )
+        .unwrap();
+
+        let result = build_review_context(
+            root,
+            &["crates/demo/src/lib.rs".to_string()],
+            ReviewContextOptions {
+                base: "HEAD",
+                include_source: false,
+                max_files: 12,
+                max_lines_per_file: 120,
+            },
+        );
+
+        assert_eq!(result.context.targets.len(), 1);
+        assert_eq!(result.context.targets[0].tests_count, 1);
+        assert_eq!(result.context.targets[0].tests[0].kind, "InlineTest");
+        assert!(result
+            .context
+            .review_guidance
+            .contains("Changes appear locally test-covered"));
     }
 }
