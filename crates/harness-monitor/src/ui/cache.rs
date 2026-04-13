@@ -203,6 +203,7 @@ pub(super) struct AppCache {
     facts_worker_tx: Sender<FactsCommand>,
     eval_worker_tx: Sender<EvalCommand>,
     worker_rx: Receiver<BackgroundResult>,
+    result_signal_rx: Option<Receiver<()>>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -243,11 +244,22 @@ impl AppCache {
         let (facts_worker_tx, facts_worker_rx_cmd) = mpsc::channel();
         let (eval_worker_tx, eval_worker_rx_cmd) = mpsc::channel();
         let (result_tx, worker_rx) = mpsc::channel();
+        let (result_signal_tx, result_signal_rx) = mpsc::channel();
         let preview_result_tx = result_tx.clone();
         let facts_result_tx = result_tx.clone();
-        thread::spawn(move || preview_worker(preview_worker_rx_cmd, preview_result_tx));
-        thread::spawn(move || facts_worker(facts_worker_rx_cmd, facts_result_tx));
-        thread::spawn(move || eval_worker(eval_worker_rx_cmd, result_tx));
+        let preview_result_signal_tx = result_signal_tx.clone();
+        let facts_result_signal_tx = result_signal_tx.clone();
+        thread::spawn(move || {
+            preview_worker(
+                preview_worker_rx_cmd,
+                preview_result_tx,
+                preview_result_signal_tx,
+            )
+        });
+        thread::spawn(move || {
+            facts_worker(facts_worker_rx_cmd, facts_result_tx, facts_result_signal_tx)
+        });
+        thread::spawn(move || eval_worker(eval_worker_rx_cmd, result_tx, result_signal_tx));
         let mut cache = Self {
             diff_stats: BTreeMap::new(),
             preview_cache: BTreeMap::new(),
@@ -279,9 +291,14 @@ impl AppCache {
             facts_worker_tx,
             eval_worker_tx,
             worker_rx,
+            result_signal_rx: Some(result_signal_rx),
         };
         cache.load_fitness_history();
         cache
+    }
+
+    pub(super) fn take_result_signal_rx(&mut self) -> Option<Receiver<()>> {
+        self.result_signal_rx.take()
     }
 
     pub(super) fn has_fitness_data(&self) -> bool {
@@ -1246,7 +1263,21 @@ fn compute_diff_stats_batch(
     results
 }
 
-fn preview_worker(rx: Receiver<PreviewCommand>, tx: Sender<BackgroundResult>) {
+fn send_background_result(
+    tx: &Sender<BackgroundResult>,
+    result_signal_tx: &Sender<()>,
+    result: BackgroundResult,
+) {
+    if tx.send(result).is_ok() {
+        let _ = result_signal_tx.send(());
+    }
+}
+
+fn preview_worker(
+    rx: Receiver<PreviewCommand>,
+    tx: Sender<BackgroundResult>,
+    result_signal_tx: Sender<()>,
+) {
     while let Ok(command) = rx.recv() {
         let mut pending = PendingPreviewCommands::default();
         queue_preview_command(&mut pending, command);
@@ -1271,19 +1302,27 @@ fn preview_worker(rx: Receiver<PreviewCommand>, tx: Sender<BackgroundResult>) {
                     (text, false)
                 }
             };
-            let _ = tx.send(BackgroundResult::Detail {
-                entry: DetailCacheEntry {
-                    key: detail_cache_key(&rel_path, &state_code, version, mode),
-                    text,
-                    truncated,
+            send_background_result(
+                &tx,
+                &result_signal_tx,
+                BackgroundResult::Detail {
+                    entry: DetailCacheEntry {
+                        key: detail_cache_key(&rel_path, &state_code, version, mode),
+                        text,
+                        truncated,
+                    },
+                    mode,
                 },
-                mode,
-            });
+            );
         }
     }
 }
 
-fn facts_worker(rx: Receiver<FactsCommand>, tx: Sender<BackgroundResult>) {
+fn facts_worker(
+    rx: Receiver<FactsCommand>,
+    tx: Sender<BackgroundResult>,
+    result_signal_tx: Sender<()>,
+) {
     while let Ok(command) = rx.recv() {
         let mut pending = PendingFactsCommands::default();
         queue_facts_command(&mut pending, command);
@@ -1303,23 +1342,35 @@ fn facts_worker(rx: Receiver<FactsCommand>, tx: Sender<BackgroundResult>) {
                 })
                 .collect::<Vec<_>>();
             let entries = compute_diff_stats_batch(&repo_root, &deduped_files);
-            let _ = tx.send(BackgroundResult::Stats { entries });
+            send_background_result(&tx, &result_signal_tx, BackgroundResult::Stats { entries });
         }
         if let Some((repo_root, rel_path, version, entry_kind)) = pending.facts.take() {
-            let _ = tx.send(BackgroundResult::Facts {
-                entry: load_file_facts(&repo_root, &rel_path, version, entry_kind),
-            });
+            send_background_result(
+                &tx,
+                &result_signal_tx,
+                BackgroundResult::Facts {
+                    entry: load_file_facts(&repo_root, &rel_path, version, entry_kind),
+                },
+            );
         }
         if let Some((repo_root, rel_path, version, entry_kind)) = pending.git_history.take() {
-            let _ = tx.send(BackgroundResult::GitHistoryCount {
-                key: facts_cache_key(&rel_path, version, entry_kind),
-                count: git_file_change_count(&repo_root, &rel_path),
-            });
+            send_background_result(
+                &tx,
+                &result_signal_tx,
+                BackgroundResult::GitHistoryCount {
+                    key: facts_cache_key(&rel_path, version, entry_kind),
+                    count: git_file_change_count(&repo_root, &rel_path),
+                },
+            );
         }
     }
 }
 
-fn eval_worker(rx: Receiver<EvalCommand>, tx: Sender<BackgroundResult>) {
+fn eval_worker(
+    rx: Receiver<EvalCommand>,
+    tx: Sender<BackgroundResult>,
+    result_signal_tx: Sender<()>,
+) {
     while let Ok(command) = rx.recv() {
         let mut pending = PendingEvalCommands::default();
         queue_eval_command(&mut pending, command);
@@ -1329,18 +1380,30 @@ fn eval_worker(rx: Receiver<EvalCommand>, tx: Sender<BackgroundResult>) {
         if let Some((repo_root, cache_key, mode)) = pending.fitness.take() {
             let result = fitness::run_fitness(&repo_root, mode).map_err(|error| error.to_string());
             let _ = cache_key;
-            let _ = tx.send(BackgroundResult::Fitness {
-                result: Box::new(result),
-            });
+            send_background_result(
+                &tx,
+                &result_signal_tx,
+                BackgroundResult::Fitness {
+                    result: Box::new(result),
+                },
+            );
         }
         if let Some((repo_root, files, cache_key)) = pending.test_mapping.take() {
             let result = load_test_mapping_snapshot(&repo_root, &files, cache_key);
-            let _ = tx.send(BackgroundResult::TestMapping { result });
+            send_background_result(
+                &tx,
+                &result_signal_tx,
+                BackgroundResult::TestMapping { result },
+            );
         }
         if let Some(repo_root) = pending.scc.take() {
-            let _ = tx.send(BackgroundResult::Scc {
-                result: run_scc_summary(&repo_root),
-            });
+            send_background_result(
+                &tx,
+                &result_signal_tx,
+                BackgroundResult::Scc {
+                    result: run_scc_summary(&repo_root),
+                },
+            );
         }
     }
 }
