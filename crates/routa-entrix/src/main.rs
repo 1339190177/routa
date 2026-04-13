@@ -2,6 +2,9 @@ use clap::{Args, Parser, Subcommand};
 use routa_entrix::file_budgets::{
     checked_count, evaluate_paths, load_config, resolve_paths,
 };
+use routa_entrix::review_trigger::{
+    collect_changed_files, collect_diff_stats, evaluate_review_triggers, load_review_triggers,
+};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -15,6 +18,8 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Command {
     Hook(HookArgs),
+    #[command(name = "review-trigger")]
+    ReviewTrigger(ReviewTriggerArgs),
 }
 
 #[derive(Args, Debug)]
@@ -43,11 +48,26 @@ struct FileLengthArgs {
     files: Vec<String>,
 }
 
+#[derive(Args, Debug)]
+struct ReviewTriggerArgs {
+    #[arg(long, default_value = "HEAD~1")]
+    base: String,
+    #[arg(long)]
+    config: Option<String>,
+    #[arg(long)]
+    fail_on_trigger: bool,
+    #[arg(long)]
+    json: bool,
+    #[arg(value_name = "files")]
+    files: Vec<String>,
+}
+
 fn main() {
     std::process::exit(match Cli::parse().command {
         Command::Hook(hook) => match hook.command {
             HookCommand::FileLength(args) => cmd_hook_file_length(args),
         },
+        Command::ReviewTrigger(args) => cmd_review_trigger(args),
     });
 }
 
@@ -106,4 +126,65 @@ fn find_project_root() -> PathBuf {
         }
     }
     cwd
+}
+
+fn cmd_review_trigger(args: ReviewTriggerArgs) -> i32 {
+    let project_root = find_project_root();
+    let config_path = args
+        .config
+        .map(PathBuf::from)
+        .unwrap_or_else(|| project_root.join("docs/fitness/review-triggers.yaml"));
+    let rules = match load_review_triggers(&config_path) {
+        Ok(rules) => rules,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let changed_files = if args.files.is_empty() {
+        collect_changed_files(&project_root, &args.base)
+    } else {
+        args.files.clone()
+    };
+    let diff_stats = collect_diff_stats(&project_root, &args.base);
+    let report = evaluate_review_triggers(
+        &rules,
+        &changed_files,
+        &diff_stats,
+        &args.base,
+        Some(&project_root),
+    );
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("serialize review trigger report")
+        );
+    } else {
+        println!("REVIEW TRIGGER REPORT");
+        println!("Base: {}", report.base);
+        println!(
+            "Diff stats: files={} added={} deleted={}",
+            report.diff_stats.file_count,
+            report.diff_stats.added_lines,
+            report.diff_stats.deleted_lines
+        );
+        if report.human_review_required {
+            println!("Human review required: yes");
+            for trigger in &report.triggers {
+                println!("- {} [{}]", trigger.name, trigger.severity);
+                for reason in &trigger.reasons {
+                    println!("  reason: {reason}");
+                }
+            }
+        } else {
+            println!("Human review required: no");
+        }
+    }
+
+    if report.human_review_required && args.fail_on_trigger {
+        3
+    } else {
+        0
+    }
 }
