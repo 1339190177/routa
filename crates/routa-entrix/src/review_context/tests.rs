@@ -1080,6 +1080,74 @@ fn parity_with_python_entrix_for_python_queries() {
 }
 
 #[test]
+fn parity_with_python_entrix_for_import_queries() {
+    let temp = tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(root.join("src/lib.py"), "def helper():\n    return 1\n").unwrap();
+    fs::write(
+        root.join("src/service.py"),
+        "from .lib import helper\n\ndef run():\n    return helper()\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/test_service.py"),
+        "from .service import run\n\ndef test_run():\n    assert run() == 1\n",
+    )
+    .unwrap();
+
+    let Some(python_imports_by_target) =
+        python_entrix_adapter_json(root, "query", &["imports_of", "run"])
+    else {
+        return;
+    };
+    let rust_imports_by_target = serde_json::to_value(query_current_graph(
+        root,
+        "run",
+        "imports_of",
+        ReviewBuildMode::Auto,
+    ))
+    .unwrap();
+    assert_eq!(
+        qualified_names(
+            rust_imports_by_target["results"]
+                .as_array()
+                .map_or(&[], |v| v),
+        ),
+        qualified_names(
+            python_imports_by_target["results"]
+                .as_array()
+                .map_or(&[], |v| v),
+        )
+    );
+
+    let Some(python_imports_qualified) =
+        python_entrix_adapter_json(root, "query", &["imports_of", "src/service.py:run"])
+    else {
+        return;
+    };
+    let rust_imports_qualified = serde_json::to_value(query_current_graph(
+        root,
+        "src/service.py:run",
+        "imports_of",
+        ReviewBuildMode::Auto,
+    ))
+    .unwrap();
+    assert_eq!(
+        qualified_names(
+            rust_imports_qualified["results"]
+                .as_array()
+                .map_or(&[], |v| v),
+        ),
+        qualified_names(
+            python_imports_qualified["results"]
+                .as_array()
+                .map_or(&[], |v| v),
+        )
+    );
+}
+
+#[test]
 fn query_current_graph_limits_call_edges_to_imported_symbols() {
     let temp = tempdir().unwrap();
     let root = temp.path();
