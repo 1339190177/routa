@@ -91,8 +91,6 @@ function main(): void {
   }
 
   const args = [
-    "-m",
-    "entrix",
     "graph",
     "test-mapping",
     "--base",
@@ -103,14 +101,10 @@ function main(): void {
     ...files,
   ];
 
-  const output = execFileSync("python3", args, {
+  const output = execFileSync("entrix", args, {
     cwd: process.cwd(),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      PYTHONPATH: "tools/entrix",
-    },
   });
 
   process.stdout.write(output);

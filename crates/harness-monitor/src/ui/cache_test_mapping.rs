@@ -85,12 +85,9 @@ pub(super) fn load_test_mapping_snapshot(
     files: &[String],
     cache_key: String,
 ) -> Result<TestMappingSnapshot, String> {
-    let mut command = Command::new("python3");
+    let mut command = Command::new("entrix");
     command
         .current_dir(repo_root)
-        .env("PYTHONPATH", "tools/entrix")
-        .arg("-m")
-        .arg("entrix")
         .arg("graph")
         .arg("test-mapping")
         .arg("--json")

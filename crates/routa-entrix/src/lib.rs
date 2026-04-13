@@ -7,6 +7,7 @@ pub mod evidence;
 pub mod governance;
 pub mod model;
 pub mod reporting;
+pub mod review_trigger;
 pub mod runner;
 pub mod scoring;
 pub mod test_mapping;
