@@ -403,7 +403,10 @@ fn main() {
 fn print_subcommand_help(name: &str) {
     let mut cmd = Cli::command();
     if let Some(subcommand) = cmd.find_subcommand_mut(name) {
-        let _ = subcommand.print_help();
+        let _ = subcommand
+            .clone()
+            .bin_name(format!("entrix {name}"))
+            .print_help();
         println!();
     }
 }
