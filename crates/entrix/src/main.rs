@@ -1590,7 +1590,7 @@ fn cmd_graph_impact(args: GraphImpactArgs) -> i32 {
     } else {
         println!("{}", result.summary);
     }
-    0
+    status_exit_code(&result.status)
 }
 
 fn cmd_graph_build(args: GraphBuildArgs) -> i32 {
@@ -1601,7 +1601,7 @@ fn cmd_graph_build(args: GraphBuildArgs) -> i32 {
     } else {
         println!("{}", result.summary);
     }
-    0
+    status_exit_code(&result.status)
 }
 
 fn cmd_graph_analyze_file(args: GraphAnalyzeFileArgs) -> i32 {
@@ -1635,7 +1635,7 @@ fn cmd_graph_stats(args: GraphStatsArgs) -> i32 {
             serde_json::to_string_pretty(&result).expect("serialize graph stats")
         );
     }
-    if result.status == "unavailable" { 1 } else { 0 }
+    status_exit_code(&result.status)
 }
 
 #[cfg(test)]
@@ -1652,6 +1652,12 @@ mod cli_parse_tests {
             }) => assert!(json),
             _ => panic!("expected graph stats command"),
         }
+    }
+
+    #[test]
+    fn unavailable_status_maps_to_exit_code_one() {
+        assert_eq!(status_exit_code("unavailable"), 1);
+        assert_eq!(status_exit_code("ok"), 0);
     }
 }
 
@@ -1679,7 +1685,7 @@ fn cmd_graph_test_radius(args: GraphTestRadiusArgs) -> i32 {
     } else {
         println!("{}", result.summary);
     }
-    0
+    status_exit_code(&result.status)
 }
 
 fn cmd_graph_query(args: GraphQueryArgs) -> i32 {
@@ -1696,7 +1702,7 @@ fn cmd_graph_query(args: GraphQueryArgs) -> i32 {
     } else {
         println!("{}", result.summary);
     }
-    0
+    status_exit_code(&result.status)
 }
 
 fn cmd_graph_history(args: GraphHistoryArgs) -> i32 {
@@ -1714,7 +1720,7 @@ fn cmd_graph_history(args: GraphHistoryArgs) -> i32 {
     } else {
         println!("{}", result.summary);
     }
-    0
+    status_exit_code(&result.status)
 }
 
 fn cmd_graph_review_context(args: GraphReviewContextArgs) -> i32 {
@@ -1757,7 +1763,7 @@ fn cmd_graph_review_context(args: GraphReviewContextArgs) -> i32 {
         println!("{}", payload.summary);
     }
 
-    0
+    status_exit_code(&payload.status)
 }
 
 fn parse_build_mode(value: &str) -> ReviewBuildMode {
@@ -1766,6 +1772,10 @@ fn parse_build_mode(value: &str) -> ReviewBuildMode {
         "full" => ReviewBuildMode::Full,
         _ => ReviewBuildMode::Auto,
     }
+}
+
+fn status_exit_code(status: &str) -> i32 {
+    if status == "unavailable" { 1 } else { 0 }
 }
 
 fn cmd_hook_file_length(args: HookFileLengthArgs) -> i32 {
