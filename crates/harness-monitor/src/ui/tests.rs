@@ -1168,6 +1168,24 @@ fn tui_snapshot_file_preview_mode() {
 }
 
 #[test]
+fn git_status_title_keeps_total_summary_without_dirty_diff() {
+    let mut state = sample_state();
+    state.files.clear();
+    state.set_committed_change_summary(Some((7432, 1461)));
+    state.refresh_views();
+    let cache = AppCache::new(&state.repo_root);
+    let line = render_file_panel_title(&state, &cache, "Git Status", 120, palette(ThemeMode::Dark));
+    let text = line
+        .spans
+        .iter()
+        .map(|span| span.content.as_ref())
+        .collect::<String>();
+
+    assert!(text.contains("Git Status"));
+    assert!(text.contains("Total: +7432 -1461"));
+}
+
+#[test]
 fn tui_snapshot_compact_mode() {
     let state = sample_state();
     let mut cache = sample_cache(&state);

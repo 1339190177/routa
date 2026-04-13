@@ -1094,7 +1094,7 @@ fn render_files(
     frame.render_widget(list, split[1]);
 }
 
-fn render_file_panel_title(
+pub(super) fn render_file_panel_title(
     state: &RuntimeState,
     cache: &AppCache,
     label: &str,
@@ -1110,20 +1110,22 @@ fn render_file_panel_title(
     }
 
     let (additions, deletions, has_diff_data) = aggregate_visible_diff_stats(state, cache);
-    if !has_diff_data {
+    if !has_diff_data && state.committed_change_summary.is_none() {
         return Line::from(spans);
     }
 
-    spans.push(Span::raw("  "));
-    spans.push(Span::styled(
-        format!("+{additions}"),
-        Style::default().fg(ACTIVE).add_modifier(Modifier::BOLD),
-    ));
-    spans.push(Span::raw(" "));
-    spans.push(Span::styled(
-        format!("-{deletions}"),
-        Style::default().fg(STOPPED).add_modifier(Modifier::BOLD),
-    ));
+    if has_diff_data {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!("+{additions}"),
+            Style::default().fg(ACTIVE).add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(
+            format!("-{deletions}"),
+            Style::default().fg(STOPPED).add_modifier(Modifier::BOLD),
+        ));
+    }
     if let Some((total_additions, total_deletions)) = state.committed_change_summary {
         spans.push(Span::raw(" "));
         spans.push(Span::styled("(Total:", Style::default().fg(colors.muted)));
