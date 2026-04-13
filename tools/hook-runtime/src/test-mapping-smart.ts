@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { resolveEntrixExec } from "./process.js";
 
 const SOURCE_PATHS = ["src", "apps", "crates"];
 const SOURCE_EXTENSIONS = /\.(ts|tsx|js|jsx|rs|java)$/;
@@ -101,7 +102,8 @@ function main(): void {
     ...files,
   ];
 
-  const output = execFileSync("entrix", args, {
+  const entrix = resolveEntrixExec(process.cwd());
+  const output = execFileSync(entrix.command, [...entrix.args, ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],

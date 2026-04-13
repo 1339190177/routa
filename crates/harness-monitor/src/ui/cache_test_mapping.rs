@@ -1,6 +1,7 @@
 use crate::ui::state::RuntimeState;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 use std::process::Command;
 
 #[derive(Clone, Debug, Default)]
@@ -85,7 +86,7 @@ pub(super) fn load_test_mapping_snapshot(
     files: &[String],
     cache_key: String,
 ) -> Result<TestMappingSnapshot, String> {
-    let mut command = Command::new("entrix");
+    let mut command = entrix_command(Path::new(repo_root));
     command
         .current_dir(repo_root)
         .arg("graph")
@@ -122,6 +123,24 @@ pub(super) fn load_test_mapping_snapshot(
         skipped_test_files: payload.skipped_test_files.into_iter().collect(),
         status_counts: payload.status_counts,
     })
+}
+
+fn entrix_command(repo_root: &Path) -> Command {
+    let debug_binary = repo_root
+        .join("target")
+        .join("debug")
+        .join(if cfg!(windows) {
+            "entrix.exe"
+        } else {
+            "entrix"
+        });
+    if debug_binary.exists() {
+        Command::new(debug_binary)
+    } else {
+        let mut command = Command::new("cargo");
+        command.args(["run", "-q", "-p", "routa-entrix", "--"]);
+        command
+    }
 }
 
 pub(super) fn is_test_like_path(path: &str) -> bool {
