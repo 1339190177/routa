@@ -11,14 +11,6 @@ The project is intentionally not "two separate products". Web and desktop differ
 - `docs/adr/`: Durable architectural decisions. Start here for "why".
 - `docs/design-docs/`: Human-reviewed design intent and normalized decisions migrated from `.kiro/specs/`.
 
-## Documentation Rules
-
-- Keep this file as a routing layer, not a knowledge dump.
-- Put durable guidance in `docs/`, not in duplicated entry-file prose.
-- Keep one canonical home per knowledge type; avoid parallel copies across `AGENTS.md`, `CLAUDE.md`, `.kiro/specs/`, and `docs/`.
-- For long-lived doc additions, place them in the most specific `docs/` area and update repository-map pointers if that area becomes a standard entry point.
-- Unless explicitly asked, do not write extra documentation.
-
 ## Coding Standards
 
 - General coding style guidance lives in `docs/coding-style.md`; keep this file focused on routing and repo-level guardrails.
@@ -68,9 +60,10 @@ entrix run --tier normal   # when behavior/shared modules/APIs/workflow orchestr
 ### Co-Author Format
 
 - If closing an issue in commit text, verify against `main` first: `gh issue view <issue-id>`.
+- Always add co-author information.
 - Only ONE co-author line is allowed. If multiple agents contributed, aggregate into ONE entry
 
-Format (MANDATORY):
+Format example:
 
 Co-authored-by: <AgentName> (<Model>) <Email>
 
