@@ -68,9 +68,9 @@ struct RunArgs {
     dry_run: bool,
     #[arg(long)]
     verbose: bool,
-    #[arg(long, default_value = "failures")]
+    #[arg(long, default_value = "failures", num_args = 0..=1, default_missing_value = "all")]
     stream: String,
-    #[arg(long, default_value = "text")]
+    #[arg(long, default_value = "text", value_parser = ["text", "ascii", "rich"])]
     format: String,
     #[arg(long, default_value_t = 4)]
     progress_refresh: usize,
@@ -431,7 +431,11 @@ fn cmd_run(args: RunArgs) -> i32 {
         verbose: args.verbose,
         min_score: args.min_score,
         fail_on_hard_gate: true,
-        execution_scope: args.scope.as_deref().and_then(parse_scope_filter),
+        execution_scope: args
+            .scope
+            .as_deref()
+            .and_then(parse_scope_filter)
+            .or(Some(ExecutionScope::Local)),
         dimension_filters: args.dimensions,
         metric_filters: args.metrics,
     };
@@ -1262,12 +1266,16 @@ fn cmd_serve() -> i32 {
 
 fn cmd_analyze_long_file(args: AnalyzeLongFileArgs) -> i32 {
     let repo_root = find_project_root();
-    let explicit_files = args
+    // Deduplicate files + paths while preserving insertion order (files first),
+    // matching Python: dict.fromkeys((args.files or []) + (args.paths or []))
+    let mut seen = std::collections::HashSet::new();
+    let explicit_files: Vec<String> = args
         .files
         .iter()
         .chain(args.paths.iter())
+        .filter(|f| seen.insert((*f).clone()))
         .cloned()
-        .collect::<Vec<_>>();
+        .collect();
     let config_path = args.config.as_deref().map(Path::new);
     let report = analyze_long_files(
         &repo_root,
@@ -1403,6 +1411,84 @@ fn print_report_text(report: &entrix::model::FitnessReport, verbose: bool) {
     }
 }
 
+fn format_line_span(start: usize, end: usize) -> String {
+    if start == end {
+        format!("L{start}")
+    } else {
+        format!("L{start}-L{end}")
+    }
+}
+
+fn print_hook_long_file_summary(report: &entrix::long_file::LongFileAnalysisReport) {
+    const MAX_CLASSES: usize = 3;
+    const MAX_METHODS_PER_CLASS: usize = 4;
+    const MAX_FUNCTIONS: usize = 5;
+
+    if report.files.is_empty() {
+        println!("Structure summary unavailable: no supported files for structural analysis.");
+        return;
+    }
+
+    println!("Structure summary (tree-sitter symbols):");
+    for item in &report.files {
+        println!("- {}", item.file_path);
+
+        if item.classes.is_empty() && item.functions.is_empty() {
+            println!("  no class/function symbols found");
+            continue;
+        }
+
+        for cls in item.classes.iter().take(MAX_CLASSES) {
+            println!(
+                "  class {} ({}, methods={})",
+                cls.name,
+                format_line_span(cls.start_line, cls.end_line),
+                cls.method_count,
+            );
+            for method in cls.methods.iter().take(MAX_METHODS_PER_CLASS) {
+                println!(
+                    "    method {} ({})",
+                    method.name,
+                    format_line_span(method.start_line, method.end_line),
+                );
+            }
+            let remaining_methods = cls.methods.len().saturating_sub(MAX_METHODS_PER_CLASS);
+            if remaining_methods > 0 {
+                println!("    ... {remaining_methods} more method(s)");
+            }
+        }
+
+        let remaining_classes = item.classes.len().saturating_sub(MAX_CLASSES);
+        if remaining_classes > 0 {
+            println!("  ... {remaining_classes} more class(es)");
+        }
+
+        if !item.functions.is_empty() {
+            let compact: Vec<String> = item
+                .functions
+                .iter()
+                .take(MAX_FUNCTIONS)
+                .map(|f| {
+                    format!(
+                        "{} ({})",
+                        f.name,
+                        format_line_span(f.start_line, f.end_line),
+                    )
+                })
+                .collect();
+            println!("  functions: {}", compact.join(", "));
+            let remaining_functions = item.functions.len().saturating_sub(MAX_FUNCTIONS);
+            if remaining_functions > 0 {
+                println!("  ... {remaining_functions} more function(s)");
+            }
+        }
+
+        if !item.warnings.is_empty() {
+            println!("  review-warnings: {}", item.warnings.len());
+        }
+    }
+}
+
 fn print_long_file_report(report: &entrix::long_file::LongFileAnalysisReport, min_lines: usize) {
     if report.files.is_empty() {
         println!("No oversized or explicit files matched for long-file analysis.");
@@ -1482,9 +1568,8 @@ fn parse_tier(value: &str) -> Option<Tier> {
 
 fn parse_scope_filter(value: &str) -> Option<ExecutionScope> {
     match value.trim() {
-        // Python Entrix examples and current workflows use `--scope ci` as a
-        // compatibility flag without expecting local-default metrics to drop out.
-        // Keep strict filtering only for non-default runtime scopes.
+        "local" => Some(ExecutionScope::Local),
+        "ci" => Some(ExecutionScope::Ci),
         "staging" => Some(ExecutionScope::Staging),
         "prod_observation" => Some(ExecutionScope::ProdObservation),
         _ => None,
@@ -1691,6 +1776,259 @@ mod cli_parse_tests {
             _ => panic!("expected graph command without subcommand"),
         }
     }
+
+    // --- Python parity tests ported from test_cli.py ---
+
+    #[test]
+    fn run_defaults() {
+        let cli = Cli::parse_from(["entrix", "run"]);
+        match cli.command {
+            Command::Run(args) => {
+                assert!(args.tier.is_none());
+                assert!(args.tier_positional.is_none());
+                assert!(!args.parallel);
+                assert!(!args.dry_run);
+                assert!(!args.verbose);
+                assert_eq!(args.stream, "failures");
+                assert_eq!(args.format, "text");
+                assert_eq!(args.min_score, 80.0);
+                assert!(args.scope.is_none());
+                assert!(!args.changed_only);
+                assert!(args.files.is_empty());
+                assert_eq!(args.base, "HEAD");
+                assert!(args.dimensions.is_empty());
+                assert!(args.metrics.is_empty());
+                assert!(!args.json);
+                assert!(args.output.is_none());
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn run_all_flags() {
+        let cli = Cli::parse_from([
+            "entrix",
+            "run",
+            "--tier", "fast",
+            "--parallel",
+            "--dry-run",
+            "--verbose",
+            "--stream", "all",
+            "--format", "rich",
+            "--min-score", "90.0",
+            "--scope", "ci",
+            "--changed-only",
+            "--files", "a.rs",
+            "--base", "main",
+            "--dimension", "security",
+            "--metric", "lint",
+            "--json",
+            "--output", "report.json",
+        ]);
+        match cli.command {
+            Command::Run(args) => {
+                assert_eq!(args.tier.as_deref(), Some("fast"));
+                assert!(args.parallel);
+                assert!(args.dry_run);
+                assert!(args.verbose);
+                assert_eq!(args.stream, "all");
+                assert_eq!(args.format, "rich");
+                assert_eq!(args.min_score, 90.0);
+                assert_eq!(args.scope.as_deref(), Some("ci"));
+                assert!(args.changed_only);
+                assert_eq!(args.files, vec!["a.rs"]);
+                assert_eq!(args.base, "main");
+                assert_eq!(args.dimensions, vec!["security"]);
+                assert_eq!(args.metrics, vec!["lint"]);
+                assert!(args.json);
+                assert_eq!(args.output.as_deref(), Some("report.json"));
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn run_stream_without_value_defaults_to_all() {
+        // Python: nargs="?", const="all" → --stream with no value gives "all"
+        let cli = Cli::parse_from(["entrix", "run", "--stream", "--dry-run"]);
+        match cli.command {
+            Command::Run(args) => {
+                assert_eq!(args.stream, "all");
+                assert!(args.dry_run);
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn run_stream_with_explicit_value() {
+        let cli = Cli::parse_from(["entrix", "run", "--stream", "off"]);
+        match cli.command {
+            Command::Run(args) => {
+                assert_eq!(args.stream, "off");
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn run_defaults_scope_to_local() {
+        // Python: execution_scope = ExecutionScope(args.scope) if args.scope else ExecutionScope.LOCAL
+        let cli = Cli::parse_from(["entrix", "run"]);
+        match cli.command {
+            Command::Run(args) => {
+                assert!(args.scope.is_none());
+                // When scope is None, cmd_run should default to ExecutionScope::Local
+                let resolved = args
+                    .scope
+                    .as_deref()
+                    .and_then(parse_scope_filter)
+                    .or(Some(ExecutionScope::Local));
+                assert_eq!(resolved, Some(ExecutionScope::Local));
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn validate_parses() {
+        let cli = Cli::parse_from(["entrix", "validate", "--json"]);
+        match cli.command {
+            Command::Validate(args) => assert!(args.json),
+            _ => panic!("expected validate command"),
+        }
+    }
+
+    #[test]
+    fn review_trigger_defaults() {
+        let cli = Cli::parse_from(["entrix", "review-trigger"]);
+        match cli.command {
+            Command::ReviewTrigger(args) => {
+                assert!(args.files.is_empty());
+                assert_eq!(args.base, "HEAD~1");
+                assert!(args.config.is_none());
+                assert!(!args.fail_on_trigger);
+                assert!(!args.json);
+            }
+            _ => panic!("expected review-trigger command"),
+        }
+    }
+
+    #[test]
+    fn release_trigger_defaults() {
+        let cli = Cli::parse_from([
+            "entrix", "release-trigger", "--manifest", "manifest.json",
+        ]);
+        match cli.command {
+            Command::ReleaseTrigger(args) => {
+                assert!(args.files.is_empty());
+                assert_eq!(args.base, "HEAD~1");
+                assert_eq!(args.manifest, "manifest.json");
+                assert!(args.baseline_manifest.is_none());
+                assert!(args.config.is_none());
+                assert!(!args.fail_on_trigger);
+                assert!(!args.json);
+            }
+            _ => panic!("expected release-trigger command"),
+        }
+    }
+
+    #[test]
+    fn hook_file_length_flags() {
+        let cli = Cli::parse_from([
+            "entrix", "hook", "file-length",
+            "--config", "budgets.json",
+            "--staged-only",
+            "--strict-limit",
+        ]);
+        match cli.command {
+            Command::Hook(HookArgs {
+                command: Some(HookCommand::FileLength(args)),
+            }) => {
+                assert_eq!(args.config, "budgets.json");
+                assert!(args.staged_only);
+                assert!(args.strict_limit);
+                assert!(!args.changed_only);
+                assert!(!args.overrides_only);
+            }
+            _ => panic!("expected hook file-length command"),
+        }
+    }
+
+    #[test]
+    fn analyze_long_file_flags() {
+        let cli = Cli::parse_from([
+            "entrix", "analyze", "long-file",
+            "--files", "a.rs",
+            "--base", "main",
+            "--strict-limit",
+            "--json",
+        ]);
+        match cli.command {
+            Command::Analyze(AnalyzeArgs {
+                command: Some(AnalyzeCommand::LongFile(args)),
+            }) => {
+                assert_eq!(args.files, vec!["a.rs"]);
+                assert_eq!(args.base, "main");
+                assert!(args.strict_limit);
+                assert!(args.json);
+            }
+            _ => panic!("expected analyze long-file command"),
+        }
+    }
+
+    #[test]
+    fn analyze_long_file_positional_paths() {
+        let cli = Cli::parse_from([
+            "entrix", "analyze", "long-file", "src/a.ts", "src/b.py",
+        ]);
+        match cli.command {
+            Command::Analyze(AnalyzeArgs {
+                command: Some(AnalyzeCommand::LongFile(args)),
+            }) => {
+                assert_eq!(args.paths, vec!["src/a.ts", "src/b.py"]);
+            }
+            _ => panic!("expected analyze long-file command"),
+        }
+    }
+
+    #[test]
+    fn analyze_long_file_dedup_merges_files_and_paths() {
+        // Python: dict.fromkeys((args.files or []) + (args.paths or []))
+        // "src/a.ts" appears in both --files and positional → deduplicated
+        let files = vec!["src/b.py".to_string(), "src/a.ts".to_string()];
+        let paths = vec!["src/a.ts".to_string(), "src/c.rs".to_string()];
+        let mut seen = std::collections::HashSet::new();
+        let merged: Vec<String> = files
+            .iter()
+            .chain(paths.iter())
+            .filter(|f| seen.insert((*f).clone()))
+            .cloned()
+            .collect();
+        assert_eq!(merged, vec!["src/b.py", "src/a.ts", "src/c.rs"]);
+    }
+
+    #[test]
+    fn stream_mode_parse_parity() {
+        assert_eq!(StreamMode::parse("all"), StreamMode::All);
+        assert_eq!(StreamMode::parse("off"), StreamMode::Off);
+        assert_eq!(StreamMode::parse("failures"), StreamMode::Failures);
+        // Unknown values fall back to Failures (same as Python default)
+        assert_eq!(StreamMode::parse("unknown"), StreamMode::Failures);
+    }
+
+    #[test]
+    fn scope_filter_parse_parity() {
+        assert_eq!(parse_scope_filter("local"), Some(ExecutionScope::Local));
+        assert_eq!(parse_scope_filter("ci"), Some(ExecutionScope::Ci));
+        assert_eq!(parse_scope_filter("staging"), Some(ExecutionScope::Staging));
+        assert_eq!(
+            parse_scope_filter("prod_observation"),
+            Some(ExecutionScope::ProdObservation)
+        );
+        assert_eq!(parse_scope_filter("unknown"), None);
+    }
 }
 
 fn cmd_graph_test_radius(args: GraphTestRadiusArgs) -> i32 {
@@ -1858,6 +2196,37 @@ fn cmd_hook_file_length(args: HookFileLengthArgs) -> i32 {
             "current file length {} exceeds limit {}: {}{}",
             violation.line_count, violation.max_lines, violation.path, reason
         );
+    }
+
+    if !violations.is_empty() {
+        println!("Refactor the oversized file before commit.");
+        // Deduplicate violation paths while preserving order
+        let mut seen = BTreeSet::new();
+        let violation_files: Vec<String> = violations
+            .iter()
+            .filter(|v| seen.insert(v.path.clone()))
+            .map(|v| v.path.clone())
+            .collect();
+        let config_path_ref = Path::new(&args.config);
+        let structure_result = analyze_long_files(
+            &repo_root,
+            Some(violation_files),
+            Some(config_path_ref),
+            &args.base,
+            !args.strict_limit,
+            default_comment_review_commit_threshold(),
+        );
+        if structure_result.status == "unavailable" {
+            println!(
+                "Structure summary unavailable: {}",
+                structure_result
+                    .summary
+                    .as_deref()
+                    .unwrap_or("long-file analysis unavailable")
+            );
+        } else {
+            print_hook_long_file_summary(&structure_result);
+        }
     }
 
     if violations.is_empty() {
