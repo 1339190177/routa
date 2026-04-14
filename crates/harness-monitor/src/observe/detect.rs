@@ -149,7 +149,9 @@ fn parse_agent_line(line: &str, _repo_root: &str) -> Option<DetectedAgent> {
     let command = args.to_string();
     let (name, vendor, icon) = classify_vendor(comm, args)?;
 
-    let cwd = detect_cwd(pid).or_else(|| detect_cwd_from_command(&command));
+    // Prefer explicit cwd flags captured in the process command so tests and
+    // historical ps snapshots do not depend on whatever currently owns the pid.
+    let cwd = detect_cwd_from_command(&command).or_else(|| detect_cwd(pid));
 
     let project = cwd
         .as_deref()
