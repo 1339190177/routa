@@ -384,6 +384,7 @@ function initializeSqliteTables(db: SqliteDatabase): void {
       workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       is_default INTEGER NOT NULL DEFAULT 0,
+      github_token TEXT,
       columns TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
@@ -425,6 +426,7 @@ function initializeSqliteTables(db: SqliteDatabase): void {
     )
   `);
 
+  try { db.run(sql`ALTER TABLE kanban_boards ADD COLUMN github_token TEXT`); } catch { /* column already exists */ }
   db.run(sql`DROP INDEX IF EXISTS kanban_boards_workspace_default_idx`);
 
   db.run(sql`

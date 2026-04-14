@@ -378,7 +378,7 @@ describe("KanbanTab GitHub import", () => {
   it("imports backlog issues without creating a task-level provider override", async () => {
     desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === "/api/github/access") {
+      if (url === "/api/github/access?boardId=board-1") {
         return {
           ok: true,
           json: async () => ({
@@ -387,7 +387,7 @@ describe("KanbanTab GitHub import", () => {
           }),
         } as Response;
       }
-      if (url === "/api/github/issues?workspaceId=workspace-1&codebaseId=codebase-1") {
+      if (url === "/api/github/issues?workspaceId=workspace-1&codebaseId=codebase-1&boardId=board-1") {
         return {
           ok: true,
           json: async () => ({

@@ -166,7 +166,7 @@ export function KanbanTab({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGitHubImportModal, setShowGitHubImportModal] = useState(false);
   const [githubAccessAvailable, setGitHubAccessAvailable] = useState(false);
-  const [githubAccessSource, setGitHubAccessSource] = useState<"env" | "gh" | "none">("none");
+  const [githubAccessSource, setGitHubAccessSource] = useState<"board" | "env" | "gh" | "none">("none");
   const [draft, setDraft] = useState<TaskDraft>({
     ...EMPTY_DRAFT,
     createGitHubIssue: false,
@@ -399,12 +399,21 @@ export function KanbanTab({
 
     void (async () => {
       try {
-        const response = await desktopAwareFetch("/api/github/access", { cache: "no-store" });
+        const searchParams = new URLSearchParams();
+        if (selectedBoardId) {
+          searchParams.set("boardId", selectedBoardId);
+        }
+        const response = await desktopAwareFetch(
+          `/api/github/access${searchParams.size > 0 ? `?${searchParams.toString()}` : ""}`,
+          { cache: "no-store" },
+        );
         const payload = await response.json().catch(() => ({}));
         if (cancelled) return;
 
         const available = response.ok && payload?.available === true;
-        const source = payload?.source === "env" || payload?.source === "gh" ? payload.source : "none";
+        const source = payload?.source === "board" || payload?.source === "env" || payload?.source === "gh"
+          ? payload.source
+          : "none";
         setGitHubAccessAvailable(available);
         setGitHubAccessSource(available ? source : "none");
       } catch {
@@ -417,7 +426,7 @@ export function KanbanTab({
     return () => {
       cancelled = true;
     };
-  }, [hasGitHubCodebase]);
+  }, [hasGitHubCodebase, selectedBoardId]);
 
   useEffect(() => {
     setLocalBoards(boards);
@@ -1601,6 +1610,7 @@ export function KanbanTab({
       newColumnAutomation: Record<string, ColumnAutomationConfig>,
       sessionConcurrencyLimit: number,
       devSessionSupervision: KanbanDevSessionSupervisionInfo,
+      githubTokenUpdate?: { token?: string; clear?: boolean },
     ) => {
       const updatedColumns = newColumns.map((col) => ({
         ...col,
@@ -1612,7 +1622,13 @@ export function KanbanTab({
       const response = await desktopAwareFetch(`/api/kanban/boards/${encodeURIComponent(board.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ columns: updatedColumns, sessionConcurrencyLimit, devSessionSupervision }),
+        body: JSON.stringify({
+          columns: updatedColumns,
+          sessionConcurrencyLimit,
+          devSessionSupervision,
+          ...(githubTokenUpdate?.token ? { githubToken: githubTokenUpdate.token } : {}),
+          ...(githubTokenUpdate?.clear ? { clearGitHubToken: true } : {}),
+        }),
       });
 
       if (!response.ok) {
@@ -1730,6 +1746,7 @@ export function KanbanTab({
   const githubImportModalProps = {
     show: showGitHubImportModal,
     workspaceId,
+    boardId: board?.id,
     codebases,
     tasks: localTasks,
     onClose: () => setShowGitHubImportModal(false),

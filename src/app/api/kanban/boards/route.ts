@@ -16,6 +16,7 @@ import {
   markTaskLaneSessionStatus,
 } from "@/core/kanban/task-lane-history";
 import type { Task, TaskLaneSessionStatus } from "@/core/models/task";
+import type { KanbanBoard, KanbanDevSessionSupervision } from "@/core/models/kanban";
 
 function isSessionActivelyRunning(
   taskSessionId: string | undefined,
@@ -160,6 +161,26 @@ async function reviveMissingEntryAutomations(
 
 export const dynamic = "force-dynamic";
 
+function sanitizeBoard(
+  board: KanbanBoard,
+  extras?: {
+    autoProviderId?: string | null;
+    sessionConcurrencyLimit?: number;
+    devSessionSupervision?: KanbanDevSessionSupervision;
+    queue?: unknown;
+  },
+) {
+  return {
+    ...board,
+    githubToken: undefined,
+    githubTokenConfigured: Boolean(board.githubToken?.trim()),
+    autoProviderId: extras?.autoProviderId,
+    sessionConcurrencyLimit: extras?.sessionConcurrencyLimit,
+    devSessionSupervision: extras?.devSessionSupervision,
+    queue: extras?.queue,
+  };
+}
+
 function requireWorkspaceId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
@@ -184,8 +205,7 @@ export async function GET(request: NextRequest) {
     processManager,
   })));
   return NextResponse.json({
-    boards: await Promise.all(boards.map(async (board) => ({
-      ...board,
+    boards: await Promise.all(boards.map(async (board) => sanitizeBoard(board, {
       autoProviderId: getKanbanAutoProvider(workspace?.metadata, board.id),
       sessionConcurrencyLimit: getKanbanSessionConcurrencyLimit(workspace?.metadata, board.id),
       devSessionSupervision: getKanbanDevSessionSupervision(workspace?.metadata, board.id),
@@ -229,5 +249,5 @@ export async function POST(request: NextRequest) {
     resourceId: board.id,
     source: "user",
   });
-  return NextResponse.json({ board }, { status: 201 });
+  return NextResponse.json({ board: sanitizeBoard(board) }, { status: 201 });
 }
