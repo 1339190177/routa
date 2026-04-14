@@ -1,8 +1,11 @@
 use crate::{
-    parse_scope_filter, status_exit_code, AnalyzeArgs, AnalyzeCommand, Cli, Command, ExecutionScope,
-    GraphArgs, GraphCommand, GraphStatsArgs, HookArgs, HookCommand, StreamMode,
+    cmd_graph_test_mapping, parse_scope_filter, status_exit_code, AnalyzeArgs, AnalyzeCommand, Cli,
+    Command, ExecutionScope, GraphArgs, GraphCommand, GraphStatsArgs, GraphTestMappingArgs,
+    HookArgs, HookCommand, StreamMode,
 };
 use clap::{CommandFactory, Parser};
+use std::fs;
+use tempfile::tempdir;
 
 #[test]
 fn graph_stats_accepts_json_flag() {
@@ -412,6 +415,52 @@ fn graph_test_mapping_flags() {
         }
         _ => panic!("expected graph test-mapping command"),
     }
+}
+
+#[test]
+fn graph_test_mapping_returns_non_zero_when_missing_and_fail_on_missing_enabled() {
+    let temp = tempdir().expect("tempdir");
+    let repo_root = temp.path();
+    fs::create_dir_all(repo_root.join("src")).expect("create src");
+    fs::write(repo_root.join("src/demo.ts"), "export function demo() {}\n").expect("write source");
+
+    let previous = std::env::current_dir().expect("cwd");
+    std::env::set_current_dir(repo_root).expect("chdir temp repo");
+
+    let exit_code = cmd_graph_test_mapping(GraphTestMappingArgs {
+        files: vec!["src/demo.ts".to_string()],
+        base: "HEAD".to_string(),
+        build_mode: "auto".to_string(),
+        no_graph: true,
+        fail_on_missing: true,
+        json: true,
+    });
+
+    std::env::set_current_dir(previous).expect("restore cwd");
+    assert_eq!(exit_code, 2);
+}
+
+#[test]
+fn graph_test_mapping_allows_missing_when_flag_disabled() {
+    let temp = tempdir().expect("tempdir");
+    let repo_root = temp.path();
+    fs::create_dir_all(repo_root.join("src")).expect("create src");
+    fs::write(repo_root.join("src/demo.ts"), "export function demo() {}\n").expect("write source");
+
+    let previous = std::env::current_dir().expect("cwd");
+    std::env::set_current_dir(repo_root).expect("chdir temp repo");
+
+    let exit_code = cmd_graph_test_mapping(GraphTestMappingArgs {
+        files: vec!["src/demo.ts".to_string()],
+        base: "HEAD".to_string(),
+        build_mode: "auto".to_string(),
+        no_graph: true,
+        fail_on_missing: false,
+        json: true,
+    });
+
+    std::env::set_current_dir(previous).expect("restore cwd");
+    assert_eq!(exit_code, 0);
 }
 
 #[test]
