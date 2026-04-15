@@ -338,7 +338,7 @@ pub fn stage_files(repo_path: &str, files: &[String]) -> Result<(), String> {
     let mut args = vec!["add", "--"];
     args.extend(files.iter().map(|s| s.as_str()));
 
-    let output = Command::new("git")
+    let output = git_command()
         .args(&args)
         .current_dir(repo_path)
         .output()
@@ -361,7 +361,7 @@ pub fn unstage_files(repo_path: &str, files: &[String]) -> Result<(), String> {
     let mut args = vec!["restore", "--staged", "--"];
     args.extend(files.iter().map(|s| s.as_str()));
 
-    let output = Command::new("git")
+    let output = git_command()
         .args(&args)
         .current_dir(repo_path)
         .output()
@@ -386,7 +386,7 @@ pub fn discard_changes(repo_path: &str, files: &[String]) -> Result<(), String> 
     let mut untracked_files: Vec<&str> = Vec::new();
 
     for file in files {
-        let output = Command::new("git")
+        let output = git_command()
             .args(["ls-files", "--error-unmatch", "--", file.as_str()])
             .current_dir(repo_path)
             .output()
@@ -403,7 +403,7 @@ pub fn discard_changes(repo_path: &str, files: &[String]) -> Result<(), String> 
         let mut restore_args = vec!["restore", "--"];
         restore_args.extend(tracked_files);
 
-        let restore_output = Command::new("git")
+        let restore_output = git_command()
             .args(&restore_args)
             .current_dir(repo_path)
             .output()
@@ -420,7 +420,7 @@ pub fn discard_changes(repo_path: &str, files: &[String]) -> Result<(), String> 
         let mut clean_args = vec!["clean", "-f", "--"];
         clean_args.extend(untracked_files);
 
-        let clean_output = Command::new("git")
+        let clean_output = git_command()
             .args(&clean_args)
             .current_dir(repo_path)
             .output()
@@ -455,7 +455,7 @@ pub fn create_commit(
     }
 
     // Check if there are staged changes
-    let check_output = Command::new("git")
+    let check_output = git_command()
         .args(["diff", "--cached", "--name-only"])
         .current_dir(repo_path)
         .output()
@@ -466,7 +466,7 @@ pub fn create_commit(
     }
 
     // Create the commit
-    let commit_output = Command::new("git")
+    let commit_output = git_command()
         .args(["commit", "-m", message])
         .current_dir(repo_path)
         .output()
@@ -479,7 +479,7 @@ pub fn create_commit(
     }
 
     // Get the commit SHA
-    let sha_output = Command::new("git")
+    let sha_output = git_command()
         .args(["rev-parse", "HEAD"])
         .current_dir(repo_path)
         .output()
@@ -503,7 +503,7 @@ pub fn pull_commits(
         args.push(branch_name);
     }
 
-    let output = Command::new("git")
+    let output = git_command()
         .args(&args)
         .current_dir(repo_path)
         .output()
@@ -518,7 +518,7 @@ pub fn pull_commits(
 
 /// Rebase current branch onto target branch
 pub fn rebase_branch(repo_path: &str, onto: &str) -> Result<(), String> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(["rebase", onto])
         .current_dir(repo_path)
         .output()
@@ -553,7 +553,7 @@ pub fn reset_branch(
         return Err("Hard reset requires explicit destructive confirmation".to_string());
     }
 
-    let output = Command::new("git")
+    let output = git_command()
         .args(["reset", reset_mode, to])
         .current_dir(repo_path)
         .output()
@@ -788,7 +788,7 @@ fn git_commit_file_status(code: &str) -> CommitFileChangeKind {
 pub fn list_git_refs(repo_path: &str) -> Result<GitRefsResult, String> {
     let current_branch = get_current_branch(repo_path);
 
-    let local_output = Command::new("git")
+    let local_output = git_command()
         .args([
             "for-each-ref",
             "--format=%(refname:short)%09%(objectname)",
@@ -834,7 +834,7 @@ pub fn list_git_refs(repo_path: &str) -> Result<GitRefsResult, String> {
             head_ref
         });
 
-    let remote_output = Command::new("git")
+    let remote_output = git_command()
         .args([
             "for-each-ref",
             "--format=%(refname:short)%09%(objectname)",
@@ -877,7 +877,7 @@ pub fn list_git_refs(repo_path: &str) -> Result<GitRefsResult, String> {
         Vec::new()
     };
 
-    let tag_output = Command::new("git")
+    let tag_output = git_command()
         .args([
             "for-each-ref",
             "--format=%(refname:short)%09%(*objectname)%09%(objectname)",
@@ -946,7 +946,7 @@ pub fn get_git_log_page(
     let has_branch_filters = !branch_filters.is_empty();
     let should_scan_for_search = !search.is_empty();
 
-    let mut command = Command::new("git");
+    let mut command = git_command();
     command.args([
         "--no-pager",
         "log",
@@ -1005,7 +1005,7 @@ pub fn get_git_log_page(
     }
 
     let total = {
-        let mut count_command = Command::new("git");
+        let mut count_command = git_command();
         count_command.args(["rev-list", "--count"]);
         if has_branch_filters {
             for branch in &branch_filters {
@@ -1040,7 +1040,7 @@ pub fn get_git_commit_detail(repo_path: &str, sha: &str) -> Result<GitCommitDeta
     let refs = list_git_refs(repo_path)?;
     let ref_map = git_refs_map(&refs);
 
-    let metadata_output = Command::new("git")
+    let metadata_output = git_command()
         .args([
             "--no-pager",
             "show",
@@ -1076,7 +1076,7 @@ pub fn get_git_commit_detail(repo_path: &str, sha: &str) -> Result<GitCommitDeta
         .map(str::to_string)
         .collect::<Vec<_>>();
 
-    let name_status_output = Command::new("git")
+    let name_status_output = git_command()
         .args(["show", "--format=", "--name-status", sha.as_str()])
         .current_dir(repo_path)
         .output()
@@ -1088,7 +1088,7 @@ pub fn get_git_commit_detail(repo_path: &str, sha: &str) -> Result<GitCommitDeta
             .to_string());
     }
 
-    let numstat_output = Command::new("git")
+    let numstat_output = git_command()
         .args(["show", "--format=", "--numstat", sha.as_str()])
         .current_dir(repo_path)
         .output()
@@ -1213,7 +1213,7 @@ pub fn get_commit_list(
         args.push(&since_str);
     }
 
-    let output = Command::new("git")
+    let output = git_command()
         .args(&args)
         .current_dir(repo_path)
         .output()
@@ -1665,7 +1665,7 @@ pub fn get_repo_commit_diff(repo_path: &str, sha: &str) -> RepoCommitDiff {
 }
 
 fn git_output_at_path(repo_root: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(args)
         .current_dir(repo_root)
         .output()
@@ -1783,7 +1783,7 @@ pub fn compute_historical_related_files(
 }
 
 fn file_exists_at_revision(repo_root: &Path, revision: &str, file_path: &str) -> bool {
-    Command::new("git")
+    git_command()
         .args(["cat-file", "-e", &format!("{revision}:{file_path}")])
         .current_dir(repo_root)
         .output()
@@ -2197,7 +2197,7 @@ pub fn branch_to_safe_dir_name(branch: &str) -> String {
 
 /// Prune stale worktree references.
 pub fn worktree_prune(repo_path: &str) -> Result<(), String> {
-    let output = Command::new("git")
+    let output = git_command()
         .args(["worktree", "prune"])
         .current_dir(repo_path)
         .output()
@@ -2240,7 +2240,7 @@ pub fn worktree_add(
         ]
     };
 
-    let output = Command::new("git")
+    let output = git_command()
         .args(&args)
         .current_dir(repo_path)
         .output()
@@ -2261,7 +2261,7 @@ pub fn worktree_remove(repo_path: &str, worktree_path: &str, force: bool) -> Res
     }
     args.push(worktree_path);
 
-    let output = Command::new("git")
+    let output = git_command()
         .args(&args)
         .current_dir(repo_path)
         .output()
@@ -2284,7 +2284,7 @@ pub struct WorktreeListEntry {
 
 /// List all worktrees for a repository.
 pub fn worktree_list(repo_path: &str) -> Vec<WorktreeListEntry> {
-    let output = match Command::new("git")
+    let output = match git_command()
         .args(["worktree", "list", "--porcelain"])
         .current_dir(repo_path)
         .output()
@@ -2331,7 +2331,7 @@ pub fn worktree_list(repo_path: &str) -> Vec<WorktreeListEntry> {
 
 /// Check if a local branch exists.
 pub fn branch_exists(repo_path: &str, branch: &str) -> bool {
-    Command::new("git")
+    git_command()
         .args(["branch", "--list", branch])
         .current_dir(repo_path)
         .output()
