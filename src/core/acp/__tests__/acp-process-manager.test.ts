@@ -367,4 +367,85 @@ describe("AcpProcessManager", () => {
     expect(manager.listSessions()).toEqual([]);
     expect(dockerStopAllMock).toHaveBeenCalledOnce();
   });
+
+  it("routes explicit opencode-sdk sessions to the direct api adapter when no server url is set", async () => {
+    const manager = new AcpProcessManager();
+    getOpencodeServerUrlMock.mockReturnValue(null);
+    isOpencodeDirectApiConfiguredMock.mockReturnValue(true);
+
+    const acpSessionId = await manager.createOpencodeSdkSession("session-direct", vi.fn());
+
+    expect(acpSessionId).toBe("direct-session");
+    expect(opencodeInstances).toHaveLength(0);
+    expect(directInstances).toHaveLength(1);
+    expect(directConnectMock).toHaveBeenCalledOnce();
+    expect(directCreateSessionMock).toHaveBeenCalledWith("Routa Session session-direct");
+  });
+
+  it("delegates Claude sessions to the SDK adapter in serverless mode", async () => {
+    const manager = new AcpProcessManager();
+    shouldUseClaudeCodeSdkAdapterMock.mockReturnValue(true);
+
+    const acpSessionId = await manager.createClaudeSession(
+      "session-claude-sdk",
+      "/workspace",
+      vi.fn(),
+      ["mcp-config"],
+      "plan",
+      "CRAFTER",
+      undefined,
+      ["Read"],
+    );
+
+    expect(acpSessionId).toBe("claude-sdk-session");
+    expect(claudeSdkConnectMock).toHaveBeenCalledOnce();
+    expect(claudeSdkCreateSessionMock).toHaveBeenCalledWith("Routa Session session-claude-sdk");
+  });
+
+  it("creates and stores workspace-agent sessions", async () => {
+    const manager = new AcpProcessManager();
+
+    const acpSessionId = await manager.createWorkspaceAgentSession(
+      "session-workspace",
+      "/workspace",
+      vi.fn(),
+      { workspaceId: "ws-1" },
+    );
+
+    expect(acpSessionId).toBe("workspace-session");
+    expect(workspaceInstances).toHaveLength(1);
+    expect(workspaceConnectMock).toHaveBeenCalledOnce();
+    expect(workspaceCreateSessionMock).toHaveBeenCalledWith("Routa Session session-workspace");
+    expect(manager.getWorkspaceAgent("session-workspace")).toBe(workspaceInstances[0]);
+    expect(manager.hasActiveSession("session-workspace")).toBe(true);
+  });
+
+  it("reports Claude SDK sessions from the HTTP store even after cold starts", () => {
+    getHttpSessionStoreMock.mockReturnValue({
+      getSession: vi.fn(() => ({
+        provider: "claude-code-sdk",
+      })),
+      upsertSession: vi.fn(),
+    });
+
+    const manager = new AcpProcessManager();
+
+    expect(manager.isClaudeCodeSdkSession("session-cold")).toBe(true);
+  });
+
+  it("routes interactive responses to managed ACP processes and falls back to false", async () => {
+    const manager = new AcpProcessManager();
+    await manager.createSession(
+      "session-1",
+      "/workspace",
+      vi.fn(),
+      "opencode",
+    );
+
+    const process = acpInstances[0];
+    (process.respondToUserInput as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+    expect(manager.respondToUserInput("session-1", "tool-1", { approved: true })).toBe(true);
+    expect(manager.respondToUserInput("missing", "tool-1", { approved: true })).toBe(false);
+  });
 });
