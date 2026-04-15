@@ -161,15 +161,10 @@ export class AcpProcess {
             shell: needsShell(command),
         });
 
-        if (!this.process.stdin || !this.process.stdout) {
-            throw new Error(
-                `${displayName} spawned without required stdio streams`
-            );
-        }
-
-        this._alive = true;
-
-        this.process.stdout.on("data", (chunk: Buffer) => {
+        // Wire up stdout/stderr/exit listeners BEFORE awaiting ready.
+        // Tauri's shell plugin forwards events immediately after cmd.spawn(),
+        // so binding after the await would miss early output frames.
+        this.process.stdout?.on("data", (chunk: Buffer) => {
             this.buffer += chunk.toString("utf-8");
             this.processBuffer();
         });
@@ -216,11 +211,20 @@ export class AcpProcess {
 
         await awaitProcessReady(this.process);
 
-        if (!this.process.pid) {
+        if (!this.process || !this.process.pid) {
             throw new Error(
                 `Failed to spawn ${displayName} - is "${command}" installed and in PATH?`
             );
         }
+
+        if (!this.process.stdin || !this.process.stdout) {
+            throw new Error(
+                `${displayName} spawned without required stdio streams`
+            );
+        }
+
+        this._alive = true;
+
 
         // Wait for process to stabilize
         await new Promise((resolve) => setTimeout(resolve, 500));

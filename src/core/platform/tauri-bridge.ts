@@ -106,7 +106,10 @@ class TauriProcessHandle implements IProcessHandle {
   private _writeFn: ((data: string) => void) | null = null;
 
   constructor() {
+    // Prevent unhandled rejection for callers (git clone, terminal, etc.)
+    // that don't await `ready`. Only ACP/Claude paths consume it.
     this.ready.catch(() => {});
+
     this.stdout = {
       on: (_event: string, handler: (chunk: Buffer) => void) => {
         this._stdoutHandlers.push(handler);
