@@ -153,7 +153,7 @@ Multi-agent coordination platform. This document is auto-generated from:
 |--------|----------|-------------|
 | GET | `/api/files/search` | Search files in a codebase |
 
-### Fitness (5)
+### Fitness (6)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -161,6 +161,7 @@ Multi-agent coordination platform. This document is auto-generated from:
 | POST | `/api/fitness/analyze` | Run harness fluency analysis and return the additive harnessability baseline for one or more profiles |
 | GET | `/api/fitness/plan` | Build the executable fitness plan for a repository context |
 | GET | `/api/fitness/report` | Read persisted harness fluency snapshots and their additive harnessability baseline payloads |
+| GET | `/api/fitness/runtime` | Read latest Entrix runtime fitness status and artifact summary for a repository context |
 | GET | `/api/fitness/specs` | Inspect docs/fitness source files and parsed metric metadata |
 
 ### Git (3)

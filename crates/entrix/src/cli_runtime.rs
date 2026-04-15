@@ -434,12 +434,21 @@ pub(crate) fn write_runtime_fitness_artifacts(
     let mode = runtime_mode(tier);
     let artifact_path = artifact_dir.join(format!("{observed_at_ms}-{mode}.json"));
     let latest_path = artifact_dir.join(format!("latest-{mode}.json"));
+    let latest_temp_path = artifact_dir.join(format!(
+        "latest-{mode}.json.tmp-{}-{}",
+        observed_at_ms,
+        std::process::id()
+    ));
     let serialized = format!(
         "{}\n",
         serde_json::to_string_pretty(snapshot).map_err(io::Error::other)?
     );
     fs::write(&artifact_path, &serialized)?;
-    fs::write(&latest_path, &serialized)?;
+    fs::write(&latest_temp_path, &serialized)?;
+    if let Err(error) = fs::rename(&latest_temp_path, &latest_path) {
+        let _ = fs::remove_file(&latest_temp_path);
+        return Err(error);
+    }
     Ok(artifact_path.display().to_string())
 }
 
@@ -465,14 +474,19 @@ fn write_runtime_fitness_mailbox_message(
     fs::write(mailbox_path, serialized)
 }
 
+pub(crate) struct RuntimeFitnessEventOptions<'a> {
+    pub(crate) metric_count: usize,
+    pub(crate) duration_ms: f64,
+    pub(crate) artifact_path: Option<&'a str>,
+    pub(crate) write_mailbox_message: bool,
+}
+
 pub(crate) fn emit_runtime_fitness_event(
     project_root: &Path,
     status: &str,
     tier: Option<&str>,
     report: Option<&FitnessReport>,
-    metric_count: usize,
-    duration_ms: f64,
-    artifact_path: Option<&str>,
+    options: RuntimeFitnessEventOptions<'_>,
 ) -> io::Result<()> {
     let event_path = runtime_event_path(project_root);
     if let Some(parent) = event_path.parent() {
@@ -487,10 +501,10 @@ pub(crate) fn emit_runtime_fitness_event(
         "final_score": report.map(|report| report.final_score),
         "hard_gate_blocked": report.map(|report| report.hard_gate_blocked),
         "score_blocked": report.map(|report| report.score_blocked),
-        "duration_ms": duration_ms,
+        "duration_ms": options.duration_ms,
         "dimension_count": report.map(|report| report.dimensions.len()),
-        "metric_count": metric_count,
-        "artifact_path": artifact_path,
+        "metric_count": options.metric_count,
+        "artifact_path": options.artifact_path,
     });
 
     let mut handle = fs::OpenOptions::new()
@@ -502,7 +516,10 @@ pub(crate) fn emit_runtime_fitness_event(
         "{}",
         serde_json::to_string(&payload).map_err(io::Error::other)?
     )?;
-    write_runtime_fitness_mailbox_message(project_root, &payload)
+    if options.write_mailbox_message {
+        write_runtime_fitness_mailbox_message(project_root, &payload)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -551,9 +568,12 @@ mod tests {
             "passed",
             Some("fast"),
             Some(&report),
-            1,
-            12.5,
-            Some(&artifact_path),
+            RuntimeFitnessEventOptions {
+                metric_count: 1,
+                duration_ms: 12.5,
+                artifact_path: Some(&artifact_path),
+                write_mailbox_message: true,
+            },
         )
         .expect("runtime event");
 
@@ -589,5 +609,52 @@ mod tests {
             .collect::<Result<Vec<_>, _>>()
             .expect("mailbox entries");
         assert_eq!(mailbox_messages.len(), 1);
+    }
+
+    #[test]
+    fn runtime_artifact_updates_latest_snapshot_without_leaking_temp_files() {
+        let temp = tempdir().expect("tempdir");
+        let repo_root = temp.path();
+
+        write_runtime_fitness_artifacts(
+            repo_root,
+            Some("fast"),
+            &json!({
+                "generated_at_ms": 1i64,
+                "final_score": 80.0,
+            }),
+            1,
+        )
+        .expect("first artifact");
+        write_runtime_fitness_artifacts(
+            repo_root,
+            Some("fast"),
+            &json!({
+                "generated_at_ms": 2i64,
+                "final_score": 91.0,
+            }),
+            2,
+        )
+        .expect("second artifact");
+
+        let artifact_dir = runtime_fitness_artifact_dir(repo_root);
+        let latest = fs::read_to_string(artifact_dir.join("latest-fast.json")).expect("latest");
+        let latest_payload =
+            serde_json::from_str::<serde_json::Value>(&latest).expect("latest json");
+        assert_eq!(latest_payload["generated_at_ms"].as_i64(), Some(2));
+        assert_eq!(latest_payload["final_score"].as_f64(), Some(91.0));
+
+        let temp_files = fs::read_dir(&artifact_dir)
+            .expect("artifact dir")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("artifact entries")
+            .into_iter()
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|name| name.contains(".tmp-"))
+            .collect::<Vec<_>>();
+        assert!(
+            temp_files.is_empty(),
+            "unexpected temp artifacts: {temp_files:?}"
+        );
     }
 }

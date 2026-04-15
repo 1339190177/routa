@@ -114,19 +114,27 @@ impl Drop for EventBusSubscriptionGuard {
 fn translate_agent_event_to_kanban_payload(event: &AgentEvent) -> Option<serde_json::Value> {
     match event.event_type {
         AgentEventType::WorkspaceUpdated => {
-            if event.data.get("scope").and_then(|value| value.as_str()) != Some("kanban") {
-                return None;
+            match event.data.get("scope").and_then(|value| value.as_str()) {
+                Some("fitness") => Some(serde_json::json!({
+                    "type": "fitness:changed",
+                    "workspaceId": event.workspace_id,
+                    "source": event.data.get("source").and_then(|value| value.as_str()).unwrap_or("system"),
+                    "codebaseId": event.data.get("codebaseId").and_then(|value| value.as_str()),
+                    "repoPath": event.data.get("repoPath").and_then(|value| value.as_str()),
+                    "status": event.data.get("status").and_then(|value| value.as_str()),
+                    "timestamp": event.timestamp.to_rfc3339(),
+                })),
+                Some("kanban") => Some(serde_json::json!({
+                    "type": "kanban:changed",
+                    "workspaceId": event.workspace_id,
+                    "entity": event.data.get("entity").and_then(|value| value.as_str()).unwrap_or("task"),
+                    "action": event.data.get("action").and_then(|value| value.as_str()).unwrap_or("updated"),
+                    "resourceId": event.data.get("resourceId").and_then(|value| value.as_str()),
+                    "source": event.data.get("source").and_then(|value| value.as_str()).unwrap_or("system"),
+                    "timestamp": event.timestamp.to_rfc3339(),
+                })),
+                _ => None,
             }
-
-            Some(serde_json::json!({
-                "type": "kanban:changed",
-                "workspaceId": event.workspace_id,
-                "entity": event.data.get("entity").and_then(|value| value.as_str()).unwrap_or("task"),
-                "action": event.data.get("action").and_then(|value| value.as_str()).unwrap_or("updated"),
-                "resourceId": event.data.get("resourceId").and_then(|value| value.as_str()),
-                "source": event.data.get("source").and_then(|value| value.as_str()).unwrap_or("system"),
-                "timestamp": event.timestamp.to_rfc3339(),
-            }))
         }
         AgentEventType::TaskStatusChanged
         | AgentEventType::TaskCompleted
@@ -1305,6 +1313,29 @@ mod tests {
         };
 
         assert!(translate_agent_event_to_kanban_payload(&event).is_none());
+    }
+
+    #[test]
+    fn translates_runtime_fitness_workspace_updates() {
+        let event = AgentEvent {
+            event_type: AgentEventType::WorkspaceUpdated,
+            agent_id: "system".to_string(),
+            workspace_id: "ws-1".to_string(),
+            data: json!({
+                "scope": "fitness",
+                "source": "system",
+                "repoPath": "/tmp/repo",
+                "status": "running",
+            }),
+            timestamp: Utc::now(),
+        };
+
+        let payload =
+            translate_agent_event_to_kanban_payload(&event).expect("payload should exist");
+        assert_eq!(payload["type"].as_str(), Some("fitness:changed"));
+        assert_eq!(payload["workspaceId"].as_str(), Some("ws-1"));
+        assert_eq!(payload["repoPath"].as_str(), Some("/tmp/repo"));
+        assert_eq!(payload["status"].as_str(), Some("running"));
     }
 
     #[test]
