@@ -16,10 +16,12 @@ vi.mock("@/core/store/custom-mcp-server-store", () => ({
 describe("mcp-setup file-based providers", () => {
   let tmpHome: string;
   let originalHome: string | undefined;
+  let originalQoderBin: string | undefined;
 
   beforeEach(async () => {
     tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "mcp-setup-home-"));
     originalHome = process.env.HOME;
+    originalQoderBin = process.env.QODER_BIN;
     process.env.HOME = tmpHome;
     vi.resetModules();
   });
@@ -30,6 +32,11 @@ describe("mcp-setup file-based providers", () => {
     } else {
       process.env.HOME = originalHome;
     }
+    if (originalQoderBin === undefined) {
+      delete process.env.QODER_BIN;
+    } else {
+      process.env.QODER_BIN = originalQoderBin;
+    }
     vi.resetModules();
     await fs.rm(tmpHome, { recursive: true, force: true });
   });
@@ -38,6 +45,7 @@ describe("mcp-setup file-based providers", () => {
     const { providerSupportsMcp, getMcpStatus, ensureMcpForProvider } = await import("../mcp-setup");
 
     expect(providerSupportsMcp("claude-registry")).toBe(true);
+    expect(providerSupportsMcp("qoder")).toBe(true);
     expect(providerSupportsMcp("unknown-provider")).toBe(false);
     expect(getMcpStatus("claude-registry", ["{}"])).toEqual({
       supported: true,
@@ -91,6 +99,82 @@ describe("mcp-setup file-based providers", () => {
     expect(raw).toContain('url = "http://127.0.0.1:3210/api/mcp"');
     expect(raw).toContain("enabled = true");
     expect(result.summary).toContain("codex: wrote");
+  });
+
+  it("adds and removes qoder MCP servers through the qodercli lifecycle", async () => {
+    const qoderBinPath = path.join(tmpHome, "qodercli");
+    const qoderLogPath = path.join(tmpHome, "qoder.log");
+    const projectDir = path.join(tmpHome, "qoder-project");
+    await fs.mkdir(projectDir, { recursive: true });
+    const realProjectDir = await fs.realpath(projectDir);
+    const mcpEndpoint = "http://127.0.0.1:3210/api/mcp?wsId=ws-qoder&sid=session-qoder";
+    const originalPwd = process.env.PWD;
+    await fs.writeFile(
+      qoderBinPath,
+      `#!/usr/bin/env node
+const fs = require("node:fs");
+const payload = JSON.stringify({
+  cwd: process.cwd(),
+  pwd: process.env.PWD || "",
+  args: process.argv.slice(2),
+});
+fs.appendFileSync(${JSON.stringify(qoderLogPath)}, payload + "\\n");
+`,
+      "utf-8",
+    );
+    await fs.chmod(qoderBinPath, 0o755);
+    process.env.QODER_BIN = qoderBinPath;
+    process.env.PWD = tmpHome;
+    vi.resetModules();
+
+    const { cleanupMcpForProvider, ensureMcpForProvider } = await import("../mcp-setup");
+
+    try {
+      const result = await ensureMcpForProvider("qoder", {
+        routaServerUrl: "http://127.0.0.1:3210",
+        mcpEndpoint,
+        workspaceId: "ws-qoder",
+        sessionId: "session-qoder",
+        includeCustomServers: false,
+        cwd: projectDir,
+      });
+
+      expect(result.mcpConfigs).toEqual([]);
+      expect(result.summary).toContain("qoder: added");
+      expect(result.cleanup).toEqual({
+        action: "qoder-remove",
+        providerId: "qoder",
+        serverName: "routa-coordination",
+        scope: "local",
+        cwd: projectDir,
+      });
+
+      const cleanupSummary = await cleanupMcpForProvider(result.cleanup!);
+      expect(cleanupSummary).toContain("qoder: removed");
+
+      const logLines = (await fs.readFile(qoderLogPath, "utf-8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as { cwd: string; pwd: string; args: string[] });
+      expect(logLines).toEqual([
+        {
+          cwd: realProjectDir,
+          pwd: realProjectDir,
+          args: ["mcp", "add", "routa-coordination", mcpEndpoint, "-t", "streamable-http", "-s", "local"],
+        },
+        {
+          cwd: realProjectDir,
+          pwd: realProjectDir,
+          args: ["mcp", "remove", "routa-coordination", "-s", "local"],
+        },
+      ]);
+    } finally {
+      if (originalPwd === undefined) {
+        delete process.env.PWD;
+      } else {
+        process.env.PWD = originalPwd;
+      }
+    }
   });
 
   it("merges inline Claude-style JSON and ignores unreadable config entries", async () => {
