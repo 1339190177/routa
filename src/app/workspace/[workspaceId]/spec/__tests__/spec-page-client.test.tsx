@@ -53,6 +53,101 @@ function okJson(data: unknown) {
   } as Response;
 }
 
+function errorJson(data: unknown) {
+  return {
+    ok: false,
+    json: async () => data,
+  } as Response;
+}
+
+function mockSpecResponses(options?: { surfaceOk?: boolean }) {
+  const surfaceOk = options?.surfaceOk ?? true;
+
+  desktopAwareFetch.mockImplementation(async (path: string) => {
+    if (path.includes("/api/spec/issues?workspaceId=default")) {
+      return okJson({
+        issues: [
+          {
+            filename: "2026-04-11-spec-board.md",
+            title: "Spec board",
+            date: "2026-04-11",
+            kind: "progress_note",
+            status: "closed",
+            severity: "high",
+            area: "kanban",
+            tags: ["kanban", "board"],
+            reportedBy: "codex",
+            relatedIssues: [
+              "docs/issues/2026-04-10-linked-issue.md",
+              "https://github.com/phodal/routa/issues/410",
+            ],
+            githubIssue: 410,
+            githubState: "closed",
+            githubUrl: "https://github.com/phodal/routa/issues/410",
+            body: [
+              "Rendered as markdown.",
+              "Marker: lineage-alpha",
+              "",
+              "## Relevant Files",
+              "- `src/app/workspace/[workspaceId]/kanban/page.tsx`",
+              "- `src/app/api/kanban/boards/route.ts`",
+              "",
+              "Touches `/workspace/default/kanban` and `/api/kanban/boards`.",
+            ].join("\n"),
+          },
+          {
+            filename: "2026-04-10-linked-issue.md",
+            title: "Linked issue",
+            date: "2026-04-10",
+            kind: "issue",
+            status: "open",
+            severity: "medium",
+            area: "kanban",
+            tags: ["link-target"],
+            reportedBy: "codex",
+            relatedIssues: [],
+            githubIssue: null,
+            githubState: null,
+            githubUrl: null,
+            body: "Second body for the linked issue.",
+          },
+        ],
+      });
+    }
+
+    if (path.includes("/api/spec/surface-index?workspaceId=default")) {
+      if (!surfaceOk) {
+        return errorJson({ error: "Feature surface index missing" });
+      }
+
+      return okJson({
+        generatedAt: "2026-04-16T00:00:00.000Z",
+        repoRoot: "/repo",
+        warnings: [],
+        pages: [
+          {
+            route: "/workspace/:workspaceId/kanban",
+            title: "Workspace / Kanban",
+            description: "Kanban workspace view",
+            sourceFile: "src/app/workspace/[workspaceId]/kanban/page.tsx",
+          },
+        ],
+        apis: [
+          {
+            domain: "kanban",
+            method: "GET",
+            path: "/api/kanban/boards",
+            operationId: "listKanbanBoards",
+            summary: "List kanban boards",
+          },
+        ],
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${path}`);
+  });
+}
+
 describe("SpecPageClient", () => {
   beforeEach(() => {
     navState.params = { workspaceId: "default" };
@@ -65,43 +160,8 @@ describe("SpecPageClient", () => {
     });
   });
 
-  it("loads issues, exposes issue links, and follows local relations in the detail panel", async () => {
-    desktopAwareFetch.mockResolvedValue(okJson({
-      issues: [
-        {
-          filename: "2026-04-11-spec-board.md",
-          title: "Spec board",
-          date: "2026-04-11",
-          kind: "progress_note",
-          status: "closed",
-          severity: "high",
-          area: "ui",
-          tags: ["spec", "board"],
-          reportedBy: "codex",
-          relatedIssues: ["docs/issues/2026-04-10-linked-issue.md", "https://github.com/phodal/routa/issues/410"],
-          githubIssue: 410,
-          githubState: "closed",
-          githubUrl: "https://github.com/phodal/routa/issues/410",
-          body: "Rendered as markdown.\nMarker: lineage-alpha",
-        },
-        {
-          filename: "2026-04-10-linked-issue.md",
-          title: "Linked issue",
-          date: "2026-04-10",
-          kind: "issue",
-          status: "open",
-          severity: "medium",
-          area: "kanban",
-          tags: ["link-target"],
-          reportedBy: "codex",
-          relatedIssues: [],
-          githubIssue: null,
-          githubState: null,
-          githubUrl: null,
-          body: "Second body for the linked issue.",
-        },
-      ],
-    }));
+  it("loads issue families, shows feature footprint matches, and follows local relations", async () => {
+    mockSpecResponses();
 
     render(<SpecPageClient />);
 
@@ -109,50 +169,58 @@ describe("SpecPageClient", () => {
       expect(screen.getByRole("button", { name: /Spec board/i })).toBeTruthy();
     });
 
-    expect(desktopAwareFetch).toHaveBeenCalledWith(
-      "/api/spec/issues?workspaceId=default",
-      expect.objectContaining({
-        cache: "no-store",
-        signal: expect.any(AbortSignal),
-      }),
-    );
+    const requestedPaths = desktopAwareFetch.mock.calls.map(([path]) => path);
+    expect(requestedPaths).toContain("/api/spec/issues?workspaceId=default");
+    expect(requestedPaths).toContain("/api/spec/surface-index?workspaceId=default");
 
-    fireEvent.change(screen.getByLabelText("Search"), {
-      target: { value: "lineage-alpha" },
-    });
+    expect(screen.getAllByText("Families").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Workspace / Kanban").length).toBeGreaterThan(0);
 
-    expect(screen.getByRole("button", { name: /Spec board/i })).toBeTruthy();
+    const detailPane = await screen.findByRole("region", { name: "Spec board" });
+    expect(within(detailPane).getByText("Feature Footprint")).toBeTruthy();
+    expect(within(detailPane).getAllByText("/workspace/:workspaceId/kanban").length).toBeGreaterThan(0);
+    expect(within(detailPane).getByText("GET /api/kanban/boards")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Spec board/i }));
-
-    const dialog = await screen.findByRole("dialog", { name: "Spec board" });
-    expect(within(dialog).getByText("Issue Links")).toBeTruthy();
-    expect(within(dialog).getByRole("link", { name: /#410/i })).toBeTruthy();
-    expect(within(dialog).getByRole("button", { name: /Linked issue/i })).toBeTruthy();
-
-    fireEvent.click(within(dialog).getByRole("button", { name: /Linked issue/i }));
+    const linkedButtons = within(detailPane).getAllByRole("button", { name: /Linked issue/i });
+    fireEvent.click(linkedButtons[0]);
 
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: "Linked issue" })).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Linked issue" })).toBeTruthy();
     });
 
-    const linkedDialog = screen.getByRole("dialog", { name: "Linked issue" });
-    expect(within(linkedDialog).getByText("Linked From")).toBeTruthy();
-    expect(within(linkedDialog).getByRole("button", { name: /Spec board/i })).toBeTruthy();
+    const linkedPane = screen.getByRole("region", { name: "Linked issue" });
+    expect(within(linkedPane).getByText("Same Family")).toBeTruthy();
     expect(screen.getByTestId("markdown-viewer").textContent).toContain("Second body for the linked issue.");
-
-    fireEvent.click(screen.getByRole("button", { name: "Close (Esc)" }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Linked issue" })).toBeNull();
-    });
   });
 
-  it("surfaces API errors instead of rendering an empty board", async () => {
-    desktopAwareFetch.mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: "Missing spec repo" }),
-    } as Response);
+  it("keeps rendering issues when the feature map endpoint is unavailable", async () => {
+    mockSpecResponses({ surfaceOk: false });
+
+    render(<SpecPageClient />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Spec board/i })).toBeTruthy();
+    });
+
+    expect(screen.getAllByText("Feature map unavailable").length).toBeGreaterThan(0);
+  });
+
+  it("surfaces issue API errors instead of rendering an empty board", async () => {
+    desktopAwareFetch.mockImplementation(async (path: string) => {
+      if (path.includes("/api/spec/issues?workspaceId=default")) {
+        return errorJson({ error: "Missing spec repo" });
+      }
+      if (path.includes("/api/spec/surface-index?workspaceId=default")) {
+        return okJson({
+          generatedAt: "",
+          repoRoot: "",
+          warnings: [],
+          pages: [],
+          apis: [],
+        });
+      }
+      throw new Error(`Unexpected fetch: ${path}`);
+    });
 
     render(<SpecPageClient />);
 

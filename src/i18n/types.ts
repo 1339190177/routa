@@ -745,6 +745,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
 
   // Agents
   specBoard: {
+    status: string;
     kind: string;
     severity: string;
     area: string;
@@ -764,6 +765,16 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     noIssues: string;
     failedToLoad: string;
     githubStateUnknown: string;
+    families: string;
+    members: string;
+    relations: string;
+    sameFamily: string;
+    featureFootprint: string;
+    pages: string;
+    apis: string;
+    noSurfaceHits: string;
+    surfaceMapUnavailable: string;
+    body: string;
     statusOpen: string;
     statusInvestigating: string;
     statusResolved: string;
