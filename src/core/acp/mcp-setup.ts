@@ -122,7 +122,12 @@ async function runCommand(
     throw new Error("Process execution is not available on this platform");
   }
 
-  const env = options?.env ? { ...process.env, ...options.env } : { ...process.env };
+  const inheritedEnv = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+  const env: Record<string, string> = options?.env
+    ? { ...inheritedEnv, ...options.env }
+    : inheritedEnv;
   if (options?.cwd) {
     // Some CLIs scope project-local config using the inherited PWD env var
     // rather than only getcwd(2). Keep both aligned when we override cwd.
