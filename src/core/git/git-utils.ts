@@ -256,7 +256,7 @@ export function listBranches(repoPath: string): string[] {
     const output = gitExecSync("git branch --format=%(refname:short)", repoPath);
     return output
       .split("\n")
-      .map((b) => b.trim().replace(/^'|'$/g, ""))
+      .map((b) => b.trim())
       .filter(Boolean);
   } catch {
     return [];
@@ -950,7 +950,7 @@ export function listRemoteBranches(repoPath: string): string[] {
     const output = gitExecSync("git branch -r --format=%(refname:short)", repoPath);
     return output
       .split("\n")
-      .map((b) => b.trim().replace(/^'|'$/g, ""))
+      .map((b) => b.trim())
       .filter(Boolean)
       .filter((b) => !b.includes("HEAD"))
       .map((b) => b.replace(/^origin\//, ""));

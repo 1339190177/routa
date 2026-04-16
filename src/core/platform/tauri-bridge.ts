@@ -43,17 +43,6 @@ import type {
   ReadableStreamLike,
 } from "./interfaces";
 
-/**
- * Quote a value for safe interpolation into a shell command.
- * Uses double-quotes on Windows (cmd.exe) and single-quotes on Unix.
- */
-function platformQuote(value: string): string {
-  if (process.platform === "win32") {
-    return `"${value.replace(/"/g, '\\"')}"`;
-  }
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
 // ─── Tauri API Dynamic Imports ────────────────────────────────────────────
 // Dynamic imports to avoid bundling Tauri APIs in web builds.
 // These packages are only available when running inside a Tauri app.
@@ -155,6 +144,11 @@ class TauriProcessHandle implements IProcessHandle {
     this._readyResolve();
   }
 
+  /** @internal Reject the async ready promise when spawn fails. */
+  _rejectReady(err: Error): void {
+    this._readyReject(err);
+  }
+
   /** @internal Forward stdout data from Tauri child */
   _emitStdout(data: string): void {
     const buf = Buffer.from(data);
@@ -184,7 +178,12 @@ class TauriProcessHandle implements IProcessHandle {
 
   on(event: "exit", handler: (code: number | null, signal: string | null) => void): void;
   on(event: "error", handler: (err: Error) => void): void;
-  on(event: "exit" | "error", handler: (...args: unknown[]) => void): void {
+  on(
+    event: "exit" | "error",
+    handler:
+      | ((code: number | null, signal: string | null) => void)
+      | ((err: Error) => void),
+  ): void {
     if (event === "exit") {
       this._exitHandlers.push(handler as (code: number | null, signal: string | null) => void);
     } else if (event === "error") {
@@ -234,7 +233,7 @@ class TauriProcess implements IPlatformProcess {
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         handle._emitError(error);
-        handle._readyReject(error);
+        handle._rejectReady(error);
       }
     })();
 
@@ -487,13 +486,12 @@ class TauriGit implements IPlatformGit {
   }
 
   async pull(repoPath: string, branch?: string): Promise<void> {
-    const quoted = branch ? platformQuote(branch) : undefined;
-    const cmd = quoted ? `git pull origin ${quoted}` : "git pull";
+    const cmd = branch ? `git pull origin ${branch}` : "git pull";
     await this.processAdapter.exec(cmd, { cwd: repoPath });
   }
 
   async checkout(repoPath: string, branch: string): Promise<void> {
-    await this.processAdapter.exec(`git checkout ${platformQuote(branch)}`, { cwd: repoPath });
+    await this.processAdapter.exec(`git checkout ${branch}`, { cwd: repoPath });
   }
 }
 

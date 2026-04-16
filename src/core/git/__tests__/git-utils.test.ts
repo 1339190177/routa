@@ -24,6 +24,8 @@ const {
   parseGitHubUrl,
   getRepoDeliveryStatus,
   getBranchStatus,
+  listBranches,
+  listRemoteBranches,
 } = await import("../git-utils");
 
 // Determine the quoting style shellQuote() will produce on this platform.
@@ -164,5 +166,27 @@ describe("delivery and branch status helpers", () => {
       behind: 1,
       hasUncommittedChanges: true,
     });
+  });
+
+  it("preserves apostrophes in local branch names", () => {
+    execSyncMock.mockImplementation((command: string) => {
+      if (command === "git branch --format=%(refname:short)") {
+        return "main\nuser's-branch\n";
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect(listBranches("/tmp/repo")).toEqual(["main", "user's-branch"]);
+  });
+
+  it("preserves apostrophes in remote branch names", () => {
+    execSyncMock.mockImplementation((command: string) => {
+      if (command === "git branch -r --format=%(refname:short)") {
+        return "origin/main\norigin/user's-branch\n";
+      }
+      throw new Error(`Unexpected command: ${command}`);
+    });
+
+    expect(listRemoteBranches("/tmp/repo")).toEqual(["main", "user's-branch"]);
   });
 });
