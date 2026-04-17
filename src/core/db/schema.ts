@@ -109,6 +109,10 @@ export const tasks = pgTable("tasks", {
   /** Git worktree ID created for this task when it enters the dev column */
   worktreeId: text("worktree_id"),
   deliverySnapshot: jsonb("delivery_snapshot").$type<TaskDeliverySnapshot>(),
+  /** URL of the pull/merge request created for this task (set by PR Publisher) */
+  pullRequestUrl: text("pull_request_url"),
+  /** Timestamp when the PR was merged */
+  pullRequestMergedAt: timestamp("pull_request_merged_at", { withTimezone: true }),
   completionSummary: text("completion_summary"),
   verificationVerdict: text("verification_verdict"),
   verificationReport: text("verification_report"),

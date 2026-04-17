@@ -366,6 +366,16 @@ export function buildTaskPrompt(
     "",
     task.objective,
     "",
+    ...(task.dependencies.length > 0
+      ? [
+          "## Task Dependencies",
+          "",
+          "This task depends on the following tasks:",
+          ...task.dependencies.map((depId) => `- ${depId}`).filter(Boolean),
+          "Ensure you do not conflict with work from these dependent tasks.",
+          "",
+        ]
+      : []),
     ...storyReadinessSection,
     ...investSection,
     ...artifactGateSection,

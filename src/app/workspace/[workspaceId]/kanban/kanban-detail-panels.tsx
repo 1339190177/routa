@@ -222,9 +222,19 @@ export function StoryReadinessPanel({
   );
 }
 
+function StatusDot({ met, label }: { met: boolean; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs">
+      <span className={`inline-block h-1.5 w-1.5 rounded-full ${met ? "bg-emerald-500" : "bg-amber-400"}`} />
+      <span className={`font-medium ${met ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"}`}>
+        {label}
+      </span>
+    </span>
+  );
+}
+
 export function EvidenceBundlePanel({
   task,
-  compact = false,
 }: {
   task: TaskInfo;
   compact?: boolean;
@@ -241,52 +251,33 @@ export function EvidenceBundlePanel({
 
   const reviewable = evidence.artifact.requiredSatisfied
     && (evidence.verification.hasReport || evidence.verification.hasVerdict || evidence.completion.hasSummary);
-  const missingRequiredArtifacts = evidence.artifact.missingRequired ?? [];
-  const missingRequired = missingRequiredArtifacts.length > 0
-    ? missingRequiredArtifacts.join(", ")
-    : t.kanbanDetail.none;
-  const artifactBreakdown = Object.entries(evidence.artifact.byType)
-    .map(([type, count]) => `${type}: ${count}`)
-    .join(", ") || t.kanbanDetail.none;
 
   return (
-    <div className="space-y-3">
-      <div className={`border-l-2 px-3 py-2.5 ${
-        reviewable
-          ? "border-l-emerald-400/80 dark:border-l-emerald-500/70"
-          : "border-l-amber-400/80 dark:border-l-amber-500/70"
-      }`}>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
-            reviewable
-              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
-              : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
-          }`}>
-            {reviewable ? t.kanbanDetail.reviewable : t.kanbanDetail.reviewBlocked}
-          </span>
-          <span className="text-xs text-slate-600 dark:text-slate-300">
-            {t.kanbanDetail.requiredArtifacts}: {missingRequired}
-          </span>
+    <div className={`border-l-2 px-3 py-2.5 ${
+      reviewable
+        ? "border-l-emerald-400/80 dark:border-l-emerald-500/70"
+        : "border-l-amber-400/80 dark:border-l-amber-500/70"
+    }`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+          reviewable
+            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200"
+            : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
+        }`}>
+          {reviewable ? t.kanbanDetail.reviewable : t.kanbanDetail.reviewBlocked}
+        </span>
+        <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300">
+          <StatusDot met={evidence.artifact.requiredSatisfied ?? false} label={t.kanbanDetail.evidenceArtifactsMet} />
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <StatusDot met={evidence.verification.hasVerdict || evidence.verification.hasReport} label={t.kanbanDetail.evidenceVerificationMet} />
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <StatusDot met={evidence.completion.hasSummary} label={t.kanbanDetail.evidenceCompletionMet} />
         </div>
-      </div>
-      <div className={`grid gap-2 ${compact ? "grid-cols-2" : "grid-cols-3"}`}>
-        <SummaryGridItem
-          label={t.kanbanDetail.requiredArtifacts}
-          value={`${evidence.artifact.total}`}
-          detail={artifactBreakdown}
-          compact={compact}
-        />
-        <SummaryGridItem
-          label={t.kanbanDetail.verification}
-          value={evidence.verification.verdict ?? formatCheckStatus(evidence.verification.hasVerdict, t)}
-          detail={evidence.verification.hasReport ? t.kanbanDetail.reportPresent : t.kanbanDetail.reportMissing}
-          compact={compact}
-        />
-        <SummaryGridItem
-          label={t.kanbanDetail.completion}
-          value={evidence.completion.hasSummary ? t.kanbanDetail.summaryPresent : t.kanbanDetail.summaryMissing}
-          compact={compact}
-        />
+        {evidence.verification.verdict && (
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {evidence.verification.verdict}
+          </span>
+        )}
       </div>
     </div>
   );

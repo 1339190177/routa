@@ -305,6 +305,20 @@ export class KanbanWorkflowOrchestrator {
       return;
     }
 
+    // Dependency gate: block automation if any dependency is unfinished
+    if (task && task.dependencies.length > 0) {
+      const depCheck = await this.checkDependencyGate(task, board.columns);
+      if (depCheck.blocked) {
+        task.lastSyncError = `Blocked by unfinished dependencies: ${depCheck.pendingDependencies.join(", ")}`;
+        task.updatedAt = new Date();
+        await this.taskStore.save(task);
+        console.warn(
+          `[WorkflowOrchestrator] Card ${data.cardId} blocked by dependencies: ${depCheck.pendingDependencies.join(", ")}`,
+        );
+        return;
+      }
+    }
+
     const supervision = shouldSuperviseStage(targetColumn.stage)
       ? (await this.resolveDevSessionSupervision?.({
         workspaceId: data.workspaceId,
@@ -457,6 +471,16 @@ export class KanbanWorkflowOrchestrator {
       automation.status = !failedToAdvanceWithinLane && successEvent && completionSatisfied ? "completed" : "failed";
       automation.signaledSessionIds.add(eventSessionId);
 
+      // Unblock dependent tasks when this task successfully completes
+      if (automation.status === "completed") {
+        await this.unblockDependentTasks(cardId, automation);
+      }
+
+      // Schedule worktree cleanup for completed done-lane tasks
+      if (automation.status === "completed" && automation.stage === "done") {
+        this.scheduleWorktreeCleanup(cardId, automation);
+      }
+
       if (task) {
         if (!failedToAdvanceWithinLane && successEvent && completionSatisfied) {
           task.lastSyncError = undefined;
@@ -561,6 +585,91 @@ export class KanbanWorkflowOrchestrator {
         },
         timestamp: new Date(),
       });
+    }
+  }
+
+  /**
+   * Check whether all of a task's dependencies are satisfied.
+   * Returns blocked=true if any dependency task is not yet in a done column.
+   */
+  private async checkDependencyGate(
+    task: Task,
+    boardColumns: Array<{ id: string; stage?: string }>,
+  ): Promise<{ blocked: boolean; pendingDependencies: string[] }> {
+    if (!task.dependencies || task.dependencies.length === 0) {
+      return { blocked: false, pendingDependencies: [] };
+    }
+
+    const doneColumnIds = new Set(
+      boardColumns
+        .filter((col) => col.stage === "done")
+        .map((col) => col.id),
+    );
+
+    const pending: string[] = [];
+    for (const depId of task.dependencies) {
+      const depTask = await this.taskStore.get(depId);
+      if (!depTask) continue;
+      const inDoneColumn = depTask.status === TaskStatus.COMPLETED
+        || doneColumnIds.has(depTask.columnId ?? "");
+      // If the dependency has a PR, it must be merged to count as complete
+      const prMerged = !depTask.pullRequestUrl || Boolean(depTask.pullRequestMergedAt);
+      const isDone = inDoneColumn && prMerged;
+      if (!isDone) {
+        pending.push(depTask.title || depId);
+      }
+    }
+
+    return { blocked: pending.length > 0, pendingDependencies: pending };
+  }
+
+  /**
+   * When a task completes, scan for dependent tasks that may now be unblocked
+   * and re-trigger their automation.
+   */
+  private async unblockDependentTasks(
+    completedCardId: string,
+    automation: ActiveAutomation,
+  ): Promise<void> {
+    const board = await this.kanbanBoardStore.get(automation.boardId);
+    if (!board) return;
+
+    const allTasks = await this.taskStore.listByWorkspace(automation.workspaceId);
+    const newlyUnblocked: string[] = [];
+
+    for (const t of allTasks) {
+      if (!t.dependencies.includes(completedCardId)) continue;
+
+      const depCheck = await this.checkDependencyGate(t, board.columns);
+      if (!depCheck.blocked && t.lastSyncError?.startsWith("Blocked by unfinished dependencies")) {
+        t.lastSyncError = undefined;
+        t.updatedAt = new Date();
+        await this.taskStore.save(t);
+        newlyUnblocked.push(t.id);
+
+        this.eventBus.emit({
+          type: AgentEventType.COLUMN_TRANSITION,
+          agentId: "kanban-workflow-orchestrator",
+          workspaceId: automation.workspaceId,
+          data: {
+            cardId: t.id,
+            cardTitle: t.title,
+            boardId: automation.boardId,
+            workspaceId: automation.workspaceId,
+            fromColumnId: t.columnId ?? "",
+            toColumnId: t.columnId ?? "",
+            fromColumnName: "",
+            toColumnName: "",
+          },
+          timestamp: new Date(),
+        });
+      }
+    }
+
+    if (newlyUnblocked.length > 0) {
+      console.log(
+        `[WorkflowOrchestrator] Unblocked ${newlyUnblocked.length} dependent task(s) after ${completedCardId} completed.`,
+      );
     }
   }
 
@@ -832,6 +941,63 @@ export class KanbanWorkflowOrchestrator {
         error,
       );
     }
+  }
+
+  private static readonly WORKTREE_CLEANUP_DELAY_MS = 60_000;
+
+  /**
+   * Schedule delayed worktree cleanup for a completed task.
+   * Only cleans up if the PR has been merged (pullRequestMergedAt is set) and the
+   * task is still in the done column.
+   */
+  private scheduleWorktreeCleanup(
+    cardId: string,
+    automation: ActiveAutomation,
+  ): void {
+    setTimeout(async () => {
+      try {
+        const task = await this.taskStore.get(cardId);
+        if (!task?.worktreeId) return;
+
+        if (!task.pullRequestMergedAt) {
+          console.log(
+            `[WorkflowOrchestrator] Skipping worktree cleanup for ${cardId}: PR not yet merged.`,
+          );
+          return;
+        }
+
+        const board = await this.kanbanBoardStore.get(automation.boardId);
+        if (!board) return;
+        const doneColumnIds = new Set(
+          board.columns
+            .filter((col) => col.stage === "done")
+            .map((col) => col.id),
+        );
+        if (!doneColumnIds.has(task.columnId ?? "")) return;
+
+        this.eventBus.emit({
+          type: AgentEventType.WORKTREE_CLEANUP,
+          agentId: "kanban-workflow-orchestrator",
+          workspaceId: automation.workspaceId,
+          data: {
+            worktreeId: task.worktreeId,
+            taskId: cardId,
+            boardId: automation.boardId,
+            deleteBranch: true,
+          },
+          timestamp: new Date(),
+        });
+
+        console.log(
+          `[WorkflowOrchestrator] Scheduled worktree cleanup for task ${cardId}, worktree ${task.worktreeId}.`,
+        );
+      } catch (err) {
+        console.error(
+          `[WorkflowOrchestrator] Worktree cleanup scheduling failed for ${cardId}:`,
+          err,
+        );
+      }
+    }, KanbanWorkflowOrchestrator.WORKTREE_CLEANUP_DELAY_MS);
   }
 
   private async autoAdvanceCard(

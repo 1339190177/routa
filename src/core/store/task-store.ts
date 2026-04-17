@@ -16,6 +16,7 @@ export interface TaskStore {
   updateStatus(taskId: string, status: TaskStatus): Promise<void>;
   delete(taskId: string): Promise<void>;
   deleteByWorkspace(workspaceId: string): Promise<number>;
+  findByPullRequestUrl?(url: string): Promise<Task | undefined>;
 }
 
 export class InMemoryTaskStore implements TaskStore {
@@ -83,6 +84,15 @@ export class InMemoryTaskStore implements TaskStore {
       deleted += 1;
     }
     return deleted;
+  }
+
+  async findByPullRequestUrl(url: string): Promise<Task | undefined> {
+    for (const task of this.tasks.values()) {
+      if (task.pullRequestUrl === url || task.githubUrl === url) {
+        return this.hydrateTask(task);
+      }
+    }
+    return undefined;
   }
 
   private hydrateTask(task: Task): Task {

@@ -38,6 +38,8 @@ import { getHttpSessionStore } from "../acp/http-session-store";
 import { getSpecialistById } from "../orchestration/specialist-prompts";
 import { dispatchSessionPrompt } from "@/core/acp/session-prompt";
 import type { ColumnTransitionData } from "./column-transition";
+import { startWorktreeCleanupListener } from "./worktree-cleanup";
+import { startPrMergeListener } from "./pr-merge-listener";
 import {
   buildTaskEvidenceSummary,
   buildTaskInvestValidation,
@@ -175,24 +177,66 @@ async function startKanbanTaskSession(
         system.worktreeStore,
         system.codebaseStore,
       );
-      const { branch, label } = buildKanbanWorktreeNaming(nextTask.id);
+      const namingOverride = nextTask.nextBranchOverride
+        ? { branch: nextTask.nextBranchOverride, label: nextTask.nextBranchOverride }
+        : undefined;
+      const { branch, label } = namingOverride ?? buildKanbanWorktreeNaming(nextTask.id, { title: nextTask.title });
+      const baseBranchOverride = nextTask.nextBaseBranchOverride;
       const worktreeRoot = workspace
         ? getEffectiveWorkspaceMetadata(workspace).worktreeRoot
         : getDefaultWorkspaceWorktreeRoot(nextTask.workspaceId);
       const worktree = await worktreeService.createWorktree(preferredCodebase.id, {
         branch,
-        baseBranch: preferredCodebase.branch ?? "main",
+        baseBranch: baseBranchOverride ?? preferredCodebase.branch ?? "main",
         label,
         worktreeRoot,
       });
       nextTask.worktreeId = worktree.id;
+      // Clear ephemeral overrides after consumption
+      nextTask.nextBranchOverride = undefined;
+      nextTask.nextBaseBranchOverride = undefined;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      nextTask.status = TaskStatus.BLOCKED;
-      nextTask.columnId = "blocked";
-      nextTask.lastSyncError = `Worktree creation failed: ${message}`;
-      await system.taskStore.save(nextTask);
-      return { error: nextTask.lastSyncError };
+      // Branch collision: retry with a timestamp suffix
+      if (message.includes("already in use")) {
+        try {
+          const worktreeService = new GitWorktreeService(
+            system.worktreeStore,
+            system.codebaseStore,
+          );
+          const namingOverride = nextTask.nextBranchOverride
+            ? { branch: nextTask.nextBranchOverride, label: nextTask.nextBranchOverride }
+            : undefined;
+          const { branch, label } = namingOverride ?? buildKanbanWorktreeNaming(nextTask.id, { title: nextTask.title });
+          const retryBranch = `${branch}-${Date.now().toString(36)}`;
+          const baseBranchOverride = nextTask.nextBaseBranchOverride;
+          const worktreeRoot = workspace
+            ? getEffectiveWorkspaceMetadata(workspace).worktreeRoot
+            : getDefaultWorkspaceWorktreeRoot(nextTask.workspaceId);
+          const worktree = await worktreeService.createWorktree(preferredCodebase.id, {
+            branch: retryBranch,
+            baseBranch: baseBranchOverride ?? preferredCodebase.branch ?? "main",
+            label,
+            worktreeRoot,
+          });
+          nextTask.worktreeId = worktree.id;
+          nextTask.nextBranchOverride = undefined;
+          nextTask.nextBaseBranchOverride = undefined;
+        } catch (retryError) {
+          const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+          nextTask.status = TaskStatus.BLOCKED;
+          nextTask.columnId = "blocked";
+          nextTask.lastSyncError = `Worktree creation failed after retry: ${retryMsg}`;
+          await system.taskStore.save(nextTask);
+          return { error: nextTask.lastSyncError };
+        }
+      } else {
+        nextTask.status = TaskStatus.BLOCKED;
+        nextTask.columnId = "blocked";
+        nextTask.lastSyncError = `Worktree creation failed: ${message}`;
+        await system.taskStore.save(nextTask);
+        return { error: nextTask.lastSyncError };
+      }
     }
   }
   const resolvedWorktreeTruth = await resolveTaskWorktreeTruth(nextTask, system);
@@ -423,6 +467,8 @@ export function startWorkflowOrchestrator(system: RoutaSystem): void {
   }));
   orchestrator.start();
   queue.start();
+  startWorktreeCleanupListener(system);
+  startPrMergeListener(system);
   g[STARTED_KEY] = true;
 }
 

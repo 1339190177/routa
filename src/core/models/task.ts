@@ -248,6 +248,20 @@ export interface Task {
   worktreeId?: string;
   /** Frozen delivery evidence captured before PR / merge / base sync can erase base..HEAD */
   deliverySnapshot?: TaskDeliverySnapshot;
+  /** URL of the pull/merge request created for this task (set by PR Publisher) */
+  pullRequestUrl?: string;
+  /** Timestamp when the PR was merged; absent means the PR is still open or was never created */
+  pullRequestMergedAt?: Date;
+  /**
+   * Ephemeral override: when set, the next worktree creation uses this branch name
+   * instead of the auto-generated one. Cleared after use — never persisted to DB.
+   */
+  nextBranchOverride?: string;
+  /**
+   * Ephemeral override: when set, the next worktree creation uses this as the base
+   * branch instead of the codebase default. Cleared after use — never persisted to DB.
+   */
+  nextBaseBranchOverride?: string;
   createdAt: Date;
   updatedAt: Date;
   completionSummary?: string;
@@ -292,6 +306,7 @@ export function createTask(params: {
   status?: TaskStatus;
   codebaseIds?: string[];
   worktreeId?: string;
+  pullRequestUrl?: string;
 }): Task {
   const now = new Date();
   const comments = params.comments ?? buildInitialTaskComments(params.comment, now);
@@ -334,6 +349,7 @@ export function createTask(params: {
     creationSource: params.creationSource,
     codebaseIds: params.codebaseIds ?? [],
     worktreeId: params.worktreeId,
+    pullRequestUrl: params.pullRequestUrl,
     triggerSessionId: params.triggerSessionId,
     createdAt: now,
     updatedAt: now,

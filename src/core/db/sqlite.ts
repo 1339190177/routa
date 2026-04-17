@@ -224,6 +224,8 @@ function initializeSqliteTables(db: SqliteDatabase): void {
       workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       session_id TEXT,
       delivery_snapshot TEXT,
+      pull_request_url TEXT,
+      pull_request_merged_at INTEGER,
       completion_summary TEXT,
       verification_verdict TEXT,
       verification_report TEXT,
@@ -262,6 +264,8 @@ function initializeSqliteTables(db: SqliteDatabase): void {
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN session_ids TEXT DEFAULT '[]'`);
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN lane_sessions TEXT DEFAULT '[]'`);
   runAddColumn(sql`ALTER TABLE tasks ADD COLUMN lane_handoffs TEXT DEFAULT '[]'`);
+  runAddColumn(sql`ALTER TABLE tasks ADD COLUMN pull_request_url TEXT`);
+  runAddColumn(sql`ALTER TABLE tasks ADD COLUMN pull_request_merged_at INTEGER`);
 
   db.run(sql`
     CREATE TABLE IF NOT EXISTS notes (

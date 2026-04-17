@@ -277,6 +277,7 @@ export function KanbanTab({
   const sessionBackfillInFlightRef = useRef(new Set<string>());
   const emptySessionRecoveryRef = useRef<string | null>(null);
   const previousPreferredTaskSessionIdRef = useRef<string | null>(null);
+  const userManuallySelectedSessionRef = useRef(false);
   const [isPageVisible, setIsPageVisible] = useState(() => (
     typeof document === "undefined" || document.visibilityState === "visible"
   ));
@@ -649,12 +650,15 @@ export function KanbanTab({
   useEffect(() => {
     if (!activeTask) {
       previousPreferredTaskSessionIdRef.current = null;
+      userManuallySelectedSessionRef.current = false;
       return;
     }
     if (!preferredActiveTaskSessionId) {
       previousPreferredTaskSessionIdRef.current = null;
       return;
     }
+    // If user manually selected a session, don't auto-switch to preferred
+    if (userManuallySelectedSessionRef.current) return;
     const previousPreferredTaskSessionId = previousPreferredTaskSessionIdRef.current;
     setActiveSessionId((current) => {
       if (!current) return preferredActiveTaskSessionId;
@@ -1867,7 +1871,10 @@ export function KanbanTab({
     runTaskPullRequest,
     confirmDeleteTask,
     onRefresh,
-    setActiveSessionId,
+    setActiveSessionId: (id: string | null) => {
+      setActiveSessionId(id);
+      if (id) userManuallySelectedSessionRef.current = true;
+    },
     sessionMap,
     workspaceId,
     isTaskDetailFullscreen,

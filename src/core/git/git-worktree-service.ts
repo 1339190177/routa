@@ -245,6 +245,18 @@ export class GitWorktreeService {
         } catch {
           // Branch may already be gone or is checked out elsewhere
         }
+
+        // Also delete the remote branch if it was pushed.
+        // Best-effort: the branch may not have been pushed, or the
+        // remote may reject the delete (e.g. branch protection).
+        try {
+          await execGit(
+            ["push", "origin", "--delete", worktree.branch],
+            repoPath,
+          );
+        } catch {
+          // Remote branch may not exist, or push access is denied — ignore
+        }
       }
 
       await this.worktreeStore.remove(worktreeId);
@@ -304,6 +316,40 @@ export class GitWorktreeService {
     }
 
     return { healthy: true };
+  }
+
+  /**
+   * Reset a worktree's working tree to match a base branch.
+   * Keeps the worktree and branch intact, but discards all local commits/changes.
+   */
+  async resetWorktree(
+    worktreeId: string,
+    options: { baseBranch?: string } = {},
+  ): Promise<void> {
+    const worktree = await this.worktreeStore.get(worktreeId);
+    if (!worktree) {
+      throw new Error(`Worktree not found: ${worktreeId}`);
+    }
+
+    const codebase = await this.codebaseStore.get(worktree.codebaseId);
+    if (!codebase) {
+      throw new Error(`Codebase not found for worktree ${worktreeId}`);
+    }
+
+    const base = options.baseBranch ?? worktree.baseBranch ?? codebase.branch ?? "main";
+    const cwd = worktree.worktreePath;
+    const repoPath = codebase.repoPath;
+
+    await this.withRepoLock(repoPath, async () => {
+      // Fetch latest from remote
+      await execGit(["fetch", "origin"], cwd).catch(() => {});
+
+      // Clean untracked files and directories
+      await execGit(["clean", "-fd"], cwd).catch(() => {});
+
+      // Hard reset to base branch
+      await execGit(["reset", "--hard", `origin/${base}`], cwd);
+    });
   }
 
   /**

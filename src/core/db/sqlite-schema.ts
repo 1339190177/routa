@@ -111,6 +111,10 @@ export const tasks = sqliteTable("tasks", {
   /** Git worktree ID created for this task when it enters the dev column */
   worktreeId: text("worktree_id"),
   deliverySnapshot: text("delivery_snapshot", { mode: "json" }).$type<TaskDeliverySnapshot>(),
+  /** URL of the pull/merge request created for this task (set by PR Publisher) */
+  pullRequestUrl: text("pull_request_url"),
+  /** Timestamp when the PR was merged */
+  pullRequestMergedAt: integer("pull_request_merged_at", { mode: "timestamp_ms" }),
   completionSummary: text("completion_summary"),
   verificationVerdict: text("verification_verdict"),
   verificationReport: text("verification_report"),
