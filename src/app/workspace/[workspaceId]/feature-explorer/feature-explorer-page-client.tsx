@@ -21,10 +21,60 @@ import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker"
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
+import { loadRepoSelection, saveRepoSelection } from "@/client/utils/repo-selection-storage";
 import { useTranslation } from "@/i18n";
 
-import type { CapabilityGroup, FeatureDetail, FileTreeNode, InspectorTab } from "./types";
+import type { ApiDetail, CapabilityGroup, FeatureDetail, FileTreeNode, InspectorTab } from "./types";
 import { useFeatureExplorerData } from "./use-feature-explorer-data";
+
+const FEATURE_EXPLORER_DEBUG_WORKSPACE_ID = "default";
+const FEATURE_EXPLORER_DEBUG_REPO_SELECTION: RepoSelection = {
+  name: "routa-js",
+  path: "/Users/phodal/ai/routa-js",
+  branch: "",
+};
+
+function featureExplorerDebugSeedKey(workspaceId: string): string {
+  return `routa.featureExplorer.debugRepoSeed.${workspaceId}`;
+}
+
+function loadInitialRepoSelection(workspaceId: string): RepoSelection | null {
+  const persisted = loadRepoSelection("featureExplorer", workspaceId);
+  if (persisted) {
+    return persisted;
+  }
+
+  if (typeof window === "undefined" || workspaceId !== FEATURE_EXPLORER_DEBUG_WORKSPACE_ID) {
+    return null;
+  }
+
+  const host = window.location.hostname;
+  if (host !== "localhost" && host !== "127.0.0.1") {
+    return null;
+  }
+
+  try {
+    if (window.localStorage.getItem(featureExplorerDebugSeedKey(workspaceId)) === "true") {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  return FEATURE_EXPLORER_DEBUG_REPO_SELECTION;
+}
+
+function markFeatureExplorerDebugSeeded(workspaceId: string): void {
+  if (typeof window === "undefined" || workspaceId !== FEATURE_EXPLORER_DEBUG_WORKSPACE_ID) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(featureExplorerDebugSeedKey(workspaceId), "true");
+  } catch {
+    // Ignore storage failures in restricted environments.
+  }
+}
 
 function flattenFiles(nodes: FileTreeNode[], acc: Record<string, FileTreeNode> = {}): Record<string, FileTreeNode> {
   for (const node of nodes) {
@@ -84,19 +134,24 @@ export function FeatureExplorerPageClient({
       })),
     [codebases],
   );
-  const [manualRepoSelectionState, setManualRepoSelectionState] = useState<{
-    workspaceId: string;
-    selection: RepoSelection | null;
-  }>({
-    workspaceId,
-    selection: null,
+  const [repoSelectionOverrides, setRepoSelectionOverrides] = useState<Record<string, RepoSelection | null>>(() => {
+    const initialSelection = loadInitialRepoSelection(workspaceId);
+    return initialSelection ? { [workspaceId]: initialSelection } : {};
   });
-  const manualRepoSelection = manualRepoSelectionState.workspaceId === workspaceId
-    ? manualRepoSelectionState.selection
-    : null;
+  const hasRepoSelectionOverride = Object.prototype.hasOwnProperty.call(repoSelectionOverrides, workspaceId);
+  const manualRepoSelection = hasRepoSelectionOverride
+    ? (repoSelectionOverrides[workspaceId] ?? null)
+    : loadInitialRepoSelection(workspaceId);
   const fallbackRepoSelection = workspaceRepos[0] ?? null;
   const effectiveRepoSelection = manualRepoSelection ?? fallbackRepoSelection;
   const repoRefreshKey = `${effectiveRepoSelection?.path ?? ""}:${effectiveRepoSelection?.branch ?? ""}`;
+
+  useEffect(() => {
+    if (manualRepoSelection?.path === FEATURE_EXPLORER_DEBUG_REPO_SELECTION.path) {
+      markFeatureExplorerDebugSeeded(workspaceId);
+    }
+    saveRepoSelection("featureExplorer", workspaceId, manualRepoSelection);
+  }, [manualRepoSelection, workspaceId]);
 
   const {
     loading,
@@ -167,7 +222,7 @@ export function FeatureExplorerPageClient({
   };
 
   const handleRepoSelectionChange = (selection: RepoSelection | null) => {
-    setManualRepoSelectionState({ workspaceId, selection });
+    setRepoSelectionOverrides((prev) => ({ ...prev, [workspaceId]: selection }));
   };
 
   const applyFileAutoSelect = (detail: FeatureDetail) => {
@@ -680,21 +735,29 @@ function ApiPanel({
   const [responseBody, setResponseBody] = useState("");
   const [requestState, setRequestState] = useState<"idle" | "loading" | "done" | "error">("idle");
 
-  const apiDetails = featureDetail?.apiDetails ?? featureDetail?.apis.map((declaration) => {
+  const fallbackApiDetails: ApiDetail[] = featureDetail?.apis.map((declaration): ApiDetail => {
     const [method, endpoint] = declaration.split(/\s+/, 2);
     if (endpoint) {
       return { group: "", method, endpoint, description: "" };
     }
     return { group: "", method: "GET", endpoint: declaration, description: "" };
   }) ?? [];
+  const apiDetails: ApiDetail[] = featureDetail?.apiDetails ?? fallbackApiDetails;
 
   if (!featureDetail || apiDetails.length === 0) {
     return <div className="text-xs text-desktop-text-secondary">-</div>;
   }
 
-  const selectedApi = apiDetails[selectedApiIdx] ?? apiDetails[0];
+  const selectedApi: ApiDetail = apiDetails[selectedApiIdx] ?? apiDetails[0] ?? {
+    group: "",
+    method: "GET",
+    endpoint: "",
+    description: "",
+  };
   const method = selectedApi.method;
   const apiPath = selectedApi.endpoint;
+  const nextjsSources: string[] = [...new Set(selectedApi.nextjsSourceFiles ?? [])];
+  const rustSources: string[] = [...new Set(selectedApi.rustSourceFiles ?? [])];
 
   const methodTone = method === "GET"
     ? "border-emerald-300/70 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-200"
@@ -735,7 +798,7 @@ function ApiPanel({
           </span>
           <code className="truncate text-desktop-text-secondary">{apiPath}</code>
         </div>
-        {selectedApi.group || selectedApi.description ? (
+        {selectedApi.group || selectedApi.description || nextjsSources.length > 0 || rustSources.length > 0 ? (
           <div className="mt-2 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2.5 py-2">
             {selectedApi.group ? (
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
@@ -745,6 +808,34 @@ function ApiPanel({
             {selectedApi.description ? (
               <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">
                 {selectedApi.description}
+              </div>
+            ) : null}
+            {nextjsSources.length > 0 ? (
+              <div className="mt-2">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+                  Next.js
+                </div>
+                <div className="mt-1 space-y-1">
+                  {nextjsSources.map((sourceFile) => (
+                    <div key={sourceFile} className="break-all text-[11px] text-desktop-text-secondary">
+                      {sourceFile}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {rustSources.length > 0 ? (
+              <div className="mt-2">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+                  Rust
+                </div>
+                <div className="mt-1 space-y-1">
+                  {rustSources.map((sourceFile) => (
+                    <div key={sourceFile} className="break-all text-[11px] text-desktop-text-secondary">
+                      {sourceFile}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>

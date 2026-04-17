@@ -14,6 +14,22 @@ const { useFeatureExplorerData } = vi.hoisted(() => ({
   useFeatureExplorerData: vi.fn(),
 }));
 
+const localStorageMock = vi.hoisted(() => {
+  let store = new Map<string, string>();
+  return {
+    getItem: vi.fn((key: string) => store.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => {
+      store.set(key, value);
+    }),
+    removeItem: vi.fn((key: string) => {
+      store.delete(key);
+    }),
+    clear: vi.fn(() => {
+      store = new Map<string, string>();
+    }),
+  };
+});
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: navState.push }),
 }));
@@ -60,10 +76,17 @@ vi.mock("@/client/components/repo-picker", () => ({
   ),
 }));
 
+Object.defineProperty(window, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+});
+
 import { FeatureExplorerPageClient } from "../feature-explorer-page-client";
 
 describe("FeatureExplorerPageClient", () => {
   beforeEach(() => {
+    window.localStorage.clear();
+    window.localStorage.setItem("routa.featureExplorer.debugRepoSeed.default", "true");
     navState.push.mockReset();
     useWorkspaces.mockReturnValue({
       loading: false,
@@ -107,6 +130,8 @@ describe("FeatureExplorerPageClient", () => {
       refreshKey: "/repo/default:main",
     });
 
+    expect(window.localStorage.getItem("routa.repoSelection.featureExplorer.default")).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: "switch repo" }));
 
     await waitFor(() => {
@@ -120,6 +145,9 @@ describe("FeatureExplorerPageClient", () => {
       repoPath: "/tmp/local-project",
       refreshKey: "/tmp/local-project:feature-x",
     });
+    expect(window.localStorage.getItem("routa.repoSelection.featureExplorer.default")).toContain(
+      "/tmp/local-project",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "clear repo" }));
 
@@ -132,5 +160,53 @@ describe("FeatureExplorerPageClient", () => {
       repoPath: "/repo/default",
       refreshKey: "/repo/default:main",
     });
+    expect(window.localStorage.getItem("routa.repoSelection.featureExplorer.default")).toBeNull();
+  });
+
+  it("hydrates the last repo selection from localStorage", async () => {
+    window.localStorage.setItem(
+      "routa.repoSelection.featureExplorer.default",
+      JSON.stringify({
+        name: "persisted-repo",
+        path: "/tmp/persisted-repo",
+        branch: "debug-branch",
+      }),
+    );
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("repo-picker-value").textContent).toBe(
+        "persisted-repo|/tmp/persisted-repo|debug-branch",
+      );
+    });
+
+    expect(useFeatureExplorerData).toHaveBeenLastCalledWith({
+      workspaceId: "default",
+      repoPath: "/tmp/persisted-repo",
+      refreshKey: "/tmp/persisted-repo:debug-branch",
+    });
+  });
+
+  it("seeds the localhost debug repo path once when nothing is stored", async () => {
+    window.localStorage.clear();
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("repo-picker-value").textContent).toBe(
+        "routa-js|/Users/phodal/ai/routa-js|",
+      );
+    });
+
+    expect(useFeatureExplorerData).toHaveBeenLastCalledWith({
+      workspaceId: "default",
+      repoPath: "/Users/phodal/ai/routa-js",
+      refreshKey: "/Users/phodal/ai/routa-js:",
+    });
+    expect(window.localStorage.getItem("routa.repoSelection.featureExplorer.default")).toContain(
+      "/Users/phodal/ai/routa-js",
+    );
+    expect(window.localStorage.getItem("routa.featureExplorer.debugRepoSeed.default")).toBe("true");
   });
 });
