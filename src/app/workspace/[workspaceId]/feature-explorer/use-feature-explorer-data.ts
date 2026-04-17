@@ -4,6 +4,8 @@ import type { CapabilityGroup, FeatureDetail, FeatureListResponse, FeatureSummar
 
 interface UseFeatureExplorerDataOptions {
   workspaceId: string;
+  repoPath?: string;
+  refreshKey?: string;
 }
 
 interface UseFeatureExplorerDataResult {
@@ -21,6 +23,9 @@ interface UseFeatureExplorerDataResult {
 function buildQuery(options: UseFeatureExplorerDataOptions): string {
   const params = new URLSearchParams();
   params.set("workspaceId", options.workspaceId);
+  if (options.repoPath) {
+    params.set("repoPath", options.repoPath);
+  }
   return params.toString();
 }
 
@@ -39,7 +44,7 @@ async function loadFeatureDetail(
 export function useFeatureExplorerData(
   options: UseFeatureExplorerDataOptions,
 ): UseFeatureExplorerDataResult {
-  const { workspaceId } = options;
+  const { workspaceId, repoPath, refreshKey } = options;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [capabilityGroups, setCapabilityGroups] = useState<CapabilityGroup[]>([]);
@@ -52,13 +57,15 @@ export function useFeatureExplorerData(
   useEffect(() => {
     let cancelled = false;
     initialFetchDone.current = false;
+    setFeatureDetail(null);
+    setInitialFeatureId("");
 
     async function fetchFeatures() {
       setLoading(true);
       setError(null);
 
       try {
-        const opts = { workspaceId };
+        const opts = { workspaceId, repoPath, refreshKey };
         const query = buildQuery(opts);
         const response = await desktopAwareFetch(`/feature-explorer?${query}`);
         if (!response.ok) {
@@ -96,13 +103,13 @@ export function useFeatureExplorerData(
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, repoPath, refreshKey]);
 
   const fetchFeatureDetail = useCallback(
     async (featureId: string): Promise<FeatureDetail | null> => {
       setFeatureDetailLoading(true);
       try {
-        const detail = await loadFeatureDetail(featureId, { workspaceId });
+        const detail = await loadFeatureDetail(featureId, { workspaceId, repoPath, refreshKey });
         if (detail) {
           setFeatureDetail(detail);
         }
@@ -113,7 +120,7 @@ export function useFeatureExplorerData(
         setFeatureDetailLoading(false);
       }
     },
-    [workspaceId],
+    [workspaceId, repoPath, refreshKey],
   );
 
   return {

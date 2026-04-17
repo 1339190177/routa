@@ -17,8 +17,9 @@ import {
 } from "lucide-react";
 
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
+import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
-import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
+import { type CodebaseData, useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import { useTranslation } from "@/i18n";
 
@@ -63,6 +64,15 @@ function formatShortDate(iso: string): string {
   return `${mm}-${dd}`;
 }
 
+function toRepoSelection(codebase: CodebaseData | null): RepoSelection | null {
+  if (!codebase) return null;
+  return {
+    name: codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath,
+    path: codebase.repoPath,
+    branch: codebase.branch ?? "",
+  };
+}
+
 export function FeatureExplorerPageClient({
   workspaceId,
 }: {
@@ -75,9 +85,34 @@ export function FeatureExplorerPageClient({
 
   const workspace = workspacesHook.workspaces.find((item) => item.id === workspaceId) ?? null;
   const defaultCodebase = codebases.find((cb) => cb.isDefault) ?? codebases[0] ?? null;
-  const repoLabel = defaultCodebase
-    ? (defaultCodebase.label ?? defaultCodebase.repoPath.split("/").pop() ?? defaultCodebase.repoPath)
+  const defaultRepoSelection = useMemo(() => toRepoSelection(defaultCodebase), [defaultCodebase]);
+  const workspaceRepos = useMemo(
+    () =>
+      codebases.map((codebase) => ({
+        name: codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath,
+        path: codebase.repoPath,
+        branch: codebase.branch,
+      })),
+    [codebases],
+  );
+  const [manualRepoSelectionState, setManualRepoSelectionState] = useState<{
+    workspaceId: string;
+    selection: RepoSelection | null;
+  }>({
+    workspaceId,
+    selection: null,
+  });
+  const manualRepoSelection = manualRepoSelectionState.workspaceId === workspaceId
+    ? manualRepoSelectionState.selection
     : null;
+
+  const effectiveRepoSelection = manualRepoSelection ?? defaultRepoSelection;
+  const isRepoOverride = Boolean(
+    manualRepoSelection?.path && manualRepoSelection.path !== defaultRepoSelection?.path,
+  );
+  const repoRefreshKey = manualRepoSelection
+    ? `${manualRepoSelection.path}:${manualRepoSelection.branch}`
+    : undefined;
 
   const {
     loading,
@@ -90,6 +125,8 @@ export function FeatureExplorerPageClient({
     fetchFeatureDetail,
   } = useFeatureExplorerData({
     workspaceId,
+    repoPath: isRepoOverride ? manualRepoSelection?.path : undefined,
+    refreshKey: repoRefreshKey,
   });
 
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("context");
@@ -167,6 +204,10 @@ export function FeatureExplorerPageClient({
     if (created?.id) {
       router.push(`/workspace/${encodeURIComponent(created.id)}/feature-explorer`);
     }
+  };
+
+  const handleRepoSelectionChange = (selection: RepoSelection | null) => {
+    setManualRepoSelectionState({ workspaceId, selection });
   };
 
   const applyFileAutoSelect = (detail: FeatureDetail) => {
@@ -264,19 +305,18 @@ export function FeatureExplorerPageClient({
           <section className="grid min-h-0 flex-1 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
             {/* ── Left panel: Feature list ── */}
             <aside className="flex min-h-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary/20">
-              {repoLabel && (
-                <div className="flex items-center gap-1.5 border-b border-desktop-border px-3 py-1.5">
-                  <Folder className="h-3.5 w-3.5 shrink-0 text-desktop-text-secondary" />
-                  <span className="min-w-0 truncate text-[12px] font-medium text-desktop-text-primary" title={defaultCodebase?.repoPath}>
-                    {repoLabel}
-                  </span>
-                  {defaultCodebase?.branch && (
-                    <span className="shrink-0 rounded-sm border border-desktop-border px-1 py-0.5 text-[9px] text-desktop-text-secondary">
-                      {defaultCodebase.branch}
-                    </span>
-                  )}
+              <div className="border-b border-desktop-border px-3 py-2">
+                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
+                  <Folder className="h-3.5 w-3.5 shrink-0" />
+                  <span>{t.featureExplorer.codebase}</span>
                 </div>
-              )}
+                <RepoPicker
+                  value={effectiveRepoSelection}
+                  onChange={handleRepoSelectionChange}
+                  additionalRepos={workspaceRepos}
+                  pathDisplay="below-muted"
+                />
+              </div>
               <div className="border-b border-desktop-border px-3 py-2">
                 <label className="flex items-center gap-2 rounded-sm border border-desktop-border bg-desktop-bg-primary px-2.5 py-1.5 text-xs text-desktop-text-secondary">
                   <Search className="h-3.5 w-3.5" />
