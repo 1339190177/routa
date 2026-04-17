@@ -231,6 +231,12 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     tryLiveRequest: string;
     expectedStatus: string;
     state: string;
+    surfaceTypeLabel: string;
+    surfaceTypeFeature: string;
+    surfaceTypePage: string;
+    surfaceTypeContractApi: string;
+    surfaceTypeNextjsApi: string;
+    surfaceTypeRustApi: string;
     treeView: string;
     listView: string;
     noFilesSelected: string;

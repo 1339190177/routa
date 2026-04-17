@@ -43,12 +43,12 @@ import {
   buildApiLookupKey,
   buildSurfaceTree,
   dedupeFeatureIds,
+  getHttpMethodBadgeClass,
   matchesQuery,
   parseApiDeclaration,
   splitApiRouteSegments,
   splitBrowserRouteSegments,
   splitPathSegments,
-  surfaceKindBadge,
 } from "./surface-navigation";
 import { useFeatureExplorerData } from "./use-feature-explorer-data";
 
@@ -1084,20 +1084,34 @@ function ContextPanel({
     return <div className="text-xs text-desktop-text-secondary">-</div>;
   }
 
+  const isFeatureSurface = selectedSurface?.kind === "feature";
+  const selectedSurfaceKindLabel = selectedSurface
+    ? describeSurfaceKind(selectedSurface.kind, t)
+    : "";
+
   return (
     <div className="space-y-2">
-      {selectedSurface ? (
+      {selectedSurface && !isFeatureSurface ? (
         <ContextSection title={t.featureExplorer.selectedSurface}>
           <div className="space-y-3">
             <div>
               <div className="text-[13px] font-semibold text-desktop-text-primary">{selectedSurface.label}</div>
-              {selectedSurface.secondary ? (
+              {selectedSurface.badges?.length ? (
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {selectedSurface.badges.map((badge) => (
+                    <span key={badge} className={getHttpMethodBadgeClass(badge, "compact")}>
+                      {badge}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {selectedSurface.secondary && !(selectedSurface.badges?.length ?? 0) ? (
                 <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{selectedSurface.secondary}</div>
               ) : null}
             </div>
 
             <div className="grid gap-px overflow-hidden rounded-sm border border-desktop-border bg-desktop-border sm:grid-cols-2">
-              <MetricCell label={t.featureExplorer.state} value={surfaceKindBadge(selectedSurface.kind)} />
+              <MetricCell label={t.featureExplorer.surfaceTypeLabel} value={selectedSurfaceKindLabel} />
               <MetricCell
                 label={t.featureExplorer.linkedFeatures}
                 value={selectedSurfaceFeatureNames.length > 0 ? String(selectedSurfaceFeatureNames.length) : t.featureExplorer.unmappedLabel}
@@ -1112,17 +1126,7 @@ function ContextPanel({
             ) : null}
 
             {selectedSurface.sourceFiles.length > 0 ? (
-              <div className="space-y-1">
-                <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.sourceFilesLabel}</div>
-                {selectedSurface.sourceFiles.map((sourceFile) => (
-                  <div
-                    key={sourceFile}
-                    className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary"
-                  >
-                    {sourceFile}
-                  </div>
-                ))}
-              </div>
+              <CompactFileList title={t.featureExplorer.sourceFilesLabel} files={selectedSurface.sourceFiles} />
             ) : null}
           </div>
         </ContextSection>
@@ -1166,40 +1170,37 @@ function ContextPanel({
       )}
 
       <ContextSection title={t.featureExplorer.selectedFileSignals}>
-        <div className="space-y-2">
-          <div>
-            <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.sessionEvidence}</div>
-            <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
-              {activeFile ? t.featureExplorer.pendingImplementation : t.featureExplorer.noFilesSelected}
+        {activeFile ? (
+          <div className="space-y-2">
+            <div>
+              <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.sessionEvidence}</div>
+              <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
+                {t.featureExplorer.pendingImplementation}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.toolHistory}</div>
+              <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
+                {t.featureExplorer.pendingImplementation}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.promptHistory}</div>
+              <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
+                {t.featureExplorer.pendingImplementation}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.toolHistory}</div>
-            <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
-              {activeFile ? t.featureExplorer.pendingImplementation : t.featureExplorer.noFilesSelected}
-            </div>
+        ) : (
+          <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
+            {t.featureExplorer.noFilesSelected}
           </div>
-          <div>
-            <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.promptHistory}</div>
-            <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
-              {activeFile ? t.featureExplorer.pendingImplementation : t.featureExplorer.noFilesSelected}
-            </div>
-          </div>
-        </div>
+        )}
       </ContextSection>
 
-      {featureDetail ? (
+      {featureDetail && (!selectedSurface || isFeatureSurface) ? (
         <ContextSection title={t.featureExplorer.sourceFilesLabel}>
-          <div className="space-y-1">
-            {featureDetail.sourceFiles.map((sourceFile) => (
-              <div
-                key={sourceFile}
-                className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary"
-              >
-                {sourceFile}
-              </div>
-            ))}
-          </div>
+          <CompactFileList files={featureDetail.sourceFiles} />
         </ContextSection>
       ) : null}
 
@@ -1493,6 +1494,24 @@ function TreeNodeRow({
   );
 }
 
+function describeSurfaceKind(
+  kind: ExplorerSurfaceItem["kind"],
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  switch (kind) {
+    case "feature":
+      return t.featureExplorer.surfaceTypeFeature;
+    case "page":
+      return t.featureExplorer.surfaceTypePage;
+    case "contract-api":
+      return t.featureExplorer.surfaceTypeContractApi;
+    case "nextjs-api":
+      return t.featureExplorer.surfaceTypeNextjsApi;
+    case "rust-api":
+      return t.featureExplorer.surfaceTypeRustApi;
+  }
+}
+
 /* ── Shared components ── */
 function ContextSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -1511,7 +1530,33 @@ function MetricCell({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
         {label}
       </div>
-      <div className="mt-1 text-[12px] font-medium text-desktop-text-primary">{value}</div>
+      <div className="mt-1 break-words text-[12px] font-medium text-desktop-text-primary">{value}</div>
+    </div>
+  );
+}
+
+function CompactFileList({
+  files,
+  title,
+}: {
+  files: string[];
+  title?: string;
+}) {
+  return (
+    <div className="space-y-1">
+      {title ? (
+        <div className="text-[10px] font-medium text-desktop-text-secondary">{title}</div>
+      ) : null}
+      <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+        {files.map((sourceFile) => (
+          <div
+            key={sourceFile}
+            className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary"
+          >
+            {sourceFile}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

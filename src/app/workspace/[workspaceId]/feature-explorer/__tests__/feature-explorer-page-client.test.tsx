@@ -409,6 +409,66 @@ describe("FeatureExplorerPageClient", () => {
     expect(highFeature.compareDocumentPosition(lowFeature) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("does not duplicate feature details in the inspector for feature selections", async () => {
+    useFeatureExplorerData.mockReturnValue({
+      loading: false,
+      error: null,
+      capabilityGroups: [{ id: "kanban", name: "Kanban", description: "Kanban workflows" }],
+      features: [
+        {
+          id: "kanban-workflow",
+          name: "Kanban Workflow",
+          group: "kanban",
+          summary: "Workflow surface",
+          status: "active",
+          sessionCount: 6,
+          changedFiles: 6,
+          updatedAt: "2026-04-17T08:00:00.000Z",
+          sourceFileCount: 1,
+          pageCount: 0,
+          apiCount: 0,
+        },
+      ],
+      surfaceIndex: {
+        generatedAt: "",
+        pages: [],
+        apis: [],
+        contractApis: [],
+        nextjsApis: [],
+        rustApis: [],
+        metadata: null,
+        repoRoot: "",
+        warnings: [],
+      },
+      featureDetail: {
+        id: "kanban-workflow",
+        name: "Kanban Workflow",
+        group: "kanban",
+        summary: "Workflow surface",
+        status: "active",
+        pages: [],
+        apis: [],
+        sourceFiles: ["src/app/api/kanban/boards/route.ts"],
+        relatedFeatures: [],
+        domainObjects: [],
+        sessionCount: 6,
+        changedFiles: 6,
+        updatedAt: "2026-04-17T08:00:00.000Z",
+        fileTree: [],
+        fileStats: {},
+      },
+      featureDetailLoading: false,
+      initialFeatureId: "kanban-workflow",
+      fetchFeatureDetail: vi.fn().mockResolvedValue(null),
+    });
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    expect(screen.queryByText("Selected surface")).toBeNull();
+    expect(screen.getByText("Feature summary")).toBeTruthy();
+    expect(screen.getAllByText("Kanban Workflow").length).toBeGreaterThan(0);
+  });
+
   it("summarizes folder session counts from descendant files", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,
