@@ -801,6 +801,156 @@ describe("FeatureExplorerPageClient", () => {
     expect(clipboardState.writeText).toHaveBeenCalledWith("codex resume 019d-selected-file");
   });
 
+  it("launches a file session analysis specialist from the inspector", async () => {
+    sessionLaunchState.desktopAwareFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        result: {
+          sessionId: "analysis-session-1",
+        },
+      }),
+    });
+
+    useFeatureExplorerData.mockReturnValue({
+      loading: false,
+      error: null,
+      capabilityGroups: [{ id: "workspace", name: "Workspace", description: "" }],
+      features: [
+        {
+          id: "workspace-overview",
+          name: "Workspace Overview",
+          group: "workspace",
+          summary: "Workspace shell",
+          status: "shipped",
+          sessionCount: 12,
+          changedFiles: 1,
+          updatedAt: "2026-04-17T08:00:00.000Z",
+          sourceFileCount: 1,
+          pageCount: 1,
+          apiCount: 0,
+        },
+      ],
+      surfaceIndex: {
+        generatedAt: "",
+        pages: [],
+        apis: [],
+        contractApis: [],
+        nextjsApis: [],
+        rustApis: [],
+        metadata: null,
+        repoRoot: "",
+        warnings: [],
+      },
+      featureDetail: {
+        id: "workspace-overview",
+        name: "Workspace Overview",
+        group: "workspace",
+        summary: "Workspace shell",
+        status: "shipped",
+        pages: [],
+        apis: [],
+        sourceFiles: ["crates/routa-server/src/api/kanban.rs"],
+        relatedFeatures: [],
+        domainObjects: [],
+        sessionCount: 12,
+        changedFiles: 1,
+        updatedAt: "2026-04-17T08:00:00.000Z",
+        fileTree: [
+          {
+            id: "file-kanban-api",
+            name: "kanban.rs",
+            path: "crates/routa-server/src/api/kanban.rs",
+            kind: "file",
+            children: [],
+          },
+        ],
+        fileStats: {
+          "crates/routa-server/src/api/kanban.rs": {
+            changes: 4,
+            sessions: 6,
+            updatedAt: "2026-04-17T08:00:00.000Z",
+          },
+        },
+        fileSignals: {
+          "crates/routa-server/src/api/kanban.rs": {
+            sessions: [
+              {
+                provider: "codex",
+                sessionId: "019d-kanban-analysis",
+                updatedAt: "2026-04-17T08:00:00.000Z",
+                promptSnippet: "Trace why kanban.rs needed multiple follow-up passes",
+                promptHistory: [
+                  "Trace why kanban.rs needed multiple follow-up passes",
+                  "Summarize what context should have been provided earlier",
+                ],
+                toolNames: ["exec_command", "apply_patch"],
+                changedFiles: [
+                  "fatal: Unable to create '/Users/phodal/ai/routa-js/.git/index.lock': Operation not permitted",
+                  "crates/routa-server/src/api/kanban.rs",
+                ],
+                resumeCommand: "codex resume 019d-kanban-analysis",
+              },
+            ],
+            toolHistory: ["exec_command", "apply_patch"],
+            promptHistory: ["Trace why kanban.rs needed multiple follow-up passes"],
+          },
+        },
+      },
+      featureDetailLoading: false,
+      initialFeatureId: "workspace-overview",
+      fetchFeatureDetail: vi.fn().mockResolvedValue(null),
+    });
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open analysis panel" })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open analysis panel" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("feature-explorer-session-analysis-drawer")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Analyze selected sessions" }));
+
+    await waitFor(() => {
+      expect(sessionLaunchState.desktopAwareFetch).toHaveBeenCalledTimes(1);
+    });
+
+    const [path, options] = sessionLaunchState.desktopAwareFetch.mock.calls[0] as [
+      string,
+      { body: string; method: string },
+    ];
+    expect(path).toBe("/api/acp");
+    expect(options.method).toBe("POST");
+
+    const body = JSON.parse(options.body);
+    expect(body.method).toBe("session/new");
+    expect(body.params).toMatchObject({
+      workspaceId: "default",
+      cwd: "/repo/default",
+      branch: "main",
+      role: "ROUTA",
+      specialistId: "file-session-analyst",
+      specialistLocale: "en",
+    });
+
+    await waitFor(() => {
+      expect(sessionLaunchState.storePendingPrompt).toHaveBeenCalledWith(
+        "analysis-session-1",
+        expect.stringContaining("crates/routa-server/src/api/kanban.rs"),
+      );
+    });
+
+    const [, prompt] = sessionLaunchState.storePendingPrompt.mock.calls[0] as [string, string];
+    expect(prompt).toContain("019d-kanban-analysis");
+    expect(prompt).toContain("Summarize what context should have been provided earlier");
+    expect(prompt).not.toContain("Operation not permitted");
+    expect(navState.push).toHaveBeenCalledWith("/workspace/default/sessions/analysis-session-1");
+  });
+
   it("aggregates folder selection sessions across descendant files", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,

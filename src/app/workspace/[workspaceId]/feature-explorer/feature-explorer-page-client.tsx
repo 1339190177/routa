@@ -34,6 +34,7 @@ import type {
 import {
   ApiPanel,
   ContextPanel,
+  SessionAnalysisDrawer,
   ScreenshotPanel,
 } from "./feature-explorer-inspector-panels";
 import { buildSessionAnalysisPrompt } from "./session-analysis";
@@ -275,6 +276,7 @@ export function FeatureExplorerPageClient({
   const [hasResolvedInitialUrlSelection, setHasResolvedInitialUrlSelection] = useState(
     initialUrlState.featureId === "",
   );
+  const [isSessionAnalysisDrawerOpen, setIsSessionAnalysisDrawerOpen] = useState(false);
   const [isStartingSessionAnalysis, setIsStartingSessionAnalysis] = useState(false);
   const [sessionAnalysisError, setSessionAnalysisError] = useState<string | null>(null);
 
@@ -991,6 +993,21 @@ export function FeatureExplorerPageClient({
     }
   };
 
+  useEffect(() => {
+    if (!isSessionAnalysisDrawerOpen) {
+      return;
+    }
+
+    if (selectedFilePaths.length === 0 || selectedScopeSessions.length === 0) {
+      setIsSessionAnalysisDrawerOpen(false);
+    }
+  }, [isSessionAnalysisDrawerOpen, selectedFilePaths.length, selectedScopeSessions.length]);
+
+  const handleOpenSessionAnalysisDrawer = () => {
+    setSessionAnalysisError(null);
+    setIsSessionAnalysisDrawerOpen(true);
+  };
+
   const handleStartSessionAnalysis = async () => {
     if (!effectiveRepoSelection?.path || selectedFilePaths.length === 0 || selectedScopeSessions.length === 0) {
       return;
@@ -1404,9 +1421,7 @@ export function FeatureExplorerPageClient({
                     selectedScopeSessions={selectedScopeSessions}
                     selectedSurface={selectedSurface}
                     selectedSurfaceFeatureNames={selectedSurfaceFeatureNames}
-                    onStartSessionAnalysis={handleStartSessionAnalysis}
-                    isStartingSessionAnalysis={isStartingSessionAnalysis}
-                    sessionAnalysisError={sessionAnalysisError}
+                    onOpenSessionAnalysis={handleOpenSessionAnalysisDrawer}
                     t={t}
                   />
                 )}
@@ -1426,6 +1441,17 @@ export function FeatureExplorerPageClient({
             </aside>
           </section>
         </main>
+
+        <SessionAnalysisDrawer
+          open={isSessionAnalysisDrawerOpen}
+          selectedFilePaths={selectedFilePaths}
+          selectedScopeSessions={selectedScopeSessions}
+          isStartingSessionAnalysis={isStartingSessionAnalysis}
+          sessionAnalysisError={sessionAnalysisError}
+          onClose={() => setIsSessionAnalysisDrawerOpen(false)}
+          onStartSessionAnalysis={handleStartSessionAnalysis}
+          t={t}
+        />
       </div>
     </DesktopAppShell>
   );

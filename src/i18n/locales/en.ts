@@ -295,6 +295,7 @@ const en: TranslationDictionary = {
     sessionAnalysisTitle: "Session analysis",
     sessionAnalysisDescription: "Launch a read-only specialist to review the selected file sessions and suggest faster future prompts.",
     sessionAnalysisEmpty: "Select at least one file with session evidence to start an analysis session.",
+    sessionAnalysisOpen: "Open analysis panel",
     sessionAnalysisAction: "Analyze selected sessions",
     sessionAnalysisStarting: "Starting analysis…",
     sessionAnalysisFailed: "Failed to start the analysis session",

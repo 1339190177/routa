@@ -301,6 +301,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     sessionAnalysisTitle: string;
     sessionAnalysisDescription: string;
     sessionAnalysisEmpty: string;
+    sessionAnalysisOpen: string;
     sessionAnalysisAction: string;
     sessionAnalysisStarting: string;
     sessionAnalysisFailed: string;

@@ -294,6 +294,7 @@ const zh: TranslationDictionary = {
     sessionAnalysisTitle: "会话分析",
     sessionAnalysisDescription: "启动一个只读 specialist，复盘当前选中文件关联的会话，并给出更快的后续输入建议。",
     sessionAnalysisEmpty: "请先选中至少一个带会话证据的文件，再启动分析会话。",
+    sessionAnalysisOpen: "打开分析面板",
     sessionAnalysisAction: "分析选中会话",
     sessionAnalysisStarting: "正在启动分析…",
     sessionAnalysisFailed: "启动分析会话失败",
