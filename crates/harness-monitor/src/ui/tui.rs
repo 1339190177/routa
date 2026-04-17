@@ -184,17 +184,10 @@ fn run_loop(terminal: &mut DefaultTerminal, ctx: RepoContext, poll_interval_ms: 
     let transcript_ctx = ctx.clone();
     let transcript_signal_tx = signal_tx.clone();
     thread::spawn(move || {
-        let mut result = crate::observe::codex_transcript::bootstrap_codex_transcript_messages(
+        let result = crate::observe::codex_transcript::bootstrap_codex_transcript_messages(
             &transcript_ctx.repo_root,
         )
         .unwrap_or_default();
-        result.extend(
-            crate::observe::auggie_session::bootstrap_auggie_session_messages(
-                &transcript_ctx.repo_root,
-            )
-            .unwrap_or_default(),
-        );
-        result.sort_by_key(RuntimeMessage::observed_at_ms);
         let _ = transcript_signal_tx.send(UiSignal::TranscriptBootstrap(result));
     });
     for message in render_feed.read_recent_since(bootstrap_cutoff)? {

@@ -6,7 +6,7 @@ members = [
     "crates/routa-cli",
     "crates/routa-rpc",
     "crates/routa-scanner",
-    "crates/trace-learning",
+    "crates/trace-parser",
     "crates/entrix",
     "apps/desktop/src-tauri",
     "crates/harness-monitor",

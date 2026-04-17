@@ -297,7 +297,6 @@ fn run_watch(
 fn open_db_with_session_backfill(ctx: &crate::observe::repo::RepoContext) -> Result<Db> {
     let db = Db::open(&ctx.db_path)?;
     crate::observe::codex_transcript::backfill_codex_transcripts_to_db(&ctx.repo_root, &db)?;
-    crate::observe::auggie_session::backfill_auggie_sessions_to_db(&ctx.repo_root, &db)?;
     Ok(db)
 }
 

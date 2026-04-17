@@ -9,7 +9,7 @@ use crate::shared::models::{
 use anyhow::Result;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use trace_learning::{
+use trace_parser::{
     collect_active_transcript_summaries, collect_recent_transcript_summaries,
     collect_recent_transcripts, discover_transcript_session_roots_with_overrides,
     parse_transcript_backfill,
@@ -38,11 +38,12 @@ pub fn bootstrap_codex_transcript_messages(
         let model = summary.model.clone();
         let transcript_path = summary.transcript_path.clone();
         let source = summary.source.clone();
+        let client = summary.client.clone();
         messages.push(RuntimeMessage::Hook(HookEvent {
             repo_root: repo_root_text.clone(),
             observed_at_ms,
             status: Some(session_status),
-            client: "codex".to_string(),
+            client,
             session_id: session_id.clone(),
             session_display_name,
             turn_id,
@@ -113,7 +114,7 @@ fn apply_transcript_summary_to_db(
     db.upsert_session(&SessionRecord {
         session_id: summary.session_id.clone(),
         repo_root: repo_root.to_string(),
-        client: "codex".to_string(),
+        client: summary.client.clone(),
         cwd: summary.cwd.clone(),
         model: summary.model.clone(),
         started_at_ms: summary.turn_started_at_ms,
@@ -157,7 +158,7 @@ fn apply_transcript_summary_to_db(
             &summary.session_id,
             repo_root,
             summary.turn_id.as_deref(),
-            "codex",
+            &summary.client,
             "TranscriptRecover",
             None,
             None,
@@ -389,16 +390,16 @@ fn recover_runtime_messages_from_transcript_tool_call(
     event: &TranscriptRecoveredEvent,
 ) -> Option<Vec<RuntimeMessage>> {
     let (turn_id_from_event, observed_at_ms, tool_name, arguments) = match event {
-        TranscriptRecoveredEvent::FunctionCall {
+        TranscriptRecoveredEvent::ToolUse {
             turn_id,
             observed_at_ms,
             tool_name,
-            arguments,
+            tool_input,
         } => (
             turn_id.clone(),
             *observed_at_ms,
             tool_name.as_str(),
-            arguments.as_str(),
+            tool_input.clone(),
         ),
     };
 
@@ -407,114 +408,85 @@ fn recover_runtime_messages_from_transcript_tool_call(
     let event_repo_root = repo_root.to_string_lossy().to_string();
     let mut messages = Vec::new();
 
-    match tool_name {
-        "exec_command" => {
-            let payload: Value = serde_json::from_str(arguments).ok()?;
-            let workdir = payload
-                .get("workdir")
-                .and_then(Value::as_str)
-                .map(PathBuf::from);
-            if workdir.as_deref().is_some_and(|path| {
-                detect_repo_root(path)
-                    .map(|root| root != repo_root)
-                    .unwrap_or_else(|_| !path.starts_with(repo_root))
-            }) {
-                return None;
-            }
-
-            let command = payload
-                .get("cmd")
-                .or_else(|| payload.get("command"))
-                .and_then(Value::as_str)?
-                .to_string();
-
-            let tool_input = json!({ "command": command });
-            let file_paths = extract_file_paths_for_repo(&tool_input, repo_root);
-            let hook = RuntimeMessage::Hook(HookEvent {
-                repo_root: event_repo_root,
-                observed_at_ms,
-                status: None,
-                client: "codex".to_string(),
-                session_id: summary.session_id.clone(),
-                session_display_name: session_display_name.clone(),
-                turn_id: turn_id.map(str::to_string),
-                cwd: summary.cwd.clone(),
-                model: summary.model.clone(),
-                transcript_path: Some(summary.transcript_path.clone()),
-                session_source: summary.source.clone(),
-                event_name: "PostToolUse".to_string(),
-                tool_name: Some("Bash".to_string()),
-                tool_command: Some(command.clone()),
-                file_paths,
-                task_id: task_identity
-                    .as_ref()
-                    .map(|(task_id, _, _)| task_id.clone()),
-                task_title: task_identity.as_ref().map(|(_, title, _)| title.clone()),
-                prompt_preview: task_identity
-                    .as_ref()
-                    .map(|(_, _, prompt_preview)| prompt_preview.clone()),
-                recovered_from_transcript: true,
-                tmux_session: None,
-                tmux_window: None,
-                tmux_pane: None,
-            });
-
-            messages.push(hook);
-            if let RuntimeMessage::Hook(event) = messages[0].clone() {
-                if let Some(git_event_name) = infer_git_refresh_event(&event) {
-                    messages.push(RuntimeMessage::Git(build_git_runtime_event(
-                        repo_root,
-                        observed_at_ms,
-                        git_event_name,
-                        Some(event.session_id.as_str()),
-                        Some(command.as_str()),
-                        None,
-                        None,
-                        true,
-                    )));
-                }
-            }
-            Some(messages)
-        }
-        "apply_patch" => {
-            let tool_input = json!({ "command": arguments });
-            let file_paths = extract_file_paths_for_repo(&tool_input, repo_root);
-            if file_paths.is_empty() {
-                return None;
-            }
-
-            messages.push(RuntimeMessage::Hook(HookEvent {
-                repo_root: event_repo_root,
-                observed_at_ms,
-                status: None,
-                client: "codex".to_string(),
-                session_id: summary.session_id.clone(),
-                session_display_name,
-                turn_id: turn_id.map(str::to_string),
-                cwd: summary.cwd.clone(),
-                model: summary.model.clone(),
-                transcript_path: Some(summary.transcript_path.clone()),
-                session_source: summary.source.clone(),
-                event_name: "PostToolUse".to_string(),
-                tool_name: Some("Write".to_string()),
-                tool_command: None,
-                file_paths,
-                task_id: task_identity
-                    .as_ref()
-                    .map(|(task_id, _, _)| task_id.clone()),
-                task_title: task_identity.as_ref().map(|(_, title, _)| title.clone()),
-                prompt_preview: task_identity
-                    .as_ref()
-                    .map(|(_, _, prompt_preview)| prompt_preview.clone()),
-                recovered_from_transcript: true,
-                tmux_session: None,
-                tmux_window: None,
-                tmux_pane: None,
-            }));
-            Some(messages)
-        }
-        _ => None,
+    let workdir = arguments
+        .get("workdir")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    if workdir.as_deref().is_some_and(|path| {
+        detect_repo_root(path)
+            .map(|root| root != repo_root)
+            .unwrap_or_else(|_| !path.starts_with(repo_root))
+    }) {
+        return None;
     }
+
+    let command = arguments
+        .get("cmd")
+        .or_else(|| arguments.get("command"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let file_paths = extract_file_paths_for_repo(&arguments, repo_root);
+
+    let normalized_tool_name = match tool_name {
+        "exec_command" | "Bash" | "launch-process" => Some("Bash".to_string()),
+        "apply_patch" | "Write" | "Edit" | "MultiEdit" | "session-files" => {
+            Some("Write".to_string())
+        }
+        other if !other.trim().is_empty() => Some(other.to_string()),
+        _ => None,
+    };
+
+    if command.is_none() && file_paths.is_empty() {
+        return None;
+    }
+
+    let hook = RuntimeMessage::Hook(HookEvent {
+        repo_root: event_repo_root,
+        observed_at_ms,
+        status: None,
+        client: summary.client.clone(),
+        session_id: summary.session_id.clone(),
+        session_display_name: session_display_name.clone(),
+        turn_id: turn_id.map(str::to_string),
+        cwd: summary.cwd.clone(),
+        model: summary.model.clone(),
+        transcript_path: Some(summary.transcript_path.clone()),
+        session_source: summary.source.clone(),
+        event_name: "PostToolUse".to_string(),
+        tool_name: normalized_tool_name,
+        tool_command: command.clone(),
+        file_paths,
+        task_id: task_identity
+            .as_ref()
+            .map(|(task_id, _, _)| task_id.clone()),
+        task_title: task_identity.as_ref().map(|(_, title, _)| title.clone()),
+        prompt_preview: task_identity
+            .as_ref()
+            .map(|(_, _, prompt_preview)| prompt_preview.clone()),
+        recovered_from_transcript: true,
+        tmux_session: None,
+        tmux_window: None,
+        tmux_pane: None,
+    });
+
+    messages.push(hook);
+    if let Some(command) = command.as_deref() {
+        if let RuntimeMessage::Hook(event) = messages[0].clone() {
+            if let Some(git_event_name) = infer_git_refresh_event(&event) {
+                messages.push(RuntimeMessage::Git(build_git_runtime_event(
+                    repo_root,
+                    observed_at_ms,
+                    git_event_name,
+                    Some(event.session_id.as_str()),
+                    Some(command),
+                    None,
+                    None,
+                    true,
+                )));
+            }
+        }
+    }
+    Some(messages)
 }
 
 #[cfg(test)]
@@ -715,6 +687,7 @@ mod tests {
         .expect("seed dirty file");
 
         let summary = TranscriptSessionBackfill {
+            client: "codex".to_string(),
             session_id: "sess-1".to_string(),
             cwd: repo_root_text.clone(),
             model: Some("gpt-5.4".to_string()),
@@ -725,11 +698,11 @@ mod tests {
             turn_id: Some("turn-9".to_string()),
             prompt: Some("refresh the page snapshot".to_string()),
             turn_started_at_ms: 1_001,
-            recovered_events: vec![TranscriptRecoveredEvent::FunctionCall {
+            recovered_events: vec![TranscriptRecoveredEvent::ToolUse {
                 turn_id: Some("turn-9".to_string()),
                 observed_at_ms: 1_003,
                 tool_name: "apply_patch".to_string(),
-                arguments: "*** Update File: src/app/page.tsx".to_string(),
+                tool_input: json!({ "command": "*** Update File: src/app/page.tsx" }),
             }],
         };
 
