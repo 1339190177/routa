@@ -4,12 +4,11 @@ import {
   CANVAS_SDK_MANIFEST_RESOURCE_URI,
   getCanvasSdkDefinitionResourceUri,
   getCanvasSdkManifest,
-  getCanvasSdkResourceManifest,
+  readCanvasSdkResource,
 } from "@/core/canvas/sdk-resource-contract";
 
 export function registerCanvasSdkResources(server: McpServer): void {
   const sdkManifest = getCanvasSdkManifest();
-  const resourceManifest = getCanvasSdkResourceManifest();
 
   server.registerResource(
     "canvas-sdk-manifest",
@@ -19,15 +18,21 @@ export function registerCanvasSdkResources(server: McpServer): void {
       description: "Compact Canvas SDK manifest for specialist UI generation.",
       mimeType: "application/json",
     },
-    async () => ({
-      contents: [
-        {
-          uri: CANVAS_SDK_MANIFEST_RESOURCE_URI,
-          mimeType: "application/json",
-          text: `${JSON.stringify(resourceManifest, null, 2)}\n`,
-        },
-      ],
-    }),
+    async () => {
+      const resource = readCanvasSdkResource(CANVAS_SDK_MANIFEST_RESOURCE_URI);
+      if (!resource) {
+        throw new Error(`Unknown Canvas SDK resource: ${CANVAS_SDK_MANIFEST_RESOURCE_URI}`);
+      }
+      return {
+        contents: [
+          {
+            uri: resource.uri,
+            mimeType: resource.mimeType,
+            text: resource.text,
+          },
+        ],
+      };
+    },
   );
 
   for (const definitionFile of sdkManifest.definitionFiles) {
@@ -41,15 +46,21 @@ export function registerCanvasSdkResources(server: McpServer): void {
         description: `Generated TypeScript definition for ${definitionFile.path}.`,
         mimeType: "text/plain",
       },
-      async () => ({
-        contents: [
-          {
-            uri: resourceUri,
-            mimeType: "text/plain",
-            text: definitionFile.source,
-          },
-        ],
-      }),
+      async () => {
+        const resource = readCanvasSdkResource(resourceUri);
+        if (!resource) {
+          throw new Error(`Unknown Canvas SDK resource: ${resourceUri}`);
+        }
+        return {
+          contents: [
+            {
+              uri: resource.uri,
+              mimeType: resource.mimeType,
+              text: resource.text,
+            },
+          ],
+        };
+      },
     );
   }
 }

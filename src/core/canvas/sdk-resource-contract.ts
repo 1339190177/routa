@@ -48,6 +48,12 @@ export type CanvasSdkResourceManifest = {
   }>;
 };
 
+export type CanvasSdkResolvedResource = {
+  uri: string;
+  mimeType: "application/json" | "text/plain";
+  text: string;
+};
+
 export const CANVAS_SDK_MANIFEST_RESOURCE_URI = "resource://routa/canvas-sdk/manifest";
 
 const canvasSdkManifest = sdkManifestJson as CanvasSdkManifest;
@@ -93,5 +99,28 @@ export function getCanvasSdkResourceManifest(): CanvasSdkResourceManifest {
       filePath: file.path,
       resourceUri: getCanvasSdkDefinitionResourceUri(file.path),
     })),
+  };
+}
+
+export function readCanvasSdkResource(uri: string): CanvasSdkResolvedResource | null {
+  if (uri === CANVAS_SDK_MANIFEST_RESOURCE_URI) {
+    return {
+      uri,
+      mimeType: "application/json",
+      text: `${JSON.stringify(getCanvasSdkResourceManifest(), null, 2)}\n`,
+    };
+  }
+
+  const definitionFile = getCanvasSdkManifest().definitionFiles.find((file) =>
+    getCanvasSdkDefinitionResourceUri(file.path) === uri
+  );
+  if (!definitionFile) {
+    return null;
+  }
+
+  return {
+    uri,
+    mimeType: "text/plain",
+    text: definitionFile.source,
   };
 }

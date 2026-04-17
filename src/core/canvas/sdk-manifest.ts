@@ -19,13 +19,14 @@ export function buildCanvasSdkPromptSection(): string {
 
   return [
     "Canvas SDK access:",
-    `- First read MCP resource \`${CANVAS_SDK_MANIFEST_RESOURCE_URI}\`.`,
+    `- Prefer MCP tool \`read_canvas_sdk_resource\` with uri \`${CANVAS_SDK_MANIFEST_RESOURCE_URI}\`.`,
+    "- If your provider supports native MCP resource reads, you may read that same URI directly instead.",
     "- That manifest is the authoritative Canvas SDK index for this session.",
-    "- Then read only the defs resources you actually need from its `definitionResources` list.",
+    "- Then read only the defs resources you actually need from its `definitionResources` list, preferably through `read_canvas_sdk_resource`.",
     `- Import only from \`${manifest.moduleSpecifier}\` or \`react\`.`,
     "- If a symbol or prop is not present in those resources, do not invent it.",
     "- Example definition resources:",
     ...definitionUris,
-    "- If MCP resource access is unavailable, stay conservative and use only the symbols named in the manifest.",
+    "- If neither direct resource reads nor the helper tool are available, stay conservative and use only the symbols named in the manifest.",
   ].join("\n");
 }
