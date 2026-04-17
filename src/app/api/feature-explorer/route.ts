@@ -9,15 +9,26 @@ function toMessage(error: unknown): string {
 }
 
 export async function GET(request: NextRequest) {
-  // Try proxying to routa-server first
-  const qs = request.nextUrl.searchParams.toString();
-  const proxied = await tryProxyToRustBackend("", qs);
+  // Resolve repo root first so we can pass it to the Rust backend
+  const context = parseContext(request.nextUrl.searchParams);
+  let repoRoot: string | undefined;
+  try {
+    repoRoot = await resolveRepoRoot(context);
+  } catch {
+    // ignore — will fall through to TS or proxy without repoPath
+  }
+
+  // Try proxying to routa-server, enriching query with resolved repoPath
+  const params = new URLSearchParams(request.nextUrl.searchParams);
+  if (repoRoot && !params.has("repoPath")) {
+    params.set("repoPath", repoRoot);
+  }
+  const proxied = await tryProxyToRustBackend("", params.toString());
   if (proxied) return proxied;
 
   try {
-    const context = parseContext(request.nextUrl.searchParams);
-    const repoRoot = await resolveRepoRoot(context);
-    const result = parseFeatureTree(repoRoot);
+    const root = repoRoot ?? (await resolveRepoRoot(context));
+    const result = parseFeatureTree(root);
 
     const features = result.features.map((f) => ({
       id: f.id,

@@ -29,15 +29,26 @@ export async function GET(
 ) {
   const { featureId } = await params;
 
-  // Try proxying to routa-server first
-  const qs = request.nextUrl.searchParams.toString();
-  const proxied = await tryProxyToRustBackend(`/${encodeURIComponent(featureId)}`, qs);
+  // Resolve repo root first so we can pass it to the Rust backend
+  const context = parseContext(request.nextUrl.searchParams);
+  let repoRoot: string | undefined;
+  try {
+    repoRoot = await resolveRepoRoot(context);
+  } catch {
+    // ignore
+  }
+
+  // Try proxying to routa-server, enriching query with resolved repoPath
+  const proxyParams = new URLSearchParams(request.nextUrl.searchParams);
+  if (repoRoot && !proxyParams.has("repoPath")) {
+    proxyParams.set("repoPath", repoRoot);
+  }
+  const proxied = await tryProxyToRustBackend(`/${encodeURIComponent(featureId)}`, proxyParams.toString());
   if (proxied) return proxied;
 
   try {
-    const context = parseContext(request.nextUrl.searchParams);
-    const repoRoot = await resolveRepoRoot(context);
-    const { features, frontendPages, apiEndpoints } = parseFeatureTree(repoRoot);
+    const root = repoRoot ?? (await resolveRepoRoot(context));
+    const { features, frontendPages, apiEndpoints } = parseFeatureTree(root);
 
     const feature = features.find((f) => f.id === featureId);
     if (!feature) {
