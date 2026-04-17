@@ -37,12 +37,28 @@ export interface FeatureDetail {
   pageDetails?: PageDetail[];
   apiDetails?: ApiDetail[];
   fileStats?: Record<string, FileStat>;
+  fileSignals?: Record<string, FileSignal>;
 }
 
 export interface FileStat {
   changes: number;
   sessions: number;
   updatedAt: string;
+}
+
+export interface FileSessionSignal {
+  provider: string;
+  sessionId: string;
+  updatedAt: string;
+  promptSnippet: string;
+  toolNames: string[];
+  resumeCommand?: string;
+}
+
+export interface FileSignal {
+  sessions: FileSessionSignal[];
+  toolHistory: string[];
+  promptHistory: string[];
 }
 
 export interface FileTreeNode {

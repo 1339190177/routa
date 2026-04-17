@@ -28,6 +28,7 @@ import type {
   ApiDetail,
   CapabilityGroup,
   FeatureDetail,
+  FileSignal,
   FeatureSurfacePage,
   FileTreeNode,
   InspectorTab,
@@ -121,6 +122,36 @@ function formatShortDate(iso: string): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${mm}-${dd}`;
+}
+
+function formatSignalProvider(provider: string): string {
+  switch (provider) {
+    case "codex":
+      return "Codex";
+    case "claude":
+      return "Claude";
+    case "qoder":
+      return "Qoder";
+    case "augment":
+      return "Augment";
+    default:
+      return provider || "Session";
+  }
+}
+
+function getSignalProviderBadgeClass(provider: string): string {
+  switch (provider) {
+    case "codex":
+      return "border-sky-300/70 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/12 dark:text-sky-200";
+    case "claude":
+      return "border-orange-300/70 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/12 dark:text-orange-200";
+    case "qoder":
+      return "border-violet-300/70 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/12 dark:text-violet-200";
+    case "augment":
+      return "border-emerald-300/70 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-200";
+    default:
+      return "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary";
+  }
 }
 
 export function FeatureExplorerPageClient({
@@ -554,6 +585,9 @@ export function FeatureExplorerPageClient({
   }, [flatMap, fileStats]);
 
   const activeFile = flatMap[activeFileId] ?? null;
+  const activeFileSignal = activeFile
+    ? (featureDetail?.fileSignals?.[activeFile.path] ?? null)
+    : null;
   const activeFeature = features.find((f) => f.id === effectiveFeatureId);
   const activeGroup = activeFeature
     ? capabilityGroups.find((group) => group.id === activeFeature.group) ?? null
@@ -1019,6 +1053,7 @@ export function FeatureExplorerPageClient({
                 {inspectorTab === "context" && (
                   <ContextPanel
                     activeFile={activeFile}
+                    activeFileSignal={activeFileSignal}
                     activeGroup={activeGroup}
                     featureDetail={surfaceOnlySelection ? null : featureDetail}
                     selectedSurface={selectedSurface}
@@ -1067,6 +1102,7 @@ export function FeatureExplorerPageClient({
 /* ── Context Panel ── */
 function ContextPanel({
   activeFile,
+  activeFileSignal,
   activeGroup,
   featureDetail,
   selectedSurface,
@@ -1074,6 +1110,7 @@ function ContextPanel({
   t,
 }: {
   activeFile: FileTreeNode | null;
+  activeFileSignal: FileSignal | null;
   activeGroup: CapabilityGroup | null;
   featureDetail: FeatureDetail | null;
   selectedSurface: ExplorerSurfaceItem | null;
@@ -1174,21 +1211,89 @@ function ContextPanel({
           <div className="space-y-2">
             <div>
               <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.sessionEvidence}</div>
-              <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
-                {t.featureExplorer.pendingImplementation}
-              </div>
+              {activeFileSignal?.sessions.length ? (
+                <div className="mt-1 space-y-1.5">
+                  {activeFileSignal.sessions.map((session) => (
+                    <div
+                      key={`${session.provider}:${session.sessionId}`}
+                      className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2.5 py-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold ${getSignalProviderBadgeClass(session.provider)}`}>
+                              {formatSignalProvider(session.provider)}
+                            </span>
+                            <code className="break-all text-[10px] text-desktop-text-primary">{session.sessionId}</code>
+                          </div>
+                          {session.resumeCommand ? (
+                            <div className="mt-1 break-all text-[10px] text-desktop-text-secondary">
+                              <span className="font-medium text-desktop-text-primary">{t.featureExplorer.resumeCommandLabel}: </span>
+                              <code>{session.resumeCommand}</code>
+                            </div>
+                          ) : null}
+                        </div>
+                        <span className="shrink-0 text-[10px] text-desktop-text-secondary">
+                          {formatShortDate(session.updatedAt)}
+                        </span>
+                      </div>
+                      {session.promptSnippet ? (
+                        <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">
+                          {session.promptSnippet}
+                        </div>
+                      ) : null}
+                      {session.toolNames.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {session.toolNames.map((toolName) => (
+                            <span
+                              key={`${session.sessionId}:${toolName}`}
+                              className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[10px] text-desktop-text-secondary"
+                            >
+                              {toolName}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <SignalEmptyState message={t.featureExplorer.noSessionEvidence} />
+              )}
             </div>
             <div>
               <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.toolHistory}</div>
-              <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
-                {t.featureExplorer.pendingImplementation}
-              </div>
+              {activeFileSignal?.toolHistory.length ? (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {activeFileSignal.toolHistory.map((toolName) => (
+                    <span
+                      key={toolName}
+                      className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-1.5 py-0.5 text-[10px] text-desktop-text-secondary"
+                    >
+                      {toolName}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <SignalEmptyState message={t.featureExplorer.noToolHistory} />
+              )}
             </div>
             <div>
               <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.promptHistory}</div>
-              <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
-                {t.featureExplorer.pendingImplementation}
-              </div>
+              {activeFileSignal?.promptHistory.length ? (
+                <div className="mt-1 space-y-1">
+                  {activeFileSignal.promptHistory.map((prompt, index) => (
+                    <div
+                      key={`${index}-${prompt}`}
+                      className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] leading-5 text-desktop-text-secondary"
+                    >
+                      {prompt}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <SignalEmptyState message={t.featureExplorer.noPromptHistory} />
+              )}
             </div>
           </div>
         ) : (
@@ -1218,6 +1323,14 @@ function ContextPanel({
           </div>
         </ContextSection>
       )}
+    </div>
+  );
+}
+
+function SignalEmptyState({ message }: { message: string }) {
+  return (
+    <div className="mt-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px] text-desktop-text-secondary">
+      {message}
     </div>
   );
 }

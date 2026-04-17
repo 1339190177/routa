@@ -16,6 +16,10 @@ const APP_ROOT = "src/app";
 const MAX_TRANSCRIPT_FILES = 200;
 const MAX_TRANSCRIPT_FILE_SIZE = 10 * 1024 * 1024;
 const BROAD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_FILE_SIGNAL_SESSIONS = 6;
+const MAX_FILE_SIGNAL_TOOLS = 8;
+const MAX_FILE_SIGNAL_PROMPTS = 6;
+const MAX_PROMPT_SNIPPET_LENGTH = 180;
 const IGNORED_PATHS = new Set([".git", "node_modules", ".next", "dist", "out", "target"]);
 
 type FallbackSourceDir = string;
@@ -161,20 +165,43 @@ export interface FileStat {
   updatedAt: string;
 }
 
+export type TranscriptProvider = "codex" | "qoder" | "augment" | "claude" | "unknown";
+
+export interface FileSessionSignal {
+  provider: TranscriptProvider;
+  sessionId: string;
+  updatedAt: string;
+  promptSnippet: string;
+  toolNames: string[];
+  resumeCommand?: string;
+}
+
+export interface FileSignal {
+  sessions: FileSessionSignal[];
+  toolHistory: string[];
+  promptHistory: string[];
+}
+
 export interface FeatureStats {
   featureStats: Record<string, FeatureTreeSummary>;
   fileStats: Record<string, FileStat>;
+  fileSignals: Record<string, FileSignal>;
 }
 
 interface TranscriptCandidate {
   transcriptPath: string;
   modifiedMs: number;
+  provider: TranscriptProvider;
 }
 
 interface ParsedFeatureTranscript {
   sessionId: string;
   cwd: string;
   updatedAt: string;
+  provider: TranscriptProvider;
+  promptHistory: string[];
+  toolHistory: string[];
+  resumeCommand?: string;
   events: unknown[];
 }
 
@@ -1042,6 +1069,141 @@ function firstString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
+function normalizeSignalPromptText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function isDuplicateSignalPrompt(existing: string, next: string): boolean {
+  if (!existing || !next) {
+    return false;
+  }
+
+  return existing === next || existing.startsWith(next) || next.startsWith(existing);
+}
+
+function truncatePrompt(text: string): string {
+  if (text.length <= MAX_PROMPT_SNIPPET_LENGTH) {
+    return text;
+  }
+  return `${text.slice(0, MAX_PROMPT_SNIPPET_LENGTH - 3)}...`;
+}
+
+function normalizeUserPrompt(text: string): string {
+  let normalized = text.trim();
+  const instructionsEnd = normalized.lastIndexOf("</INSTRUCTIONS>");
+  if (instructionsEnd >= 0) {
+    normalized = normalized.slice(instructionsEnd + "</INSTRUCTIONS>".length).trim();
+  }
+
+  normalized = normalized
+    .replace(/<image[^>]*>[\s\S]*?<\/image>/g, " ")
+    .replace(/<environment_context>[\s\S]*?<\/environment_context>/g, " ")
+    .replace(/<[^>]+>/g, " ");
+
+  return truncatePrompt(normalizeSignalPromptText(normalized));
+}
+
+function extractUserPromptFromResponseItem(event: Record<string, unknown>): string | undefined {
+  if (event.type !== "message" || event.role !== "user" || !Array.isArray(event.content)) {
+    return undefined;
+  }
+
+  const parts: string[] = [];
+  for (const item of event.content) {
+    if (!isRecord(item) || item.type !== "input_text" || typeof item.text !== "string") {
+      continue;
+    }
+    const text = item.text.trim();
+    if (text) {
+      parts.push(text);
+    }
+  }
+
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  return parts.join("\n");
+}
+
+function userPromptFromUnknown(event: unknown): string | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+
+  if (event.type === "user_message") {
+    return firstString(event.message);
+  }
+
+  return extractUserPromptFromResponseItem(event);
+}
+
+function toolNameFromUnknown(event: unknown): string | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+
+  if (event.type === "function_call" && typeof event.name === "string") {
+    return event.name;
+  }
+
+  if (typeof event.tool_name === "string") {
+    return event.tool_name;
+  }
+
+  if (event.type === "exec_command_end" || event.type === "exec_command_begin") {
+    return "exec_command";
+  }
+
+  return commandFromUnknown(event) ? "exec_command" : undefined;
+}
+
+function collectTranscriptPromptHistory(events: unknown[]): string[] {
+  const prompts: string[] = [];
+
+  for (const event of events) {
+    const prompt = userPromptFromUnknown(event);
+    if (!prompt) {
+      continue;
+    }
+
+    const normalized = normalizeUserPrompt(prompt);
+    if (!normalized) {
+      continue;
+    }
+
+    const lastPrompt = prompts[prompts.length - 1] ?? "";
+    if (isDuplicateSignalPrompt(lastPrompt, normalized)) {
+      continue;
+    }
+
+    prompts.push(normalized);
+  }
+
+  return prompts;
+}
+
+function collectTranscriptToolHistory(events: unknown[]): string[] {
+  const tools: string[] = [];
+
+  for (const event of events) {
+    const toolName = toolNameFromUnknown(event);
+    if (!toolName || tools.includes(toolName)) {
+      continue;
+    }
+    tools.push(toolName);
+  }
+
+  return tools;
+}
+
+function appendLimitedUnique(target: string[], value: string, limit: number): void {
+  if (!value || target.includes(value) || target.length >= limit) {
+    return;
+  }
+  target.push(value);
+}
+
 function sanitizePathCandidate(candidate: string): string | null {
   const cleaned = toPosix(candidate)
     .trim()
@@ -1200,47 +1362,56 @@ function collectChangedFilesFromToolLike(event: unknown, repoRoot: string, sessi
   return changed;
 }
 
+function buildResumeCommand(provider: TranscriptProvider, sessionId: string): string | undefined {
+  if (provider === "codex" && sessionId) {
+    return `codex resume ${sessionId}`;
+  }
+  return undefined;
+}
+
 function collectTranscriptCandidates(): TranscriptCandidate[] {
-  const roots = [
-    path.join(process.env.HOME ?? "", ".codex", "sessions"),
-    path.join(process.env.HOME ?? "", ".qoder", "projects"),
-    path.join(process.env.HOME ?? "", ".augment", "sessions"),
-    path.join(process.env.HOME ?? "", ".claude", "projects"),
+  const roots: Array<{ provider: TranscriptProvider; rootPath: string }> = [
+    { provider: "codex", rootPath: path.join(process.env.HOME ?? "", ".codex", "sessions") },
+    { provider: "qoder", rootPath: path.join(process.env.HOME ?? "", ".qoder", "projects") },
+    { provider: "augment", rootPath: path.join(process.env.HOME ?? "", ".augment", "sessions") },
+    { provider: "claude", rootPath: path.join(process.env.HOME ?? "", ".claude", "projects") },
   ];
 
   if (process.env.CLAUDE_CONFIG_DIR) {
-    roots.push(path.join(process.env.CLAUDE_CONFIG_DIR, "projects"));
+    roots.push({ provider: "claude", rootPath: path.join(process.env.CLAUDE_CONFIG_DIR, "projects") });
   }
 
-  const queue = roots.filter(Boolean);
+  const queue = roots
+    .filter((entry) => Boolean(entry.rootPath))
+    .map((entry) => ({ path: entry.rootPath, provider: entry.provider }));
   const visited = new Set<string>();
   const collected: TranscriptCandidate[] = [];
 
   while (queue.length > 0) {
     const current = queue.shift();
-    if (!current || visited.has(current)) {
+    if (!current || visited.has(current.path)) {
       continue;
     }
-    visited.add(current);
+    visited.add(current.path);
 
     let stat: fs.Stats;
     try {
-      stat = fs.statSync(current);
+      stat = fs.statSync(current.path);
     } catch {
       continue;
     }
 
     if (!stat.isDirectory()) {
-      const lower = current.toLowerCase();
+      const lower = current.path.toLowerCase();
       if ((lower.endsWith(".jsonl") || lower.endsWith(".json")) && stat.size < MAX_TRANSCRIPT_FILE_SIZE) {
-        collected.push({ transcriptPath: current, modifiedMs: stat.mtimeMs });
+        collected.push({ transcriptPath: current.path, modifiedMs: stat.mtimeMs, provider: current.provider });
       }
       continue;
     }
 
     let entries: string[];
     try {
-      entries = fs.readdirSync(current);
+      entries = fs.readdirSync(current.path);
     } catch {
       continue;
     }
@@ -1249,7 +1420,7 @@ function collectTranscriptCandidates(): TranscriptCandidate[] {
       if (IGNORED_PATHS.has(entry)) {
         continue;
       }
-      queue.push(path.join(current, entry));
+      queue.push({ path: path.join(current.path, entry), provider: current.provider });
     }
   }
 
@@ -1436,7 +1607,11 @@ function repoPathMatches(
   );
 }
 
-function parseTranscriptSession(transcriptPath: string, modifiedMs: number): ParsedFeatureTranscript | null {
+function parseTranscriptSession(
+  transcriptPath: string,
+  modifiedMs: number,
+  provider: TranscriptProvider,
+): ParsedFeatureTranscript | null {
   let content: string;
   try {
     content = fs.readFileSync(transcriptPath, "utf8");
@@ -1499,6 +1674,10 @@ function parseTranscriptSession(transcriptPath: string, modifiedMs: number): Par
     sessionId,
     cwd,
     updatedAt,
+    provider,
+    promptHistory: collectTranscriptPromptHistory(events),
+    toolHistory: collectTranscriptToolHistory(events),
+    resumeCommand: buildResumeCommand(provider, sessionId),
     events,
   };
 }
@@ -1517,7 +1696,7 @@ function collectMatchingTranscriptSessions(repoRoot: string): ParsedFeatureTrans
       continue;
     }
 
-    const transcript = parseTranscriptSession(candidate.transcriptPath, candidate.modifiedMs);
+    const transcript = parseTranscriptSession(candidate.transcriptPath, candidate.modifiedMs, candidate.provider);
     if (!transcript) {
       continue;
     }
@@ -1535,6 +1714,7 @@ function collectMatchingTranscriptSessions(repoRoot: string): ParsedFeatureTrans
 export function collectFeatureSessionStats(repoRoot: string, featureTree: FeatureTree): FeatureStats {
   const featureStats: Record<string, FeatureTreeSummary> = {};
   const fileStats: Record<string, FileStat> = {};
+  const fileSignals: Record<string, FileSignal> = {};
 
   const featureSessionIds = new Map<string, Set<string>>();
   const featureChangedFiles = new Map<string, Set<string>>();
@@ -1558,6 +1738,8 @@ export function collectFeatureSessionStats(repoRoot: string, featureTree: Featur
       continue;
     }
 
+    const transcriptKey = `${transcript.provider}:${transcript.sessionId}`;
+
     for (const changedFile of changedFromTranscript) {
       const fileEntry = fileStats[changedFile] ?? {
         changes: 0,
@@ -1570,6 +1752,34 @@ export function collectFeatureSessionStats(repoRoot: string, featureTree: Featur
         fileEntry.updatedAt = transcript.updatedAt;
       }
       fileStats[changedFile] = fileEntry;
+
+      const signalEntry = fileSignals[changedFile] ?? {
+        sessions: [],
+        toolHistory: [],
+        promptHistory: [],
+      };
+      if (
+        signalEntry.sessions.length < MAX_FILE_SIGNAL_SESSIONS
+        && !signalEntry.sessions.some(
+          (session) => `${session.provider}:${session.sessionId}` === transcriptKey,
+        )
+      ) {
+        signalEntry.sessions.push({
+          provider: transcript.provider,
+          sessionId: transcript.sessionId,
+          updatedAt: transcript.updatedAt,
+          promptSnippet: transcript.promptHistory[0] ?? "",
+          toolNames: transcript.toolHistory.slice(0, MAX_FILE_SIGNAL_TOOLS),
+          ...(transcript.resumeCommand ? { resumeCommand: transcript.resumeCommand } : {}),
+        });
+      }
+      for (const toolName of transcript.toolHistory) {
+        appendLimitedUnique(signalEntry.toolHistory, toolName, MAX_FILE_SIGNAL_TOOLS);
+      }
+      for (const prompt of transcript.promptHistory) {
+        appendLimitedUnique(signalEntry.promptHistory, prompt, MAX_FILE_SIGNAL_PROMPTS);
+      }
+      fileSignals[changedFile] = signalEntry;
 
       const surfaceLinks = parseFeatureSurfaceLinks(surfaceCatalog, changedFile);
 
@@ -1597,7 +1807,7 @@ export function collectFeatureSessionStats(repoRoot: string, featureTree: Featur
 
     for (const featureId of sessionFeatures) {
       const sessions = featureSessionIds.get(featureId) ?? new Set<string>();
-      sessions.add(transcript.sessionId);
+      sessions.add(transcriptKey);
       featureSessionIds.set(featureId, sessions);
 
       const changedFiles = featureChangedFiles.get(featureId) ?? new Set<string>();
@@ -1625,6 +1835,7 @@ export function collectFeatureSessionStats(repoRoot: string, featureTree: Featur
   return {
     featureStats,
     fileStats,
+    fileSignals,
   };
 }
 

@@ -278,6 +278,10 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     sessionEvidence: string;
     toolHistory: string;
     promptHistory: string;
+    noSessionEvidence: string;
+    noToolHistory: string;
+    noPromptHistory: string;
+    resumeCommandLabel: string;
     pendingImplementation: string;
     screenshotComingSoon: string;
     selectedFileSignals: string;

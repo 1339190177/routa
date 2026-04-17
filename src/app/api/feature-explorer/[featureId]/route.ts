@@ -41,6 +41,18 @@ interface FeatureDetailResponse {
   pageDetails: FrontendPageDetail[];
   apiDetails: ApiEndpointDetail[];
   fileStats: Record<string, { changes: number; sessions: number; updatedAt: string }>;
+  fileSignals: Record<string, {
+    sessions: Array<{
+      provider: string;
+      sessionId: string;
+      updatedAt: string;
+      promptSnippet: string;
+      toolNames: string[];
+      resumeCommand?: string;
+    }>;
+    toolHistory: string[];
+    promptHistory: string[];
+  }>;
 }
 
 function toMessage(error: unknown): string {
@@ -148,7 +160,11 @@ export async function GET(
       );
     }
 
-    const { featureStats, fileStats: rawFileStats } = collectFeatureSessionStats(repoRoot, featureTree);
+    const {
+      featureStats,
+      fileStats: rawFileStats,
+      fileSignals: rawFileSignals,
+    } = collectFeatureSessionStats(repoRoot, featureTree);
 
     const featureStat = featureStats[feature.id] ?? {
       sessionCount: 0,
@@ -177,11 +193,16 @@ export async function GET(
       pageDetails: toPageDetails(feature, featureTree),
       apiDetails: toApiDetails(feature, featureTree),
       fileStats: {},
+      fileSignals: {},
     };
 
     for (const filePath of allFiles) {
       const stat = rawFileStats[filePath];
       if (!stat) {
+        const signal = rawFileSignals[filePath];
+        if (signal) {
+          response.fileSignals[filePath] = signal;
+        }
         continue;
       }
 
@@ -190,6 +211,11 @@ export async function GET(
         sessions: stat.sessions,
         updatedAt: stat.updatedAt,
       };
+
+      const signal = rawFileSignals[filePath];
+      if (signal) {
+        response.fileSignals[filePath] = signal;
+      }
     }
 
     return NextResponse.json(response);

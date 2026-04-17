@@ -565,4 +565,99 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.getByTestId("feature-tree-sessions-folder-app").textContent).toBe("6");
     expect(screen.getByTestId("feature-tree-updated-folder-src").textContent).not.toBe("-");
   });
+
+  it("renders selected file session evidence with resume command", async () => {
+    useFeatureExplorerData.mockReturnValue({
+      loading: false,
+      error: null,
+      capabilityGroups: [{ id: "workspace", name: "Workspace", description: "" }],
+      features: [
+        {
+          id: "workspace-overview",
+          name: "Workspace Overview",
+          group: "workspace",
+          summary: "Workspace shell",
+          status: "shipped",
+          sessionCount: 12,
+          changedFiles: 1,
+          updatedAt: "2026-04-17T08:00:00.000Z",
+          sourceFileCount: 1,
+          pageCount: 1,
+          apiCount: 0,
+        },
+      ],
+      surfaceIndex: {
+        generatedAt: "",
+        pages: [],
+        apis: [],
+        contractApis: [],
+        nextjsApis: [],
+        rustApis: [],
+        metadata: null,
+        repoRoot: "",
+        warnings: [],
+      },
+      featureDetail: {
+        id: "workspace-overview",
+        name: "Workspace Overview",
+        group: "workspace",
+        summary: "Workspace shell",
+        status: "shipped",
+        pages: [],
+        apis: [],
+        sourceFiles: ["src/app/workspace/[workspaceId]/page.tsx"],
+        relatedFeatures: [],
+        domainObjects: [],
+        sessionCount: 12,
+        changedFiles: 1,
+        updatedAt: "2026-04-17T08:00:00.000Z",
+        fileTree: [
+          {
+            id: "file-workspace-page",
+            name: "page.tsx",
+            path: "src/app/workspace/[workspaceId]/page.tsx",
+            kind: "file",
+            children: [],
+          },
+        ],
+        fileStats: {
+          "src/app/workspace/[workspaceId]/page.tsx": {
+            changes: 3,
+            sessions: 3,
+            updatedAt: "2026-04-17T08:00:00.000Z",
+          },
+        },
+        fileSignals: {
+          "src/app/workspace/[workspaceId]/page.tsx": {
+            sessions: [
+              {
+                provider: "codex",
+                sessionId: "019d-selected-file",
+                updatedAt: "2026-04-17T08:00:00.000Z",
+                promptSnippet: "Connect selected file signals to the right inspector panel",
+                toolNames: ["exec_command", "apply_patch"],
+                resumeCommand: "codex resume 019d-selected-file",
+              },
+            ],
+            toolHistory: ["exec_command", "apply_patch"],
+            promptHistory: ["Connect selected file signals to the right inspector panel"],
+          },
+        },
+      },
+      featureDetailLoading: false,
+      initialFeatureId: "workspace-overview",
+      fetchFeatureDetail: vi.fn().mockResolvedValue(null),
+    });
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Codex")).toBeTruthy();
+    });
+
+    expect(screen.getByText("019d-selected-file")).toBeTruthy();
+    expect(screen.getByText("codex resume 019d-selected-file")).toBeTruthy();
+    expect(screen.getAllByText("exec_command").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Connect selected file signals to the right inspector panel").length).toBeGreaterThan(0);
+  });
 });
