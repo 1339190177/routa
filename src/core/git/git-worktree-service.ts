@@ -139,10 +139,20 @@ export class GitWorktreeService {
       const worktreeRoot = options.worktreeRoot?.trim() || getWorktreeBaseDir();
       const worktreePath = path.join(
         worktreeRoot,
-        codebase.workspaceId,
         codebaseId,
         directoryName
       );
+
+      // Clean up stale error-status worktree at the same path before creating a new one.
+      // A previous attempt may have failed (e.g. Windows filename length) leaving an
+      // error record that blocks the unique constraint on worktree_path.
+      const codebaseWorktrees = await this.worktreeStore.listByCodebase(codebaseId);
+      const staleAtSamePath = codebaseWorktrees.find(
+        (wt) => wt.worktreePath === worktreePath && wt.status === "error"
+      );
+      if (staleAtSamePath) {
+        await this.worktreeStore.remove(staleAtSamePath.id);
+      }
 
       // Create DB record
       const worktree = createWorktree({
@@ -159,6 +169,11 @@ export class GitWorktreeService {
       try {
         // Ensure parent directory exists
         await fs.mkdir(path.dirname(worktreePath), { recursive: true });
+
+        // Enable long paths on Windows to avoid MAX_PATH (260) failures
+        if (process.platform === "win32") {
+          await execGit(["config", "core.longPaths", "true"], repoPath).catch(() => {});
+        }
 
         // Prune stale worktree references
         await execGit(["worktree", "prune"], repoPath).catch(() => {});
