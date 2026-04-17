@@ -1,4 +1,7 @@
+use std::fs;
+
 use reqwest::StatusCode;
+use routa_core::storage::get_project_storage_dir;
 use serde_json::{json, Value};
 
 #[path = "common/mod.rs"]
@@ -9,6 +12,13 @@ fn json_has_error(resp: &Value, expected: &str) -> bool {
     resp.get("error")
         .and_then(Value::as_str)
         .is_some_and(|message| message.contains(expected))
+}
+
+fn cleanup_canvas_file(path: &str) {
+    let _ = fs::remove_file(path);
+    if let Some(parent) = std::path::Path::new(path).parent() {
+        let _ = fs::remove_dir(parent);
+    }
 }
 
 #[tokio::test]
@@ -140,6 +150,93 @@ async fn api_canvas_specialist_rejects_unknown_specialist() {
         &body,
         "Specialist not found: missing-specialist"
     ));
+}
+
+#[tokio::test]
+async fn api_canvas_specialist_materialize_persists_canvas_source() {
+    let fixture = ApiFixture::new().await;
+    let repo_root = tempfile::tempdir().expect("temp repo");
+    let repo_path = repo_root.path().join("demo-repo");
+    fs::create_dir_all(&repo_path).expect("create demo repo");
+
+    let response = fixture
+        .client
+        .post(fixture.endpoint("/api/canvas/specialist/materialize"))
+        .json(&json!({
+            "workspaceId": "default",
+            "repoPath": repo_path,
+            "repoLabel": "demo-repo",
+            "source": "export default function Canvas(){ return <div>Saved</div>; }"
+        }))
+        .send()
+        .await
+        .expect("materialize canvas source");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body: Value = response.json().await.expect("decode materialize response");
+    let expected_path = get_project_storage_dir(repo_path.to_string_lossy().as_ref())
+        .join("canvases")
+        .join("demo-repo-fitness-overview.canvas.tsx");
+
+    assert_eq!(body["workspaceId"], json!("default"));
+    assert_eq!(
+        body["fileName"],
+        json!("demo-repo-fitness-overview.canvas.tsx")
+    );
+    assert_eq!(
+        body["filePath"],
+        json!(expected_path.to_string_lossy().to_string())
+    );
+    assert_eq!(
+        fs::read_to_string(expected_path.as_path()).expect("read persisted canvas"),
+        "export default function Canvas(){ return <div>Saved</div>; }\n"
+    );
+
+    cleanup_canvas_file(expected_path.to_string_lossy().as_ref());
+}
+
+#[tokio::test]
+async fn api_canvas_specialist_materialize_maps_managed_clone_to_project_root() {
+    let fixture = ApiFixture::new().await;
+    let repo_root = tempfile::tempdir().expect("temp repo");
+    let clone_repo_path = repo_root
+        .path()
+        .join(".routa")
+        .join("repos")
+        .join("phodal--routa");
+
+    let response = fixture
+        .client
+        .post(fixture.endpoint("/api/canvas/specialist/materialize"))
+        .json(&json!({
+            "workspaceId": "default",
+            "repoPath": clone_repo_path,
+            "repoLabel": "phodal/routa",
+            "source": "export default function Canvas(){ return <div>Clone</div>; }"
+        }))
+        .send()
+        .await
+        .expect("materialize managed clone canvas");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body: Value = response
+        .json()
+        .await
+        .expect("decode managed clone materialize response");
+    let expected_path = get_project_storage_dir(repo_root.path().to_string_lossy().as_ref())
+        .join("canvases")
+        .join("phodal-routa-fitness-overview.canvas.tsx");
+
+    assert_eq!(
+        body["filePath"],
+        json!(expected_path.to_string_lossy().to_string())
+    );
+    assert_eq!(
+        fs::read_to_string(expected_path.as_path()).expect("read managed clone canvas"),
+        "export default function Canvas(){ return <div>Clone</div>; }\n"
+    );
+
+    cleanup_canvas_file(expected_path.to_string_lossy().as_ref());
 }
 
 #[tokio::test]
