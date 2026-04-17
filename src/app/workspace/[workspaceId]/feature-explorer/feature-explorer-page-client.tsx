@@ -75,6 +75,9 @@ export function FeatureExplorerPageClient({
 
   const workspace = workspacesHook.workspaces.find((item) => item.id === workspaceId) ?? null;
   const defaultCodebase = codebases.find((cb) => cb.isDefault) ?? codebases[0] ?? null;
+  const repoDisplayPath = defaultCodebase?.repoPath
+    ? defaultCodebase.repoPath.replace(/\/\.routa\/.*$/, "")
+    : null;
   const repoLabel = defaultCodebase
     ? (defaultCodebase.label ?? defaultCodebase.repoPath.split("/").pop() ?? defaultCodebase.repoPath)
     : null;
@@ -264,11 +267,11 @@ export function FeatureExplorerPageClient({
           <section className="grid min-h-0 flex-1 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
             {/* ── Left panel: Feature list ── */}
             <aside className="flex min-h-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary/20">
-              {repoLabel && (
+              {(repoDisplayPath || repoLabel) && (
                 <div className="flex items-center gap-1.5 border-b border-desktop-border px-3 py-1.5">
                   <Folder className="h-3.5 w-3.5 shrink-0 text-desktop-text-secondary" />
-                  <span className="min-w-0 truncate text-[12px] font-medium text-desktop-text-primary" title={defaultCodebase?.repoPath}>
-                    {defaultCodebase?.repoPath ?? repoLabel}
+                  <span className="min-w-0 truncate text-[12px] font-medium text-desktop-text-primary" title={repoDisplayPath ?? undefined}>
+                    {repoDisplayPath ?? repoLabel}
                   </span>
                   {defaultCodebase?.branch && (
                     <span className="shrink-0 rounded-sm border border-desktop-border px-1 py-0.5 text-[9px] text-desktop-text-secondary">
@@ -350,7 +353,7 @@ export function FeatureExplorerPageClient({
                                 <span>{feature.sourceFileCount}f</span>
                                 <span>{feature.pageCount}p</span>
                                 <span>{feature.apiCount}a</span>
-                                <span>{feature.updatedAt}</span>
+                                <span>{formatShortDate(feature.updatedAt)}</span>
                               </div>
                             </button>
                           );
@@ -376,7 +379,7 @@ export function FeatureExplorerPageClient({
                           {activeFeature.name}
                         </span>
                         <span className="text-[10px] text-desktop-text-secondary">
-                          {activeFeature.sessionCount}s · {activeFeature.changedFiles}f
+                          {activeFeature.sessionCount}s · {activeFeature.sourceFileCount}f
                         </span>
                       </div>
                       <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-desktop-text-secondary">
@@ -401,7 +404,7 @@ export function FeatureExplorerPageClient({
               </div>
 
               <div className="flex items-center justify-between border-b border-desktop-border bg-desktop-bg-secondary/40 px-3 py-1.5">
-                <div className="grid flex-1 grid-cols-[minmax(0,1fr)_64px_48px_80px] text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
+                <div className="grid flex-1 grid-cols-[minmax(0,1fr)_56px_72px_96px] text-[10px] font-semibold uppercase tracking-[0.08em] text-desktop-text-secondary">
                   <div>{t.featureExplorer.nameColumn}</div>
                   <div>{t.featureExplorer.changeColumn}</div>
                   <div>{t.featureExplorer.sessionsColumn}</div>
@@ -439,7 +442,7 @@ export function FeatureExplorerPageClient({
                       return (
                         <div
                           key={node.id}
-                          className={`grid grid-cols-[minmax(0,1fr)_64px_48px_80px] items-center px-3 py-1 text-xs transition-colors ${
+                          className={`grid grid-cols-[minmax(0,1fr)_56px_72px_96px] items-center px-3 py-1 text-xs transition-colors ${
                             isActive ? "bg-desktop-bg-active" : "hover:bg-desktop-bg-secondary/40"
                           }`}
                         >
@@ -847,7 +850,7 @@ function TreeNodeRow({
 
     return (
       <>
-        <div className="grid grid-cols-[minmax(0,1fr)_64px_48px_80px] items-center px-3 py-1 text-xs text-desktop-text-primary">
+        <div className="grid grid-cols-[minmax(0,1fr)_56px_72px_96px] items-center px-3 py-1 text-xs text-desktop-text-primary">
           <button
             onClick={() => onToggleNode(node.id)}
             className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-desktop-bg-active"
@@ -893,7 +896,7 @@ function TreeNodeRow({
 
   return (
     <div
-      className={`grid grid-cols-[minmax(0,1fr)_64px_48px_80px] items-center px-3 py-1 text-xs transition-colors ${
+      className={`grid grid-cols-[minmax(0,1fr)_56px_72px_96px] items-center px-3 py-1 text-xs transition-colors ${
         isActive ? "bg-desktop-bg-active" : "hover:bg-desktop-bg-secondary/40"
       }`}
     >

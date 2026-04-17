@@ -22,7 +22,7 @@ export async function tryProxyToRustBackend(
   try {
     const response = await fetch(url, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(8000),
     });
     if (response.ok) {
       const body = await response.json();
