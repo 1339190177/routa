@@ -5,6 +5,10 @@ const navState = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 
+const clipboardState = vi.hoisted(() => ({
+  writeText: vi.fn(),
+}));
+
 const { useWorkspaces, useCodebases } = vi.hoisted(() => ({
   useWorkspaces: vi.fn(),
   useCodebases: vi.fn(),
@@ -81,6 +85,11 @@ Object.defineProperty(window, "localStorage", {
   writable: true,
 });
 
+Object.defineProperty(navigator, "clipboard", {
+  value: clipboardState,
+  writable: true,
+});
+
 import { FeatureExplorerPageClient } from "../feature-explorer-page-client";
 
 describe("FeatureExplorerPageClient", () => {
@@ -88,6 +97,7 @@ describe("FeatureExplorerPageClient", () => {
     window.history.replaceState({}, "", "/workspace/default/feature-explorer");
     window.localStorage.clear();
     navState.push.mockReset();
+    clipboardState.writeText.mockReset();
     useWorkspaces.mockReturnValue({
       loading: false,
       workspaces: [{ id: "default", title: "Default Workspace" }],
@@ -467,6 +477,7 @@ describe("FeatureExplorerPageClient", () => {
 
     expect(screen.queryByText("Selected surface")).toBeNull();
     expect(screen.getAllByText("Kanban Workflow").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Capability group")).toBeNull();
   });
 
   it("summarizes folder session counts from descendant files", async () => {
@@ -564,6 +575,12 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.getByTestId("feature-tree-changes-folder-src").textContent).toBe("6");
     expect(screen.getByTestId("feature-tree-sessions-folder-app").textContent).toBe("6");
     expect(screen.getByTestId("feature-tree-updated-folder-src").textContent).not.toBe("-");
+
+    fireEvent.click(screen.getByTestId("feature-tree-select-folder-src"));
+    expect(screen.getByText("0f")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("feature-tree-select-folder-src"));
+    expect(screen.getByText("1f")).toBeTruthy();
   });
 
   it("renders selected file session evidence with resume command", async () => {
@@ -667,6 +684,14 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.getByText("Keep user prompts grouped under the owning session card")).toBeTruthy();
     expect(screen.getByText("Related files")).toBeTruthy();
     expect(screen.getAllByText("src/app/workspace/[workspaceId]/kanban/kanban-page-client.tsx").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Active file")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Copy to clipboard: codex resume 019d-selected-file",
+      }),
+    );
+    expect(clipboardState.writeText).toHaveBeenCalledWith("codex resume 019d-selected-file");
   });
 
   it("hydrates file selection from the url and keeps it in sync", async () => {

@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Braces,
+  Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   FileCode2,
   FileJson2,
   FileText,
@@ -26,7 +28,6 @@ import { useTranslation } from "@/i18n";
 
 import type {
   ApiDetail,
-  CapabilityGroup,
   FeatureDetail,
   FileSignal,
   FeatureSurfacePage,
@@ -113,6 +114,28 @@ function buildTreeNodeStats(
   }
 
   return statsByNodeId;
+}
+
+function buildSelectableFileIdsByNode(
+  nodes: FileTreeNode[],
+  acc: Record<string, string[]> = {},
+): Record<string, string[]> {
+  const visit = (node: FileTreeNode): string[] => {
+    if (node.kind === "file") {
+      acc[node.id] = [node.id];
+      return acc[node.id];
+    }
+
+    const descendantFileIds = node.children.flatMap((child) => visit(child));
+    acc[node.id] = descendantFileIds;
+    return descendantFileIds;
+  };
+
+  for (const node of nodes) {
+    visit(node);
+  }
+
+  return acc;
 }
 
 function formatShortDate(iso: string): string {
@@ -618,6 +641,7 @@ export function FeatureExplorerPageClient({
   );
   const flatMap = useMemo(() => flattenFiles(fileTree), [fileTree]);
   const treeNodeStats = useMemo(() => buildTreeNodeStats(fileTree, fileStats), [fileTree, fileStats]);
+  const selectableFileIdsByNode = useMemo(() => buildSelectableFileIdsByNode(fileTree), [fileTree]);
 
   // Flat file list sorted by sessions desc, then changes desc
   const sessionSortedFiles = useMemo(() => {
@@ -639,9 +663,6 @@ export function FeatureExplorerPageClient({
     ? (resolvedFeatureDetail?.fileSignals?.[activeFile.path] ?? null)
     : null;
   const activeFeature = features.find((f) => f.id === effectiveFeatureId);
-  const activeGroup = activeFeature
-    ? capabilityGroups.find((group) => group.id === activeFeature.group) ?? null
-    : null;
   const activeSurfaceKey = selectedSurface?.key ?? (effectiveFeatureId ? `feature:${effectiveFeatureId}` : "");
   const selectedSurfaceFeatureNames = useMemo(
     () => (selectedSurface?.featureIds ?? []).map(
@@ -793,11 +814,33 @@ export function FeatureExplorerPageClient({
     setDesiredFilePath(flatMap[fileId]?.path ?? "");
   };
 
-  const handleToggleFileSelection = (fileId: string) => {
-    setSelectedFileIds((prev) =>
-      prev.includes(fileId) ? prev.filter((item) => item !== fileId) : [...prev, fileId],
-    );
-    handleSetActiveFile(fileId);
+  const handleToggleNodeSelection = (nodeId: string) => {
+    const targetFileIds = selectableFileIdsByNode[nodeId] ?? [];
+    if (targetFileIds.length === 0) {
+      return;
+    }
+
+    const isRemoving = targetFileIds.every((fileId) => selectedFileIds.includes(fileId));
+    const nextSelectedIds = isRemoving
+      ? selectedFileIds.filter((fileId) => !targetFileIds.includes(fileId))
+      : [...new Set([...selectedFileIds, ...targetFileIds])];
+
+    setSelectedFileIds(nextSelectedIds);
+
+    if (!isRemoving) {
+      handleSetActiveFile(targetFileIds[0] ?? "");
+      return;
+    }
+
+    if (activeFileId && targetFileIds.includes(activeFileId)) {
+      const nextActiveFileId = nextSelectedIds[0] ?? "";
+      if (nextActiveFileId) {
+        handleSetActiveFile(nextActiveFileId);
+      } else {
+        setActiveFileId("");
+        setDesiredFilePath("");
+      }
+    }
   };
 
   const handleClearSelection = () => {
@@ -1064,8 +1107,9 @@ export function FeatureExplorerPageClient({
                           <div className="flex items-center gap-1.5">
                             <input
                               type="checkbox"
+                              data-testid={`feature-tree-select-${node.id}`}
                               checked={isSelected}
-                              onChange={() => handleToggleFileSelection(node.id)}
+                              onChange={() => handleToggleNodeSelection(node.id)}
                               className="h-3.5 w-3.5 rounded border-black/15 bg-transparent dark:border-white/20"
                             />
                             <button onClick={() => handleSetActiveFile(node.id)} className="flex min-w-0 items-center gap-1.5 text-left">
@@ -1091,8 +1135,9 @@ export function FeatureExplorerPageClient({
                         activeFileId={activeFileId}
                         selectedFileIds={selectedFileIds}
                         treeNodeStats={treeNodeStats}
+                        selectableFileIdsByNode={selectableFileIdsByNode}
                         onToggleNode={handleToggleNode}
-                        onToggleFileSelection={handleToggleFileSelection}
+                        onToggleNodeSelection={handleToggleNodeSelection}
                         onSetActiveFile={handleSetActiveFile}
                       />
                     ))}
@@ -1160,7 +1205,6 @@ export function FeatureExplorerPageClient({
                   <ContextPanel
                     activeFile={activeFile}
                     activeFileSignal={activeFileSignal}
-                    activeGroup={activeGroup}
                     featureDetail={surfaceOnlySelection ? null : resolvedFeatureDetail}
                     selectedSurface={selectedSurface}
                     selectedSurfaceFeatureNames={selectedSurfaceFeatureNames}
@@ -1209,7 +1253,6 @@ export function FeatureExplorerPageClient({
 function ContextPanel({
   activeFile,
   activeFileSignal,
-  activeGroup,
   featureDetail,
   selectedSurface,
   selectedSurfaceFeatureNames,
@@ -1217,12 +1260,13 @@ function ContextPanel({
 }: {
   activeFile: FileTreeNode | null;
   activeFileSignal: FileSignal | null;
-  activeGroup: CapabilityGroup | null;
   featureDetail: FeatureDetail | null;
   selectedSurface: ExplorerSurfaceItem | null;
   selectedSurfaceFeatureNames: string[];
   t: ReturnType<typeof useTranslation>["t"];
 }) {
+  const [copiedResumeCommand, setCopiedResumeCommand] = useState("");
+
   if (!featureDetail && !selectedSurface) {
     return <div className="text-xs text-desktop-text-secondary">-</div>;
   }
@@ -1286,49 +1330,16 @@ function ContextPanel({
 
       {featureDetail ? (
         <section className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-2.5">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <div>
               <div className="text-[14px] font-semibold text-desktop-text-primary">{featureDetail.name}</div>
               {featureDetail.summary ? (
                 <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{featureDetail.summary}</div>
               ) : null}
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              <InlineMetricPill label={t.featureExplorer.capabilityGroup} value={activeGroup?.name ?? featureDetail.group} />
-              <InlineMetricPill label={t.featureExplorer.statusLabel} value={featureDetail.status} />
-              <InlineMetricPill label={t.featureExplorer.sourceFilesLabel} value={String(featureDetail.sourceFiles.length)} />
-              <InlineMetricPill label={t.featureExplorer.sessionsLabel} value={String(featureDetail.sessionCount)} />
-            </div>
-            {featureDetail.relatedFeatures.length > 0 ? (
-              <div className="space-y-1">
-                <div className="text-[10px] font-medium text-desktop-text-secondary">{t.featureExplorer.relatedFeaturesLabel}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {featureDetail.relatedFeatures.map((relId) => (
-                    <span
-                      key={relId}
-                      className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1 text-[11px] text-desktop-text-secondary"
-                    >
-                      {relId}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
         </section>
       ) : null}
-
-      {activeFile && (
-        <ContextSection title={t.featureExplorer.activeFile}>
-          <div className="flex items-center gap-2 text-desktop-text-primary">
-            <FileIcon path={activeFile.path} />
-            <span className="truncate text-xs font-semibold">{activeFile.name}</span>
-          </div>
-          <div className="mt-1 break-all text-[10px] text-desktop-text-secondary">
-            {activeFile.path}
-          </div>
-        </ContextSection>
-      )}
 
       <ContextSection title={t.featureExplorer.selectedFileSignals}>
         {activeFile ? (
@@ -1348,9 +1359,26 @@ function ContextPanel({
                         <code className="break-all text-[10px] text-desktop-text-primary">{session.sessionId}</code>
                       </div>
                       {session.resumeCommand ? (
-                        <div className="mt-1 break-all text-[10px] text-desktop-text-secondary">
-                          <span className="font-medium text-desktop-text-primary">{t.featureExplorer.resumeCommandLabel}: </span>
-                          <code>{session.resumeCommand}</code>
+                        <div className="mt-1.5 flex items-center gap-2 rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1.5">
+                          <code className="min-w-0 flex-1 break-all text-[10px] text-desktop-text-primary">
+                            {session.resumeCommand}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(session.resumeCommand ?? "");
+                              setCopiedResumeCommand(`${session.provider}:${session.sessionId}`);
+                            }}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-1.5 py-1 text-[10px] text-desktop-text-secondary hover:text-desktop-text-primary"
+                            aria-label={`${t.common.copyToClipboard}: ${session.resumeCommand}`}
+                            title={t.common.copyToClipboard}
+                          >
+                            {copiedResumeCommand === `${session.provider}:${session.sessionId}` ? (
+                              <Check className="h-3 w-3" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </button>
                         </div>
                       ) : null}
                     </div>
@@ -1387,15 +1415,24 @@ function ContextPanel({
         )}
       </ContextSection>
 
-      {featureDetail && (!selectedSurface || isFeatureSurface) ? (
-        <ContextSection title={t.featureExplorer.sourceFilesLabel}>
-          <CompactFileList files={featureDetail.sourceFiles} />
-        </ContextSection>
-      ) : null}
-
       {featureDetail && (featureDetail.relatedFiles?.length ?? 0) > 0 ? (
         <ContextSection title={t.featureExplorer.relatedFiles}>
           <CompactFileList files={featureDetail.relatedFiles ?? []} />
+        </ContextSection>
+      ) : null}
+
+      {featureDetail && featureDetail.relatedFeatures.length > 0 ? (
+        <ContextSection title={t.featureExplorer.relatedFeaturesLabel}>
+          <div className="flex flex-wrap gap-1.5">
+            {featureDetail.relatedFeatures.map((relId) => (
+              <span
+                key={relId}
+                className="rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1 text-[11px] text-desktop-text-secondary"
+              >
+                {relId}
+              </span>
+            ))}
+          </div>
         </ContextSection>
       ) : null}
     </div>
@@ -1597,8 +1634,9 @@ function TreeNodeRow({
   activeFileId,
   selectedFileIds,
   treeNodeStats,
+  selectableFileIdsByNode,
   onToggleNode,
-  onToggleFileSelection,
+  onToggleNodeSelection,
   onSetActiveFile,
 }: {
   node: FileTreeNode;
@@ -1607,8 +1645,9 @@ function TreeNodeRow({
   activeFileId: string;
   selectedFileIds: string[];
   treeNodeStats: Record<string, TreeNodeStat>;
+  selectableFileIdsByNode: Record<string, string[]>;
   onToggleNode: (nodeId: string) => void;
-  onToggleFileSelection: (fileId: string) => void;
+  onToggleNodeSelection: (nodeId: string) => void;
   onSetActiveFile: (fileId: string) => void;
 }) {
   const paddingLeft = 12 + depth * 16;
@@ -1616,23 +1655,33 @@ function TreeNodeRow({
 
   if (node.kind === "folder") {
     const isExpanded = expandedIds[node.id] ?? true;
+    const descendantFileIds = selectableFileIdsByNode[node.id] ?? [];
+    const isSelected = descendantFileIds.length > 0 && descendantFileIds.every((fileId) => selectedFileIds.includes(fileId));
 
     return (
       <>
         <div className="grid grid-cols-[minmax(0,1fr)_56px_72px_96px] items-center px-3 py-1 text-xs text-desktop-text-primary">
-          <button
-            onClick={() => onToggleNode(node.id)}
-            className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-desktop-bg-active"
-            style={{ paddingLeft }}
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 text-desktop-text-secondary" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-desktop-text-secondary" />
-            )}
-            <Folder className="h-3.5 w-3.5 text-amber-400" />
-            <span className="text-[12px]">{node.name}</span>
-          </button>
+          <div className="flex items-center gap-1.5" style={{ paddingLeft }}>
+            <input
+              type="checkbox"
+              data-testid={`feature-tree-select-${node.id}`}
+              checked={isSelected}
+              onChange={() => onToggleNodeSelection(node.id)}
+              className="h-3.5 w-3.5 rounded border-black/15 bg-transparent dark:border-white/20"
+            />
+            <button
+              onClick={() => onToggleNode(node.id)}
+              className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-desktop-bg-active"
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5 text-desktop-text-secondary" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-desktop-text-secondary" />
+              )}
+              <Folder className="h-3.5 w-3.5 text-amber-400" />
+              <span className="truncate text-[12px]">{node.name}</span>
+            </button>
+          </div>
           <div data-testid={`feature-tree-changes-${node.id}`} className="text-[11px] text-desktop-text-secondary">
             {stat?.changes ? stat.changes : "-"}
           </div>
@@ -1654,8 +1703,9 @@ function TreeNodeRow({
               activeFileId={activeFileId}
               selectedFileIds={selectedFileIds}
               treeNodeStats={treeNodeStats}
+              selectableFileIdsByNode={selectableFileIdsByNode}
               onToggleNode={onToggleNode}
-              onToggleFileSelection={onToggleFileSelection}
+              onToggleNodeSelection={onToggleNodeSelection}
               onSetActiveFile={onSetActiveFile}
             />
           ))}
@@ -1675,8 +1725,9 @@ function TreeNodeRow({
       <div className="flex items-center gap-1.5" style={{ paddingLeft }}>
         <input
           type="checkbox"
+          data-testid={`feature-tree-select-${node.id}`}
           checked={isSelected}
-          onChange={() => onToggleFileSelection(node.id)}
+          onChange={() => onToggleNodeSelection(node.id)}
           className="h-3.5 w-3.5 rounded border-black/15 bg-transparent dark:border-white/20"
         />
         <button onClick={() => onSetActiveFile(node.id)} className="flex min-w-0 items-center gap-1.5 text-left">
