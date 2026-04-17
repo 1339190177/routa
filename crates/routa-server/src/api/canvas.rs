@@ -6,11 +6,17 @@ use axum::{
 use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::path::{Path as FsPath, PathBuf};
 
 use crate::error::ServerError;
 use routa_core::acp::SessionLaunchOptions;
-use routa_core::models::get_canvas_generation_contract;
+use routa_core::git::get_clone_base_dir;
+use routa_core::models::{
+    get_canvas_generation_contract, get_canvas_sdk_definition_resource_uris,
+    CANVAS_SDK_MANIFEST_RESOURCE_URI,
+};
 use routa_core::orchestration::SpecialistConfig;
+use routa_core::storage::get_project_storage_dir;
 use routa_core::store::acp_session_store::CreateAcpSessionParams;
 
 use crate::models::artifact::{Artifact, ArtifactStatus, ArtifactType};
@@ -24,6 +30,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", post(create_canvas).get(list_canvas))
         .route("/specialist", post(create_canvas_from_specialist))
+        .route("/specialist/materialize", post(materialize_canvas_source))
         .route("/{id}", get(get_canvas).delete(delete_canvas))
 }
 
@@ -59,8 +66,61 @@ struct CreateCanvasFromSpecialistBody {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct MaterializeCanvasBody {
+    workspace_id: Option<String>,
+    repo_path: Option<String>,
+    repo_label: Option<String>,
+    source: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ListCanvasQuery {
     workspace_id: Option<String>,
+}
+
+async fn materialize_canvas_source(
+    body: Result<Json<Value>, axum::extract::rejection::JsonRejection>,
+) -> Result<(axum::http::StatusCode, Json<Value>), ServerError> {
+    let Json(raw_body) =
+        body.map_err(|_| ServerError::BadRequest("Invalid JSON body".to_string()))?;
+    if !raw_body.is_object() {
+        return Err(ServerError::BadRequest("Invalid JSON body".to_string()));
+    }
+
+    let body: MaterializeCanvasBody = serde_json::from_value(raw_body)
+        .map_err(|_| ServerError::BadRequest("Invalid JSON body".to_string()))?;
+    let workspace_id = body
+        .workspace_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ServerError::BadRequest("workspaceId is required".to_string()))?;
+    let repo_path = body
+        .repo_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ServerError::BadRequest("repoPath is required".to_string()))?;
+    let source = body
+        .source
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ServerError::BadRequest("source is required".to_string()))?;
+
+    let file_path = persist_fitness_canvas_source(repo_path, body.repo_label.as_deref(), source)?;
+    let file_name = file_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(json!({
+            "workspaceId": workspace_id,
+            "filePath": file_path.to_string_lossy(),
+            "fileName": file_name,
+        })),
+    ))
 }
 
 async fn create_canvas(
@@ -582,6 +642,146 @@ fn derive_allowed_native_tools(specialist_id: Option<&str>) -> Option<Vec<String
     None
 }
 
+fn sanitize_segment(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase().replace(['/', '\\'], "-");
+    let sanitized = normalized
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    sanitized
+        .trim_matches('-')
+        .split('-')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn strip_managed_clone_root(repo_path: &FsPath) -> Option<PathBuf> {
+    let mut root = PathBuf::new();
+    let mut components = repo_path.components().peekable();
+
+    while let Some(component) = components.next() {
+        let name = component.as_os_str().to_str()?;
+        if name == ".routa" {
+            let Some(next_component) = components.peek() else {
+                break;
+            };
+            if next_component.as_os_str() == "repos" {
+                return Some(if root.as_os_str().is_empty() {
+                    PathBuf::from(std::path::MAIN_SEPARATOR.to_string())
+                } else {
+                    root
+                });
+            }
+        }
+        root.push(component.as_os_str());
+    }
+
+    None
+}
+
+fn derive_repo_segment(repo_path: &str, repo_label: Option<&str>) -> String {
+    let candidate = repo_label
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            FsPath::new(repo_path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(repo_path)
+        });
+    let sanitized = sanitize_segment(candidate);
+    if sanitized.is_empty() {
+        "canvas".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn resolve_canvas_storage_root(repo_path: &str) -> PathBuf {
+    let resolved_repo_path = if FsPath::new(repo_path).is_absolute() {
+        PathBuf::from(repo_path)
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(repo_path)
+    };
+    if let Some(root) = strip_managed_clone_root(&resolved_repo_path) {
+        return root;
+    }
+    let clone_base_dir = get_clone_base_dir();
+    if resolved_repo_path == clone_base_dir || resolved_repo_path.starts_with(&clone_base_dir) {
+        return clone_base_dir
+            .parent()
+            .and_then(|path| path.parent())
+            .map(PathBuf::from)
+            .unwrap_or(clone_base_dir);
+    }
+    resolved_repo_path
+}
+
+fn build_fitness_canvas_file_name(repo_path: &str, repo_label: Option<&str>) -> String {
+    format!(
+        "{}-fitness-overview.canvas.tsx",
+        derive_repo_segment(repo_path, repo_label)
+    )
+}
+
+fn get_stored_fitness_canvas_path(repo_path: &str, repo_label: Option<&str>) -> PathBuf {
+    let storage_root = resolve_canvas_storage_root(repo_path);
+    let storage_root_str = storage_root.to_string_lossy().to_string();
+    get_project_storage_dir(&storage_root_str)
+        .join("canvases")
+        .join(build_fitness_canvas_file_name(repo_path, repo_label))
+}
+
+fn persist_fitness_canvas_source(
+    repo_path: &str,
+    repo_label: Option<&str>,
+    source: &str,
+) -> Result<PathBuf, ServerError> {
+    let file_path = get_stored_fitness_canvas_path(repo_path, repo_label);
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            ServerError::Internal(format!("Failed to create canvas directory: {error}"))
+        })?;
+    }
+    let normalized_source = format!("{}\n", source.trim());
+    std::fs::write(&file_path, normalized_source).map_err(|error| {
+        ServerError::Internal(format!("Failed to persist canvas source: {error}"))
+    })?;
+    Ok(file_path)
+}
+
+fn build_canvas_sdk_prompt_section() -> Vec<String> {
+    let mut lines = vec![
+        "Canvas SDK access:".to_string(),
+        format!(
+            "- Prefer MCP tool `read_canvas_sdk_resource` with uri `{CANVAS_SDK_MANIFEST_RESOURCE_URI}`."
+        ),
+        "- If your provider supports native MCP resource reads, you may read that same URI directly instead.".to_string(),
+        "- That manifest is the authoritative Canvas SDK index for this session.".to_string(),
+        "- Then read only the defs resources you actually need from its `definitionResources` list, preferably through `read_canvas_sdk_resource`.".to_string(),
+        "- Import only from `@canvas-sdk` or `react`.".to_string(),
+        "- If a symbol or prop is not present in those resources, do not invent it.".to_string(),
+        "- Example definition resources:".to_string(),
+    ];
+    for uri in get_canvas_sdk_definition_resource_uris()
+        .into_iter()
+        .take(3)
+    {
+        lines.push(format!("  - `{uri}`"));
+    }
+    lines.push("- If neither direct resource reads nor the helper tool are available, stay conservative and use only the symbols named in the manifest.".to_string());
+    lines
+}
+
 fn build_canvas_specialist_prompt(user_prompt: &str) -> String {
     let contract = get_canvas_generation_contract();
     let default_export_forms = format_or_list(&contract.output.default_export_forms);
@@ -616,15 +816,15 @@ fn build_canvas_specialist_prompt(user_prompt: &str) -> String {
             contract.style.forbidden_patterns.join(", ")
         ),
         String::new(),
+    ]);
+    lines.extend(build_canvas_sdk_prompt_section());
+    lines.extend([
+        String::new(),
         "User request:".to_string(),
         user_prompt.trim().to_string(),
     ]);
 
-    lines
-        .into_iter()
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
+    lines.join("\n")
 }
 
 fn format_or_list(values: &[String]) -> String {
@@ -740,6 +940,38 @@ fn extract_update_text(update: &serde_json::Map<String, Value>) -> Option<String
     None
 }
 
+fn extract_tool_call_canvas_candidate(update: &serde_json::Map<String, Value>) -> Option<String> {
+    let session_update = update
+        .get("sessionUpdate")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if session_update != "tool_call" && session_update != "tool_call_update" {
+        return None;
+    }
+
+    let kind = update.get("kind").and_then(Value::as_str).unwrap_or("");
+    let title = update
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if kind != "edit" && title != "write" && title != "edit" {
+        return None;
+    }
+
+    let raw_input = update.get("rawInput").and_then(Value::as_object)?;
+    for key in ["content", "new_string", "text", "source"] {
+        if let Some(value) = raw_input.get(key).and_then(Value::as_str) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 fn extract_specialist_output_from_history(history: &[Value]) -> String {
     let mut direct_output = String::new();
     let mut process_output = String::new();
@@ -773,10 +1005,28 @@ fn extract_specialist_output_from_history(history: &[Value]) -> String {
     }
 
     if direct_output.trim().is_empty() {
-        process_output.trim().to_string()
+        if !process_output.trim().is_empty() {
+            return process_output.trim().to_string();
+        }
     } else {
-        direct_output.trim().to_string()
+        return direct_output.trim().to_string();
     }
+
+    for entry in history.iter().rev() {
+        let Some(update) = entry
+            .get("params")
+            .and_then(|params| params.get("update"))
+            .and_then(Value::as_object)
+        else {
+            continue;
+        };
+
+        if let Some(candidate) = extract_tool_call_canvas_candidate(update) {
+            return candidate;
+        }
+    }
+
+    String::new()
 }
 
 fn extract_canvas_source_from_specialist_output(output: &str) -> Option<String> {
@@ -894,6 +1144,12 @@ fn parse_canvas_payload(content: Option<&str>) -> Option<CanvasArtifactPayload> 
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::sync::{Mutex, OnceLock};
+
+    fn current_dir_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn build_canvas_specialist_prompt_constrains_output_shape() {
@@ -902,7 +1158,34 @@ mod tests {
         assert!(prompt.contains("Return only the TSX source."));
         assert!(prompt.contains("fake shell chrome"));
         assert!(prompt.contains("@canvas-sdk/*"));
+        assert!(prompt.contains("read_canvas_sdk_resource"));
+        assert!(prompt.contains(CANVAS_SDK_MANIFEST_RESOURCE_URI));
         assert!(prompt.contains("Create a status card."));
+    }
+
+    #[test]
+    fn extract_canvas_source_from_tool_call_history() {
+        let history = vec![json!({
+            "params": {
+                "update": {
+                    "sessionUpdate": "tool_call_update",
+                    "kind": "edit",
+                    "title": "write",
+                    "rawInput": {
+                        "content": "export default function Canvas(){ return <div>Tool</div>; }"
+                    }
+                }
+            }
+        })];
+
+        let output = extract_specialist_output_from_history(&history);
+        let source = extract_canvas_source_from_specialist_output(&output)
+            .expect("expected canvas source from tool call");
+
+        assert_eq!(
+            source,
+            "export default function Canvas(){ return <div>Tool</div>; }"
+        );
     }
 
     #[test]
@@ -954,5 +1237,38 @@ function Canvas() {
     #[test]
     fn return_none_when_output_has_no_canvas_component() {
         assert!(extract_canvas_source_from_specialist_output("I cannot do that.").is_none());
+    }
+
+    #[test]
+    fn stores_managed_clone_canvases_under_project_storage_root() {
+        let _guard = current_dir_lock().lock().unwrap();
+        let original_cwd = std::env::current_dir().expect("current dir");
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        std::env::set_current_dir(temp_dir.path()).expect("switch cwd");
+
+        let clone_repo_path = temp_dir
+            .path()
+            .join(".routa")
+            .join("repos")
+            .join("phodal--routa");
+        let expected_path = get_project_storage_dir(temp_dir.path().to_string_lossy().as_ref())
+            .join("canvases")
+            .join("phodal-routa-fitness-overview.canvas.tsx");
+        let source = "export default function Canvas(){ return <div>Clone</div>; }";
+
+        let file_path = persist_fitness_canvas_source(
+            clone_repo_path.to_string_lossy().as_ref(),
+            Some("phodal/routa"),
+            source,
+        )
+        .expect("persist managed clone canvas");
+
+        assert_eq!(file_path, expected_path);
+        assert_eq!(
+            std::fs::read_to_string(file_path).unwrap(),
+            format!("{source}\n")
+        );
+
+        std::env::set_current_dir(original_cwd).expect("restore cwd");
     }
 }
