@@ -15,6 +15,12 @@ pub struct SessionAnalyzer<'a> {
     catalog: Option<&'a FeatureSurfaceCatalog>,
 }
 
+impl<'a> Default for SessionAnalyzer<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'a> SessionAnalyzer<'a> {
     pub fn new() -> Self {
         Self { catalog: None }

@@ -154,7 +154,7 @@ fn normalize_api_route(rel: &str) -> String {
     route = route.replace("[...", "{");
     route = route.replace('[', "{");
     route = route.replace(']', "}");
-    format!("/{}", route)
+    format!("/{route}")
 }
 
 fn normalize_page_segments(route: &str) -> String {
