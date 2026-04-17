@@ -196,7 +196,7 @@ fn collect_session_stats(
     let surface_catalog = FeatureSurfaceCatalog::from_repo_root(repo_root).unwrap_or_default();
     let analyzer = SessionAnalyzer::with_catalogs(&surface_catalog, feature_tree);
 
-    match trace_parser::collect_recent_transcript_summaries(repo_root) {
+    match trace_parser::collect_broad_transcript_summaries(repo_root) {
         Ok(transcripts) => {
             for transcript in &transcripts {
                 // Build changed files from recovered events

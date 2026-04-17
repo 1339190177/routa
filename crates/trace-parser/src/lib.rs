@@ -25,7 +25,8 @@ pub use transcript_discovery::{
     TranscriptSessionSource,
 };
 pub use transcript_parser::{
-    collect_active_transcript_summaries, collect_recent_claude_project_transcripts,
+    collect_active_transcript_summaries, collect_broad_transcript_summaries,
+    collect_recent_claude_project_transcripts,
     collect_recent_codex_transcripts, collect_recent_transcript_summaries,
     collect_recent_transcript_summaries_for_client,
     collect_recent_transcripts, collect_recent_transcripts_from_dirs,

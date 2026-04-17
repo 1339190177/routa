@@ -11,9 +11,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const BACKFILL_WINDOW_MS: i64 = 24 * 60 * 60 * 1000;
+const BROAD_WINDOW_MS: i64 = 30 * 24 * 60 * 60 * 1000; // 30 days
 const ACTIVE_WINDOW_MS: i64 = 30 * 60 * 1000;
 const FAST_RECENT_TRANSCRIPTS: usize = 12;
 const MAX_TRANSCRIPTS: usize = 48;
+const MAX_BROAD_TRANSCRIPTS: usize = 200;
 
 #[derive(Clone, Debug)]
 pub struct TranscriptSessionBackfill {
@@ -104,6 +106,29 @@ pub fn collect_recent_transcript_summaries_for_client(
         repo_root,
         now_ms,
         ACTIVE_WINDOW_MS,
+    ))
+}
+
+/// Broader collection for analytics: 30-day window, up to 200 transcripts, no active-window filter.
+pub fn collect_broad_transcript_summaries(
+    repo_root: &Path,
+) -> Result<Vec<TranscriptSessionBackfill>, TraceLearningError> {
+    let session_roots = discover_transcript_session_roots();
+    if session_roots.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let now_ms = Utc::now().timestamp_millis();
+    let mut transcripts = collect_recent_transcripts(&session_roots)?;
+    transcripts.retain(|(_, modified_ms)| now_ms.saturating_sub(*modified_ms) <= BROAD_WINDOW_MS);
+    transcripts.sort_by(|a, b| b.1.cmp(&a.1));
+    transcripts.truncate(MAX_BROAD_TRANSCRIPTS);
+
+    Ok(parse_matching_transcript_summaries(
+        &transcripts,
+        repo_root,
+        now_ms,
+        BROAD_WINDOW_MS,
     ))
 }
 
