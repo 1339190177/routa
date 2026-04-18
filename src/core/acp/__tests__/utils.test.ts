@@ -176,7 +176,7 @@ describe("which", () => {
   });
 
   it("prefers local node_modules binaries on non-Windows", async () => {
-    mockBridge.fs.existsSync.mockImplementation((candidate: string) => candidate === "/repo/node_modules/.bin/codex");
+    mockBridge.fs.existsSync.mockImplementation(((candidate: string) => candidate === "/repo/node_modules/.bin/codex") as any);
     mockBridge.fs.statSync.mockReturnValue({ isFile: true });
 
     await expect(which("codex")).resolves.toBe("/repo/node_modules/.bin/codex");
@@ -185,7 +185,7 @@ describe("which", () => {
 
   it("prefers .cmd wrappers from node_modules on Windows", async () => {
     mockBridge.env.osPlatform.mockReturnValue("win32");
-    mockBridge.fs.existsSync.mockImplementation((candidate: string) => candidate === "/repo/node_modules/.bin/codex.cmd");
+    mockBridge.fs.existsSync.mockImplementation(((candidate: string) => candidate === "/repo/node_modules/.bin/codex.cmd") as any);
     mockBridge.fs.statSync.mockReturnValue({ isFile: true });
 
     await expect(which("codex")).resolves.toBe("/repo/node_modules/.bin/codex.cmd");
@@ -198,14 +198,14 @@ describe("which", () => {
         "C:\\Users\\dev\\AppData\\Roaming\\npm\\codex",
         "C:\\Users\\dev\\AppData\\Roaming\\npm\\codex.cmd",
         "C:\\Windows\\System32\\codex.exe",
-      ].join("\n"),
+      ].join("\n") as any,
     );
 
     await expect(which("codex")).resolves.toBe("C:\\Users\\dev\\AppData\\Roaming\\npm\\codex.cmd");
   });
 
   it("returns the resolved PATH entry on non-Windows", async () => {
-    mockBridge.process.which.mockResolvedValue("/usr/bin/codex");
+    mockBridge.process.which.mockResolvedValue("/usr/bin/codex" as any);
 
     await expect(which("codex")).resolves.toBe("/usr/bin/codex");
   });
