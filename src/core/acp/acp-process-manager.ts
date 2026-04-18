@@ -699,6 +699,9 @@ export class AcpProcessManager {
         return this.workspaceAgents.get(sessionId)?.adapter;
     }
 
+    /** In-flight recreation promises to prevent concurrent double-creation. */
+    private pendingSdkRecreations = new Map<string, Promise<ClaudeCodeSdkAdapter | undefined>>();
+
     /**
      * Get or recreate a Claude Code SDK adapter for serverless environments.
      * If the session exists in HTTP store or database with provider 'claude-code-sdk' but
@@ -714,11 +717,42 @@ export class AcpProcessManager {
             return existing;
         }
 
+        // Deduplicate concurrent recreation attempts
+        const pending = this.pendingSdkRecreations.get(sessionId);
+        if (pending) {
+            return pending;
+        }
+
+        const recreationPromise = this._recreateClaudeCodeSdkAdapter(sessionId, onNotification);
+        this.pendingSdkRecreations.set(sessionId, recreationPromise);
+
+        try {
+            return await recreationPromise;
+        } finally {
+            this.pendingSdkRecreations.delete(sessionId);
+        }
+    }
+
+    private async _recreateClaudeCodeSdkAdapter(
+        sessionId: string,
+        onNotification: NotificationHandler
+    ): Promise<ClaudeCodeSdkAdapter | undefined> {
+        // Double-check after acquiring dedup lock
+        const existing = this.claudeCodeSdkAdapters.get(sessionId)?.adapter;
+        if (existing) {
+            return existing;
+        }
+
         // Check HTTP session store for session metadata
         const store = getHttpSessionStore();
         const sessionRecord = store.getSession(sessionId);
         let cwd = sessionRecord?.cwd;
         let provider = sessionRecord?.provider;
+        let model = sessionRecord?.model;
+        let role = sessionRecord?.role;
+        let specialistId = sessionRecord?.specialistId;
+        let allowedNativeTools = sessionRecord?.allowedNativeTools;
+        let specialistSystemPrompt = sessionRecord?.specialistSystemPrompt;
 
         // If not in HTTP store (serverless cold start), try to recover from database
         if (!sessionRecord && isServerlessEnvironment() && getDatabaseDriver() === "postgres") {
@@ -730,7 +764,10 @@ export class AcpProcessManager {
                 if (dbSession) {
                     cwd = dbSession.cwd;
                     provider = dbSession.provider;
-                    logAcpDebug(`[AcpProcessManager] Found session in database: provider=${provider}, cwd=${cwd}`);
+                    model = dbSession.model ?? model;
+                    role = dbSession.role ?? role;
+                    specialistId = dbSession.specialistId ?? specialistId;
+                    logAcpDebug(`[AcpProcessManager] Found session in database: provider=${provider}, model=${model}, cwd=${cwd}`);
 
                     // Restore to HTTP session store for future requests in this instance
                     store.upsertSession({
@@ -740,6 +777,7 @@ export class AcpProcessManager {
                         routaAgentId: dbSession.routaAgentId,
                         provider: dbSession.provider,
                         role: dbSession.role,
+                        model: dbSession.model,
                         modeId: dbSession.modeId,
                         createdAt: dbSession.createdAt.toISOString(),
                         firstPromptSent: dbSession.firstPromptSent,
@@ -773,13 +811,21 @@ export class AcpProcessManager {
             console.warn(`[AcpProcessManager] Failed to rebuild MCP config for ${sessionId}:`, err);
         }
 
-        const adapter = new ClaudeCodeSdkAdapter(cwd, onNotification, {
-            allowedNativeTools: sessionRecord?.allowedNativeTools,
-            mcpServers,
-            systemPromptAppend: sessionRecord?.specialistSystemPrompt,
-        });
+        // Use AgentInstanceFactory to properly resolve model via specialist/role/tier chain
+        const { adapter, resolved } = AgentInstanceFactory.createClaudeCodeSdkAdapter(
+            cwd,
+            onNotification,
+            {
+                provider: "claude-code-sdk",
+                model,
+                role,
+                specialistId,
+                allowedNativeTools,
+                mcpServers,
+                systemPromptAppend: specialistSystemPrompt,
+            },
+        );
         await adapter.connect();
-        // Use existing session ID instead of creating new one
         const acpSessionId = await adapter.createSession(`Routa Session ${sessionId}`);
 
         this.claudeCodeSdkAdapters.set(sessionId, {
@@ -789,7 +835,10 @@ export class AcpProcessManager {
             createdAt: new Date(),
         });
 
-        logAcpDebug(`[AcpProcessManager] Claude Code SDK adapter recreated: ${acpSessionId}`);
+        // Track instance config for observability (parity with createClaudeCodeSdkSession)
+        getAgentInstanceManager().register(sessionId, resolved);
+
+        logAcpDebug(`[AcpProcessManager] Claude Code SDK adapter recreated: ${acpSessionId} (model: ${resolved.resolvedModel ?? "default"})`);
         return adapter;
     }
 

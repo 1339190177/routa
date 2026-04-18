@@ -204,6 +204,30 @@ export async function rebaseBranch(repoPath: string, onto: string): Promise<void
 }
 
 /**
+ * Safe rebase that detects conflicts and auto-aborts, leaving the repo clean.
+ * Returns conflict file list on failure for caller to report.
+ */
+export async function rebaseBranchSafe(
+  repoPath: string,
+  onto: string,
+): Promise<{ success: boolean; conflictFiles?: string[] }> {
+  try {
+    await gitExec(`git rebase ${shellQuote(onto)}`, repoPath);
+    return { success: true };
+  } catch {
+    let conflictFiles: string[] | undefined;
+    try {
+      const { stdout } = await gitExec("git diff --name-only --diff-filter=U", repoPath);
+      conflictFiles = stdout.trim().split("\n").filter(Boolean);
+    } catch {
+      // Could not read conflict files
+    }
+    await gitExec("git rebase --abort", repoPath).catch(() => {});
+    return { success: false, conflictFiles };
+  }
+}
+
+/**
  * Reset branch to a specific commit or branch
  * @param repoPath - Path to the git repository
  * @param to - Target commit SHA or branch name

@@ -101,6 +101,9 @@ export const tasks = sqliteTable("tasks", {
   lastSyncError: text("last_sync_error"),
   isPullRequest: integer("is_pull_request", { mode: "boolean" }),
   dependencies: text("dependencies", { mode: "json" }).$type<string[]>().default([]),
+  blocking: text("blocking", { mode: "json" }).$type<string[]>().default([]),
+  dependencyStatus: text("dependency_status"),
+  parentTaskId: text("parent_task_id"),
   parallelGroup: text("parallel_group"),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   /** Session ID that created this task (for session-scoped filtering) */
@@ -111,6 +114,10 @@ export const tasks = sqliteTable("tasks", {
   /** Git worktree ID created for this task when it enters the dev column */
   worktreeId: text("worktree_id"),
   deliverySnapshot: text("delivery_snapshot", { mode: "json" }).$type<TaskDeliverySnapshot>(),
+  /** URL of the pull/merge request created for this task (set by PR Publisher) */
+  pullRequestUrl: text("pull_request_url"),
+  /** Timestamp when the PR was merged */
+  pullRequestMergedAt: integer("pull_request_merged_at", { mode: "timestamp_ms" }),
   completionSummary: text("completion_summary"),
   verificationVerdict: text("verification_verdict"),
   verificationReport: text("verification_report"),

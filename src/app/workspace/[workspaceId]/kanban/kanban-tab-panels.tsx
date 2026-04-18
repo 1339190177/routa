@@ -734,7 +734,7 @@ export function KanbanTaskDetailOverlay({
   runTaskPullRequest: (taskId: string) => Promise<string | null>;
   confirmDeleteTask: (task: TaskInfo) => void;
   onRefresh: () => void;
-  setActiveSessionId: Dispatch<SetStateAction<string | null>>;
+  setActiveSessionId: (id: string | null) => void;
   sessionMap: Map<string, SessionInfo>;
   workspaceId: string;
   isTaskDetailFullscreen?: boolean;

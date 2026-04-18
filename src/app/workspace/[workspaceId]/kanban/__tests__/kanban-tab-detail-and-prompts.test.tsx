@@ -538,7 +538,6 @@ describe("KanbanCardDetail repository health", () => {
     fireEvent.click(screen.getByRole("button", { name: "Evidence Bundle" }));
     expect(screen.getByRole("button", { name: "Evidence Bundle" })).toBeTruthy();
     expect(screen.getAllByText("Evidence incomplete").length).toBeGreaterThan(0);
-    expect(screen.getByText(/test_results/i)).toBeTruthy();
     expect(screen.queryByText("Latest Run")).toBeNull();
   });
 

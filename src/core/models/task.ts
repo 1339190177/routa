@@ -238,6 +238,12 @@ export interface Task {
   lastSyncError?: string;
   isPullRequest?: boolean;
   dependencies: string[];
+  /** Tasks this task is blocking (reverse of dependencies) */
+  blocking: string[];
+  /** Dependency gate status: "clear" | "blocked" */
+  dependencyStatus?: "clear" | "blocked";
+  /** Parent task for sub-task hierarchy */
+  parentTaskId?: string;
   parallelGroup?: string;
   workspaceId: string;
   /** Session ID that created this task (for session-scoped filtering) */
@@ -249,6 +255,20 @@ export interface Task {
   worktreeId?: string;
   /** Frozen delivery evidence captured before PR / merge / base sync can erase base..HEAD */
   deliverySnapshot?: TaskDeliverySnapshot;
+  /** URL of the pull/merge request created for this task (set by PR Publisher) */
+  pullRequestUrl?: string;
+  /** Timestamp when the PR was merged; absent means the PR is still open or was never created */
+  pullRequestMergedAt?: Date;
+  /**
+   * Ephemeral override: when set, the next worktree creation uses this branch name
+   * instead of the auto-generated one. Cleared after use — never persisted to DB.
+   */
+  nextBranchOverride?: string;
+  /**
+   * Ephemeral override: when set, the next worktree creation uses this as the base
+   * branch instead of the codebase default. Cleared after use — never persisted to DB.
+   */
+  nextBaseBranchOverride?: string;
   createdAt: Date;
   updatedAt: Date;
   completionSummary?: string;
@@ -271,6 +291,9 @@ export function createTask(params: {
   verificationCommands?: string[];
   testCases?: string[];
   dependencies?: string[];
+  blocking?: string[];
+  dependencyStatus?: "clear" | "blocked";
+  parentTaskId?: string;
   parallelGroup?: string;
   boardId?: string;
   columnId?: string;
@@ -293,6 +316,7 @@ export function createTask(params: {
   status?: TaskStatus;
   codebaseIds?: string[];
   worktreeId?: string;
+  pullRequestUrl?: string;
 }): Task {
   const now = new Date();
   const comments = params.comments ?? buildInitialTaskComments(params.comment, now);
@@ -329,12 +353,16 @@ export function createTask(params: {
     lastSyncError: params.lastSyncError,
     isPullRequest: params.isPullRequest,
     dependencies: params.dependencies ?? [],
+    blocking: params.blocking ?? [],
+    dependencyStatus: params.dependencyStatus,
+    parentTaskId: params.parentTaskId,
     parallelGroup: params.parallelGroup,
     workspaceId: params.workspaceId,
     sessionId: params.sessionId,
     creationSource: params.creationSource,
     codebaseIds: params.codebaseIds ?? [],
     worktreeId: params.worktreeId,
+    pullRequestUrl: params.pullRequestUrl,
     triggerSessionId: params.triggerSessionId,
     createdAt: now,
     updatedAt: now,
@@ -386,4 +414,25 @@ export function splitLegacyTaskComment(comment: string | undefined): TaskComment
     createdAt: "",
     source: "legacy_import",
   }];
+}
+
+/**
+ * Clear session/delivery state fields on a task for a clean re-trigger.
+ * Used when reopening a task on a new branch or resetting its execution.
+ *
+ * @param full - If true, also clear worktree, PR, and delivery snapshot.
+ */
+export function resetTaskExecutionState(task: Task, full: boolean): void {
+  task.triggerSessionId = undefined;
+  task.lastSyncError = undefined;
+  task.verificationVerdict = undefined;
+  task.verificationReport = undefined;
+  task.completionSummary = undefined;
+
+  if (full) {
+    task.worktreeId = undefined;
+    task.pullRequestUrl = undefined;
+    task.pullRequestMergedAt = undefined;
+    task.deliverySnapshot = undefined;
+  }
 }

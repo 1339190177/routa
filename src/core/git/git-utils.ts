@@ -22,7 +22,7 @@ import { gitExec } from "@/core/utils/safe-exec";
 // ─── GitHub URL Parsing ──────────────────────────────────────────────────
 
 const GITHUB_URL_PATTERNS = [
-  /^https?:\/\/github\.com\/([^/]+)\/([^/\s#?.]+)/i,
+  /^https?:\/\/(?:[^/@]+@)?github\.com\/([^/]+)\/([^/\s#?.]+)/i,
   /^git@github\.com:([^/]+)\/([^/\s#?.]+)/i,
   /^github\.com\/([^/]+)\/([^/\s#?.]+)/i,
 ];

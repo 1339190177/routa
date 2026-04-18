@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { monitorApiRoute } from "@/core/http/api-route-observability";
 import { getRoutaSystem } from "@/core/routa-system";
-import { hydrateTaskComments, TaskPriority, TaskStatus, VerificationVerdict, type Task } from "@/core/models/task";
+import { hydrateTaskComments, resetTaskExecutionState, TaskPriority, TaskStatus, VerificationVerdict, type Task } from "@/core/models/task";
 import { columnIdToTaskStatus, resolveTaskStatusForBoardColumn, taskStatusToColumnId } from "@/core/models/kanban";
 import { getKanbanEventBroadcaster } from "@/core/kanban/kanban-event-broadcaster";
 import { ensureTaskBoardContext } from "@/core/kanban/task-board-context";
 import { buildTaskGitHubIssueBody, updateGitHubIssue } from "@/core/kanban/github-issues";
 import { GitWorktreeService } from "@/core/git/git-worktree-service";
-import { getDefaultWorkspaceWorktreeRoot, getEffectiveWorkspaceMetadata } from "@/core/models/workspace";
-import { buildKanbanWorktreeNaming } from "@/core/kanban/worktree-naming";
+import { ensureTaskWorktree } from "@/core/kanban/ensure-task-worktree";
+import { getKanbanBranchRules } from "@/core/kanban/board-branch-rules";
 import type { ArtifactType } from "@/core/models/artifact";
 import { emitColumnTransition } from "@/core/kanban/column-transition";
 import { archiveActiveTaskSession, prepareTaskForColumnChange } from "@/core/kanban/task-session-transition";
@@ -51,6 +51,7 @@ import {
   resolveCurrentOrNextContractGate,
 } from "@/core/kanban/task-contract-readiness";
 import { resolveTaskWorktreeTruth } from "@/core/kanban/task-worktree-truth";
+import { checkDependencyGate, updateDependencyRelations, applyDependencyStatus, validateParentAssignment, detectParentCycle } from "@/core/kanban/dependency-gate";
 
 export const dynamic = "force-dynamic";
 
@@ -199,6 +200,10 @@ export async function PATCH(
     retryProviderId?: string;
     codebaseIds?: string[];
     worktreeId?: string | null;
+    reopenOnNewBranch?: boolean;
+    branchStrategy?: "new" | "reset" | "custom";
+    customBranchName?: string;
+    targetBaseBranch?: string;
   };
   try {
     body = await request.json() as Partial<Task> & {
@@ -206,6 +211,10 @@ export async function PATCH(
       syncToGitHub?: boolean;
       retryTrigger?: boolean;
       retryProviderId?: string;
+      reopenOnNewBranch?: boolean;
+      branchStrategy?: "new" | "reset" | "custom";
+      customBranchName?: string;
+      targetBaseBranch?: string;
     };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -213,6 +222,90 @@ export async function PATCH(
 
   const nextTask: Task = { ...existing, updatedAt: new Date() };
   let transitionDeliveryReadiness: TaskDeliveryReadiness | undefined;
+
+  // ── Reopen on New Branch ──────────────────────────────────────────
+  // Three strategies for any card that has a worktree:
+  //   "new"    — delete old worktree+branch, create fresh (default)
+  //   "reset"  — keep worktree+branch, hard-reset to base
+  //   "custom" — like "new" but with a user-specified branch name
+  if (body.reopenOnNewBranch === true) {
+    if (!existing.worktreeId) {
+      return NextResponse.json(
+        { error: "reopenOnNewBranch requires an existing worktree" },
+        { status: 400 },
+      );
+    }
+
+    const strategy = body.branchStrategy ?? "new";
+
+    if (strategy === "reset") {
+      // ── Reset: keep worktree, hard-reset to base branch ──
+      try {
+        const worktreeService = new GitWorktreeService(
+          system.worktreeStore,
+          system.codebaseStore,
+        );
+        await worktreeService.resetWorktree(existing.worktreeId, {
+          baseBranch: body.targetBaseBranch,
+        });
+        console.log(
+          `[ReopenOnNewBranch] Reset worktree ${existing.worktreeId} for task ${taskId}.`,
+        );
+      } catch (err) {
+        console.warn(
+          `[ReopenOnNewBranch] Failed to reset worktree ${existing.worktreeId}:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+
+      // Clear session/delivery state, but KEEP worktree + PR info
+      resetTaskExecutionState(nextTask, false);
+
+      // Move to dev column if not already there
+      if (existing.columnId !== "dev") {
+        body.columnId = "dev";
+        body.status = TaskStatus.IN_PROGRESS;
+      }
+    } else {
+      // ── New / Custom: delete old worktree, recreate on fresh branch ──
+
+      // Clean up old worktree + branch
+      try {
+        const worktreeService = new GitWorktreeService(
+          system.worktreeStore,
+          system.codebaseStore,
+        );
+        await worktreeService.removeWorktree(existing.worktreeId, { deleteBranch: true });
+        console.log(
+          `[ReopenOnNewBranch] Removed old worktree ${existing.worktreeId} for task ${taskId}.`,
+        );
+      } catch (err) {
+        console.warn(
+          `[ReopenOnNewBranch] Failed to remove old worktree ${existing.worktreeId}:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+
+      // Reset all delivery / PR state
+      resetTaskExecutionState(nextTask, true);
+
+      // Custom branch name override (consumed when worktree is created)
+      if (strategy === "custom" && body.customBranchName) {
+        nextTask.nextBranchOverride = body.customBranchName;
+      }
+      if (body.targetBaseBranch) {
+        nextTask.nextBaseBranchOverride = body.targetBaseBranch;
+      }
+
+      // Move to dev column
+      body.columnId = "dev";
+      body.status = TaskStatus.IN_PROGRESS;
+    }
+
+    // Archive the active session so the queue releases the card
+    archiveActiveTaskSession(nextTask);
+    getKanbanSessionQueue(system).removeCardJob(taskId);
+  }
 
   if (
     existing.columnId === "review"
@@ -346,8 +439,11 @@ export async function PATCH(
     const allowReviewFallbackToDev = existing.columnId === "review"
       && targetColumnId === "dev"
       && incomingVerificationVerdict === VerificationVerdict.NOT_APPROVED;
+    const allowReopenOnNewBranch = body.reopenOnNewBranch === true
+      && Boolean(existing.worktreeId)
+      && targetColumnId === "dev";
     if (boardId && board) {
-        if (existing.triggerSessionId && !allowReviewFallbackToDev) {
+        if (existing.triggerSessionId && !allowReviewFallbackToDev && !allowReopenOnNewBranch) {
           const laneAutomationState = resolveCurrentLaneAutomationState(existing, board.columns, {
             currentSessionId: existing.triggerSessionId,
           });
@@ -358,83 +454,102 @@ export async function PATCH(
         }
 
         const targetColumn = board.columns.find((c) => c.id === targetColumnId);
-        const requiredArtifacts = targetColumn?.automation?.requiredArtifacts;
-        if (requiredArtifacts && requiredArtifacts.length > 0 && system.artifactStore) {
-          const missingArtifacts: string[] = [];
-          for (const artifactType of requiredArtifacts) {
-            const artifacts = await system.artifactStore.listByTaskAndType(
-              taskId,
-              artifactType as ArtifactType
-            );
-            if (artifacts.length === 0) {
-              missingArtifacts.push(artifactType);
+
+        // Skip artifact/field/contract/delivery gates for done→dev reopen
+        if (!allowReopenOnNewBranch) {
+          const requiredArtifacts = targetColumn?.automation?.requiredArtifacts;
+          if (requiredArtifacts && requiredArtifacts.length > 0 && system.artifactStore) {
+            const missingArtifacts: string[] = [];
+            for (const artifactType of requiredArtifacts) {
+              const artifacts = await system.artifactStore.listByTaskAndType(
+                taskId,
+                artifactType as ArtifactType
+              );
+              if (artifacts.length === 0) {
+                missingArtifacts.push(artifactType);
+              }
+            }
+            if (missingArtifacts.length > 0) {
+              return NextResponse.json(
+                {
+                  error: `Cannot move task to "${targetColumn?.name ?? targetColumnId}": missing required artifacts: ${missingArtifacts.join(", ")}. Please provide these artifacts before moving the task.`,
+                  missingArtifacts,
+                },
+                { status: 400 }
+              );
             }
           }
-          if (missingArtifacts.length > 0) {
-            return NextResponse.json(
-              {
-                error: `Cannot move task to "${targetColumn?.name ?? targetColumnId}": missing required artifacts: ${missingArtifacts.join(", ")}. Please provide these artifacts before moving the task.`,
-                missingArtifacts,
-              },
-              { status: 400 }
-            );
-          }
-        }
 
-        const requiredTaskFields = resolveTargetRequiredTaskFields(board.columns, targetColumn?.id);
-        if (requiredTaskFields.length > 0) {
-          const readiness = validateTaskReadiness(nextTask, requiredTaskFields);
-          if (!readiness.ready) {
-            const missingTaskFields = readiness.missing.map(formatRequiredTaskFieldLabel);
+          const requiredTaskFields = resolveTargetRequiredTaskFields(board.columns, targetColumn?.id);
+          if (requiredTaskFields.length > 0) {
+            const readiness = validateTaskReadiness(nextTask, requiredTaskFields);
+            if (!readiness.ready) {
+              const missingTaskFields = readiness.missing.map(formatRequiredTaskFieldLabel);
+              return NextResponse.json(
+                {
+                  error: `Cannot move task to "${targetColumn?.name ?? targetColumnId}": missing required task fields: ${missingTaskFields.join(", ")}. Please complete this story definition before moving the task.`,
+                  missingTaskFields,
+                  storyReadiness: readiness,
+                },
+                { status: 400 },
+              );
+            }
+          }
+
+          const contractReadiness = buildTaskContractReadiness(nextTask, targetColumn?.automation?.contractRules);
+          const contractError = buildTaskContractTransitionErrorFromRules(
+            contractReadiness,
+            targetColumn?.name ?? targetColumnId,
+            targetColumn?.automation?.contractRules,
+          );
+          if (contractError) {
+            await recordTaskContractGateFailure(existing, system, {
+              message: contractError,
+              targetColumnName: targetColumn?.name ?? targetColumnId,
+              threshold: contractReadiness.loopBreakerThreshold,
+              sessionId: existing.triggerSessionId,
+            });
             return NextResponse.json(
               {
-                error: `Cannot move task to "${targetColumn?.name ?? targetColumnId}": missing required task fields: ${missingTaskFields.join(", ")}. Please complete this story definition before moving the task.`,
-                missingTaskFields,
-                storyReadiness: readiness,
+                error: contractError,
+                contractReadiness,
               },
               { status: 400 },
             );
           }
-        }
 
-        const contractReadiness = buildTaskContractReadiness(nextTask, targetColumn?.automation?.contractRules);
-        const contractError = buildTaskContractTransitionErrorFromRules(
-          contractReadiness,
-          targetColumn?.name ?? targetColumnId,
-          targetColumn?.automation?.contractRules,
-        );
-        if (contractError) {
-          await recordTaskContractGateFailure(existing, system, {
-            message: contractError,
-            targetColumnName: targetColumn?.name ?? targetColumnId,
-            threshold: contractReadiness.loopBreakerThreshold,
-            sessionId: existing.triggerSessionId,
-          });
-          return NextResponse.json(
-            {
-              error: contractError,
-              contractReadiness,
-            },
-            { status: 400 },
-          );
-        }
+          // Dependency gate: block column transition if dependencies are unsatisfied
+          if (nextTask.dependencies.length > 0) {
+            const depCheck = await checkDependencyGate(nextTask, board.columns, system.taskStore);
+            applyDependencyStatus(nextTask, depCheck);
+            if (depCheck.blocked) {
+              return NextResponse.json(
+                {
+                  error: `Cannot move task: blocked by unfinished dependencies: ${depCheck.pendingDependencies.join(", ")}`,
+                  pendingDependencies: depCheck.pendingDependencies,
+                },
+                { status: 409 },
+              );
+            }
+          }
 
-        if (targetColumn?.automation?.deliveryRules) {
-          const deliveryReadiness = await buildTaskDeliveryReadiness(nextTask, system);
-          transitionDeliveryReadiness = deliveryReadiness;
-          const deliveryError = buildTaskDeliveryTransitionErrorFromRules(
-            deliveryReadiness,
-            targetColumn.name ?? targetColumnId,
-            targetColumn.automation.deliveryRules,
-          );
-          if (deliveryError) {
-            return NextResponse.json(
-              {
-                error: deliveryError,
-                deliveryReadiness,
-              },
-              { status: 400 },
+          if (targetColumn?.automation?.deliveryRules) {
+            const deliveryReadiness = await buildTaskDeliveryReadiness(nextTask, system);
+            transitionDeliveryReadiness = deliveryReadiness;
+            const deliveryError = buildTaskDeliveryTransitionErrorFromRules(
+              deliveryReadiness,
+              targetColumn.name ?? targetColumnId,
+              targetColumn.automation.deliveryRules,
             );
+            if (deliveryError) {
+              return NextResponse.json(
+                {
+                  error: deliveryError,
+                  deliveryReadiness,
+                },
+                { status: 400 },
+              );
+            }
           }
         }
     }
@@ -443,6 +558,7 @@ export async function PATCH(
   if (
     isColumnTransition
     && shouldCaptureTaskDeliverySnapshotForColumn(nextTask.columnId)
+    && body.reopenOnNewBranch !== true
   ) {
     transitionDeliveryReadiness ??= await buildTaskDeliveryReadiness(nextTask, system);
     nextTask.deliverySnapshot = captureTaskDeliverySnapshot(nextTask, transitionDeliveryReadiness, {
@@ -464,7 +580,25 @@ export async function PATCH(
   if (body.githubState !== undefined) nextTask.githubState = body.githubState;
   if (body.lastSyncError !== undefined) nextTask.lastSyncError = body.lastSyncError;
   if (body.isPullRequest !== undefined) nextTask.isPullRequest = body.isPullRequest === true ? true : undefined;
-  if (body.dependencies !== undefined) nextTask.dependencies = body.dependencies;
+  if (body.dependencies !== undefined) {
+    nextTask.dependencies = body.dependencies;
+    // Sync bidirectional relations + update blocked status
+    await updateDependencyRelations(taskId, body.dependencies, system.taskStore);
+  }
+  if (body.parentTaskId !== undefined) {
+    const newParentId = body.parentTaskId || undefined;
+    if (newParentId) {
+      const validationError = validateParentAssignment(taskId, newParentId);
+      if (validationError) {
+        return NextResponse.json({ error: validationError }, { status: 400 });
+      }
+      const hasCycle = await detectParentCycle(taskId, newParentId, system.taskStore);
+      if (hasCycle) {
+        return NextResponse.json({ error: "Circular parent relationship detected." }, { status: 400 });
+      }
+    }
+    nextTask.parentTaskId = newParentId;
+  }
   if (body.parallelGroup !== undefined) nextTask.parallelGroup = body.parallelGroup;
 
   Object.assign(nextTask, await ensureTaskBoardContext(system, nextTask));
@@ -499,40 +633,32 @@ export async function PATCH(
     body.assignedProvider !== undefined || body.assignedSpecialistId !== undefined || body.assignedRole !== undefined
   );
   const retryingTrigger = body.retryTrigger === true;
+  const reopenTrigger = body.reopenOnNewBranch === true && nextTask.columnId === "dev" && !nextTask.worktreeId;
   const retryProviderId = typeof body.retryProviderId === "string" && body.retryProviderId.trim().length > 0
     ? body.retryProviderId.trim()
     : undefined;
 
-  if ((enteringDev || assignedWhileInDev || retryingTrigger) && !nextTask.triggerSessionId) {
+  if ((enteringDev || assignedWhileInDev || retryingTrigger || reopenTrigger) && !nextTask.triggerSessionId) {
     const worktreeTruth = await resolveTaskWorktreeTruth(nextTask, system, {
       preferredRepoPath: body.repoPath,
     });
     const preferredCodebase = worktreeTruth?.codebase;
 
     // Auto-create worktree when entering dev column (if no worktree yet and codebase exists)
-    if (enteringDev && preferredCodebase && !nextTask.worktreeId) {
-      try {
-        const worktreeService = new GitWorktreeService(system.worktreeStore, system.codebaseStore);
-        const { branch, label } = buildKanbanWorktreeNaming(nextTask.id);
-        // Req 5: use worktreeRoot from workspace metadata if configured
-        const workspace = await system.workspaceStore.get(nextTask.workspaceId);
-        const worktreeRoot = workspace
-          ? getEffectiveWorkspaceMetadata(workspace).worktreeRoot
-          : getDefaultWorkspaceWorktreeRoot(nextTask.workspaceId);
-        const worktree = await worktreeService.createWorktree(preferredCodebase.id, {
-          branch,
-          baseBranch: preferredCodebase.branch ?? "main",
-          label,
-          worktreeRoot,
-        });
-        nextTask.worktreeId = worktree.id;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error("[kanban] Failed to auto-create worktree:", msg);
-        // Mark task as blocked if worktree creation fails
-        nextTask.status = TaskStatus.BLOCKED;
-        nextTask.columnId = "blocked";
-        nextTask.lastSyncError = `Worktree creation failed: ${msg}`;
+    if ((enteringDev || reopenTrigger) && preferredCodebase && !nextTask.worktreeId) {
+      const workspace = await system.workspaceStore.get(nextTask.workspaceId);
+      const boardId = nextTask.boardId ?? board?.id;
+      const branchRules = boardId ? getKanbanBranchRules(workspace?.metadata, boardId) : undefined;
+      const result = await ensureTaskWorktree(nextTask, preferredCodebase, {
+        worktreeStore: system.worktreeStore,
+        codebaseStore: system.codebaseStore,
+        taskStore: system.taskStore,
+        workspace,
+        workspaceId: nextTask.workspaceId,
+        rules: branchRules,
+      });
+      if (!result.ok) {
+        console.error("[kanban] Failed to auto-create worktree:", result.errorMessage);
         await system.taskStore.save(nextTask);
         getKanbanEventBroadcaster().notify({
           workspaceId: nextTask.workspaceId,
@@ -549,6 +675,7 @@ export async function PATCH(
       task: nextTask,
       expectedColumnId: nextTask.columnId,
       ignoreExistingTrigger: retryingTrigger,
+      bypassDependencyGate: reopenTrigger,
       providerOverride: retryProviderId,
     });
     if (triggerResult.sessionId) {

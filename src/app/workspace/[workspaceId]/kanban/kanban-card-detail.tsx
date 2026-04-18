@@ -716,6 +716,7 @@ export function KanbanCardDetail({
                 onPatchTask={onPatchTask}
                 onRetryTrigger={onRetryTrigger}
                 onProviderChange={onProviderChange}
+                onRefresh={onRefresh}
                 compact={compactMode}
               />
 
@@ -854,6 +855,7 @@ function ExecutionSection({
   onPatchTask,
   onRetryTrigger,
   onProviderChange,
+  onRefresh,
   compact = false,
 }: {
   task: TaskInfo;
@@ -867,9 +869,11 @@ function ExecutionSection({
   onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
   onRetryTrigger: (taskId: string) => Promise<void>;
   onProviderChange?: (providerId: string | null) => void;
+  onRefresh?: () => void;
   compact?: boolean;
 }) {
   const { t } = useTranslation();
+  const [showBranchStrategy, setShowBranchStrategy] = useState(false);
   const sessionCopy = getKanbanSessionCopy(specialistLanguage);
   const resolveSpecialist = useMemo(
     () => createKanbanSpecialistResolver(specialists),
@@ -1140,8 +1144,177 @@ function ExecutionSection({
             {runActionLabel}
           </button>
         )}
+        {task.worktreeId && (
+          <button
+            onClick={() => setShowBranchStrategy(true)}
+            className={`rounded border border-amber-500 bg-amber-500/10 px-4 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-500/20 ${compact ? "py-2" : "py-2.5"}`}
+          >
+            {t.kanbanDetail.branchAction ?? "Branch Action"}
+          </button>
+        )}
+        {showBranchStrategy && (
+          <BranchStrategyModal
+            task={task}
+            onPatchTask={onPatchTask}
+            onRefresh={onRefresh}
+            onCancel={() => setShowBranchStrategy(false)}
+            t={t}
+          />
+        )}
       </div>
     </DetailSection>
+  );
+}
+
+function BranchStrategyModal({
+  task,
+  onPatchTask,
+  onRefresh,
+  onCancel,
+  t,
+}: {
+  task: TaskInfo;
+  onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
+  onRefresh?: () => void;
+  onCancel: () => void;
+  t: ReturnType<typeof useTranslation>["t"];
+}) {
+  const [strategy, setStrategy] = useState<"new" | "custom" | "reset">("new");
+  const [customName, setCustomName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConfirm = async () => {
+    if (strategy === "custom" && !customName.trim()) {
+      setError(t.kanbanDetail.branchStrategyNameRequired ?? "Branch name is required");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const payload: Record<string, unknown> = {
+        reopenOnNewBranch: true,
+        branchStrategy: strategy,
+      };
+      if (strategy === "custom") {
+        payload.customBranchName = customName.trim();
+      }
+      await onPatchTask(task.id, payload);
+      onRefresh?.();
+      onCancel();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to execute branch strategy");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="mx-4 w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+        <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
+          {t.kanbanDetail.branchStrategyTitle ?? "Branch Strategy"}
+        </h3>
+
+        <div className="space-y-3">
+          {/* New branch (auto-named) */}
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700/50 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50/50 dark:has-[:checked]:border-blue-400 dark:has-[:checked]:bg-blue-900/20">
+            <input
+              type="radio"
+              name="branchStrategy"
+              checked={strategy === "new"}
+              onChange={() => setStrategy("new")}
+              className="mt-0.5"
+            />
+            <div>
+              <div className="font-medium text-slate-900 dark:text-slate-100">
+                {t.kanbanDetail.branchStrategyNew ?? "New Branch (Auto-named)"}
+              </div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                {t.kanbanDetail.branchStrategyNewDesc ?? "Delete current branch and create a new one"}
+              </div>
+            </div>
+          </label>
+
+          {/* Custom branch name */}
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700/50 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50/50 dark:has-[:checked]:border-blue-400 dark:has-[:checked]:bg-blue-900/20">
+            <input
+              type="radio"
+              name="branchStrategy"
+              checked={strategy === "custom"}
+              onChange={() => setStrategy("custom")}
+              className="mt-0.5"
+            />
+            <div className="flex-1">
+              <div className="font-medium text-slate-900 dark:text-slate-100">
+                {t.kanbanDetail.branchStrategyCustom ?? "New Branch (Custom Name)"}
+              </div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                {t.kanbanDetail.branchStrategyCustomDesc ?? "Create a new branch with a custom name"}
+              </div>
+              {strategy === "custom" && (
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  placeholder={t.kanbanDetail.branchStrategyCustomNamePlaceholder ?? "Enter branch name"}
+                  className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                  autoFocus
+                />
+              )}
+            </div>
+          </label>
+
+          {/* Keep branch, hard reset */}
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700/50 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50/50 dark:has-[:checked]:border-blue-400 dark:has-[:checked]:bg-blue-900/20">
+            <input
+              type="radio"
+              name="branchStrategy"
+              checked={strategy === "reset"}
+              onChange={() => setStrategy("reset")}
+              className="mt-0.5"
+            />
+            <div>
+              <div className="font-medium text-slate-900 dark:text-slate-100">
+                {t.kanbanDetail.branchStrategyReset ?? "Keep Branch, Hard Reset"}
+              </div>
+              <div className="text-sm text-slate-500 dark:text-slate-400">
+                {t.kanbanDetail.branchStrategyResetDesc ?? "Reset all commits on the current branch"}
+              </div>
+            </div>
+          </label>
+        </div>
+
+        {task.triggerSessionId && (
+          <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
+            {t.kanbanDetail.branchStrategyActiveSessionWarning ?? "This task has an active session. The operation will terminate it."}
+          </p>
+        )}
+
+        {error && (
+          <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>
+        )}
+
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            {t.kanbanDetail.branchStrategyCancel ?? "Cancel"}
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={loading}
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? "..." : (t.kanbanDetail.branchStrategyConfirm ?? "Confirm")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

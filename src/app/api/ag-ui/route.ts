@@ -199,9 +199,24 @@ export async function POST(request: NextRequest) {
       if (provider === "opencode-sdk" && isOpencodeServerConfigured()) {
         await manager.createOpencodeSdkSession(sessionId, forwardSessionUpdate);
       } else if (provider === "claude-code-sdk" && isClaudeCodeSdkConfigured()) {
+        // Build MCP config for SDK adapter
+        let sdkMcpServers: Record<string, import("@anthropic-ai/claude-agent-sdk").McpServerConfig> | undefined;
+        try {
+          const { ensureMcpForProvider } = await import("@/core/acp/mcp-setup");
+          const { getDefaultRoutaMcpConfig } = await import("@/core/acp/mcp-config-generator");
+          const { parseMcpServersFromConfigs } = await import("@/core/acp/mcp-setup");
+          const mcpResult = await ensureMcpForProvider("claude", getDefaultRoutaMcpConfig(workspaceId, sessionId));
+          if (mcpResult.mcpConfigs.length > 0) {
+            sdkMcpServers = parseMcpServersFromConfigs(mcpResult.mcpConfigs);
+          }
+        } catch (err) {
+          console.warn("[AG-UI] Failed to build MCP config for SDK session:", err);
+        }
+
         await manager.createClaudeCodeSdkSession(sessionId, cwd, forwardSessionUpdate, {
           provider: "claude-code-sdk",
           role: "CRAFTER",
+          mcpServers: sdkMcpServers,
         });
       } else {
         // Standard ACP session (opencode CLI)

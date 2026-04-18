@@ -644,6 +644,17 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     del: string;
     dangerZone: string;
     dangerZoneHint: string;
+    branchLifecycle: string;
+    branchLifecycleSettings: string;
+    branchLifecycleHint: string;
+    deleteBranchOnMerge: string;
+    deleteBranchOnMergeHint: string;
+    removeWorktreeOnMerge: string;
+    removeWorktreeOnMergeHint: string;
+    rebaseDownstream: string;
+    rebaseDownstreamHint: string;
+    autoCreatePullRequest: string;
+    autoCreatePullRequestHint: string;
     dirty: string;
     discardChanges: string;
     down: string;
@@ -850,6 +861,14 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     summaryPresent: string;
     summaryMissing: string;
     noEvidenceSummary: string;
+    evidenceArtifactsMet: string;
+    evidenceVerificationMet: string;
+    evidenceCompletionMet: string;
+    screenshotGallery: string;
+    lightboxClose: string;
+    artifactGroupTitle: string;
+    missingArtifactPlaceholder: string;
+    missingArtifactHint: string;
     none: string;
     editOverride: string;
     overrideCard: string;
@@ -863,6 +882,23 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     failedToSwitchRepo: string;
     failedToUpdateRepos: string;
     resetOverride: string;
+    reopenOnNewBranch: string;
+    reopenOnNewBranchConfirm: string;
+    resetOnNewBranch: string;
+    resetOnNewBranchConfirm: string;
+    branchAction: string;
+    branchStrategyTitle: string;
+    branchStrategyNew: string;
+    branchStrategyNewDesc: string;
+    branchStrategyCustom: string;
+    branchStrategyCustomDesc: string;
+    branchStrategyReset: string;
+    branchStrategyResetDesc: string;
+    branchStrategyCustomNamePlaceholder: string;
+    branchStrategyConfirm: string;
+    branchStrategyCancel: string;
+    branchStrategyNameRequired: string;
+    branchStrategyActiveSessionWarning: string;
   };
 
   // Kanban modal dialogs
@@ -1396,6 +1432,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     refresh: string;
     export: string;
     noTracesForSession: string;
+    transcriptFallback: string;
     selectSessionToView: string;
     sessionStarted: string;
     sessionEnded: string;

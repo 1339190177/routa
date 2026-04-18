@@ -99,6 +99,9 @@ export const tasks = pgTable("tasks", {
   lastSyncError: text("last_sync_error"),
   isPullRequest: boolean("is_pull_request"),
   dependencies: jsonb("dependencies").$type<string[]>().default([]),
+  blocking: jsonb("blocking").$type<string[]>().default([]),
+  dependencyStatus: text("dependency_status"),
+  parentTaskId: text("parent_task_id"),
   parallelGroup: text("parallel_group"),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   /** Session ID that created this task (for session-scoped filtering) */
@@ -109,6 +112,10 @@ export const tasks = pgTable("tasks", {
   /** Git worktree ID created for this task when it enters the dev column */
   worktreeId: text("worktree_id"),
   deliverySnapshot: jsonb("delivery_snapshot").$type<TaskDeliverySnapshot>(),
+  /** URL of the pull/merge request created for this task (set by PR Publisher) */
+  pullRequestUrl: text("pull_request_url"),
+  /** Timestamp when the PR was merged */
+  pullRequestMergedAt: timestamp("pull_request_merged_at", { withTimezone: true }),
   completionSummary: text("completion_summary"),
   verificationVerdict: text("verification_verdict"),
   verificationReport: text("verification_report"),

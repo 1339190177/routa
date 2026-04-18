@@ -42,6 +42,12 @@ export enum AgentEventType {
   SHUTDOWN_REQUESTED = "SHUTDOWN_REQUESTED",
   /** Emitted when an agent acknowledges a shutdown request */
   SHUTDOWN_ACKNOWLEDGED = "SHUTDOWN_ACKNOWLEDGED",
+  /** Emitted when a completed task's worktree should be cleaned up */
+  WORKTREE_CLEANUP = "worktree_cleanup",
+  /** Emitted when a GitHub PR associated with a task is merged */
+  PR_MERGED = "pr_merged",
+  /** Emitted when a task should automatically create a Pull Request */
+  PR_CREATE_REQUESTED = "pr_create_requested",
 }
 
 export interface AgentEvent {

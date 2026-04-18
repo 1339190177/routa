@@ -730,11 +730,20 @@ export class RoutaOrchestrator {
           });
       }
     } else if (isClaudeCodeSdk) {
+      // Build MCP config for SDK adapter (parity with isClaudeCode path)
+      const sdkMcpConfigJson = JSON.stringify({
+        mcpServers: {
+          routa: { url: mcpUrl, type: "http" },
+        },
+      });
+      const { parseMcpServersFromConfigs } = await import("@/core/acp/mcp-setup");
+      const sdkMcpServers = parseMcpServersFromConfigs([sdkMcpConfigJson]);
+
       acpSessionId = await this.processManager.createClaudeCodeSdkSession(
         sessionId,
         cwd,
         notificationHandler,
-        { provider: "claude-code-sdk" },
+        { provider: "claude-code-sdk", mcpServers: sdkMcpServers },
         lifecycleNotifier,
       );
 
