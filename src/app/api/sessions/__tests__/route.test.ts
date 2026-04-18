@@ -107,4 +107,75 @@ describe("/api/sessions GET", () => {
       "child-2",
     ]);
   });
+
+  it("returns stable team-run summaries for explicit team runs and anonymous top-level ROUTA runs with descendants", async () => {
+    listSessions.mockReturnValue([
+      {
+        sessionId: "anonymous-team-run",
+        workspaceId: "workspace-1",
+        cwd: "/tmp/project",
+        role: "ROUTA",
+        createdAt: "2026-04-03T10:05:00.000Z",
+      },
+      {
+        sessionId: "anonymous-team-child",
+        workspaceId: "workspace-1",
+        cwd: "/tmp/project",
+        role: "DEVELOPER",
+        parentSessionId: "anonymous-team-run",
+        createdAt: "2026-04-03T10:04:00.000Z",
+      },
+      {
+        sessionId: "named-team-run",
+        name: "Team - Investigate regression",
+        workspaceId: "workspace-1",
+        cwd: "/tmp/project",
+        role: "ROUTA",
+        createdAt: "2026-04-03T10:03:00.000Z",
+      },
+      {
+        sessionId: "non-team-routa",
+        workspaceId: "workspace-1",
+        cwd: "/tmp/project",
+        role: "ROUTA",
+        createdAt: "2026-04-03T10:02:00.000Z",
+      },
+      {
+        sessionId: "team-specialist-run",
+        workspaceId: "workspace-1",
+        cwd: "/tmp/project",
+        role: "ROUTA",
+        specialistId: "team-agent-lead",
+        createdAt: "2026-04-03T10:01:00.000Z",
+      },
+      {
+        sessionId: "session-other-workspace",
+        workspaceId: "workspace-2",
+        cwd: "/tmp/project",
+        role: "ROUTA",
+        createdAt: "2026-04-03T10:00:00.000Z",
+      },
+    ]);
+
+    const response = await GET(
+      new NextRequest("http://localhost/api/sessions?workspaceId=workspace-1&surface=team"),
+    );
+    const data = await response.json();
+
+    expect(data.sessions.map((session: { sessionId: string }) => session.sessionId)).toEqual([
+      "anonymous-team-run",
+      "named-team-run",
+      "team-specialist-run",
+    ]);
+    expect(data.sessions[0]).toMatchObject({
+      sessionId: "anonymous-team-run",
+      directDelegates: 1,
+      descendants: 1,
+    });
+    expect(data.sessions[1]).toMatchObject({
+      sessionId: "named-team-run",
+      directDelegates: 0,
+      descendants: 0,
+    });
+  });
 });
