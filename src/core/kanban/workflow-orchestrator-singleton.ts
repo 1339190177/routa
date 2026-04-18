@@ -15,7 +15,7 @@ import type {
   KanbanColumnAutomation,
   KanbanColumnStage,
 } from "../models/kanban";
-import type { Workspace } from "../models/workspace";
+
 import {
   resolveKanbanAutomationStep,
   resolveEffectiveTaskAutomation,

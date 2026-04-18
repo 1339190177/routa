@@ -7,6 +7,7 @@
  */
 
 import { getHttpSessionStore } from "../acp/http-session-store";
+import { isExecutionLeaseActive } from "../acp/execution-backend";
 import { EventBus, AgentEventType, AgentEvent } from "../events/event-bus";
 import type {
   KanbanAutomationStep,
@@ -25,10 +26,12 @@ import { resolveTransitionAutomation } from "./column-transition";
 import { getDefaultKanbanDevSessionSupervision } from "./board-session-supervision";
 import { markTaskLaneSessionStatus, upsertTaskLaneSession } from "./task-lane-history";
 import { checkDependencyGate } from "./dependency-gate";
-import { getKanbanBranchRules, type KanbanBranchRules } from "./board-branch-rules";
+import { type KanbanBranchRules } from "./board-branch-rules";
 
 const WATCHDOG_SCAN_INTERVAL_MS = 30_000;
 const COMPLETED_AUTOMATION_CLEANUP_DELAY_MS = 30_000;
+const STALE_QUEUED_THRESHOLD_MS = 60_000;
+const MAX_AUTOMATION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 interface RecoveryNotificationParams {
   workspaceId: string;
@@ -234,7 +237,9 @@ export class KanbanWorkflowOrchestrator {
     }
     this.eventBus.on(this.handlerKey, (event: AgentEvent) => {
       if (event.type === AgentEventType.COLUMN_TRANSITION) {
-        void this.handleColumnTransition(event);
+        this.handleColumnTransition(event).catch((err) => {
+          console.error("[WorkflowOrchestrator] handleColumnTransition error:", err);
+        });
       }
       if (
         event.type === AgentEventType.AGENT_COMPLETED
@@ -242,7 +247,9 @@ export class KanbanWorkflowOrchestrator {
         || event.type === AgentEventType.AGENT_FAILED
         || event.type === AgentEventType.AGENT_TIMEOUT
       ) {
-        void this.handleAgentCompletion(event);
+        this.handleAgentCompletion(event).catch((err) => {
+          console.error("[WorkflowOrchestrator] handleAgentCompletion error:", err);
+        });
       }
     });
     this.watchdogTimer = setInterval(() => {
@@ -417,6 +424,11 @@ export class KanbanWorkflowOrchestrator {
         if (sessionId) {
           automationEntry.status = "running";
           automationEntry.sessionId = sessionId;
+        } else {
+          automationEntry.status = "failed";
+          console.error(
+            `[WorkflowOrchestrator] createSession returned null for card ${data.cardId} in column ${targetColumn.id}.`,
+          );
         }
       } catch (err) {
         automationEntry.status = "failed";
@@ -538,6 +550,10 @@ export class KanbanWorkflowOrchestrator {
         }
       }
 
+      // Save lane-session updates BEFORE autoAdvanceCard, which reloads the task
+      // and emits a synchronous COLUMN_TRANSITION. Saving after would overwrite the
+      // column change, triggerSessionId, and session state set by autoAdvanceCard
+      // and the downstream session-creation chain.
       if (task) {
         if (!failedToAdvanceWithinLane && successEvent && completionSatisfied) {
           task.lastSyncError = undefined;
@@ -582,10 +598,49 @@ export class KanbanWorkflowOrchestrator {
 
     for (const automation of this.activeAutomations.values()) {
       if (automation.status !== "running" || !automation.sessionId) continue;
-      if (!isRecoveryMode(automation.supervision.mode)) continue;
 
       const sessionId = automation.sessionId;
       if (automation.signaledSessionIds.has(sessionId)) continue;
+
+      // ── Universal guards (apply to ALL running automations) ──────────────
+
+      // Max automation duration guard — terminates any automation running
+      // longer than MAX_AUTOMATION_DURATION_MS regardless of activity state
+      // or supervision mode. This is a safety net against runaway sessions.
+      const automationDurationMs = now - automation.startedAt.getTime();
+      if (automationDurationMs >= MAX_AUTOMATION_DURATION_MS) {
+        automation.signaledSessionIds.add(sessionId);
+        const hours = Math.floor(MAX_AUTOMATION_DURATION_MS / 3_600_000);
+        const reason = `Automation exceeded maximum duration of ${hours} hours.`;
+        sessionStore.markSessionTimedOut(sessionId, reason);
+        void this.notifyKanbanAgent({
+          workspaceId: automation.workspaceId,
+          sessionId,
+          cardId: automation.cardId,
+          cardTitle: automation.cardTitle,
+          boardId: automation.boardId,
+          columnId: automation.columnId,
+          reason,
+          mode: automation.supervision.mode,
+        });
+        this.eventBus.emit({
+          type: AgentEventType.AGENT_FAILED,
+          agentId: sessionId,
+          workspaceId: automation.workspaceId,
+          data: {
+            sessionId,
+            success: false,
+            error: reason,
+            watchdog: true,
+          },
+          timestamp: new Date(),
+        });
+        continue;
+      }
+
+      // ── Recovery-mode guards (dev-lane supervision only) ─────────────────
+
+      if (!isRecoveryMode(automation.supervision.mode)) continue;
 
       const sessionRecord = sessionStore.getSession(sessionId);
       if (sessionRecord?.acpStatus === "error") {
@@ -608,6 +663,37 @@ export class KanbanWorkflowOrchestrator {
             sessionId,
             success: false,
             error: sessionRecord.acpError ?? "ACP session entered error state.",
+            watchdog: true,
+          },
+          timestamp: new Date(),
+        });
+        continue;
+      }
+
+      // Check execution lease expiration — terminates sessions whose lease has
+      // lapsed even if they are still actively making tool calls.
+      if (sessionRecord?.leaseExpiresAt && !isExecutionLeaseActive(sessionRecord.leaseExpiresAt)) {
+        automation.signaledSessionIds.add(sessionId);
+        const reason = `Execution lease expired at ${sessionRecord.leaseExpiresAt}.`;
+        sessionStore.markSessionTimedOut(sessionId, reason);
+        void this.notifyKanbanAgent({
+          workspaceId: automation.workspaceId,
+          sessionId,
+          cardId: automation.cardId,
+          cardTitle: automation.cardTitle,
+          boardId: automation.boardId,
+          columnId: automation.columnId,
+          reason,
+          mode: automation.supervision.mode,
+        });
+        this.eventBus.emit({
+          type: AgentEventType.AGENT_TIMEOUT,
+          agentId: sessionId,
+          workspaceId: automation.workspaceId,
+          data: {
+            sessionId,
+            success: false,
+            error: reason,
             watchdog: true,
           },
           timestamp: new Date(),
@@ -656,6 +742,45 @@ export class KanbanWorkflowOrchestrator {
         },
         timestamp: new Date(),
       });
+    }
+
+    // Detect stale "queued" automations that never got a session.
+    // This can happen when createSession returned null or an async handler
+    // failed silently (e.g. HMR restart during column transition processing).
+    for (const [cardId, automation] of this.activeAutomations.entries()) {
+      if (automation.status !== "queued") continue;
+      const queuedMs = now - automation.startedAt.getTime();
+      if (queuedMs < STALE_QUEUED_THRESHOLD_MS) continue;
+
+      console.warn(
+        `[WorkflowOrchestrator] Stale queued automation for card ${cardId} ` +
+        `in column ${automation.columnId} (${queuedMs}ms old). Retrying.`,
+      );
+      automation.status = "failed";
+      this.cleanupCardSession?.(cardId);
+      this.activeAutomations.delete(cardId);
+
+      // Re-trigger via processColumnTransition to let restart-recovery logic
+      // pick it up on the next scan.
+      const task = await this.taskStore.get(cardId);
+      if (task?.columnId && task.boardId) {
+        this.eventBus.emit({
+          type: AgentEventType.COLUMN_TRANSITION,
+          agentId: "kanban-workflow-orchestrator-watchdog",
+          workspaceId: automation.workspaceId,
+          data: {
+            cardId,
+            cardTitle: automation.cardTitle,
+            boardId: automation.boardId,
+            workspaceId: automation.workspaceId,
+            fromColumnId: "__watchdog_retry__",
+            toColumnId: task.columnId,
+            fromColumnName: "Watchdog",
+            toColumnName: automation.columnName,
+          } as unknown as Record<string, unknown>,
+          timestamp: new Date(),
+        });
+      }
     }
   }
 
