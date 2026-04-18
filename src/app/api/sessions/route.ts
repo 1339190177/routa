@@ -74,12 +74,12 @@ function normalizeSessionName(name: string | undefined): string {
 }
 
 function hasExplicitTeamRunMarker(session: RoutaSessionRecord): boolean {
-  if (session.role?.toUpperCase() !== "ROUTA") {
-    return false;
-  }
-
   if (session.specialistId === TEAM_LEAD_SPECIALIST_ID) {
     return true;
+  }
+
+  if (session.role?.toUpperCase() !== "ROUTA") {
+    return false;
   }
 
   const normalizedName = normalizeSessionName(session.name);

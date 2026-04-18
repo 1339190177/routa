@@ -152,7 +152,6 @@ describe("/api/sessions GET", () => {
         sessionId: "team-specialist-run",
         workspaceId: "workspace-1",
         cwd: "/tmp/project",
-        role: "ROUTA",
         specialistId: TEAM_LEAD_SPECIALIST_ID,
         createdAt: "2026-04-03T10:01:00.000Z",
       },

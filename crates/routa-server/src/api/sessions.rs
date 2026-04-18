@@ -182,15 +182,15 @@ fn normalize_session_name(name: Option<&str>) -> String {
 }
 
 fn has_explicit_team_run_marker(session: &Value) -> bool {
+    if session_specialist_id(session) == Some(TEAM_LEAD_SPECIALIST_ID) {
+        return true;
+    }
+
     if !session_role(session)
         .map(|role| role.eq_ignore_ascii_case("ROUTA"))
         .unwrap_or(false)
     {
         return false;
-    }
-
-    if session_specialist_id(session) == Some(TEAM_LEAD_SPECIALIST_ID) {
-        return true;
     }
 
     let normalized_name = normalize_session_name(session_name(session));
