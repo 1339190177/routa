@@ -89,7 +89,9 @@ export interface FeatureTree {
 export type FeatureTreeParsed = FeatureTree;
 
 interface FeatureMetadataRaw {
+  schemaVersion?: number;
   capability_groups?: CapabilityGroup[];
+  capabilityGroups?: CapabilityGroup[];
   features?: Array<{
     id?: string;
     name?: string;
@@ -99,8 +101,11 @@ interface FeatureMetadataRaw {
     pages?: string[];
     apis?: string[];
     source_files?: string[];
+    sourceFiles?: string[];
     related_features?: string[];
+    relatedFeatures?: string[];
     domain_objects?: string[];
+    domainObjects?: string[];
   }>;
 }
 
@@ -109,6 +114,22 @@ interface FeatureTreeFrontmatter {
 }
 
 interface FeatureTreeIndexPayload {
+  metadata?: {
+    schemaVersion?: number;
+    capabilityGroups?: CapabilityGroup[];
+    features?: Array<{
+      id?: string;
+      name?: string;
+      group?: string;
+      summary?: string;
+      status?: string;
+      pages?: string[];
+      apis?: string[];
+      sourceFiles?: string[];
+      relatedFeatures?: string[];
+      domainObjects?: string[];
+    }>;
+  };
   pages?: Array<{
     route?: string;
     title?: string;
@@ -248,10 +269,10 @@ function extractFrontmatter(raw: string): string | null {
   return match ? match[1] ?? null : null;
 }
 
-function readFeatureTreeContent(repoRoot: string): string {
+function readFeatureTreeContent(repoRoot: string): string | null {
   const featureTreePath = path.join(repoRoot, FEATURE_TREE_PATH);
   if (!fs.existsSync(featureTreePath)) {
-    throw new Error("FEATURE_TREE.md not found");
+    return null;
   }
   return fs.readFileSync(featureTreePath, "utf8");
 }
@@ -623,21 +644,73 @@ function mergeImplementationApiEndpoints(...lists: ApiImplementationDetail[][]):
   );
 }
 
+function toSurfaceMetadata(
+  featureMetadata: FeatureMetadataRaw | FeatureTreeIndexPayload["metadata"] | null | undefined,
+) {
+  if (!featureMetadata) {
+    return null;
+  }
+
+  return {
+    schemaVersion: typeof featureMetadata.schemaVersion === "number" ? featureMetadata.schemaVersion : 1,
+    capabilityGroups: (featureMetadata.capability_groups ?? featureMetadata.capabilityGroups ?? []).map((group) => ({
+      id: group.id ?? "",
+      name: group.name ?? "",
+      description: group.description ?? "",
+    })),
+    features: (featureMetadata.features ?? []).map((feature) => ({
+      id: feature.id ?? "",
+      name: feature.name ?? "",
+      group: feature.group ?? "",
+      summary: feature.summary ?? "",
+      status: feature.status ?? "",
+      pages: Array.isArray(feature.pages) ? [...feature.pages] : [],
+      apis: Array.isArray(feature.apis) ? [...feature.apis] : [],
+      sourceFiles: Array.isArray(feature.source_files)
+        ? [...feature.source_files]
+        : Array.isArray(feature.sourceFiles)
+          ? [...feature.sourceFiles]
+          : [],
+      relatedFeatures: Array.isArray(feature.related_features)
+        ? [...feature.related_features]
+        : Array.isArray(feature.relatedFeatures)
+          ? [...feature.relatedFeatures]
+          : [],
+      domainObjects: Array.isArray(feature.domain_objects)
+        ? [...feature.domain_objects]
+        : Array.isArray(feature.domainObjects)
+          ? [...feature.domainObjects]
+          : [],
+    })),
+  };
+}
+
 export function parseFeatureTree(repoRoot: string): FeatureTree {
   const raw = readFeatureTreeContent(repoRoot);
   const index = readFeatureTreeIndex(repoRoot);
-  const frontmatter = extractFrontmatter(raw);
-  if (!frontmatter) {
-    throw new Error("FEATURE_TREE.md frontmatter not found");
+  let metadata = toSurfaceMetadata(index?.metadata);
+
+  if (raw) {
+    const frontmatter = extractFrontmatter(raw);
+    if (frontmatter) {
+      try {
+        const parsed = yaml.load(frontmatter) as FeatureTreeFrontmatter | null;
+        metadata = toSurfaceMetadata(parsed?.feature_metadata) ?? metadata;
+      } catch {
+        // Fall back to generated index data or empty metadata when older markdown cannot be parsed.
+      }
+    }
   }
 
-  const parsed = yaml.load(frontmatter) as FeatureTreeFrontmatter | null;
-  const featureMetadata = parsed?.feature_metadata;
-  if (!featureMetadata) {
-    throw new Error("feature_metadata not found in frontmatter");
-  }
-
-  const fallbackTables = parseFeatureTreeTables(raw);
+  const fallbackTables = raw
+    ? parseFeatureTreeTables(raw)
+    : {
+        frontendPages: [],
+        apiEndpoints: [],
+        nextjsApiEndpoints: [],
+        rustApiEndpoints: [],
+        implementationApiEndpoints: [],
+      };
   const frontendPages = toFrontendPagesFromIndex(index);
   const apiEndpoints = toApiEndpointsFromIndex(index);
   const nextjsApiEndpoints = toImplementationApiEndpoints(index?.nextjsApis, "nextjs");
@@ -654,26 +727,7 @@ export function parseFeatureTree(repoRoot: string): FeatureTree {
     fallbackTables.implementationApiEndpoints,
   );
   const normalizedMetadata = normalizeSurfaceMetadata({
-    metadata: {
-      schemaVersion: 1,
-      capabilityGroups: (featureMetadata.capability_groups ?? []).map((group) => ({
-        id: group.id ?? "",
-        name: group.name ?? "",
-        description: group.description ?? "",
-      })),
-      features: (featureMetadata.features ?? []).map((feature) => ({
-        id: feature.id ?? "",
-        name: feature.name ?? "",
-        group: feature.group ?? "",
-        summary: feature.summary ?? "",
-        status: feature.status ?? "",
-        pages: Array.isArray(feature.pages) ? [...feature.pages] : [],
-        apis: Array.isArray(feature.apis) ? [...feature.apis] : [],
-        sourceFiles: Array.isArray(feature.source_files) ? [...feature.source_files] : [],
-        relatedFeatures: Array.isArray(feature.related_features) ? [...feature.related_features] : [],
-        domainObjects: Array.isArray(feature.domain_objects) ? [...feature.domain_objects] : [],
-      })),
-    },
+    metadata,
     pages: resolvedFrontendPages.map((page) => ({
       route: page.route,
       title: page.name,

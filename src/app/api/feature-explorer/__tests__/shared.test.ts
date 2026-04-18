@@ -489,6 +489,74 @@ feature_metadata:
     ]);
   });
 
+  it("returns an empty feature tree when generated artifacts are missing", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-empty-"));
+    const repoRoot = path.join(tempRoot, "repo");
+
+    const featureTree = parseFeatureTree(repoRoot);
+
+    expect(featureTree).toEqual({
+      capabilityGroups: [],
+      features: [],
+      frontendPages: [],
+      apiEndpoints: [],
+      nextjsApiEndpoints: [],
+      rustApiEndpoints: [],
+      implementationApiEndpoints: [],
+    });
+  });
+
+  it("accepts legacy generated markdown without feature metadata frontmatter", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-legacy-"));
+    const repoRoot = path.join(tempRoot, "repo");
+
+    ensureFile(
+      path.join(repoRoot, "docs/product-specs/FEATURE_TREE.md"),
+      `---
+status: generated
+purpose: Auto-generated route and API surface index for Routa.js.
+---
+
+# Product Feature Specification
+
+## Frontend Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| Feature Explorer | \`/workspace/:workspaceId/feature-explorer\` | Browse features |
+
+## API Endpoints
+
+### Feature-Explorer (1)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | \`/api/feature-explorer\` | List features |
+`,
+    );
+
+    const featureTree = parseFeatureTree(repoRoot);
+
+    expect(featureTree.features).toEqual([]);
+    expect(featureTree.capabilityGroups).toEqual([]);
+    expect(featureTree.frontendPages).toEqual([
+      {
+        name: "Feature Explorer",
+        route: "/workspace/:workspaceId/feature-explorer",
+        sourceFile: "",
+        description: "Browse features",
+      },
+    ]);
+    expect(featureTree.apiEndpoints).toEqual([
+      {
+        group: "feature-explorer",
+        method: "GET",
+        endpoint: "/api/feature-explorer",
+        description: "List features",
+      },
+    ]);
+  });
+
   it("infers feature ownership for unmapped surfaces from the generated tables", () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-inferred-"));
     const repoRoot = path.join(tempRoot, "repo");
