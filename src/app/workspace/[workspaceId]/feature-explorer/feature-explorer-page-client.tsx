@@ -1,47 +1,42 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ChevronDown,
   ChevronRight,
-  FileCode2,
-  FileJson2,
-  FileText,
-  FlaskConical,
   Folder,
-  ImageIcon,
   RefreshCw,
   Search,
 } from "lucide-react";
 
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
-import { ChatPanel } from "@/client/components/chat-panel";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { useAcp } from "@/client/hooks/use-acp";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
-import { loadRepoSelection, saveRepoSelection } from "@/client/utils/repo-selection-storage";
+import { saveRepoSelection } from "@/client/utils/repo-selection-storage";
 import { useTranslation } from "@/i18n";
 
 import type {
   AggregatedSelectionSession,
   FeatureDetail,
   FeatureSurfacePage,
-  FileSessionDiagnostics,
   FileTreeNode,
   InspectorTab,
 } from "./types";
 import {
-  AnalysisSessionDrawer,
-  ApiPanel,
-  ContextPanel,
-  SessionAnalysisDrawer,
-  ScreenshotPanel,
-} from "./feature-explorer-inspector-panels";
-import { GenerateFeatureTreeDrawer } from "./generate-feature-tree-drawer";
+  buildSessionAnalysisSessionName,
+  loadInitialRepoSelection,
+  mergeSessionDiagnostics,
+  readFeatureExplorerUrlState,
+  replaceFeatureExplorerUrlState,
+} from "./feature-explorer-client-helpers";
+import { buildSelectableFileIdsByNode, buildTreeNodeStats, FileIcon, flattenFiles, formatShortDate, TreeNodeRow } from "./feature-explorer-file-tree";
+import { FeatureApiRow, FeatureRouteRow, FeatureStructureSection, InlineStatPill, SimpleSourceFileRow } from "./feature-explorer-structure-sections";
+import { FeatureExplorerDrawers, FeatureExplorerInspectorPane } from "./feature-explorer-secondary-ui";
 import { buildSessionAnalysisPrompt } from "./session-analysis";
 import {
   type ExplorerSection,
@@ -61,205 +56,6 @@ import {
   splitPathSegments,
 } from "./surface-navigation";
 import { useFeatureExplorerData } from "./use-feature-explorer-data";
-
-function loadInitialRepoSelection(workspaceId: string): RepoSelection | null {
-  return loadRepoSelection("featureExplorer", workspaceId);
-}
-
-function flattenFiles(nodes: FileTreeNode[], acc: Record<string, FileTreeNode> = {}): Record<string, FileTreeNode> {
-  for (const node of nodes) {
-    acc[node.id] = node;
-    if (node.children?.length) {
-      flattenFiles(node.children, acc);
-    }
-  }
-  return acc;
-}
-
-type TreeNodeStat = {
-  changes: number;
-  sessions: number;
-  updatedAt: string;
-};
-
-function maxUpdatedAt(left: string, right: string): string {
-  if (!left) return right;
-  if (!right) return left;
-  return right > left ? right : left;
-}
-
-function buildTreeNodeStats(
-  nodes: FileTreeNode[],
-  fileStats: Record<string, { changes: number; sessions: number; updatedAt: string }>,
-): Record<string, TreeNodeStat> {
-  const statsByNodeId: Record<string, TreeNodeStat> = {};
-
-  const visit = (node: FileTreeNode): TreeNodeStat => {
-    if (node.kind === "file") {
-      const stat = fileStats[node.path] ?? { changes: 0, sessions: 0, updatedAt: "" };
-      statsByNodeId[node.id] = stat;
-      return stat;
-    }
-
-    const aggregate = node.children.reduce<TreeNodeStat>(
-      (acc, child) => {
-        const childStat = visit(child);
-        return {
-          changes: acc.changes + childStat.changes,
-          sessions: acc.sessions + childStat.sessions,
-          updatedAt: maxUpdatedAt(acc.updatedAt, childStat.updatedAt),
-        };
-      },
-      { changes: 0, sessions: 0, updatedAt: "" },
-    );
-
-    statsByNodeId[node.id] = aggregate;
-    return aggregate;
-  };
-
-  for (const node of nodes) {
-    visit(node);
-  }
-
-  return statsByNodeId;
-}
-
-function buildSelectableFileIdsByNode(
-  nodes: FileTreeNode[],
-  acc: Record<string, string[]> = {},
-): Record<string, string[]> {
-  const visit = (node: FileTreeNode): string[] => {
-    if (node.kind === "file") {
-      acc[node.id] = [node.id];
-      return acc[node.id];
-    }
-
-    const descendantFileIds = node.children.flatMap((child) => visit(child));
-    acc[node.id] = descendantFileIds;
-    return descendantFileIds;
-  };
-
-  for (const node of nodes) {
-    visit(node);
-  }
-
-  return acc;
-}
-
-function mergeDistinctStrings(left: string[], right: string[]): string[] {
-  return [...new Set([...left, ...right])];
-}
-
-function mergeSessionDiagnostics(
-  left?: FileSessionDiagnostics,
-  right?: FileSessionDiagnostics,
-): FileSessionDiagnostics | undefined {
-  if (!left) {
-    return right ? {
-      ...right,
-      toolCallsByName: { ...right.toolCallsByName },
-      readFiles: [...right.readFiles],
-      writtenFiles: [...right.writtenFiles],
-      repeatedReadFiles: [...right.repeatedReadFiles],
-      repeatedCommands: [...right.repeatedCommands],
-      failedTools: right.failedTools.map((failure) => ({ ...failure })),
-    } : undefined;
-  }
-
-  if (!right) {
-    return left;
-  }
-
-  const toolCallsByName: Record<string, number> = { ...left.toolCallsByName };
-  for (const [toolName, count] of Object.entries(right.toolCallsByName)) {
-    toolCallsByName[toolName] = Math.max(toolCallsByName[toolName] ?? 0, count);
-  }
-
-  const failedTools = new Map(
-    left.failedTools.map((failure) => [`${failure.toolName}|${failure.command ?? ""}|${failure.message}`, failure] as const),
-  );
-  for (const failure of right.failedTools) {
-    failedTools.set(`${failure.toolName}|${failure.command ?? ""}|${failure.message}`, failure);
-  }
-
-  return {
-    toolCallCount: Math.max(left.toolCallCount, right.toolCallCount),
-    failedToolCallCount: Math.max(left.failedToolCallCount, right.failedToolCallCount),
-    toolCallsByName,
-    readFiles: mergeDistinctStrings(left.readFiles, right.readFiles).sort((a, b) => a.localeCompare(b)),
-    writtenFiles: mergeDistinctStrings(left.writtenFiles, right.writtenFiles).sort((a, b) => a.localeCompare(b)),
-    repeatedReadFiles: mergeDistinctStrings(left.repeatedReadFiles, right.repeatedReadFiles).sort((a, b) => a.localeCompare(b)),
-    repeatedCommands: mergeDistinctStrings(left.repeatedCommands, right.repeatedCommands),
-    failedTools: [...failedTools.values()],
-  };
-}
-
-function formatShortDate(iso: string): string {
-  if (!iso || iso === "-") return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${mm}-${dd}`;
-}
-
-type FeatureExplorerUrlState = {
-  featureId: string;
-  filePath: string;
-};
-
-function readFeatureExplorerUrlState(): FeatureExplorerUrlState {
-  if (typeof window === "undefined") {
-    return { featureId: "", filePath: "" };
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  return {
-    featureId: params.get("feature") ?? "",
-    filePath: params.get("file") ?? "",
-  };
-}
-
-function replaceFeatureExplorerUrlState(nextState: FeatureExplorerUrlState): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  if (nextState.featureId) {
-    params.set("feature", nextState.featureId);
-  } else {
-    params.delete("feature");
-  }
-  if (nextState.filePath) {
-    params.set("file", nextState.filePath);
-  } else {
-    params.delete("file");
-  }
-
-  const query = params.toString();
-  const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
-  window.history.replaceState(window.history.state, "", nextUrl);
-}
-
-function buildSessionAnalysisSessionName(
-  locale: string,
-  featureDetail: FeatureDetail | null,
-  selectedFilePaths: string[],
-): string {
-  const firstFile = selectedFilePaths[0]?.split("/").pop() ?? "";
-  const focus = firstFile || featureDetail?.name || "feature";
-
-  if (selectedFilePaths.length > 1) {
-    return locale === "zh"
-      ? `文件会话分析 · ${focus} +${selectedFilePaths.length - 1}`
-      : `File session analysis · ${focus} +${selectedFilePaths.length - 1}`;
-  }
-
-  return locale === "zh"
-    ? `文件会话分析 · ${focus}`
-    : `File session analysis · ${focus}`;
-}
 
 export function FeatureExplorerPageClient({
   workspaceId,
@@ -1325,7 +1121,6 @@ export function FeatureExplorerPageClient({
       <div className="flex h-full min-h-0 bg-desktop-bg-primary">
         <main className="flex min-w-0 flex-1">
           <section className={featureExplorerLayoutClassName}>
-            {/* ── Left panel: Feature list ── */}
             <aside className="flex min-h-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary/20">
               <div className="border-b border-desktop-border px-3 py-2">
                 <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-desktop-text-secondary">
@@ -1525,7 +1320,6 @@ export function FeatureExplorerPageClient({
               </div>
             </aside>
 
-            {/* ── Middle panel: Feature structure ── */}
             <section className="flex min-h-0 flex-col border-r border-desktop-border bg-desktop-bg-primary">
               <div className="flex items-center justify-between border-b border-desktop-border px-3 py-2">
                 <div>
@@ -1736,78 +1530,30 @@ export function FeatureExplorerPageClient({
               </div>
             </section>
 
-            {/* ── Right panel: Inspector ── */}
-            <aside className="flex min-h-0 flex-col bg-desktop-bg-secondary/10">
-              <div className="border-b border-desktop-border px-3 py-2">
-                <div className="flex items-center gap-1.5 overflow-x-auto">
-                  {([
-                    { id: "context" as const, label: t.featureExplorer.contextTab, icon: FileText },
-                    { id: "screenshot" as const, label: t.featureExplorer.screenshotTab, icon: ImageIcon },
-                    { id: "api" as const, label: t.featureExplorer.apiTab, icon: FlaskConical },
-                  ]).map((tab) => {
-                    const Icon = tab.icon;
-                    const isScreenshot = tab.id === "screenshot";
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => (!isScreenshot ? setInspectorTab(tab.id) : null)}
-                        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          inspectorTab === tab.id
-                            ? "border-desktop-accent bg-desktop-bg-active text-desktop-text-primary"
-                            : isScreenshot
-                              ? "cursor-not-allowed border-desktop-border bg-desktop-bg-primary/30 text-desktop-text-secondary/60"
-                              : "border-desktop-border bg-desktop-bg-primary text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary"
-                        }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                {inspectorTab === "context" && (
-                  <ContextPanel
-                    featureDetail={surfaceOnlySelection ? null : resolvedFeatureDetail}
-                    selectedFileCount={selectedFileIds.length}
-                    selectedScopeSessions={selectedScopeSessions}
-                    selectedSurface={selectedSurface}
-                    selectedSurfaceFeatureNames={selectedSurfaceFeatureNames}
-                    onOpenSessionAnalysis={handleOpenSessionAnalysisDrawer}
-                    t={t}
-                  />
-                )}
-
-                {inspectorTab === "screenshot" && (
-                  <ScreenshotPanel featureDetail={surfaceOnlySelection ? null : resolvedFeatureDetail} t={t} />
-                )}
-
-                {inspectorTab === "api" && (
-                  <ApiPanel
-                    featureDetail={surfaceOnlySelection ? null : resolvedFeatureDetail}
-                    t={t}
-                    onRequest={handleApiRequest}
-                  />
-                )}
-              </div>
-            </aside>
+            <FeatureExplorerInspectorPane
+              inspectorTab={inspectorTab}
+              onSelectInspectorTab={setInspectorTab}
+              featureDetail={surfaceOnlySelection ? null : resolvedFeatureDetail}
+              selectedFileCount={selectedFileIds.length}
+              selectedScopeSessions={selectedScopeSessions}
+              selectedSurface={selectedSurface}
+              selectedSurfaceFeatureNames={selectedSurfaceFeatureNames}
+              onOpenSessionAnalysis={handleOpenSessionAnalysisDrawer}
+              onRequestApi={handleApiRequest}
+              t={t}
+            />
 
           </section>
         </main>
 
-        <GenerateFeatureTreeDrawer
-          open={isGenerateDrawerOpen}
+        <FeatureExplorerDrawers
           workspaceId={workspaceId}
           repoPath={effectiveRepoSelection?.path}
-          onClose={() => setIsGenerateDrawerOpen(false)}
+          generateOpen={isGenerateDrawerOpen}
+          onCloseGenerate={() => setIsGenerateDrawerOpen(false)}
           onGenerated={() => setGenerateRefreshCounter((c) => c + 1)}
-        />
-
-        <SessionAnalysisDrawer
-          key={`session-analysis:${isSessionAnalysisDrawerOpen ? "open" : "closed"}:${selectedFilePaths.join("|")}:${selectedScopeSessions.map((session) => `${session.provider}:${session.sessionId}`).join("|")}`}
-          open={isSessionAnalysisDrawerOpen}
+          sessionAnalysisDrawerKey={`session-analysis:${isSessionAnalysisDrawerOpen ? "open" : "closed"}:${selectedFilePaths.join("|")}:${selectedScopeSessions.map((session) => `${session.provider}:${session.sessionId}`).join("|")}`}
+          sessionAnalysisOpen={isSessionAnalysisDrawerOpen}
           selectedFilePaths={selectedFilePaths}
           selectedScopeSessions={selectedScopeSessions}
           providers={analysisProviders}
@@ -1815,336 +1561,29 @@ export function FeatureExplorerPageClient({
           onProviderChange={setAnalysisProvider}
           isStartingSessionAnalysis={isStartingSessionAnalysis}
           sessionAnalysisError={sessionAnalysisError}
-          onClose={() => setIsSessionAnalysisDrawerOpen(false)}
+          onCloseSessionAnalysis={() => setIsSessionAnalysisDrawerOpen(false)}
           onStartSessionAnalysis={handleStartSessionAnalysis}
-          t={t}
-        />
-
-        <AnalysisSessionDrawer
-          open={isAnalysisSessionPaneOpen && Boolean(analysisSessionId)}
-          title={analysisSessionName || t.featureExplorer.sessionAnalysisTitle}
-          subtitle={`${analysisSessionProviderName || analysisSessionProviderId || analysisSelectedProvider} · ${analysisSessionId ?? ""}`}
-          detailHref={analysisSessionId
-            ? `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(analysisSessionId)}`
-            : undefined}
-          onClose={() => {
+          analysisSessionPaneOpen={isAnalysisSessionPaneOpen}
+          analysisSessionId={analysisSessionId}
+          analysisSessionName={analysisSessionName}
+          analysisSessionProviderName={analysisSessionProviderName}
+          analysisSessionProviderId={analysisSessionProviderId}
+          fallbackSelectedProvider={analysisSelectedProvider}
+          onCloseAnalysisSessionPane={() => {
             setIsAnalysisSessionPaneOpen(false);
             setAnalysisSessionId(null);
           }}
+          acp={analysisAcp}
+          onEnsureAnalysisSession={async () => analysisSessionId}
+          onSelectAnalysisSession={async (sessionId) => {
+            setAnalysisSessionId(sessionId);
+            selectAnalysisSession(sessionId);
+          }}
+          repoSelection={effectiveRepoSelection}
+          codebases={codebases}
           t={t}
-        >
-          {analysisSessionId ? (
-            <ChatPanel
-              acp={analysisAcp}
-              activeSessionId={analysisSessionId}
-              onEnsureSession={async () => analysisSessionId}
-              onSelectSession={async (sessionId) => {
-                setAnalysisSessionId(sessionId);
-                selectAnalysisSession(sessionId);
-              }}
-              repoSelection={effectiveRepoSelection}
-              onRepoChange={() => {}}
-              codebases={codebases}
-              activeWorkspaceId={workspaceId}
-              agentRole="ROUTA"
-            />
-          ) : null}
-        </AnalysisSessionDrawer>
+        />
       </div>
     </DesktopAppShell>
   );
-}
-
-function InlineStatPill({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/30 px-2 py-1 text-[10px]">
-      <div className="uppercase tracking-[0.08em] text-desktop-text-secondary">{label}</div>
-      <div className="mt-0.5 text-right text-[11px] font-semibold text-desktop-text-primary">{value}</div>
-    </div>
-  );
-}
-
-function FeatureStructureSection({
-  title,
-  count,
-  collapsed,
-  onToggle,
-  toolbar,
-  children,
-}: {
-  title: string;
-  count: number;
-  collapsed: boolean;
-  onToggle: () => void;
-  toolbar?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary">
-      <div className="flex items-center justify-between gap-3 border-b border-desktop-border bg-desktop-bg-secondary/30 px-3 py-2">
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex min-w-0 items-center gap-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary hover:text-desktop-text-primary"
-        >
-          {collapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
-          <span className="truncate">{title}</span>
-          <span className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-medium normal-case tracking-normal text-desktop-text-primary">
-            {count}
-          </span>
-        </button>
-        {toolbar}
-      </div>
-      {!collapsed ? <div className="space-y-2 p-3">{children}</div> : null}
-    </section>
-  );
-}
-
-function FeatureRouteRow({
-  page,
-}: {
-  page: {
-    route: string;
-    title?: string;
-    description?: string;
-    sourceFile?: string;
-  };
-}) {
-  return (
-    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/20 px-3 py-2">
-      <div className="flex items-start gap-2">
-        <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-400" />
-        <div className="min-w-0 flex-1">
-          <div className="break-all text-[12px] font-medium text-desktop-text-primary">{page.route}</div>
-          {page.title ? (
-            <div className="mt-0.5 text-[11px] text-desktop-text-primary">{page.title}</div>
-          ) : null}
-          {page.description ? (
-            <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{page.description}</div>
-          ) : null}
-          {page.sourceFile ? (
-            <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-desktop-text-secondary">
-              <FileIcon path={page.sourceFile} />
-              <span className="break-all">{page.sourceFile}</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FeatureApiRow({
-  api,
-  implementationLabel,
-}: {
-  api: {
-    group?: string;
-    method: string;
-    endpoint: string;
-    description?: string;
-    nextjsSourceFiles?: string[];
-    rustSourceFiles?: string[];
-    implementationSources?: Array<{
-      label: string;
-      sourceFiles: string[];
-    }>;
-  };
-  implementationLabel: string;
-}) {
-  const implementationGroups = [
-    ...(api.implementationSources ?? []),
-    ...(api.nextjsSourceFiles?.length
-      ? [{ label: "Next.js API", sourceFiles: api.nextjsSourceFiles }]
-      : []),
-    ...(api.rustSourceFiles?.length
-      ? [{ label: "Rust API", sourceFiles: api.rustSourceFiles }]
-      : []),
-  ].map((group) => ({
-    ...group,
-    sourceFiles: [...new Set(group.sourceFiles)],
-  })).filter((group) => group.sourceFiles.length > 0);
-
-  return (
-    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/20 px-3 py-2">
-      <div className="flex items-start gap-2">
-        <FileJson2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-sm border border-desktop-accent/30 bg-desktop-accent/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-desktop-accent">
-              {api.method}
-            </span>
-            <span className="break-all text-[12px] font-medium text-desktop-text-primary">{api.endpoint}</span>
-            {api.group ? (
-              <span className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[10px] text-desktop-text-secondary">
-                {api.group}
-              </span>
-            ) : null}
-          </div>
-          {api.description ? (
-            <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{api.description}</div>
-          ) : null}
-          {implementationGroups.length > 0 ? (
-            <div className="mt-2 space-y-2">
-              {implementationGroups.map((group) => (
-                <div key={`${api.method}:${api.endpoint}:${group.label}`} className="rounded-sm border border-desktop-border/80 bg-desktop-bg-primary px-2.5 py-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-desktop-text-secondary">
-                    {implementationLabel}: {group.label}
-                  </div>
-                  <div className="mt-1.5 space-y-1">
-                    {group.sourceFiles.map((sourceFile) => (
-                      <SimpleSourceFileRow key={`${group.label}:${sourceFile}`} path={sourceFile} compact />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SimpleSourceFileRow({
-  path,
-  compact = false,
-}: {
-  path: string;
-  compact?: boolean;
-}) {
-  return (
-    <div className={`flex items-start gap-2 rounded-sm border border-desktop-border bg-desktop-bg-secondary/20 ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
-      <FileIcon path={path} />
-      <span className="break-all text-[11px] text-desktop-text-primary">{path}</span>
-    </div>
-  );
-}
-
-/* ── Tree Node Row ── */
-function TreeNodeRow({
-  node,
-  depth,
-  expandedIds,
-  activeFileId,
-  selectedFileIds,
-  treeNodeStats,
-  selectableFileIdsByNode,
-  onToggleNode,
-  onToggleNodeSelection,
-  onSetActiveFile,
-}: {
-  node: FileTreeNode;
-  depth: number;
-  expandedIds: Record<string, boolean>;
-  activeFileId: string;
-  selectedFileIds: string[];
-  treeNodeStats: Record<string, TreeNodeStat>;
-  selectableFileIdsByNode: Record<string, string[]>;
-  onToggleNode: (nodeId: string) => void;
-  onToggleNodeSelection: (nodeId: string) => void;
-  onSetActiveFile: (fileId: string) => void;
-}) {
-  const paddingLeft = 12 + depth * 16;
-  const stat = treeNodeStats[node.id];
-
-  if (node.kind === "folder") {
-    const isExpanded = expandedIds[node.id] ?? true;
-    const descendantFileIds = selectableFileIdsByNode[node.id] ?? [];
-    const isSelected = descendantFileIds.length > 0 && descendantFileIds.every((fileId) => selectedFileIds.includes(fileId));
-
-    return (
-      <>
-        <div className="grid grid-cols-[minmax(0,1fr)_56px_72px_96px] items-center px-3 py-1 text-xs text-desktop-text-primary">
-          <div className="flex items-center gap-1.5" style={{ paddingLeft }}>
-            <input
-              type="checkbox"
-              data-testid={`feature-tree-select-${node.id}`}
-              checked={isSelected}
-              onChange={() => onToggleNodeSelection(node.id)}
-              className="h-3.5 w-3.5 rounded border-black/15 bg-transparent dark:border-white/20"
-            />
-            <button
-              onClick={() => onToggleNode(node.id)}
-              className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-desktop-bg-active"
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 text-desktop-text-secondary" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-desktop-text-secondary" />
-              )}
-              <Folder className="h-3.5 w-3.5 text-amber-400" />
-              <span className="truncate text-[12px]">{node.name}</span>
-            </button>
-          </div>
-          <div data-testid={`feature-tree-changes-${node.id}`} className="text-[11px] text-desktop-text-secondary">
-            {stat?.changes ? stat.changes : "-"}
-          </div>
-          <div data-testid={`feature-tree-sessions-${node.id}`} className="text-[11px] text-desktop-text-secondary">
-            {stat?.sessions ? stat.sessions : "-"}
-          </div>
-          <div data-testid={`feature-tree-updated-${node.id}`} className="text-[11px] text-desktop-text-secondary">
-            {stat?.updatedAt ? formatShortDate(stat.updatedAt) : "-"}
-          </div>
-        </div>
-
-        {isExpanded &&
-          node.children?.map((child) => (
-            <TreeNodeRow
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              expandedIds={expandedIds}
-              activeFileId={activeFileId}
-              selectedFileIds={selectedFileIds}
-              treeNodeStats={treeNodeStats}
-              selectableFileIdsByNode={selectableFileIdsByNode}
-              onToggleNode={onToggleNode}
-              onToggleNodeSelection={onToggleNodeSelection}
-              onSetActiveFile={onSetActiveFile}
-            />
-          ))}
-      </>
-    );
-  }
-
-  const isActive = activeFileId === node.id;
-  const isSelected = selectedFileIds.includes(node.id);
-
-  return (
-    <div
-      className={`grid grid-cols-[minmax(0,1fr)_56px_72px_96px] items-center px-3 py-1 text-xs transition-colors ${
-        isActive ? "bg-desktop-bg-active" : "hover:bg-desktop-bg-secondary/40"
-      }`}
-    >
-      <div className="flex items-center gap-1.5" style={{ paddingLeft }}>
-        <input
-          type="checkbox"
-          data-testid={`feature-tree-select-${node.id}`}
-          checked={isSelected}
-          onChange={() => onToggleNodeSelection(node.id)}
-          className="h-3.5 w-3.5 rounded border-black/15 bg-transparent dark:border-white/20"
-        />
-        <button onClick={() => onSetActiveFile(node.id)} className="flex min-w-0 items-center gap-1.5 text-left">
-          <FileIcon path={node.path} />
-          <span className="truncate text-[12px] text-desktop-text-primary">{node.name}</span>
-        </button>
-      </div>
-      <div className="text-[11px] text-desktop-text-secondary">{stat?.changes ?? "-"}</div>
-      <div className="text-[11px] text-desktop-text-secondary">{stat?.sessions ?? "-"}</div>
-      <div className="text-[11px] text-desktop-text-secondary">{stat?.updatedAt ? formatShortDate(stat.updatedAt) : "-"}</div>
-    </div>
-  );
-}
-
-function FileIcon({ path }: { path: string }) {
-  if (path.endsWith(".json")) return <FileJson2 className="h-3.5 w-3.5 shrink-0 text-amber-400" />;
-  if (path.endsWith(".md")) return <FileText className="h-3.5 w-3.5 shrink-0 text-violet-400" />;
-  return <FileCode2 className="h-3.5 w-3.5 shrink-0 text-sky-400" />;
 }
