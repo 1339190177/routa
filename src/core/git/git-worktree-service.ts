@@ -170,9 +170,12 @@ export class GitWorktreeService {
         // Ensure parent directory exists
         await fs.mkdir(path.dirname(worktreePath), { recursive: true });
 
-        // Enable long paths on Windows to avoid MAX_PATH (260) failures
+        // Enable long paths on Windows to avoid MAX_PATH (260) failures.
+        // Set both local (repo-level) and global (--global) so the worktree
+        // checkout respects the setting even before the worktree gitconfig exists.
         if (process.platform === "win32") {
           await execGit(["config", "core.longPaths", "true"], repoPath).catch(() => {});
+          await execGit(["config", "--global", "core.longPaths", "true"]).catch(() => {});
         }
 
         // Prune stale worktree references

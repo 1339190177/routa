@@ -138,6 +138,11 @@ export function hasExceededNonDevAutomationRepeatLimit(
   columnId: string,
   stage: KanbanColumnStage,
 ): boolean {
+  // Blocked lane should always allow automation so the resolver can attempt
+  // to unblock the task regardless of previous failure count.
+  if (stage === "blocked") {
+    return false;
+  }
   return getNonDevAutomationRunCount(task, columnId, stage) >= NON_DEV_AUTOMATION_REPEAT_LIMIT;
 }
 
@@ -544,6 +549,20 @@ export class KanbanWorkflowOrchestrator {
 
       // Auto-advance if configured and successful.
       if (!failedToAdvanceWithinLane && successEvent && completionSatisfied && automation.automation.autoAdvanceOnSuccess) {
+        await this.autoAdvanceCard(cardId, automation);
+      } else if (
+        !failedToAdvanceWithinLane
+        && successEvent
+        && completionSatisfied
+        && !automation.automation.autoAdvanceOnSuccess
+        && automation.steps[automation.currentStepIndex]?.role === "GATE"
+      ) {
+        // Safety net: GATE specialist completed successfully but autoAdvanceOnSuccess is off.
+        // Auto-advance anyway to prevent the card from getting stuck.
+        console.warn(
+          `[WorkflowOrchestrator] GATE specialist completed without moving card ${cardId}. ` +
+          `Auto-advancing as safety net.`
+        );
         await this.autoAdvanceCard(cardId, automation);
       }
 

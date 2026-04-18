@@ -109,7 +109,14 @@ export async function enqueueKanbanTaskSession(
     return { queued: false, error: "Task is missing board context." };
   }
   if (task.triggerSessionId && !params.ignoreExistingTrigger) {
-    return { sessionId: task.triggerSessionId, queued: false };
+    const sessionStore = getHttpSessionStore();
+    const activity = sessionStore.getSessionActivity(task.triggerSessionId);
+    if (activity?.terminalState) {
+      // Stale triggerSessionId from a terminated session — clear and continue
+      task.triggerSessionId = undefined;
+    } else {
+      return { sessionId: task.triggerSessionId, queued: false };
+    }
   }
 
   // Dependency gate: block enqueue if dependencies are unsatisfied
@@ -165,7 +172,15 @@ async function startKanbanTaskSession(
     return { error: `Task is no longer in column ${params.expectedColumnId}.` };
   }
   if (task.triggerSessionId && !params.ignoreExistingTrigger) {
-    return { sessionId: task.triggerSessionId };
+    const sessionStore = getHttpSessionStore();
+    const activity = sessionStore.getSessionActivity(task.triggerSessionId);
+    if (activity?.terminalState) {
+      // Stale triggerSessionId from a terminated session — clear and continue
+      task.triggerSessionId = undefined;
+      await system.taskStore.save(task);
+    } else {
+      return { sessionId: task.triggerSessionId };
+    }
   }
 
   const nextTask = {
