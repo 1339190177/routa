@@ -110,16 +110,6 @@ export async function enqueueKanbanTaskSession(
     return { queued: false, error: "Task is missing board context." };
   }
 
-  // Sync source repos before any lane automation so analysis runs on latest code
-  try {
-    const codebases = await system.codebaseStore.listByWorkspace(task.workspaceId);
-    for (const cb of codebases) {
-      if (cb.repoPath) fetchRemote(cb.repoPath);
-    }
-  } catch {
-    // fetch failure should not block automation
-  }
-
   if (task.triggerSessionId && !params.ignoreExistingTrigger) {
     const sessionStore = getHttpSessionStore();
     const activity = sessionStore.getSessionActivity(task.triggerSessionId);
@@ -180,6 +170,19 @@ async function startKanbanTaskSession(
 ): Promise<{ sessionId?: string | null; error?: string }> {
   const task = await system.taskStore.get(taskId);
   if (!task) return { error: "Task no longer exists." };
+
+  // Sync source repos when task starts actual execution (not just queue enqueue).
+  // This ensures agents analyze code based on the latest remote state.
+  if (task.codebaseIds?.length) {
+    try {
+      const codebases = await system.codebaseStore.listByWorkspace(task.workspaceId);
+      for (const cb of codebases) {
+        if (cb.repoPath) fetchRemote(cb.repoPath);
+      }
+    } catch {
+      // fetch failure should not block automation
+    }
+  }
   if (params.expectedColumnId && task.columnId !== params.expectedColumnId) {
     return { error: `Task is no longer in column ${params.expectedColumnId}.` };
   }
@@ -213,15 +216,6 @@ async function startKanbanTaskSession(
   let worktreeCwd = initialWorktreeTruth?.cwd ?? process.cwd();
   let worktreeBranch = initialWorktreeTruth?.branch;
   if (branchRules.triggers.worktreeCreationColumns.includes(params.expectedColumnId ?? nextTask.columnId ?? "") && preferredCodebase && !nextTask.worktreeId) {
-    // Sync source repo before worktree creation to ensure latest base ref
-    try {
-      if (preferredCodebase.repoPath) {
-        fetchRemote(preferredCodebase.repoPath);
-      }
-    } catch {
-      // fetch failure should not block worktree creation
-    }
-
     const result = await ensureTaskWorktree(nextTask, preferredCodebase, {
       worktreeStore: system.worktreeStore,
       codebaseStore: system.codebaseStore,
