@@ -943,7 +943,7 @@ export function SessionPageClient() {
         )}
 
         {/* ─── Chat Area ──────────────────────────────────────────── */}
-        <main className="flex flex-1 min-w-0 flex-col">
+        <div className="flex flex-1 min-w-0 flex-col">
           {repoSlideSource && (
             <RepoSlideSessionPanel
               workspaceId={workspaceId}
@@ -970,7 +970,7 @@ export function SessionPageClient() {
             inputPrefill={dockerRetryText}
             onInputPrefillConsumed={() => setDockerRetryText(null)}
           />
-        </main>
+        </div>
 
         {/* ─── Right Sidebar: CRAFTERs running status ─────────────── */}
         {!isEmbedMode && crafterAgents.length > 0 && (

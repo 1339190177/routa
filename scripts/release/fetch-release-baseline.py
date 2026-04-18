@@ -3,39 +3,59 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import io
 import json
 import os
+import ssl
 import sys
-import urllib.request
+from urllib.parse import urlparse
 import zipfile
 from pathlib import Path
 
+ALLOWED_GITHUB_HOSTS = {"api.github.com"}
 
-def github_get(url: str, token: str) -> dict:
-    request = urllib.request.Request(
-        url,
+
+def ensure_allowed_github_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in ALLOWED_GITHUB_HOSTS:
+        raise ValueError(f"Refusing to fetch non-GitHub HTTPS URL: {url}")
+    return url
+
+
+def github_request(url: str, token: str) -> bytes:
+    parsed = urlparse(ensure_allowed_github_url(url))
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+
+    connection = http.client.HTTPSConnection(
+        parsed.hostname,
+        timeout=30,
+        context=ssl.create_default_context(),
+    )  # nosemgrep: python.lang.security.audit.httpsconnection-detected.httpsconnection-detected
+    connection.request(
+        "GET",
+        path,
         headers={
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(request) as response:
-        return json.loads(response.read().decode("utf-8"))
+    response = connection.getresponse()
+    payload = response.read()
+    if response.status >= 400:
+        raise RuntimeError(f"GitHub request failed ({response.status}): {url}")
+    return payload
+
+
+def github_get(url: str, token: str) -> dict:
+    return json.loads(github_request(url, token).decode("utf-8"))
 
 
 def github_download(url: str, token: str) -> bytes:
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    with urllib.request.urlopen(request) as response:
-        return response.read()
+    return github_request(url, token)
 
 
 def find_artifact_download_url(

@@ -9,12 +9,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getHttpSessionStore, type RoutaSessionRecord } from "@/core/acp/http-session-store";
 import { getAcpProcessManager } from "@/core/acp/processer";
 import { getPresetById } from "@/core/acp/acp-presets";
+import { TEAM_LEAD_SPECIALIST_ID } from "./team-run";
 
 export const dynamic = "force-dynamic";
 
 /** Stale threshold: sessions older than 7 days without an active process are considered stale */
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
-export const TEAM_LEAD_SPECIALIST_ID = "team-agent-lead";
 
 export type SessionContinuityStatus = "active" | "interrupted" | "restorable" | "stale";
 

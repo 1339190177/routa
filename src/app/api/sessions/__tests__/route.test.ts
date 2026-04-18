@@ -13,7 +13,8 @@ vi.mock("@/core/acp/http-session-store", () => ({
   }),
 }));
 
-import { GET, TEAM_LEAD_SPECIALIST_ID } from "../route";
+import { GET } from "../route";
+import { TEAM_LEAD_SPECIALIST_ID } from "../team-run";
 
 describe("/api/sessions GET", () => {
   beforeEach(() => {
