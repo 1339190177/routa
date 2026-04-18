@@ -122,6 +122,10 @@ export interface ApiDetail {
   description: string;
   nextjsSourceFiles?: string[];
   rustSourceFiles?: string[];
+  implementationSources?: Array<{
+    label: string;
+    sourceFiles: string[];
+  }>;
 }
 
 export interface FeatureSurfacePage {
@@ -140,6 +144,7 @@ export interface FeatureSurfaceApi {
 }
 
 export interface FeatureSurfaceImplementationApi {
+  label: string;
   domain: string;
   method: string;
   path: string;
@@ -179,6 +184,7 @@ export interface FeatureSurfaceIndexResponse {
   contractApis: FeatureSurfaceApi[];
   nextjsApis: FeatureSurfaceImplementationApi[];
   rustApis: FeatureSurfaceImplementationApi[];
+  implementationApis: FeatureSurfaceImplementationApi[];
   metadata: FeatureSurfaceMetadata | null;
   repoRoot: string;
   warnings: string[];

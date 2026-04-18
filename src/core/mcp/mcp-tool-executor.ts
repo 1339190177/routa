@@ -10,6 +10,7 @@ import { NoteTools } from "@/core/tools/note-tools";
 import { WorkspaceTools } from "@/core/tools/workspace-tools";
 import { KanbanTools } from "@/core/tools/kanban-tools";
 import { getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleton";
+import { readFeatureTreeSpecResource } from "@/core/spec/feature-tree-spec-resource-contract";
 import { ToolMode } from "./routa-mcp-tool-manager";
 import { getMcpProfileToolAllowlist, type McpServerProfile } from "./mcp-server-profiles";
 
@@ -59,6 +60,7 @@ const ESSENTIAL_TOOL_NAMES = new Set([
   "get_artifact",
   "list_pending_artifact_requests",
   "capture_screenshot",
+  "read_specialist_spec_resource",
 ]);
 
 export async function executeMcpTool(
@@ -124,6 +126,20 @@ export async function executeMcpTool(
     } catch (e) {
       return { content: [{ type: "text", text: JSON.stringify({ error: e instanceof Error ? e.message : String(e) }) }], isError: true };
     }
+  }
+
+  if (name === "read_specialist_spec_resource") {
+    const uri = args.uri;
+    if (typeof uri !== "string" || !uri.trim()) {
+      return formatResult({ success: false, error: "uri is required" });
+    }
+
+    const resource = readFeatureTreeSpecResource(uri);
+    return formatResult(
+      resource
+        ? { success: true, data: resource }
+        : { success: false, error: `Unknown specialist spec resource URI: ${uri}` },
+    );
   }
 
   const workspace = args.workspaceId as string;
@@ -323,7 +339,6 @@ export async function executeMcpTool(
           outputPath: args.outputPath as string | undefined,
         })
       );
-
     // ── Note tools ───────────────────────────────────────────────────
     case "create_note":
       if (!noteTools) return formatResult({ success: false, error: "Note tools not available." });
@@ -1145,6 +1160,17 @@ export function getMcpToolDefinitions(
           outputPath: { type: "string", description: "Optional output path for the captured screenshot" },
         },
         required: ["agentId", "taskId"],
+      },
+    },
+    {
+      name: "read_specialist_spec_resource",
+      description: "Read a bundled specialist framework spec resource by URI. Use this when your provider cannot call MCP resources/read directly.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          uri: { type: "string", description: "Specialist spec resource URI, e.g. resource://routa/specialists/feature-tree/manifest" },
+        },
+        required: ["uri"],
       },
     },
     // ── Kanban tools ──────────────────────────────────────────────────
