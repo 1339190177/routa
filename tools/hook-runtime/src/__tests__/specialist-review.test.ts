@@ -87,6 +87,7 @@ describe("runReviewTriggerSpecialist", () => {
     expect(result.allowed).toBe(true);
     expect(runCommandMock).toHaveBeenCalledTimes(3);
     expect(runCommandMock.mock.calls[2]?.[0]).toContain("claude -p --permission-mode bypassPermissions");
+    expect(runCommandMock.mock.calls[2]?.[1]).toMatchObject({ timeoutMs: 45_000 });
   });
 
   it("uses anthropic-compatible HTTP when provider override is anthropic", async () => {
@@ -168,6 +169,7 @@ describe("runReviewTriggerSpecialist", () => {
     expect(result.allowed).toBe(true);
     expect(runCommandMock).toHaveBeenCalledTimes(3);
     expect(runCommandMock.mock.calls[2]?.[0]).toContain("codex -a never exec -s read-only");
+    expect(runCommandMock.mock.calls[2]?.[1]).toMatchObject({ timeoutMs: 45_000 });
   });
 
   it("falls back to Codex when the default Claude provider is unavailable", async () => {

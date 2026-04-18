@@ -1464,7 +1464,31 @@ async fn api_spec_surface_index_contract() {
       "operationId": "listSpecIssues",
       "summary": "List local issue specs"
     }
-  ]
+  ],
+  "contractApis": [
+    {
+      "domain": "spec",
+      "method": "GET",
+      "path": "/api/spec/issues",
+      "summary": "List local issue specs"
+    }
+  ],
+  "rustApis": [
+    {
+      "domain": "spec",
+      "method": "GET",
+      "path": "/api/spec/issues",
+      "sourceFiles": ["crates/routa-server/src/api/spec.rs"]
+    }
+  ],
+  "metadata": {
+    "capabilityGroups": [
+      {
+        "id": "governance-settings",
+        "name": "Governance and Settings"
+      }
+    ]
+  }
 }"#,
     )
     .expect("write surface index");
@@ -1488,8 +1512,30 @@ async fn api_spec_surface_index_contract() {
         json!("/workspace/:workspaceId/spec")
     );
     assert_eq!(success_json["apis"][0]["domain"], json!("spec"));
+    assert_eq!(
+        success_json["contractApis"][0]["path"],
+        json!("/api/spec/issues")
+    );
+    assert_eq!(
+        success_json["rustApis"][0]["sourceFiles"][0],
+        json!("crates/routa-server/src/api/spec.rs")
+    );
+    assert_eq!(
+        success_json["metadata"]["capabilityGroups"][0]["id"],
+        json!("governance-settings")
+    );
 
     std::fs::remove_file(specs_dir.join("feature-tree.index.json")).expect("remove surface index");
+    std::fs::write(
+        repo_root.path().join("api-contract.yaml"),
+        r#"openapi: 3.1.0
+paths:
+  /api/spec/issues:
+    get:
+      summary: List local issue specs
+"#,
+    )
+    .expect("write api contract");
 
     let missing_response = fixture
         .client
@@ -1505,11 +1551,56 @@ async fn api_spec_surface_index_contract() {
         .await
         .expect("decode missing spec surface index");
     assert_eq!(missing_json["pages"], json!([]));
-    assert_eq!(missing_json["apis"], json!([]));
+    assert_eq!(missing_json["apis"][0]["path"], json!("/api/spec/issues"));
+    assert_eq!(
+        missing_json["contractApis"][0]["summary"],
+        json!("List local issue specs")
+    );
     assert!(
         missing_json["warnings"][0]
             .as_str()
             .is_some_and(|warning| warning.contains("Feature surface index not found")),
         "expected missing surface index warning, got {missing_json:?}"
     );
+}
+
+#[tokio::test]
+async fn api_spec_feature_tree_generate_contract() {
+    let fixture = ApiFixture::new().await;
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("workspace root")
+        .to_path_buf();
+
+    let response = fixture
+        .client
+        .post(fixture.endpoint("/api/spec/feature-tree/generate"))
+        .json(&json!({
+            "repoPath": repo_root.to_string_lossy().to_string(),
+            "dryRun": true
+        }))
+        .send()
+        .await
+        .expect("generate feature tree");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value = response
+        .json()
+        .await
+        .expect("decode feature tree generate response");
+
+    assert!(payload["generatedAt"].as_str().is_some());
+    assert_eq!(payload["frameworksDetected"], json!(["nextjs"]));
+    assert_eq!(
+        payload["wroteFiles"],
+        json!([
+            "docs/product-specs/FEATURE_TREE.md",
+            "docs/product-specs/feature-tree.index.json"
+        ])
+    );
+    assert!(payload["warnings"].as_array().is_some());
+    assert!(payload["pagesCount"].as_u64().is_some_and(|count| count > 0));
+    assert!(payload["apisCount"].as_u64().is_some_and(|count| count > 0));
 }

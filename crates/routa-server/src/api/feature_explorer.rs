@@ -5,7 +5,8 @@ use axum::{
     Json, Router,
 };
 use feature_trace::{
-    FeatureSurfaceCatalog, FeatureTraceInput, FeatureTreeCatalog, SessionAnalysis, SessionAnalyzer,
+    build_feature_prompt_context, FeaturePromptContext, FeatureSurfaceCatalog, FeatureTraceInput,
+    FeatureTreeCatalog, SessionAnalysis, SessionAnalyzer,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -62,6 +63,7 @@ struct FeatureDetailResponse {
     session_count: usize,
     changed_files: usize,
     updated_at: String,
+    prompt_context: Option<FeaturePromptContext>,
     file_tree: Vec<FileTreeNode>,
     surface_links: Vec<SurfaceLinkResponse>,
     page_details: Vec<PageDetailResponse>,
@@ -127,12 +129,8 @@ fn map_context_error(error: impl std::fmt::Display) -> (StatusCode, Json<Value>)
 }
 
 fn load_feature_tree(repo_root: &Path) -> Result<FeatureTreeCatalog, String> {
-    let feature_tree_path = repo_root.join("docs/product-specs/FEATURE_TREE.md");
-    if !feature_tree_path.exists() {
-        return Err("FEATURE_TREE.md not found".to_string());
-    }
-    FeatureTreeCatalog::from_feature_tree_markdown(&feature_tree_path)
-        .map_err(|e| format!("Failed to parse FEATURE_TREE.md: {e}"))
+    FeatureTreeCatalog::from_repo_root(repo_root)
+        .map_err(|e| format!("Failed to load feature tree sources: {e}"))
 }
 
 fn build_file_tree(source_files: &[String]) -> Vec<FileTreeNode> {
@@ -184,6 +182,9 @@ fn insert_into_tree(children: &mut Vec<FileTreeNode>, parts: &[&str], full_path:
 /// Per-file statistics: (change_count, session_count, latest_timestamp)
 type FileStats = HashMap<String, (usize, usize, String)>;
 
+/// Per-feature statistics: (session_count, changed_file_count, latest_timestamp)
+type FeatureStats = HashMap<String, (usize, usize, String)>;
+
 #[derive(Debug, Default)]
 struct FeatureStatAggregate {
     session_ids: BTreeSet<String>,
@@ -201,9 +202,14 @@ struct FileStatAggregate {
 fn collect_session_stats(
     repo_root: &Path,
     feature_tree: &FeatureTreeCatalog,
-) -> (HashMap<String, (usize, usize, String)>, FileStats) {
+) -> (
+    FeatureStats,
+    FileStats,
+    Vec<SessionAnalysis>,
+) {
     let mut stats: HashMap<String, FeatureStatAggregate> = HashMap::new();
     let mut file_stats: HashMap<String, FileStatAggregate> = HashMap::new();
+    let mut analyses = Vec::new();
 
     // Try to collect real transcript data
     let surface_catalog = FeatureSurfaceCatalog::from_repo_root(repo_root).unwrap_or_default();
@@ -221,6 +227,7 @@ fn collect_session_stats(
                 );
                 let changed_files = input.changed_files.clone();
                 let analysis = analyzer.analyze_input(&input);
+                analyses.push(analysis.clone());
 
                 let ts_str = {
                     let ms = transcript.last_seen_at_ms;
@@ -271,6 +278,7 @@ fn collect_session_stats(
                 )
             })
             .collect(),
+        analyses,
     )
 }
 
@@ -303,6 +311,8 @@ fn build_feature_trace_input_from_transcript(
         session_id: transcript.session_id.clone(),
         changed_files,
         tool_call_names,
+        prompt_previews: transcript.prompt.iter().cloned().collect(),
+        file_operations: Vec::new(),
     }
 }
 
@@ -322,6 +332,26 @@ fn build_feature_trace_input_from_normalized_session(
         .iter()
         .map(|tool_call| tool_call.tool_name.clone())
         .collect::<Vec<_>>();
+    let prompt_previews = session
+        .prompts
+        .iter()
+        .filter(|prompt| prompt.role == trace_parser::PromptRole::User)
+        .map(|prompt| prompt.text.trim())
+        .filter(|prompt| !prompt.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    let file_operations = session
+        .file_events
+        .iter()
+        .map(|event| match event.operation {
+            trace_parser::FileOperationKind::Added => "added",
+            trace_parser::FileOperationKind::Modified => "modified",
+            trace_parser::FileOperationKind::Deleted => "deleted",
+            trace_parser::FileOperationKind::Renamed => "renamed",
+            trace_parser::FileOperationKind::Unknown => "unknown",
+        })
+        .map(str::to_string)
+        .collect::<Vec<_>>();
 
     if changed_files.is_empty() && tool_call_names.is_empty() {
         return None;
@@ -331,6 +361,8 @@ fn build_feature_trace_input_from_normalized_session(
         session_id: session.session_id.clone(),
         changed_files,
         tool_call_names,
+        prompt_previews,
+        file_operations,
     })
 }
 
@@ -570,7 +602,7 @@ async fn get_feature_list(
     .map_err(map_context_error)?;
 
     let feature_tree = load_feature_tree(&repo_root).map_err(map_error)?;
-    let (session_stats, _file_stats) = collect_session_stats(&repo_root, &feature_tree);
+    let (session_stats, _file_stats, _analyses) = collect_session_stats(&repo_root, &feature_tree);
 
     let capability_groups: Vec<CapabilityGroupResponse> = feature_tree
         .capability_groups
@@ -633,7 +665,7 @@ async fn get_feature_detail(
     .map_err(map_context_error)?;
 
     let feature_tree = load_feature_tree(&repo_root).map_err(map_error)?;
-    let (session_stats, file_stats) = collect_session_stats(&repo_root, &feature_tree);
+    let (session_stats, file_stats, analyses) = collect_session_stats(&repo_root, &feature_tree);
 
     let feature = feature_tree
         .features
@@ -754,6 +786,10 @@ async fn get_feature_detail(
         } else {
             updated_at
         },
+        prompt_context: {
+            let context = build_feature_prompt_context(&feature.id, &analyses);
+            (context.session_count > 0).then_some(context)
+        },
         file_tree,
         surface_links,
         page_details,
@@ -866,6 +902,8 @@ mod tests {
                 "src/app/workspace/[workspaceId]/sessions/page.tsx".to_string(),
             ],
             tool_call_counts: BTreeMap::new(),
+            prompt_previews: Vec::new(),
+            file_operation_counts: BTreeMap::new(),
             surface_links: Vec::new(),
             feature_links: vec![ProductFeatureLink {
                 feature_id: "session-recovery".to_string(),

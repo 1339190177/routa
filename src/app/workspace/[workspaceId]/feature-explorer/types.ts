@@ -33,6 +33,7 @@ export interface FeatureDetail {
   sessionCount: number;
   changedFiles: number;
   updatedAt: string;
+  promptContext?: FeaturePromptContext | null;
   fileTree: FileTreeNode[];
   surfaceLinks?: SurfaceLink[];
   pageDetails?: PageDetail[];
@@ -41,10 +42,40 @@ export interface FeatureDetail {
   fileSignals?: Record<string, FileSignal>;
 }
 
+export interface CountSummary {
+  name: string;
+  count: number;
+}
+
+export interface FeaturePromptContext {
+  featureId: string;
+  sessionCount: number;
+  promptPreviews: CountSummary[];
+  toolCallCounts: CountSummary[];
+  fileOperationCounts: CountSummary[];
+}
+
 export interface FileStat {
   changes: number;
   sessions: number;
   updatedAt: string;
+}
+
+export interface FileSessionToolFailure {
+  toolName: string;
+  command?: string;
+  message: string;
+}
+
+export interface FileSessionDiagnostics {
+  toolCallCount: number;
+  failedToolCallCount: number;
+  toolCallsByName: Record<string, number>;
+  readFiles: string[];
+  writtenFiles: string[];
+  repeatedReadFiles: string[];
+  repeatedCommands: string[];
+  failedTools: FileSessionToolFailure[];
 }
 
 export interface FileSessionSignal {
@@ -56,12 +87,25 @@ export interface FileSessionSignal {
   toolNames: string[];
   changedFiles?: string[];
   resumeCommand?: string;
+  diagnostics?: FileSessionDiagnostics;
 }
 
 export interface FileSignal {
   sessions: FileSessionSignal[];
   toolHistory: string[];
   promptHistory: string[];
+}
+
+export interface AggregatedSelectionSession {
+  provider: string;
+  sessionId: string;
+  updatedAt: string;
+  promptSnippet: string;
+  promptHistory: string[];
+  toolNames: string[];
+  resumeCommand?: string;
+  changedFiles: string[];
+  diagnostics?: FileSessionDiagnostics;
 }
 
 export interface FileTreeNode {
@@ -92,6 +136,10 @@ export interface ApiDetail {
   description: string;
   nextjsSourceFiles?: string[];
   rustSourceFiles?: string[];
+  implementationSources?: Array<{
+    label: string;
+    sourceFiles: string[];
+  }>;
 }
 
 export interface FeatureSurfacePage {
@@ -110,6 +158,7 @@ export interface FeatureSurfaceApi {
 }
 
 export interface FeatureSurfaceImplementationApi {
+  label: string;
   domain: string;
   method: string;
   path: string;
@@ -149,6 +198,7 @@ export interface FeatureSurfaceIndexResponse {
   contractApis: FeatureSurfaceApi[];
   nextjsApis: FeatureSurfaceImplementationApi[];
   rustApis: FeatureSurfaceImplementationApi[];
+  implementationApis: FeatureSurfaceImplementationApi[];
   metadata: FeatureSurfaceMetadata | null;
   repoRoot: string;
   warnings: string[];

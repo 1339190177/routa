@@ -76,6 +76,7 @@ feature_metadata:
       expect(payload.contractApis).toHaveLength(1);
       expect(payload.nextjsApis).toHaveLength(1);
       expect(payload.rustApis).toHaveLength(1);
+      expect(payload.implementationApis).toHaveLength(2);
       expect(payload.pages[0]).toMatchObject({
         route: "/workspace/:workspaceId/spec",
         title: "Workspace / Spec",
@@ -84,6 +85,18 @@ feature_metadata:
         domain: "spec",
         path: "/api/spec/issues",
       });
+      expect(payload.implementationApis).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: "nextjs",
+            path: "/api/spec/issues",
+          }),
+          expect.objectContaining({
+            label: "rust",
+            path: "/api/spec/issues",
+          }),
+        ]),
+      );
     } finally {
       await rm(repoRoot, { recursive: true, force: true });
     }
@@ -102,6 +115,66 @@ feature_metadata:
       expect(payload.pages).toEqual([]);
       expect(payload.apis).toEqual([]);
       expect(payload.warnings[0]).toContain("FEATURE_TREE.md");
+    } finally {
+      await rm(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("infers metadata for legacy generated markdown without feature frontmatter", async () => {
+    const repoRoot = await createTempRepo();
+
+    try {
+      await writeFile(
+        path.join(repoRoot, "docs", "product-specs", "FEATURE_TREE.md"),
+        `---
+status: generated
+purpose: Auto-generated route and API surface index for Routa.js.
+---
+
+# Product Feature Specification
+
+## Frontend Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| Feature Explorer | \`/workspace/:workspaceId/feature-explorer\` | Browse features |
+
+## API Endpoints
+
+### Feature-Explorer (1)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | \`/api/feature-explorer\` | List features |
+`,
+      );
+
+      const response = await GET(new NextRequest(
+        `http://localhost/api/spec/surface-index?repoPath=${encodeURIComponent(repoRoot)}`,
+      ));
+      const payload = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(payload.pages).toHaveLength(1);
+      expect(payload.contractApis).toHaveLength(1);
+      expect(payload.metadata).toMatchObject({
+        capabilityGroups: [
+          {
+            id: "inferred-surfaces",
+            name: "Inferred Surfaces",
+          },
+        ],
+        features: [
+          {
+            id: "feature-explorer",
+            name: "Feature Explorer",
+            group: "inferred-surfaces",
+            status: "inferred",
+            pages: ["/workspace/:workspaceId/feature-explorer"],
+            apis: ["GET /api/feature-explorer"],
+          },
+        ],
+      });
     } finally {
       await rm(repoRoot, { recursive: true, force: true });
     }

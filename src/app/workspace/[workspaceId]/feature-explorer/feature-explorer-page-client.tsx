@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -12,24 +12,37 @@ import {
   FlaskConical,
   Folder,
   ImageIcon,
+  RefreshCw,
   Search,
 } from "lucide-react";
 
 import { DesktopAppShell } from "@/client/components/desktop-app-shell";
+import { ChatPanel } from "@/client/components/chat-panel";
 import { RepoPicker, type RepoSelection } from "@/client/components/repo-picker";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
+import { useAcp } from "@/client/hooks/use-acp";
 import { useCodebases, useWorkspaces } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import { loadRepoSelection, saveRepoSelection } from "@/client/utils/repo-selection-storage";
 import { useTranslation } from "@/i18n";
 
-import type { FeatureDetail, FeatureSurfacePage, FileTreeNode, InspectorTab } from "./types";
+import type {
+  AggregatedSelectionSession,
+  FeatureDetail,
+  FeatureSurfacePage,
+  FileSessionDiagnostics,
+  FileTreeNode,
+  InspectorTab,
+} from "./types";
 import {
+  AnalysisSessionDrawer,
   ApiPanel,
-  type AggregatedSelectionSession,
   ContextPanel,
+  SessionAnalysisDrawer,
   ScreenshotPanel,
 } from "./feature-explorer-inspector-panels";
+import { GenerateFeatureTreeDrawer } from "./generate-feature-tree-drawer";
+import { buildSessionAnalysisPrompt } from "./session-analysis";
 import {
   type ExplorerSection,
   type ExplorerSurfaceItem,
@@ -133,6 +146,54 @@ function buildSelectableFileIdsByNode(
   return acc;
 }
 
+function mergeDistinctStrings(left: string[], right: string[]): string[] {
+  return [...new Set([...left, ...right])];
+}
+
+function mergeSessionDiagnostics(
+  left?: FileSessionDiagnostics,
+  right?: FileSessionDiagnostics,
+): FileSessionDiagnostics | undefined {
+  if (!left) {
+    return right ? {
+      ...right,
+      toolCallsByName: { ...right.toolCallsByName },
+      readFiles: [...right.readFiles],
+      writtenFiles: [...right.writtenFiles],
+      repeatedReadFiles: [...right.repeatedReadFiles],
+      repeatedCommands: [...right.repeatedCommands],
+      failedTools: right.failedTools.map((failure) => ({ ...failure })),
+    } : undefined;
+  }
+
+  if (!right) {
+    return left;
+  }
+
+  const toolCallsByName: Record<string, number> = { ...left.toolCallsByName };
+  for (const [toolName, count] of Object.entries(right.toolCallsByName)) {
+    toolCallsByName[toolName] = Math.max(toolCallsByName[toolName] ?? 0, count);
+  }
+
+  const failedTools = new Map(
+    left.failedTools.map((failure) => [`${failure.toolName}|${failure.command ?? ""}|${failure.message}`, failure] as const),
+  );
+  for (const failure of right.failedTools) {
+    failedTools.set(`${failure.toolName}|${failure.command ?? ""}|${failure.message}`, failure);
+  }
+
+  return {
+    toolCallCount: Math.max(left.toolCallCount, right.toolCallCount),
+    failedToolCallCount: Math.max(left.failedToolCallCount, right.failedToolCallCount),
+    toolCallsByName,
+    readFiles: mergeDistinctStrings(left.readFiles, right.readFiles).sort((a, b) => a.localeCompare(b)),
+    writtenFiles: mergeDistinctStrings(left.writtenFiles, right.writtenFiles).sort((a, b) => a.localeCompare(b)),
+    repeatedReadFiles: mergeDistinctStrings(left.repeatedReadFiles, right.repeatedReadFiles).sort((a, b) => a.localeCompare(b)),
+    repeatedCommands: mergeDistinctStrings(left.repeatedCommands, right.repeatedCommands),
+    failedTools: [...failedTools.values()],
+  };
+}
+
 function formatShortDate(iso: string): string {
   if (!iso || iso === "-") return "-";
   const d = new Date(iso);
@@ -181,17 +242,46 @@ function replaceFeatureExplorerUrlState(nextState: FeatureExplorerUrlState): voi
   window.history.replaceState(window.history.state, "", nextUrl);
 }
 
+function buildSessionAnalysisSessionName(
+  locale: string,
+  featureDetail: FeatureDetail | null,
+  selectedFilePaths: string[],
+): string {
+  const firstFile = selectedFilePaths[0]?.split("/").pop() ?? "";
+  const focus = firstFile || featureDetail?.name || "feature";
+
+  if (selectedFilePaths.length > 1) {
+    return locale === "zh"
+      ? `文件会话分析 · ${focus} +${selectedFilePaths.length - 1}`
+      : `File session analysis · ${focus} +${selectedFilePaths.length - 1}`;
+  }
+
+  return locale === "zh"
+    ? `文件会话分析 · ${focus}`
+    : `File session analysis · ${focus}`;
+}
+
 export function FeatureExplorerPageClient({
   workspaceId,
 }: {
   workspaceId: string;
 }) {
+  const inferredGroupId = "inferred-surfaces";
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const workspacesHook = useWorkspaces();
   const { codebases } = useCodebases(workspaceId);
 
   const workspace = workspacesHook.workspaces.find((item) => item.id === workspaceId) ?? null;
+  const analysisAcp = useAcp();
+  const analysisAcpConnected = analysisAcp.connected;
+  const analysisAcpLoading = analysisAcp.loading;
+  const connectAnalysisAcp = analysisAcp.connect;
+  const analysisProviders = analysisAcp.providers;
+  const analysisSelectedProvider = analysisAcp.selectedProvider;
+  const setAnalysisProvider = analysisAcp.setProvider;
+  const selectAnalysisSession = analysisAcp.selectSession;
+  const promptAnalysisSession = analysisAcp.promptSession;
   const workspaceRepos = useMemo(
     () =>
       codebases.map((codebase) => ({
@@ -205,13 +295,14 @@ export function FeatureExplorerPageClient({
     const initialSelection = loadInitialRepoSelection(workspaceId);
     return initialSelection ? { [workspaceId]: initialSelection } : {};
   });
+  const [generateRefreshCounter, setGenerateRefreshCounter] = useState(0);
   const hasRepoSelectionOverride = Object.prototype.hasOwnProperty.call(repoSelectionOverrides, workspaceId);
   const manualRepoSelection = hasRepoSelectionOverride
     ? (repoSelectionOverrides[workspaceId] ?? null)
     : loadInitialRepoSelection(workspaceId);
   const fallbackRepoSelection = workspaceRepos[0] ?? null;
   const effectiveRepoSelection = manualRepoSelection ?? fallbackRepoSelection;
-  const repoRefreshKey = `${effectiveRepoSelection?.path ?? ""}:${effectiveRepoSelection?.branch ?? ""}`;
+  const repoRefreshKey = `${effectiveRepoSelection?.path ?? ""}:${effectiveRepoSelection?.branch ?? ""}:${generateRefreshCounter}`;
 
   useEffect(() => {
     saveRepoSelection("featureExplorer", workspaceId, manualRepoSelection);
@@ -243,12 +334,21 @@ export function FeatureExplorerPageClient({
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [surfaceSectionCollapsed, setSurfaceSectionCollapsed] = useState<Record<string, boolean>>({});
   const [surfaceTreeExpandedIds, setSurfaceTreeExpandedIds] = useState<Record<string, boolean>>({});
+  const [structureSectionCollapsed, setStructureSectionCollapsed] = useState<Record<string, boolean>>({});
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>("");
   const [desiredFilePath, setDesiredFilePath] = useState<string>(initialUrlState.filePath);
   const [hasResolvedInitialUrlSelection, setHasResolvedInitialUrlSelection] = useState(
     initialUrlState.featureId === "",
   );
+  const [isSessionAnalysisDrawerOpen, setIsSessionAnalysisDrawerOpen] = useState(false);
+  const [isGenerateDrawerOpen, setIsGenerateDrawerOpen] = useState(false);
+  const [isStartingSessionAnalysis, setIsStartingSessionAnalysis] = useState(false);
+  const [sessionAnalysisError, setSessionAnalysisError] = useState<string | null>(null);
+  const [analysisSessionId, setAnalysisSessionId] = useState<string | null>(null);
+  const [analysisSessionName, setAnalysisSessionName] = useState("");
+  const [analysisSessionProviderId, setAnalysisSessionProviderId] = useState("");
+  const [isAnalysisSessionPaneOpen, setIsAnalysisSessionPaneOpen] = useState(false);
 
   // Derive effective feature ID: user-selected or auto-initialized from hook
   const effectiveFeatureId = featureId || initialFeatureId;
@@ -313,18 +413,69 @@ export function FeatureExplorerPageClient({
     }
     return map;
   }, [featureMetadata, surfaceIndex.nextjsApis, surfaceIndex.rustApis]);
+  const browserViewFeatureIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const feature of features) {
+      if (feature.pageCount > 0) {
+        ids.add(feature.id);
+      }
+    }
+    for (const metadataItem of featureMetadata) {
+      if ((metadataItem.pages?.length ?? 0) > 0) {
+        ids.add(metadataItem.id);
+      }
+    }
+    for (const page of surfaceIndex.pages) {
+      for (const featureId of dedupeFeatureIds(pageFeatureMap.get(page.route) ?? [])) {
+        ids.add(featureId);
+      }
+    }
+    return ids;
+  }, [featureMetadata, features, pageFeatureMap, surfaceIndex.pages]);
+  const nextjsApiFeatureIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const api of surfaceIndex.nextjsApis) {
+      const lookupKey = buildApiLookupKey(api.method, api.path);
+      for (const featureId of dedupeFeatureIds(apiFeatureMap.get(lookupKey) ?? [])) {
+        ids.add(featureId);
+      }
+    }
+    return ids;
+  }, [apiFeatureMap, surfaceIndex.nextjsApis]);
+  const rustApiFeatureIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const api of surfaceIndex.rustApis) {
+      const lookupKey = buildApiLookupKey(api.method, api.path);
+      for (const featureId of dedupeFeatureIds(apiFeatureMap.get(lookupKey) ?? [])) {
+        ids.add(featureId);
+      }
+    }
+    return ids;
+  }, [apiFeatureMap, surfaceIndex.rustApis]);
 
   const featureItems = useMemo<ExplorerSurfaceItem[]>(
     () => features
-      .filter((feature) => matchesQuery(query, [feature.name, feature.summary, feature.id]))
-      .sort((left, right) => {
-        if (right.sessionCount !== left.sessionCount) {
-          return right.sessionCount - left.sessionCount;
+      .filter((feature) => {
+        if (!matchesQuery(query, [feature.name, feature.summary, feature.id])) {
+          return false;
         }
-        if (right.changedFiles !== left.changedFiles) {
-          return right.changedFiles - left.changedFiles;
+
+        if (feature.id === effectiveFeatureId) {
+          return true;
         }
-        return left.name.localeCompare(right.name);
+
+        switch (surfaceNavigationView) {
+          case "sections":
+            return true;
+          case "browser-url":
+            return browserViewFeatureIds.has(feature.id);
+          case "nextjs-api":
+            return nextjsApiFeatureIds.has(feature.id);
+          case "rust-api":
+            return rustApiFeatureIds.has(feature.id);
+          case "path":
+            return true;
+        }
       })
       .map((feature): ExplorerSurfaceItem => {
         const metadataItem = featureMetadataById.get(feature.id);
@@ -353,7 +504,39 @@ export function FeatureExplorerPageClient({
           selectable: true,
         };
       }),
-    [capabilityGroups, featureMetadataById, features, query, t.featureExplorer.filesLabel, t.featureExplorer.sessionsLabel],
+    [
+      browserViewFeatureIds,
+      capabilityGroups,
+      effectiveFeatureId,
+      featureMetadataById,
+      features,
+      nextjsApiFeatureIds,
+      query,
+      rustApiFeatureIds,
+      surfaceNavigationView,
+      t.featureExplorer.filesLabel,
+      t.featureExplorer.sessionsLabel,
+    ],
+  );
+  const curatedFeatureItems = useMemo(
+    () => featureItems.filter((item) => {
+      const feature = featureSummaryById.get(item.featureIds[0] ?? "");
+      if (!feature) {
+        return true;
+      }
+      return feature.group !== inferredGroupId && feature.status !== "inferred";
+    }),
+    [featureItems, featureSummaryById, inferredGroupId],
+  );
+  const inferredFeatureItems = useMemo(
+    () => featureItems.filter((item) => {
+      const feature = featureSummaryById.get(item.featureIds[0] ?? "");
+      if (!feature) {
+        return false;
+      }
+      return feature.group === inferredGroupId || feature.status === "inferred";
+    }),
+    [featureItems, featureSummaryById, inferredGroupId],
   );
   const pageItems = useMemo<ExplorerSurfaceItem[]>(
     () => surfaceIndex.pages
@@ -440,6 +623,60 @@ export function FeatureExplorerPageClient({
       t.featureExplorer.sessionsLabel,
     ],
   );
+  const featureSidebarGroups = useMemo(() => {
+    const itemsByGroup = new Map<string, ExplorerSurfaceItem[]>();
+
+    for (const item of curatedFeatureItems) {
+      const feature = featureSummaryById.get(item.featureIds[0] ?? "");
+      const groupId = feature?.group || "__ungrouped__";
+      const current = itemsByGroup.get(groupId) ?? [];
+      current.push(item);
+      itemsByGroup.set(groupId, current);
+    }
+
+    const groups = capabilityGroups
+      .filter((group) => group.id !== inferredGroupId)
+      .map((group) => ({
+        id: group.id,
+        title: group.name,
+        description: group.description,
+        items: itemsByGroup.get(group.id) ?? [],
+      }))
+      .filter((group) => group.items.length > 0);
+
+    const groupedIds = new Set(groups.map((group) => group.id));
+    for (const [groupId, items] of itemsByGroup.entries()) {
+      if (groupedIds.has(groupId)) {
+        continue;
+      }
+      groups.push({
+        id: groupId,
+        title: groupId === "__ungrouped__" ? t.featureExplorer.featureSection : groupId,
+        description: "",
+        items,
+      });
+    }
+
+    if (inferredFeatureItems.length > 0) {
+      const inferredGroup = capabilityGroups.find((group) => group.id === inferredGroupId);
+      groups.push({
+        id: inferredGroupId,
+        title: inferredGroup?.name ?? t.featureExplorer.inferredFeaturesLabel,
+        description: inferredGroup?.description ?? "",
+        items: inferredFeatureItems,
+      });
+    }
+
+    return groups;
+  }, [
+    capabilityGroups,
+    curatedFeatureItems,
+    featureSummaryById,
+    inferredFeatureItems,
+    inferredGroupId,
+    t.featureExplorer.featureSection,
+    t.featureExplorer.inferredFeaturesLabel,
+  ]);
   const surfaceNavigationOptions = useMemo(
     () => [
       { id: "sections" as const, label: t.featureExplorer.sectionView },
@@ -528,39 +765,6 @@ export function FeatureExplorerPageClient({
     t.featureExplorer.pathView,
     t.featureExplorer.rustApiSection,
   ]);
-  const sectionTreeNodesById = useMemo<Record<string, SurfaceTreeNode[]>>(
-    () => ({
-      pages: buildSurfaceTree(
-        pageItems.map((item) => ({
-          nodeId: item.key,
-          segments: splitBrowserRouteSegments(item.label),
-          item,
-        })),
-      ),
-      "contract-apis": buildSurfaceTree(
-        contractApiItems.map((item) => ({
-          nodeId: item.key,
-          segments: splitApiRouteSegments(item.label),
-          item,
-        })),
-      ),
-      "nextjs-apis": buildSurfaceTree(
-        nextjsApiItems.map((item) => ({
-          nodeId: item.key,
-          segments: splitApiRouteSegments(item.label),
-          item,
-        })),
-      ),
-      "rust-apis": buildSurfaceTree(
-        rustApiItems.map((item) => ({
-          nodeId: item.key,
-          segments: splitApiRouteSegments(item.label),
-          item,
-        })),
-      ),
-    }),
-    [contractApiItems, nextjsApiItems, pageItems, rustApiItems],
-  );
   const explorerItemsByKey = useMemo(() => {
     const treeItems = surfaceTreeSection
       ? (function collect(nodes: SurfaceTreeNode[], acc: ExplorerSurfaceItem[] = []): ExplorerSurfaceItem[] {
@@ -596,6 +800,86 @@ export function FeatureExplorerPageClient({
     () => (featureDetail?.id === effectiveFeatureId ? featureDetail : null),
     [effectiveFeatureId, featureDetail],
   );
+  const activeFeatureMetadata = useMemo(
+    () => featureMetadataById.get(effectiveFeatureId) ?? null,
+    [effectiveFeatureId, featureMetadataById],
+  );
+  const featurePageDetails = useMemo(() => {
+    if (resolvedFeatureDetail?.pageDetails?.length) {
+      return resolvedFeatureDetail.pageDetails.filter(
+        (page, index, pages) => pages.findIndex((candidate) => candidate.route === page.route) === index,
+      );
+    }
+
+    const declaredPages = activeFeatureMetadata?.pages ?? [];
+    return declaredPages
+      .map((route) => {
+        const matched = surfaceIndex.pages.find((page) => page.route === route);
+        return matched ?? {
+          name: route,
+          route,
+          description: "",
+          sourceFile: "",
+        };
+      })
+      .filter((page, index, pages) => pages.findIndex((candidate) => candidate.route === page.route) === index);
+  }, [activeFeatureMetadata, resolvedFeatureDetail, surfaceIndex.pages]);
+  const featureApiDetails = useMemo(() => {
+    if (resolvedFeatureDetail?.apiDetails?.length) {
+      return resolvedFeatureDetail.apiDetails.filter(
+        (api, index, apis) => apis.findIndex(
+          (candidate) => candidate.method === api.method && candidate.endpoint === api.endpoint,
+        ) === index,
+      );
+    }
+
+    const declaredApis = activeFeatureMetadata?.apis ?? [];
+    return declaredApis
+      .map((declaration) => {
+        const parsed = parseApiDeclaration(declaration);
+        const lookupKey = buildApiLookupKey(parsed.method, parsed.path);
+        const contractApi = surfaceIndex.contractApis.find(
+          (api) => buildApiLookupKey(api.method, api.path) === lookupKey,
+        );
+        const nextjsSourceFiles = surfaceIndex.nextjsApis
+          .filter((api) => buildApiLookupKey(api.method, api.path) === lookupKey)
+          .flatMap((api) => api.sourceFiles);
+        const rustSourceFiles = surfaceIndex.rustApis
+          .filter((api) => buildApiLookupKey(api.method, api.path) === lookupKey)
+          .flatMap((api) => api.sourceFiles);
+
+        return {
+          group: contractApi?.domain ?? "",
+          method: parsed.method,
+          endpoint: parsed.path,
+          description: contractApi?.summary ?? "",
+          ...(nextjsSourceFiles.length > 0 ? { nextjsSourceFiles: [...new Set(nextjsSourceFiles)] } : {}),
+          ...(rustSourceFiles.length > 0 ? { rustSourceFiles: [...new Set(rustSourceFiles)] } : {}),
+        };
+      })
+      .filter((api, index, apis) => apis.findIndex(
+        (candidate) => candidate.method === api.method && candidate.endpoint === api.endpoint,
+      ) === index);
+  }, [activeFeatureMetadata, resolvedFeatureDetail, surfaceIndex.contractApis, surfaceIndex.nextjsApis, surfaceIndex.rustApis]);
+  const featureSourceFiles = useMemo(
+    () => [...new Set(resolvedFeatureDetail?.sourceFiles ?? activeFeatureMetadata?.sourceFiles ?? [])],
+    [activeFeatureMetadata, resolvedFeatureDetail],
+  );
+  const curatedFeatureCount = useMemo(
+    () => features.filter((feature) => feature.group !== inferredGroupId && feature.status !== "inferred").length,
+    [features, inferredGroupId],
+  );
+  const inferredFeatureCount = useMemo(
+    () => features.filter((feature) => feature.group === inferredGroupId || feature.status === "inferred").length,
+    [features, inferredGroupId],
+  );
+  const hasCuratedFeatureTaxonomy = curatedFeatureCount > 0;
+  const hasInferredFeatureTaxonomy = inferredFeatureCount > 0;
+  const repositoryStatusTone = hasCuratedFeatureTaxonomy
+    ? "ready"
+    : hasInferredFeatureTaxonomy
+      ? "inferred"
+      : "missing";
   const fileTree = useMemo(
     () => (surfaceOnlySelection ? [] : resolvedFeatureDetail?.fileTree ?? []),
     [resolvedFeatureDetail, surfaceOnlySelection],
@@ -605,6 +889,15 @@ export function FeatureExplorerPageClient({
     [resolvedFeatureDetail, surfaceOnlySelection],
   );
   const flatMap = useMemo(() => flattenFiles(fileTree), [fileTree]);
+  const selectedFilePaths = useMemo(
+    () => [...new Set(
+      selectedFileIds
+        .map((fileId) => flatMap[fileId])
+        .filter((node): node is FileTreeNode => Boolean(node && node.kind === "file"))
+        .map((node) => node.path),
+    )].sort((left, right) => left.localeCompare(right)),
+    [flatMap, selectedFileIds],
+  );
   const treeNodeStats = useMemo(() => buildTreeNodeStats(fileTree, fileStats), [fileTree, fileStats]);
   const selectableFileIdsByNode = useMemo(() => buildSelectableFileIdsByNode(fileTree), [fileTree]);
 
@@ -656,9 +949,15 @@ export function FeatureExplorerPageClient({
           if (!existing.resumeCommand && session.resumeCommand) {
             existing.resumeCommand = session.resumeCommand;
           }
+          existing.diagnostics = mergeSessionDiagnostics(existing.diagnostics, session.diagnostics);
           for (const prompt of session.promptHistory ?? []) {
             if (!existing.promptHistory.includes(prompt)) {
               existing.promptHistory.push(prompt);
+            }
+          }
+          for (const toolName of session.toolNames ?? []) {
+            if (!existing.toolNames.includes(toolName)) {
+              existing.toolNames.push(toolName);
             }
           }
           for (const changedFile of session.changedFiles ?? [fileNode.path]) {
@@ -675,8 +974,10 @@ export function FeatureExplorerPageClient({
           updatedAt: session.updatedAt,
           promptSnippet: session.promptSnippet,
           promptHistory: [...(session.promptHistory ?? [])],
+          toolNames: [...(session.toolNames ?? [])],
           ...(session.resumeCommand ? { resumeCommand: session.resumeCommand } : {}),
           changedFiles: [...(session.changedFiles ?? [fileNode.path])],
+          ...(session.diagnostics ? { diagnostics: mergeSessionDiagnostics(undefined, session.diagnostics) } : {}),
         });
       }
     }
@@ -684,6 +985,7 @@ export function FeatureExplorerPageClient({
     return [...aggregated.values()]
       .map((session) => ({
         ...session,
+        toolNames: session.toolNames.sort((left, right) => left.localeCompare(right)),
         changedFiles: session.changedFiles.sort((left, right) => left.localeCompare(right)),
       }))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -701,6 +1003,11 @@ export function FeatureExplorerPageClient({
     : selectedSurface
       ? `${selectedSurface.label}${selectedSurfaceFeatureNames[0] ? ` -> ${selectedSurfaceFeatureNames[0]}` : ""}`
       : "";
+  const analysisSessionProviderName = useMemo(
+    () => analysisProviders.find((provider) => provider.id === analysisSessionProviderId)?.name ?? analysisSessionProviderId,
+    [analysisProviders, analysisSessionProviderId],
+  );
+  const featureExplorerLayoutClassName = "grid min-h-0 flex-1 xl:grid-cols-[320px_minmax(280px,1fr)_minmax(340px,420px)] 2xl:grid-cols-[380px_minmax(320px,1fr)_minmax(400px,500px)]";
 
   const handleWorkspaceSelect = (nextWorkspaceId: string) => {
     router.push(`/workspace/${encodeURIComponent(nextWorkspaceId)}/feature-explorer`);
@@ -747,7 +1054,6 @@ export function FeatureExplorerPageClient({
   const [prevDetailId, setPrevDetailId] = useState<string>("");
   useEffect(() => {
     if (resolvedFeatureDetail && resolvedFeatureDetail.id !== prevDetailId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate initialization of derived selection state
       setPrevDetailId(resolvedFeatureDetail.id);
       applyFileAutoSelect(
         resolvedFeatureDetail,
@@ -835,6 +1141,10 @@ export function FeatureExplorerPageClient({
     setSurfaceTreeExpandedIds((prev) => ({ ...prev, [nodeId]: !(prev[nodeId] ?? true) }));
   };
 
+  const handleToggleStructureSection = (sectionId: string) => {
+    setStructureSectionCollapsed((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+
   const handleSetActiveFile = (fileId: string) => {
     setActiveFileId(fileId);
     setDesiredFilePath(flatMap[fileId]?.path ?? "");
@@ -884,6 +1194,117 @@ export function FeatureExplorerPageClient({
     }
   };
 
+  useEffect(() => {
+    if (!isSessionAnalysisDrawerOpen) {
+      return;
+    }
+
+    if (selectedFilePaths.length === 0 || selectedScopeSessions.length === 0) {
+      setIsSessionAnalysisDrawerOpen(false);
+    }
+  }, [isSessionAnalysisDrawerOpen, selectedFilePaths.length, selectedScopeSessions.length]);
+
+  useEffect(() => {
+    if ((!isSessionAnalysisDrawerOpen && !isAnalysisSessionPaneOpen) || analysisAcpConnected || analysisAcpLoading) {
+      return;
+    }
+
+    void connectAnalysisAcp();
+  }, [
+    analysisAcpConnected,
+    analysisAcpLoading,
+    connectAnalysisAcp,
+    isAnalysisSessionPaneOpen,
+    isSessionAnalysisDrawerOpen,
+  ]);
+
+  const handleOpenSessionAnalysisDrawer = () => {
+    setSessionAnalysisError(null);
+    setIsSessionAnalysisDrawerOpen(true);
+  };
+
+  const handleStartSessionAnalysis = async (sessionsToAnalyze: AggregatedSelectionSession[] = selectedScopeSessions) => {
+    if (!effectiveRepoSelection?.path || selectedFilePaths.length === 0 || sessionsToAnalyze.length === 0) {
+      return;
+    }
+
+    setSessionAnalysisError(null);
+    setIsStartingSessionAnalysis(true);
+
+    try {
+      const sessionName = buildSessionAnalysisSessionName(
+        locale,
+        surfaceOnlySelection ? null : resolvedFeatureDetail,
+        selectedFilePaths,
+      );
+      const prompt = buildSessionAnalysisPrompt({
+        locale,
+        workspaceId,
+        repoName: effectiveRepoSelection.name,
+        repoPath: effectiveRepoSelection.path,
+        branch: effectiveRepoSelection.branch,
+        featureDetail: surfaceOnlySelection ? null : resolvedFeatureDetail,
+        selectedFilePaths,
+        sessions: sessionsToAnalyze,
+      });
+
+      const response = await desktopAwareFetch("/api/acp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: `feature-explorer-analysis:${Date.now()}`,
+          method: "session/new",
+          params: {
+            workspaceId,
+            cwd: effectiveRepoSelection.path,
+            branch: effectiveRepoSelection.branch || undefined,
+            role: "ROUTA",
+            specialistId: "file-session-analyst",
+            specialistLocale: locale,
+            name: sessionName,
+            provider: analysisSelectedProvider,
+          },
+        }),
+      });
+
+      const payload = await response.json().catch(() => null) as {
+        result?: { sessionId?: string };
+        error?: { message?: string };
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.error?.message || t.featureExplorer.sessionAnalysisFailed);
+      }
+
+      if (payload?.error?.message) {
+        throw new Error(payload.error.message);
+      }
+
+      const sessionId = payload?.result?.sessionId;
+      if (!sessionId) {
+        throw new Error(t.featureExplorer.sessionAnalysisFailed);
+      }
+
+      await connectAnalysisAcp();
+      selectAnalysisSession(sessionId);
+      setAnalysisSessionId(sessionId);
+      setAnalysisSessionName(sessionName);
+      setAnalysisSessionProviderId(analysisSelectedProvider);
+      setIsAnalysisSessionPaneOpen(true);
+      setIsSessionAnalysisDrawerOpen(false);
+      void promptAnalysisSession(sessionId, prompt);
+    } catch (err) {
+      setSessionAnalysisError(
+        err instanceof Error && err.message
+          ? err.message
+          : t.featureExplorer.sessionAnalysisFailed,
+      );
+    } finally {
+      setIsStartingSessionAnalysis(false);
+    }
+  };
+
   return (
     <DesktopAppShell
       workspaceId={workspaceId}
@@ -903,7 +1324,7 @@ export function FeatureExplorerPageClient({
     >
       <div className="flex h-full min-h-0 bg-desktop-bg-primary">
         <main className="flex min-w-0 flex-1">
-          <section className="grid min-h-0 flex-1 xl:grid-cols-[360px_minmax(0,1fr)_500px] 2xl:grid-cols-[420px_minmax(0,1fr)_560px]">
+          <section className={featureExplorerLayoutClassName}>
             {/* ── Left panel: Feature list ── */}
             <aside className="flex min-h-0 flex-col border-r border-desktop-border bg-desktop-bg-secondary/20">
               <div className="border-b border-desktop-border px-3 py-2">
@@ -917,6 +1338,15 @@ export function FeatureExplorerPageClient({
                   additionalRepos={workspaceRepos}
                   pathDisplay="below-muted"
                 />
+                <button
+                  type="button"
+                  onClick={() => setIsGenerateDrawerOpen(true)}
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-sm border border-desktop-accent/50 bg-desktop-accent/10 px-2.5 py-1.5 text-[11px] font-medium text-desktop-accent hover:bg-desktop-accent/20"
+                  data-testid="generate-feature-tree-button"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  {t.featureExplorer.generateFeatureTree}
+                </button>
               </div>
               <div className="border-b border-desktop-border px-3 py-2">
                 <label className="flex items-center gap-2 rounded-sm border border-desktop-border bg-desktop-bg-primary px-2.5 py-1.5 text-xs text-desktop-text-secondary">
@@ -928,6 +1358,9 @@ export function FeatureExplorerPageClient({
                     className="w-full bg-transparent text-xs text-desktop-text-primary outline-none placeholder:text-desktop-text-secondary"
                   />
                 </label>
+                <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
+                  {t.featureExplorer.workViewLabel}
+                </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1">
                   {surfaceNavigationOptions.map((option) => (
                     <button
@@ -944,6 +1377,50 @@ export function FeatureExplorerPageClient({
                     </button>
                   ))}
                 </div>
+                <div className={`mt-3 rounded-sm border px-2.5 py-2 ${
+                  repositoryStatusTone === "ready"
+                    ? "border-emerald-300/60 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+                    : repositoryStatusTone === "inferred"
+                      ? "border-sky-300/60 bg-sky-50/70 text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200"
+                      : "border-amber-300/60 bg-amber-50/70 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+                }`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em]">
+                      {t.featureExplorer.repositoryStatus}
+                    </div>
+                    <div className="text-[10px] font-semibold">
+                      {repositoryStatusTone === "ready"
+                        ? t.featureExplorer.repositoryReady
+                        : repositoryStatusTone === "inferred"
+                          ? t.featureExplorer.repositoryInferred
+                        : t.featureExplorer.repositoryMissingTaxonomy}
+                    </div>
+                  </div>
+                  <div className="mt-1 text-[11px] leading-5">
+                    {repositoryStatusTone === "ready"
+                      ? t.featureExplorer.repositoryReadyDescription
+                      : repositoryStatusTone === "inferred"
+                        ? t.featureExplorer.repositoryInferredDescription
+                      : t.featureExplorer.repositoryMissingTaxonomyDescription}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                    <span className="rounded-sm border border-current/20 bg-white/60 px-1.5 py-0.5 dark:bg-black/10">
+                      {curatedFeatureCount} {t.featureExplorer.curatedFeaturesLabel}
+                    </span>
+                    <span className="rounded-sm border border-current/20 bg-white/60 px-1.5 py-0.5 dark:bg-black/10">
+                      {inferredFeatureCount} {t.featureExplorer.inferredFeaturesLabel}
+                    </span>
+                    <span className="rounded-sm border border-current/20 bg-white/60 px-1.5 py-0.5 dark:bg-black/10">
+                      {surfaceIndex.pages.length} {t.featureExplorer.pageSection}
+                    </span>
+                    <span className="rounded-sm border border-current/20 bg-white/60 px-1.5 py-0.5 dark:bg-black/10">
+                      {surfaceIndex.contractApis.length} {t.featureExplorer.contractApiSection}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-[10px]">
+                    {t.featureExplorer.lastGeneratedLabel}: {surfaceIndex.generatedAt ? formatShortDate(surfaceIndex.generatedAt) : "-"}
+                  </div>
+                </div>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
@@ -951,123 +1428,109 @@ export function FeatureExplorerPageClient({
                   <div className="px-3 py-4 text-xs text-desktop-text-secondary">Loading…</div>
                 ) : error ? (
                   <div className="px-3 py-4 text-xs text-red-400">{error}</div>
-                ) : explorerSections.length === 0 && !surfaceTreeSection ? (
+                ) : surfaceNavigationView === "sections" ? (
+                  featureSidebarGroups.length > 0 ? (
+                    <div className="space-y-3 px-2 pb-3 pt-2">
+                      {featureSidebarGroups.map((group) => {
+                        const collapsed = surfaceSectionCollapsed[group.id] ?? (group.id === inferredGroupId);
+                        return (
+                          <div key={group.id}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSurfaceSection(group.id)}
+                              className="mb-1 flex w-full items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary hover:text-desktop-text-primary"
+                            >
+                              <span className="flex items-center gap-1.5">
+                                {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                <span>{group.title}</span>
+                              </span>
+                              <span className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-medium normal-case tracking-normal text-current/80">
+                                {group.items.length} {t.featureExplorer.itemsLabel}
+                              </span>
+                            </button>
+                            {group.description ? (
+                              <div className="mb-1 px-1 text-[11px] leading-5 text-desktop-text-secondary">
+                                {group.description}
+                              </div>
+                            ) : null}
+                            {!collapsed ? (
+                              <div className="space-y-1">
+                                {group.items.map((item) => (
+                                  <ExplorerSurfaceCard
+                                    key={item.key}
+                                    item={item}
+                                    isActive={item.key === activeSurfaceKey}
+                                    onSelect={() => handleSelectSurface(item)}
+                                    unmappedLabel={t.featureExplorer.unmappedLabel}
+                                  />
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-3 py-4">
+                      <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-3">
+                        <div className="text-[12px] font-semibold text-desktop-text-primary">
+                          {t.featureExplorer.featureTaxonomyEmptyTitle}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">
+                          {t.featureExplorer.featureTaxonomyEmptyDescription}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ) : !surfaceTreeSection ? (
                   <div className="px-3 py-4 text-xs text-desktop-text-secondary">
                     {t.featureExplorer.noFeatureMatches}
                   </div>
                 ) : (
                   <div className="space-y-3 px-2 pb-3 pt-2">
-                    {explorerSections
-                      .filter((section) => surfaceNavigationView === "sections" || section.id === "features")
-                      .map((section) => {
-                        const collapsed = surfaceSectionCollapsed[section.id] ?? false;
-                        const sectionTreeNodes = surfaceNavigationView === "sections" ? (sectionTreeNodesById[section.id] ?? []) : [];
-                        return (
-                          <div key={section.id}>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleSurfaceSection(section.id)}
-                              className="mb-1 flex w-full items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary hover:text-desktop-text-primary"
-                            >
-                              <span className="flex items-center gap-1.5">
-                                {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                                <span>{section.title}</span>
-                              </span>
-                              <div className="flex items-center gap-1">
-                                {section.metrics?.map((metric) => (
-                                  <span
-                                    key={metric.id}
-                                    data-testid={metric.testId}
-                                    className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-medium normal-case tracking-normal text-current/80"
-                                  >
-                                    {metric.value} {metric.label}
-                                  </span>
-                                ))}
-                                <span className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-medium normal-case tracking-normal text-current/80">
-                                  {section.items.length} {t.featureExplorer.itemsLabel}
-                                </span>
-                              </div>
-                            </button>
-                            {!collapsed ? (
-                              sectionTreeNodes.length > 0 ? (
-                                <div className="space-y-1">
-                                  {sectionTreeNodes.map((node) => (
-                                    <SurfaceTreeRow
-                                      key={node.id}
-                                      node={node}
-                                      depth={0}
-                                      activeSurfaceKey={activeSurfaceKey}
-                                      expandedIds={surfaceTreeExpandedIds}
-                                      onSelectSurface={handleSelectSurface}
-                                      onToggleNode={handleToggleSurfaceTreeNode}
-                                      unmappedLabel={t.featureExplorer.unmappedLabel}
-                                      defaultExpandedDepth={0}
-                                    />
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  {section.items.map((item) => (
-                                    <ExplorerSurfaceCard
-                                      key={item.key}
-                                      item={item}
-                                      isActive={item.key === activeSurfaceKey}
-                                      onSelect={() => handleSelectSurface(item)}
-                                      unmappedLabel={t.featureExplorer.unmappedLabel}
-                                    />
-                                  ))}
-                                </div>
-                              )
-                            ) : null}
-                          </div>
-                        );
-                      })}
-
-                    {surfaceTreeSection ? (
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleSurfaceSection(surfaceTreeSection.id)}
-                          className="mb-1 flex w-full items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary hover:text-desktop-text-primary"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            {(surfaceSectionCollapsed[surfaceTreeSection.id] ?? false)
-                              ? <ChevronRight className="h-3.5 w-3.5" />
-                              : <ChevronDown className="h-3.5 w-3.5" />}
-                            <span>{surfaceTreeSection.title}</span>
-                          </span>
-                          <span>{surfaceTreeSection.nodes.reduce((sum, node) => sum + node.itemCount, 0)}</span>
-                        </button>
-                        {!(surfaceSectionCollapsed[surfaceTreeSection.id] ?? false) ? (
-                          <div className="space-y-1">
-                            {surfaceTreeSection.nodes.map((node) => (
-                              <SurfaceTreeRow
-                                key={node.id}
-                                node={node}
-                                depth={0}
-                                activeSurfaceKey={activeSurfaceKey}
-                                expandedIds={surfaceTreeExpandedIds}
-                                onSelectSurface={handleSelectSurface}
-                                onToggleNode={handleToggleSurfaceTreeNode}
-                                unmappedLabel={t.featureExplorer.unmappedLabel}
-                                defaultExpandedDepth={0}
-                              />
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSurfaceSection(surfaceTreeSection.id)}
+                        className="mb-1 flex w-full items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary hover:text-desktop-text-primary"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          {(surfaceSectionCollapsed[surfaceTreeSection.id] ?? false)
+                            ? <ChevronRight className="h-3.5 w-3.5" />
+                            : <ChevronDown className="h-3.5 w-3.5" />}
+                          <span>{surfaceTreeSection.title}</span>
+                        </span>
+                        <span>{surfaceTreeSection.nodes.reduce((sum, node) => sum + node.itemCount, 0)}</span>
+                      </button>
+                      {!(surfaceSectionCollapsed[surfaceTreeSection.id] ?? false) ? (
+                        <div className="space-y-1">
+                          {surfaceTreeSection.nodes.map((node) => (
+                            <SurfaceTreeRow
+                              key={node.id}
+                              node={node}
+                              depth={0}
+                              activeSurfaceKey={activeSurfaceKey}
+                              expandedIds={surfaceTreeExpandedIds}
+                              onSelectSurface={handleSelectSurface}
+                              onToggleNode={handleToggleSurfaceTreeNode}
+                              unmappedLabel={t.featureExplorer.unmappedLabel}
+                              defaultExpandedDepth={0}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 )}
               </div>
             </aside>
 
-            {/* ── Middle panel: File tree ── */}
+            {/* ── Middle panel: Feature structure ── */}
             <section className="flex min-h-0 flex-col border-r border-desktop-border bg-desktop-bg-primary">
               <div className="flex items-center justify-between border-b border-desktop-border px-3 py-2">
                 <div>
                   <div className="text-xs font-semibold text-desktop-text-secondary">
-                    {t.featureExplorer.filesHeading}
+                    {t.featureExplorer.featureStructureHeading}
                   </div>
                   {middleHeadingDetail ? (
                     <div className="mt-0.5 truncate text-[10px] text-desktop-text-secondary">
@@ -1075,107 +1538,195 @@ export function FeatureExplorerPageClient({
                     </div>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setMiddleView("list")}
-                    className={`rounded-sm px-1.5 py-0.5 text-[9px] font-medium ${middleView === "list" ? "bg-desktop-bg-active text-desktop-text-primary" : "text-desktop-text-secondary hover:text-desktop-text-primary"}`}
-                  >
-                    {t.featureExplorer.listView}
-                  </button>
-                  <button
-                    onClick={() => setMiddleView("tree")}
-                    className={`rounded-sm px-1.5 py-0.5 text-[9px] font-medium ${middleView === "tree" ? "bg-desktop-bg-active text-desktop-text-primary" : "text-desktop-text-secondary hover:text-desktop-text-primary"}`}
-                  >
-                    {t.featureExplorer.treeView}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-desktop-border bg-desktop-bg-secondary/40 px-3 py-1.5">
-                <div className="grid flex-1 grid-cols-[minmax(0,1fr)_56px_72px_96px] text-[10px] font-semibold uppercase tracking-[0.08em] text-desktop-text-secondary">
-                  <div>{t.featureExplorer.nameColumn}</div>
-                  <div>{t.featureExplorer.changeColumn}</div>
-                  <div>{t.featureExplorer.sessionsColumn}</div>
-                  <div>{t.featureExplorer.updatedColumn}</div>
-                </div>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {featureDetailLoading ? (
                   <div className="px-3 py-4 text-xs text-desktop-text-secondary">Loading…</div>
-                ) : fileTree.length === 0 ? (
+                ) : !effectiveFeatureId ? (
                   <div className="px-3 py-4 text-xs text-desktop-text-secondary">
-                    {t.featureExplorer.noFilesSelected}
-                  </div>
-                ) : middleView === "list" ? (
-                  <div className="divide-y divide-desktop-border">
-                    {sessionSortedFiles.map((node) => {
-                      const stat = fileStats[node.path];
-                      const isActive = activeFileId === node.id;
-                      const isSelected = selectedFileIds.includes(node.id);
-                      return (
-                        <div
-                          key={node.id}
-                          className={`grid grid-cols-[minmax(0,1fr)_56px_72px_96px] items-center px-3 py-1 text-xs transition-colors ${
-                            isActive ? "bg-desktop-bg-active" : "hover:bg-desktop-bg-secondary/40"
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="checkbox"
-                              data-testid={`feature-tree-select-${node.id}`}
-                              checked={isSelected}
-                              onChange={() => handleToggleNodeSelection(node.id)}
-                              className="h-3.5 w-3.5 rounded border-black/15 bg-transparent dark:border-white/20"
-                            />
-                            <button onClick={() => handleSetActiveFile(node.id)} className="flex min-w-0 items-center gap-1.5 text-left">
-                              <FileIcon path={node.path} />
-                              <span className="break-all text-[12px] text-desktop-text-primary" title={node.path}>{node.path}</span>
-                            </button>
-                          </div>
-                          <div className="text-[11px] text-desktop-text-secondary">{stat?.changes ?? "-"}</div>
-                          <div className="text-[11px] text-desktop-text-secondary">{stat?.sessions ?? "-"}</div>
-                          <div className="text-[11px] text-desktop-text-secondary">{stat?.updatedAt ? formatShortDate(stat.updatedAt) : "-"}</div>
-                        </div>
-                      );
-                    })}
+                    {t.featureExplorer.featureStructureEmpty}
                   </div>
                 ) : (
-                  <div className="divide-y divide-desktop-border">
-                    {fileTree.map((node) => (
-                      <TreeNodeRow
-                        key={node.id}
-                        node={node}
-                        depth={0}
-                        expandedIds={expandedIds}
-                        activeFileId={activeFileId}
-                        selectedFileIds={selectedFileIds}
-                        treeNodeStats={treeNodeStats}
-                        selectableFileIdsByNode={selectableFileIdsByNode}
-                        onToggleNode={handleToggleNode}
-                        onToggleNodeSelection={handleToggleNodeSelection}
-                        onSetActiveFile={handleSetActiveFile}
-                      />
-                    ))}
+                  <div className="space-y-3 px-3 py-3">
+                    {activeFeature ? (
+                      <section className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[14px] font-semibold text-desktop-text-primary">
+                              {activeFeature.name}
+                            </div>
+                            {activeFeature.summary ? (
+                              <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">
+                                {activeFeature.summary}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <InlineStatPill label={t.featureExplorer.statusLabel} value={activeFeature.status || "-"} />
+                            <InlineStatPill label={t.featureExplorer.pageSection} value={String(featurePageDetails.length)} />
+                            <InlineStatPill label={t.featureExplorer.apiSurfacesLabel} value={String(featureApiDetails.length)} />
+                            <InlineStatPill label={t.featureExplorer.sourceFilesLabel} value={String(featureSourceFiles.length)} />
+                            <InlineStatPill label={t.featureExplorer.sessionsLabel} value={String(activeFeature.sessionCount)} />
+                          </div>
+                        </div>
+                      </section>
+                    ) : (
+                      <div className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-3 text-[11px] text-desktop-text-secondary">
+                        {t.featureExplorer.featureStructureUnavailable}
+                      </div>
+                    )}
+
+                    <FeatureStructureSection
+                      title={t.featureExplorer.frontendRoutesLabel}
+                      count={featurePageDetails.length}
+                      collapsed={structureSectionCollapsed.pages ?? false}
+                      onToggle={() => handleToggleStructureSection("pages")}
+                    >
+                      {featurePageDetails.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {featurePageDetails.map((page) => (
+                            <FeatureRouteRow key={page.route} page={page} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.noPagesDeclared}</div>
+                      )}
+                    </FeatureStructureSection>
+
+                    <FeatureStructureSection
+                      title={t.featureExplorer.apiSurfacesLabel}
+                      count={featureApiDetails.length}
+                      collapsed={structureSectionCollapsed.apis ?? false}
+                      onToggle={() => handleToggleStructureSection("apis")}
+                    >
+                      {featureApiDetails.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {featureApiDetails.map((api) => (
+                            <FeatureApiRow
+                              key={`${api.method}:${api.endpoint}`}
+                              api={api}
+                              implementationLabel={t.featureExplorer.implementationLabel}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.noApisDeclared}</div>
+                      )}
+                    </FeatureStructureSection>
+
+                    <FeatureStructureSection
+                      title={t.featureExplorer.sourceFilesLabel}
+                      count={featureSourceFiles.length}
+                      collapsed={structureSectionCollapsed.files ?? false}
+                      onToggle={() => handleToggleStructureSection("files")}
+                      toolbar={featureSourceFiles.length > 0 ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setMiddleView("list")}
+                            className={`rounded-sm px-1.5 py-0.5 text-[9px] font-medium ${middleView === "list" ? "bg-desktop-bg-active text-desktop-text-primary" : "text-desktop-text-secondary hover:text-desktop-text-primary"}`}
+                          >
+                            {t.featureExplorer.listView}
+                          </button>
+                          <button
+                            onClick={() => setMiddleView("tree")}
+                            className={`rounded-sm px-1.5 py-0.5 text-[9px] font-medium ${middleView === "tree" ? "bg-desktop-bg-active text-desktop-text-primary" : "text-desktop-text-secondary hover:text-desktop-text-primary"}`}
+                          >
+                            {t.featureExplorer.treeView}
+                          </button>
+                        </div>
+                      ) : null}
+                    >
+                      {fileTree.length > 0 ? (
+                        <div className="overflow-hidden rounded-sm border border-desktop-border">
+                          <div className="grid grid-cols-[minmax(0,1fr)_56px_72px_96px] bg-desktop-bg-secondary/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-desktop-text-secondary">
+                            <div>{t.featureExplorer.nameColumn}</div>
+                            <div>{t.featureExplorer.changeColumn}</div>
+                            <div>{t.featureExplorer.sessionsColumn}</div>
+                            <div>{t.featureExplorer.updatedColumn}</div>
+                          </div>
+                          {middleView === "list" ? (
+                            <div className="divide-y divide-desktop-border">
+                              {sessionSortedFiles.map((node) => {
+                                const stat = fileStats[node.path];
+                                const isActive = activeFileId === node.id;
+                                const isSelected = selectedFileIds.includes(node.id);
+                                return (
+                                  <div
+                                    key={node.id}
+                                    className={`grid grid-cols-[minmax(0,1fr)_56px_72px_96px] items-center px-3 py-1 text-xs transition-colors ${
+                                      isActive ? "bg-desktop-bg-active" : "hover:bg-desktop-bg-secondary/40"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="checkbox"
+                                        data-testid={`feature-tree-select-${node.id}`}
+                                        checked={isSelected}
+                                        onChange={() => handleToggleNodeSelection(node.id)}
+                                        className="h-3.5 w-3.5 rounded border-black/15 bg-transparent dark:border-white/20"
+                                      />
+                                      <button onClick={() => handleSetActiveFile(node.id)} className="flex min-w-0 items-center gap-1.5 text-left">
+                                        <FileIcon path={node.path} />
+                                        <span className="break-all text-[12px] text-desktop-text-primary" title={node.path}>{node.path}</span>
+                                      </button>
+                                    </div>
+                                    <div className="text-[11px] text-desktop-text-secondary">{stat?.changes ?? "-"}</div>
+                                    <div className="text-[11px] text-desktop-text-secondary">{stat?.sessions ?? "-"}</div>
+                                    <div className="text-[11px] text-desktop-text-secondary">{stat?.updatedAt ? formatShortDate(stat.updatedAt) : "-"}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-desktop-border">
+                              {fileTree.map((node) => (
+                                <TreeNodeRow
+                                  key={node.id}
+                                  node={node}
+                                  depth={0}
+                                  expandedIds={expandedIds}
+                                  activeFileId={activeFileId}
+                                  selectedFileIds={selectedFileIds}
+                                  treeNodeStats={treeNodeStats}
+                                  selectableFileIdsByNode={selectableFileIdsByNode}
+                                  onToggleNode={handleToggleNode}
+                                  onToggleNodeSelection={handleToggleNodeSelection}
+                                  onSetActiveFile={handleSetActiveFile}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : featureSourceFiles.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {featureSourceFiles.map((sourceFile) => (
+                            <SimpleSourceFileRow key={sourceFile} path={sourceFile} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.sourceFilesEmpty}</div>
+                      )}
+                    </FeatureStructureSection>
                   </div>
                 )}
               </div>
 
               <div className="border-t border-desktop-border bg-desktop-bg-secondary/20 px-3 py-1.5">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="truncate text-[11px] text-desktop-text-secondary">
                     {selectedFileIds.length}f
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
                     <button
                       onClick={handleClearSelection}
-                      className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[11px] text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary"
+                      className="shrink-0 whitespace-nowrap rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[11px] text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary"
                     >
                       {t.featureExplorer.clearSelection}
                     </button>
                     <button
                       onClick={() => router.push(`/workspace/${encodeURIComponent(workspaceId)}/sessions`)}
-                      className="inline-flex items-center gap-1 rounded-sm border border-desktop-accent bg-desktop-bg-active px-2 py-1 text-[11px] text-desktop-text-primary hover:bg-desktop-bg-primary"
+                      className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border border-desktop-accent bg-desktop-bg-active px-2 py-1 text-[11px] text-desktop-text-primary hover:bg-desktop-bg-primary"
                     >
                       {t.featureExplorer.continueAction}
                       <ArrowRight className="h-3 w-3" />
@@ -1188,7 +1739,7 @@ export function FeatureExplorerPageClient({
             {/* ── Right panel: Inspector ── */}
             <aside className="flex min-h-0 flex-col bg-desktop-bg-secondary/10">
               <div className="border-b border-desktop-border px-3 py-2">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 overflow-x-auto">
                   {([
                     { id: "context" as const, label: t.featureExplorer.contextTab, icon: FileText },
                     { id: "screenshot" as const, label: t.featureExplorer.screenshotTab, icon: ImageIcon },
@@ -1200,7 +1751,7 @@ export function FeatureExplorerPageClient({
                       <button
                         key={tab.id}
                         onClick={() => (!isScreenshot ? setInspectorTab(tab.id) : null)}
-                        className={`inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                           inspectorTab === tab.id
                             ? "border-desktop-accent bg-desktop-bg-active text-desktop-text-primary"
                             : isScreenshot
@@ -1224,6 +1775,7 @@ export function FeatureExplorerPageClient({
                     selectedScopeSessions={selectedScopeSessions}
                     selectedSurface={selectedSurface}
                     selectedSurfaceFeatureNames={selectedSurfaceFeatureNames}
+                    onOpenSessionAnalysis={handleOpenSessionAnalysisDrawer}
                     t={t}
                   />
                 )}
@@ -1241,10 +1793,237 @@ export function FeatureExplorerPageClient({
                 )}
               </div>
             </aside>
+
           </section>
         </main>
+
+        <GenerateFeatureTreeDrawer
+          open={isGenerateDrawerOpen}
+          workspaceId={workspaceId}
+          repoPath={effectiveRepoSelection?.path}
+          onClose={() => setIsGenerateDrawerOpen(false)}
+          onGenerated={() => setGenerateRefreshCounter((c) => c + 1)}
+        />
+
+        <SessionAnalysisDrawer
+          key={`session-analysis:${isSessionAnalysisDrawerOpen ? "open" : "closed"}:${selectedFilePaths.join("|")}:${selectedScopeSessions.map((session) => `${session.provider}:${session.sessionId}`).join("|")}`}
+          open={isSessionAnalysisDrawerOpen}
+          selectedFilePaths={selectedFilePaths}
+          selectedScopeSessions={selectedScopeSessions}
+          providers={analysisProviders}
+          selectedProvider={analysisSelectedProvider}
+          onProviderChange={setAnalysisProvider}
+          isStartingSessionAnalysis={isStartingSessionAnalysis}
+          sessionAnalysisError={sessionAnalysisError}
+          onClose={() => setIsSessionAnalysisDrawerOpen(false)}
+          onStartSessionAnalysis={handleStartSessionAnalysis}
+          t={t}
+        />
+
+        <AnalysisSessionDrawer
+          open={isAnalysisSessionPaneOpen && Boolean(analysisSessionId)}
+          title={analysisSessionName || t.featureExplorer.sessionAnalysisTitle}
+          subtitle={`${analysisSessionProviderName || analysisSessionProviderId || analysisSelectedProvider} · ${analysisSessionId ?? ""}`}
+          detailHref={analysisSessionId
+            ? `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(analysisSessionId)}`
+            : undefined}
+          onClose={() => {
+            setIsAnalysisSessionPaneOpen(false);
+            setAnalysisSessionId(null);
+          }}
+          t={t}
+        >
+          {analysisSessionId ? (
+            <ChatPanel
+              acp={analysisAcp}
+              activeSessionId={analysisSessionId}
+              onEnsureSession={async () => analysisSessionId}
+              onSelectSession={async (sessionId) => {
+                setAnalysisSessionId(sessionId);
+                selectAnalysisSession(sessionId);
+              }}
+              repoSelection={effectiveRepoSelection}
+              onRepoChange={() => {}}
+              codebases={codebases}
+              activeWorkspaceId={workspaceId}
+              agentRole="ROUTA"
+            />
+          ) : null}
+        </AnalysisSessionDrawer>
       </div>
     </DesktopAppShell>
+  );
+}
+
+function InlineStatPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/30 px-2 py-1 text-[10px]">
+      <div className="uppercase tracking-[0.08em] text-desktop-text-secondary">{label}</div>
+      <div className="mt-0.5 text-right text-[11px] font-semibold text-desktop-text-primary">{value}</div>
+    </div>
+  );
+}
+
+function FeatureStructureSection({
+  title,
+  count,
+  collapsed,
+  onToggle,
+  toolbar,
+  children,
+}: {
+  title: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+  toolbar?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-sm border border-desktop-border bg-desktop-bg-primary">
+      <div className="flex items-center justify-between gap-3 border-b border-desktop-border bg-desktop-bg-secondary/30 px-3 py-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 items-center gap-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-desktop-text-secondary hover:text-desktop-text-primary"
+        >
+          {collapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+          <span className="truncate">{title}</span>
+          <span className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[9px] font-medium normal-case tracking-normal text-desktop-text-primary">
+            {count}
+          </span>
+        </button>
+        {toolbar}
+      </div>
+      {!collapsed ? <div className="space-y-2 p-3">{children}</div> : null}
+    </section>
+  );
+}
+
+function FeatureRouteRow({
+  page,
+}: {
+  page: {
+    route: string;
+    title?: string;
+    description?: string;
+    sourceFile?: string;
+  };
+}) {
+  return (
+    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/20 px-3 py-2">
+      <div className="flex items-start gap-2">
+        <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-400" />
+        <div className="min-w-0 flex-1">
+          <div className="break-all text-[12px] font-medium text-desktop-text-primary">{page.route}</div>
+          {page.title ? (
+            <div className="mt-0.5 text-[11px] text-desktop-text-primary">{page.title}</div>
+          ) : null}
+          {page.description ? (
+            <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{page.description}</div>
+          ) : null}
+          {page.sourceFile ? (
+            <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-desktop-text-secondary">
+              <FileIcon path={page.sourceFile} />
+              <span className="break-all">{page.sourceFile}</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeatureApiRow({
+  api,
+  implementationLabel,
+}: {
+  api: {
+    group?: string;
+    method: string;
+    endpoint: string;
+    description?: string;
+    nextjsSourceFiles?: string[];
+    rustSourceFiles?: string[];
+    implementationSources?: Array<{
+      label: string;
+      sourceFiles: string[];
+    }>;
+  };
+  implementationLabel: string;
+}) {
+  const implementationGroups = [
+    ...(api.implementationSources ?? []),
+    ...(api.nextjsSourceFiles?.length
+      ? [{ label: "Next.js API", sourceFiles: api.nextjsSourceFiles }]
+      : []),
+    ...(api.rustSourceFiles?.length
+      ? [{ label: "Rust API", sourceFiles: api.rustSourceFiles }]
+      : []),
+  ].map((group) => ({
+    ...group,
+    sourceFiles: [...new Set(group.sourceFiles)],
+  })).filter((group) => group.sourceFiles.length > 0);
+
+  return (
+    <div className="rounded-sm border border-desktop-border bg-desktop-bg-secondary/20 px-3 py-2">
+      <div className="flex items-start gap-2">
+        <FileJson2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-sm border border-desktop-accent/30 bg-desktop-accent/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-desktop-accent">
+              {api.method}
+            </span>
+            <span className="break-all text-[12px] font-medium text-desktop-text-primary">{api.endpoint}</span>
+            {api.group ? (
+              <span className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[10px] text-desktop-text-secondary">
+                {api.group}
+              </span>
+            ) : null}
+          </div>
+          {api.description ? (
+            <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{api.description}</div>
+          ) : null}
+          {implementationGroups.length > 0 ? (
+            <div className="mt-2 space-y-2">
+              {implementationGroups.map((group) => (
+                <div key={`${api.method}:${api.endpoint}:${group.label}`} className="rounded-sm border border-desktop-border/80 bg-desktop-bg-primary px-2.5 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-desktop-text-secondary">
+                    {implementationLabel}: {group.label}
+                  </div>
+                  <div className="mt-1.5 space-y-1">
+                    {group.sourceFiles.map((sourceFile) => (
+                      <SimpleSourceFileRow key={`${group.label}:${sourceFile}`} path={sourceFile} compact />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SimpleSourceFileRow({
+  path,
+  compact = false,
+}: {
+  path: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`flex items-start gap-2 rounded-sm border border-desktop-border bg-desktop-bg-secondary/20 ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
+      <FileIcon path={path} />
+      <span className="break-all text-[11px] text-desktop-text-primary">{path}</span>
+    </div>
   );
 }
 

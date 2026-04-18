@@ -2,11 +2,13 @@ use std::path::{Path, PathBuf};
 
 use axum::{
     extract::{Query, State},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
+use feature_trace::api_endpoints_from_openapi_contract;
 use serde::Deserialize;
 use serde_json::{json, Value as JsonValue};
+use std::collections::BTreeMap;
 
 use crate::api::repo_context::{extract_frontmatter, resolve_repo_root, ResolveRepoRootOptions};
 use crate::error::ServerError;
@@ -16,6 +18,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/issues", get(list_spec_issues))
         .route("/surface-index", get(get_surface_index))
+        .route("/feature-tree/generate", post(generate_feature_tree))
 }
 
 const SPEC_STATUSES: [&str; 4] = ["open", "investigating", "resolved", "wontfix"];
@@ -36,9 +39,16 @@ struct FeatureSurfaceIndexFile {
     pages: Vec<FeatureSurfacePage>,
     #[serde(default)]
     apis: Vec<FeatureSurfaceApi>,
+    #[serde(default)]
+    contract_apis: Vec<FeatureSurfaceApi>,
+    #[serde(default)]
+    nextjs_apis: Vec<FeatureSurfaceImplementationApi>,
+    #[serde(default)]
+    rust_apis: Vec<FeatureSurfaceImplementationApi>,
+    metadata: Option<JsonValue>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FeatureSurfacePage {
     route: String,
@@ -49,7 +59,7 @@ struct FeatureSurfacePage {
     source_file: String,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FeatureSurfaceApi {
     domain: String,
@@ -59,6 +69,16 @@ struct FeatureSurfaceApi {
     operation_id: String,
     #[serde(default)]
     summary: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FeatureSurfaceImplementationApi {
+    domain: String,
+    method: String,
+    path: String,
+    #[serde(default)]
+    source_files: Vec<String>,
 }
 
 fn yaml_scalar_to_string(value: &serde_yaml::Value) -> Option<String> {
@@ -159,14 +179,17 @@ fn empty_surface_index_response(repo_root: &Path, warnings: Vec<String>) -> Json
         "generatedAt": "",
         "pages": [],
         "apis": [],
+        "contractApis": [],
+        "nextjsApis": [],
+        "rustApis": [],
+        "metadata": JsonValue::Null,
         "repoRoot": repo_root.to_string_lossy(),
         "warnings": warnings,
     })
 }
 
-fn normalize_surface_index(index: FeatureSurfaceIndexFile, repo_root: &Path) -> JsonValue {
-    let pages: Vec<JsonValue> = index
-        .pages
+fn normalize_surface_pages(pages: Vec<FeatureSurfacePage>) -> Vec<JsonValue> {
+    pages
         .into_iter()
         .filter(|page| !page.route.trim().is_empty() && !page.title.trim().is_empty())
         .map(|page| {
@@ -177,16 +200,56 @@ fn normalize_surface_index(index: FeatureSurfaceIndexFile, repo_root: &Path) -> 
                 "sourceFile": page.source_file.trim(),
             })
         })
-        .collect();
+        .collect()
+}
 
-    let apis: Vec<JsonValue> = index
-        .apis
+fn merge_surface_api_lists<const N: usize>(
+    lists: [Vec<FeatureSurfaceApi>; N],
+) -> Vec<FeatureSurfaceApi> {
+    let mut merged: BTreeMap<(String, String), FeatureSurfaceApi> = BTreeMap::new();
+
+    for list in lists {
+        for api in list {
+            let method = api.method.trim().to_ascii_uppercase();
+            let path = api.path.trim().to_string();
+            if method.is_empty() || path.is_empty() {
+                continue;
+            }
+
+            let key = (method.clone(), path.clone());
+            if let Some(existing) = merged.get_mut(&key) {
+                if existing.domain.trim().is_empty() && !api.domain.trim().is_empty() {
+                    existing.domain = api.domain.trim().to_string();
+                }
+                if existing.operation_id.trim().is_empty() && !api.operation_id.trim().is_empty() {
+                    existing.operation_id = api.operation_id.trim().to_string();
+                }
+                if existing.summary.trim().is_empty() && !api.summary.trim().is_empty() {
+                    existing.summary = api.summary.trim().to_string();
+                }
+                continue;
+            }
+
+            merged.insert(
+                key,
+                FeatureSurfaceApi {
+                    domain: api.domain.trim().to_string(),
+                    method,
+                    path,
+                    operation_id: api.operation_id.trim().to_string(),
+                    summary: api.summary.trim().to_string(),
+                },
+            );
+        }
+    }
+
+    merged.into_values().collect()
+}
+
+fn normalize_surface_apis(apis: Vec<FeatureSurfaceApi>) -> Vec<JsonValue> {
+    merge_surface_api_lists([apis])
         .into_iter()
-        .filter(|api| {
-            !api.domain.trim().is_empty()
-                && !api.method.trim().is_empty()
-                && !api.path.trim().is_empty()
-        })
+        .filter(|api| !api.domain.trim().is_empty())
         .map(|api| {
             json!({
                 "domain": api.domain.trim(),
@@ -196,14 +259,76 @@ fn normalize_surface_index(index: FeatureSurfaceIndexFile, repo_root: &Path) -> 
                 "summary": api.summary.trim(),
             })
         })
-        .collect();
+        .collect()
+}
+
+fn normalize_surface_implementation_apis(
+    apis: Vec<FeatureSurfaceImplementationApi>,
+) -> Vec<JsonValue> {
+    apis.into_iter()
+        .filter(|api| {
+            !api.domain.trim().is_empty()
+                && !api.method.trim().is_empty()
+                && !api.path.trim().is_empty()
+        })
+        .map(|api| {
+            json!({
+                "domain": api.domain.trim(),
+                "method": api.method.trim().to_ascii_uppercase(),
+                "path": api.path.trim(),
+                "sourceFiles": api.source_files,
+            })
+        })
+        .collect()
+}
+
+fn to_surface_api_from_contract(
+    apis: Vec<feature_trace::ApiEndpointDetail>,
+) -> Vec<FeatureSurfaceApi> {
+    apis.into_iter()
+        .map(|api| FeatureSurfaceApi {
+            domain: api.domain,
+            method: api.method,
+            path: api.endpoint,
+            operation_id: String::new(),
+            summary: api.description,
+        })
+        .collect()
+}
+
+fn normalize_surface_index(
+    index: FeatureSurfaceIndexFile,
+    openapi_contract_apis: Vec<FeatureSurfaceApi>,
+    repo_root: &Path,
+    warnings: Vec<String>,
+) -> JsonValue {
+    let pages = index.pages;
+    let fallback_contract_apis = if index.contract_apis.is_empty() {
+        index.apis.clone()
+    } else {
+        index.contract_apis.clone()
+    };
+    let resolved_apis = if index.apis.is_empty() {
+        merge_surface_api_lists([
+            openapi_contract_apis.clone(),
+            fallback_contract_apis.clone(),
+        ])
+    } else {
+        merge_surface_api_lists([openapi_contract_apis.clone(), index.apis])
+    };
+    let resolved_contract_apis =
+        merge_surface_api_lists([openapi_contract_apis, fallback_contract_apis]);
 
     json!({
         "generatedAt": index.generated_at.unwrap_or_default(),
-        "pages": pages,
-        "apis": apis,
+        "pages": normalize_surface_pages(pages),
+        "apis": normalize_surface_apis(resolved_apis),
+        "contractApis": normalize_surface_apis(resolved_contract_apis),
+        "nextjsApis": normalize_surface_implementation_apis(index.nextjs_apis),
+        "rustApis": normalize_surface_implementation_apis(index.rust_apis),
+        "metadata": index.metadata.unwrap_or(JsonValue::Null),
         "repoRoot": repo_root.to_string_lossy(),
-        "warnings": [],
+        "warnings": warnings,
     })
 }
 
@@ -324,37 +449,149 @@ async fn get_surface_index(
         .join("docs")
         .join("product-specs")
         .join("feature-tree.index.json");
+    let api_contract_path = repo_root.join("api-contract.yaml");
     let relative_index_path = index_path
         .strip_prefix(&repo_root)
         .unwrap_or(&index_path)
         .to_string_lossy()
         .to_string();
+    let relative_api_contract_path = api_contract_path
+        .strip_prefix(&repo_root)
+        .unwrap_or(&api_contract_path)
+        .to_string_lossy()
+        .to_string();
 
-    let raw = match std::fs::read_to_string(&index_path) {
-        Ok(content) => content,
-        Err(_) => {
-            return Ok(Json(empty_surface_index_response(
-                &repo_root,
-                vec![format!(
-                    "Feature surface index not found at {relative_index_path}"
-                )],
-            )))
-        }
-    };
-
-    let parsed = match serde_json::from_str::<FeatureSurfaceIndexFile>(&raw) {
-        Ok(index) => index,
-        Err(_) => {
-            return Ok(Json(empty_surface_index_response(
-                &repo_root,
-                vec![format!(
+    let mut warnings = Vec::new();
+    let parsed_index = match std::fs::read_to_string(&index_path) {
+        Ok(raw) => match serde_json::from_str::<FeatureSurfaceIndexFile>(&raw) {
+            Ok(index) => Some(index),
+            Err(_) => {
+                warnings.push(format!(
                     "Feature surface index is not valid JSON at {relative_index_path}"
-                )],
-            )))
+                ));
+                None
+            }
+        },
+        Err(_) => {
+            warnings.push(format!(
+                "Feature surface index not found at {relative_index_path}"
+            ));
+            None
         }
     };
 
-    Ok(Json(normalize_surface_index(parsed, &repo_root)))
+    let openapi_contract_apis = if api_contract_path.exists() {
+        match api_endpoints_from_openapi_contract(&api_contract_path) {
+            Ok(apis) => {
+                if apis.is_empty() {
+                    warnings.push(format!(
+                        "OpenAPI contract produced no endpoints at {relative_api_contract_path}"
+                    ));
+                }
+                Some(to_surface_api_from_contract(apis))
+            }
+            Err(error) => {
+                warnings.push(format!(
+                    "Failed to parse OpenAPI contract at {relative_api_contract_path}: {error}"
+                ));
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    match (parsed_index, openapi_contract_apis) {
+        (Some(index), openapi_contract_apis) => Ok(Json(normalize_surface_index(
+            index,
+            openapi_contract_apis.unwrap_or_default(),
+            &repo_root,
+            warnings,
+        ))),
+        (None, Some(openapi_contract_apis)) => Ok(Json(normalize_surface_index(
+            FeatureSurfaceIndexFile::default(),
+            openapi_contract_apis,
+            &repo_root,
+            warnings,
+        ))),
+        (None, None) => Ok(Json(empty_surface_index_response(&repo_root, warnings))),
+    }
+}
+
+// ── Feature tree generation ─────────────────────────────────────────
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GenerateFeatureTreeRequest {
+    workspace_id: Option<String>,
+    codebase_id: Option<String>,
+    repo_path: Option<String>,
+    #[serde(default)]
+    dry_run: bool,
+}
+
+async fn generate_feature_tree(
+    State(state): State<AppState>,
+    Json(body): Json<GenerateFeatureTreeRequest>,
+) -> Result<Json<JsonValue>, ServerError> {
+    let repo_root = resolve_repo_root(
+        &state,
+        body.workspace_id.as_deref(),
+        body.codebase_id.as_deref(),
+        body.repo_path.as_deref(),
+        "Missing context: provide workspaceId, codebaseId, or repoPath",
+        ResolveRepoRootOptions {
+            prefer_current_repo_for_default_workspace: true,
+        },
+    )
+    .await?;
+
+    let dry_run = body.dry_run;
+    let result = tokio::task::spawn_blocking(move || {
+        run_feature_tree_generator(&repo_root, dry_run)
+    })
+    .await
+    .map_err(|e| ServerError::Internal(format!("Task join error: {e}")))?
+    .map_err(ServerError::Internal)?;
+
+    Ok(Json(result))
+}
+
+/// Run the TypeScript feature-tree generator via Node and return the
+/// JSON result. This is the same script the CLI wraps.
+fn run_feature_tree_generator(repo_root: &Path, dry_run: bool) -> Result<JsonValue, String> {
+    let script = repo_root.join("scripts/docs/feature-tree-generator.ts");
+    if !script.exists() {
+        return Err(format!(
+            "Feature tree generator script not found at {}",
+            script.display()
+        ));
+    }
+
+    let mut args = vec![
+        "--import".to_string(),
+        "tsx".to_string(),
+        script.to_string_lossy().to_string(),
+        "--json".to_string(),
+    ];
+    if !dry_run {
+        args.push("--save".to_string());
+    }
+
+    let output = std::process::Command::new("node")
+        .args(&args)
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("Failed to run feature tree generator: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Feature tree generator failed: {stderr}"));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim())
+        .map_err(|e| format!("Failed to parse generator output: {e}"))
 }
 
 #[cfg(test)]

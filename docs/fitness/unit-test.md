@@ -28,6 +28,7 @@ metrics:
   - name: rust_test_pass
     command: cargo test --workspace --exclude routa-desktop 2>&1
     pattern: "test result: ok"
+    serial: true
     hard_gate: true
     tier: normal
 

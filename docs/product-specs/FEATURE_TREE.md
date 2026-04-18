@@ -7,7 +7,7 @@ sources:
   - src/app/api/**/route.ts
   - crates/routa-server/src/api/**/*.rs
 update_policy:
-  - "Regenerate with `node --import tsx scripts/docs/feature-tree-generator.ts --save`."
+  - "Regenerate with `routa feature-tree generate` or via the Feature Explorer UI."
   - "Hand-edit semantic `feature_metadata` fields in this frontmatter block."
   - "`feature_metadata.features[].source_files` is regenerated from declared pages/APIs."
   - "Do not hand-edit generated endpoint or route tables below."
@@ -595,10 +595,11 @@ Multi-agent coordination platform. This document is auto-generated from:
 | POST | `/api/skills/clone` | Clone a skill repository | `src/app/api/skills/clone/route.ts` | `crates/routa-server/src/api/skills_clone.rs` |
 | POST | `/api/skills/upload` | Upload skill as zip | `src/app/api/skills/upload/route.ts` | `crates/routa-server/src/api/skills_upload.rs` |
 
-### Spec (2)
+### Spec (3)
 
 | Method | Endpoint | Details | Next.js | Rust |
 |--------|----------|---------|---------|------|
+| POST | `/api/spec/feature-tree/generate` | Scan the repository and generate FEATURE_TREE.md + feature-tree.index.json | `src/app/api/spec/feature-tree/generate/route.ts` | `crates/routa-server/src/api/spec.rs` |
 | GET | `/api/spec/issues` | List local issue specs | `src/app/api/spec/issues/route.ts` | `crates/routa-server/src/api/spec.rs` |
 | GET | `/api/spec/surface-index` | Read the generated product surface index for spec analysis | `src/app/api/spec/surface-index/route.ts` | `crates/routa-server/src/api/spec.rs` |
 

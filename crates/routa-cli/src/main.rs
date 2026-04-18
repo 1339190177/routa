@@ -211,6 +211,12 @@ enum Commands {
         #[command(subcommand)]
         action: TeamAction,
     },
+
+    /// Generate and inspect feature tree surface index
+    FeatureTree {
+        #[command(subcommand)]
+        action: FeatureTreeAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -735,6 +741,25 @@ enum ReviewAction {
         /// Custom specialist definitions directory
         #[arg(long)]
         specialist_dir: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum FeatureTreeAction {
+    /// Scan the repository and generate FEATURE_TREE.md + feature-tree.index.json
+    Generate {
+        /// Repository path (defaults to current working directory)
+        #[arg(long)]
+        repo_path: Option<String>,
+        /// Preview what would be generated without writing files
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+    /// Display a summary of the current feature tree index
+    Inspect {
+        /// Repository path (defaults to current working directory)
+        #[arg(long)]
+        repo_path: Option<String>,
     },
 }
 
@@ -1402,6 +1427,19 @@ async fn main() {
                     }
                 }
             }
+
+            Commands::FeatureTree { action } => match action {
+                FeatureTreeAction::Generate {
+                    repo_path,
+                    dry_run,
+                } => commands::feature_tree::generate(
+                    repo_path.as_deref(),
+                    dry_run,
+                ),
+                FeatureTreeAction::Inspect { repo_path } => {
+                    commands::feature_tree::inspect(repo_path.as_deref())
+                }
+            },
         }
     } else {
         // No prompt and no subcommand — show help

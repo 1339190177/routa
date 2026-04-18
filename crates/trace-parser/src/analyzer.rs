@@ -1,5 +1,5 @@
 use crate::catalog::{FeatureSurfaceCatalog, FeatureTreeCatalog};
-use crate::model::NormalizedSession;
+use crate::model::{FileOperationKind, NormalizedSession, PromptRole};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub use feature_trace::{FeatureTraceInput, ProductFeatureLink, SessionAnalysis};
@@ -56,6 +56,27 @@ impl<'a> SessionAnalyzer<'a> {
             changed_file_set.insert(file_event.path.clone());
         }
 
+        let prompt_previews = session
+            .prompts
+            .iter()
+            .filter(|prompt| prompt.role == PromptRole::User)
+            .map(|prompt| prompt.text.trim())
+            .filter(|prompt| !prompt.is_empty())
+            .map(ToOwned::to_owned)
+            .collect();
+        let file_operations = session
+            .file_events
+            .iter()
+            .map(|event| match event.operation {
+                FileOperationKind::Added => "added",
+                FileOperationKind::Modified => "modified",
+                FileOperationKind::Deleted => "deleted",
+                FileOperationKind::Renamed => "renamed",
+                FileOperationKind::Unknown => "unknown",
+            })
+            .map(str::to_string)
+            .collect();
+
         let input = FeatureTraceInput {
             session_id: session.session_id.clone(),
             changed_files: changed_file_set.into_iter().collect(),
@@ -63,6 +84,8 @@ impl<'a> SessionAnalyzer<'a> {
                 .into_iter()
                 .flat_map(|(tool_name, count)| std::iter::repeat_n(tool_name, count))
                 .collect(),
+            prompt_previews,
+            file_operations,
         };
 
         self.inner.analyze_input(&input)
