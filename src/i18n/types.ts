@@ -285,6 +285,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     featureStructureHeading: string;
     featureStructureEmpty: string;
     featureStructureUnavailable: string;
+    apiSourceLabel: string;
     frontendRoutesLabel: string;
     apiSurfacesLabel: string;
     implementationLabel: string;

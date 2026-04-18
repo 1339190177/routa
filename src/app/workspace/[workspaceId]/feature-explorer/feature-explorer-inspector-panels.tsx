@@ -275,19 +275,6 @@ export function ContextPanel({
         </ContextSection>
       ) : null}
 
-      {featureDetail ? (
-        <section className="rounded-sm border border-desktop-border bg-desktop-bg-primary p-2.5">
-          <div className="space-y-1.5">
-            <div>
-              <div className="text-[14px] font-semibold text-desktop-text-primary">{featureDetail.name}</div>
-              {featureDetail.summary ? (
-                <div className="mt-1 text-[11px] leading-5 text-desktop-text-secondary">{featureDetail.summary}</div>
-              ) : null}
-            </div>
-          </div>
-        </section>
-      ) : null}
-
       {featureDetail?.promptContext ? (
         <ContextSection title={t.featureExplorer.learnedPromptContext}>
           <div className="space-y-2.5">

@@ -278,6 +278,7 @@ const zh: TranslationDictionary = {
     featureStructureHeading: "Feature 结构",
     featureStructureEmpty: "先选择一个 Feature，再把 routes、APIs 和 source files 放在一起查看。",
     featureStructureUnavailable: "当前代码库还没有这个 Feature 的详细结构数据。",
+    apiSourceLabel: "API Source",
     frontendRoutesLabel: "前端路由",
     apiSurfacesLabel: "API Surface",
     implementationLabel: "实现",

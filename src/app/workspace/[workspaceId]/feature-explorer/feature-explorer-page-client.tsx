@@ -766,44 +766,6 @@ export function FeatureExplorerPageClient({
                     ) : null}
 
                     <FeatureStructureSection
-                      title={t.featureExplorer.frontendRoutesLabel}
-                      count={featurePageDetails.length}
-                      collapsed={structureSectionCollapsed.pages ?? false}
-                      onToggle={() => handleToggleStructureSection("pages")}
-                    >
-                      {featurePageDetails.length > 0 ? (
-                        <div className="space-y-1.5">
-                          {featurePageDetails.map((page) => (
-                            <FeatureRouteRow key={page.route} page={page} />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.noPagesDeclared}</div>
-                      )}
-                    </FeatureStructureSection>
-
-                    <FeatureStructureSection
-                      title={t.featureExplorer.apiSurfacesLabel}
-                      count={featureApiDetails.length}
-                      collapsed={structureSectionCollapsed.apis ?? false}
-                      onToggle={() => handleToggleStructureSection("apis")}
-                    >
-                      {featureApiDetails.length > 0 ? (
-                        <div className="space-y-1.5">
-                          {featureApiDetails.map((api) => (
-                            <FeatureApiRow
-                              key={`${api.method}:${api.endpoint}`}
-                              api={api}
-                              implementationLabel={t.featureExplorer.implementationLabel}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.noApisDeclared}</div>
-                      )}
-                    </FeatureStructureSection>
-
-                    <FeatureStructureSection
                       title={t.featureExplorer.sourceFilesLabel}
                       count={featureSourceFiles.length}
                       collapsed={structureSectionCollapsed.files ?? false}
@@ -894,6 +856,44 @@ export function FeatureExplorerPageClient({
                         </div>
                       ) : (
                         <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.sourceFilesEmpty}</div>
+                      )}
+                    </FeatureStructureSection>
+
+                    <FeatureStructureSection
+                      title={t.featureExplorer.frontendRoutesLabel}
+                      count={featurePageDetails.length}
+                      collapsed={structureSectionCollapsed.pages ?? false}
+                      onToggle={() => handleToggleStructureSection("pages")}
+                    >
+                      {featurePageDetails.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {featurePageDetails.map((page) => (
+                            <FeatureRouteRow key={page.route} page={page} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.noPagesDeclared}</div>
+                      )}
+                    </FeatureStructureSection>
+
+                    <FeatureStructureSection
+                      title={t.featureExplorer.apiSourceLabel}
+                      count={featureApiDetails.length}
+                      collapsed={structureSectionCollapsed.apis ?? false}
+                      onToggle={() => handleToggleStructureSection("apis")}
+                    >
+                      {featureApiDetails.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {featureApiDetails.map((api) => (
+                            <FeatureApiRow
+                              key={`${api.method}:${api.endpoint}`}
+                              api={api}
+                              implementationLabel={t.featureExplorer.implementationLabel}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-desktop-text-secondary">{t.featureExplorer.noApisDeclared}</div>
                       )}
                     </FeatureStructureSection>
                   </div>

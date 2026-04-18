@@ -279,6 +279,7 @@ const en: TranslationDictionary = {
     featureStructureHeading: "Feature Structure",
     featureStructureEmpty: "Select a feature to inspect its routes, APIs, and source files together.",
     featureStructureUnavailable: "Feature details are not available for the selected codebase yet.",
+    apiSourceLabel: "API Source",
     frontendRoutesLabel: "Frontend routes",
     apiSurfacesLabel: "API surfaces",
     implementationLabel: "Implementation",
