@@ -113,7 +113,13 @@ function listTeamRuns(sessions: RoutaSessionRecord[]): TeamRunSummary[] {
 
     visiting.add(sessionId);
     const children = childMap.get(sessionId) ?? [];
-    const total = children.reduce((sum, child) => sum + 1 + countDescendants(child.sessionId, visiting), 0);
+    const total = children.reduce((sum, child) => {
+      if (visiting.has(child.sessionId)) {
+        return sum;
+      }
+
+      return sum + 1 + countDescendants(child.sessionId, visiting);
+    }, 0);
     visiting.delete(sessionId);
     descendantsBySessionId.set(sessionId, total);
     return total;

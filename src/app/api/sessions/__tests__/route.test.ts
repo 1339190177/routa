@@ -230,7 +230,7 @@ describe("/api/sessions GET", () => {
     expect(data.sessions[0]).toMatchObject({
       sessionId: "cycle-root",
       directDelegates: 1,
-      descendants: 2,
+      descendants: 1,
     });
   });
 });
