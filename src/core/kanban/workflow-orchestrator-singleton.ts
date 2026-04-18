@@ -234,6 +234,7 @@ async function startKanbanTaskSession(
   const resolvedWorktreeTruth = await resolveTaskWorktreeTruth(nextTask, system);
   worktreeCwd = resolvedWorktreeTruth?.cwd ?? worktreeCwd;
   worktreeBranch = resolvedWorktreeTruth?.branch ?? worktreeBranch;
+  const baseBranch = resolvedWorktreeTruth?.baseBranch ?? preferredCodebase?.branch;
 
   const effectiveAutomation = resolveEffectiveTaskAutomation(
     nextTask,
@@ -268,6 +269,7 @@ async function startKanbanTaskSession(
     workspaceId: nextTask.workspaceId,
     cwd: worktreeCwd,
     branch: worktreeBranch,
+    baseBranch,
     task: taskForSession,
     step: sessionStep,
     specialistLocale: sessionStep?.specialistLocale ?? effectiveAutomation.step?.specialistLocale,

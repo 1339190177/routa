@@ -374,6 +374,25 @@ export class KanbanWorkflowOrchestrator {
       if (existingAutomation.columnId === targetColumn.id) {
         return;
       }
+
+      // Debounce: if the current automation started very recently (< 5s),
+      // the card is being rapidly moved (e.g. by user or upstream process).
+      // Wait briefly to avoid tearing down a session that will immediately be replaced.
+      const timeSinceStart = Date.now() - existingAutomation.startedAt.getTime();
+      if (timeSinceStart < 5_000) {
+        console.log(
+          `[WorkflowOrchestrator] Debouncing rapid card move for ${data.cardId} ` +
+          `(${existingAutomation.columnId} → ${targetColumn.id}, automation age ${timeSinceStart}ms)`,
+        );
+        await new Promise(r => setTimeout(r, 5_000 - timeSinceStart));
+        // After waiting, re-check whether the card is still in the target column.
+        const latestTask = await this.taskStore.get(data.cardId);
+        if (latestTask?.columnId !== targetColumn.id) {
+          console.log(`[WorkflowOrchestrator] Card ${data.cardId} moved again during debounce, skipping`);
+          return;
+        }
+      }
+
       // If the existing automation is in a DIFFERENT column but still active,
       // the agent called move_card while the previous automation was still running.
       // Cancel the stale automation before starting the new one.
@@ -573,11 +592,12 @@ export class KanbanWorkflowOrchestrator {
         && !automation.automation.autoAdvanceOnSuccess
         && automation.steps[automation.currentStepIndex]?.role === "GATE"
       ) {
-        // Safety net: GATE specialist completed successfully but autoAdvanceOnSuccess is off.
+        // Safety net: GATE specialist completed successfully but did not call move_card.
         // Auto-advance anyway to prevent the card from getting stuck.
+        const specialistId = automation.steps[automation.currentStepIndex]?.specialistId ?? "unknown";
         console.warn(
-          `[WorkflowOrchestrator] GATE specialist completed without moving card ${cardId}. ` +
-          `Auto-advancing as safety net.`
+          `[WorkflowOrchestrator] GATE specialist (${specialistId}) completed without moving card ${cardId}. ` +
+          `Auto-advancing as safety net. Specialist should call move_card explicitly.`
         );
         await this.autoAdvanceCard(cardId, automation);
       }
