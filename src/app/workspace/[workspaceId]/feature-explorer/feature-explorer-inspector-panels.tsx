@@ -13,23 +13,17 @@ import {
 import { useTranslation } from "@/i18n";
 
 import type {
+  AggregatedSelectionSession,
   ApiDetail,
+  CountSummary,
   FeatureDetail,
 } from "./types";
 import {
   type ExplorerSurfaceItem,
   getHttpMethodBadgeClass,
 } from "./surface-navigation";
-
-export type AggregatedSelectionSession = {
-  provider: string;
-  sessionId: string;
-  updatedAt: string;
-  promptSnippet: string;
-  promptHistory: string[];
-  resumeCommand?: string;
-  changedFiles: string[];
-};
+export { AnalysisSessionDrawer, SessionAnalysisDrawer } from "./session-analysis-drawer";
+import { sanitizeChangedFiles } from "./session-analysis";
 
 function formatShortDate(iso: string): string {
   if (!iso || iso === "-") return "-";
@@ -38,6 +32,24 @@ function formatShortDate(iso: string): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${mm}-${dd}`;
+}
+
+function humanizeImplementationLabel(label: string): string {
+  if (!label) {
+    return "Implementation";
+  }
+  if (label === "nextjs") {
+    return "Next.js";
+  }
+  if (label === "springMvc") {
+    return "Spring MVC";
+  }
+
+  return label
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[-_]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function formatSignalProvider(provider: string): string {
@@ -142,12 +154,41 @@ function InlineMetricPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CountSummaryList({
+  items,
+  emptyMessage,
+}: {
+  items: CountSummary[];
+  emptyMessage: string;
+}) {
+  if (items.length === 0) {
+    return <SignalEmptyState message={emptyMessage} />;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {items.map((item) => (
+        <div
+          key={item.name}
+          className="flex items-center justify-between gap-3 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2 py-1.5 text-[11px]"
+        >
+          <span className="min-w-0 flex-1 break-words text-desktop-text-secondary">{item.name}</span>
+          <span className="shrink-0 rounded-sm border border-desktop-border bg-desktop-bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-desktop-text-primary">
+            {item.count}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ContextPanel({
   featureDetail,
   selectedFileCount,
   selectedScopeSessions,
   selectedSurface,
   selectedSurfaceFeatureNames,
+  onOpenSessionAnalysis,
   t,
 }: {
   featureDetail: FeatureDetail | null;
@@ -155,6 +196,7 @@ export function ContextPanel({
   selectedScopeSessions: AggregatedSelectionSession[];
   selectedSurface: ExplorerSurfaceItem | null;
   selectedSurfaceFeatureNames: string[];
+  onOpenSessionAnalysis?: () => void;
   t: ReturnType<typeof useTranslation>["t"];
 }) {
   const [copiedResumeCommand, setCopiedResumeCommand] = useState("");
@@ -168,6 +210,9 @@ export function ContextPanel({
   const selectedSurfaceKindLabel = selectedSurface
     ? describeSurfaceKind(selectedSurface.kind, t)
     : "";
+  const canOpenSessionAnalysis = selectedFileCount > 0
+    && selectedScopeSessions.length > 0
+    && typeof onOpenSessionAnalysis === "function";
 
   return (
     <div className="space-y-2">
@@ -234,6 +279,67 @@ export function ContextPanel({
         </section>
       ) : null}
 
+      {featureDetail?.promptContext ? (
+        <ContextSection title={t.featureExplorer.learnedPromptContext}>
+          <div className="space-y-2.5">
+            <div className="text-[11px] leading-5 text-desktop-text-secondary">
+              {t.featureExplorer.learnedPromptContextDescription}
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              <InlineMetricPill
+                label={t.featureExplorer.sessionsLabel}
+                value={String(featureDetail.promptContext.sessionCount)}
+              />
+              <InlineMetricPill
+                label={t.featureExplorer.promptPatternsLabel}
+                value={String(featureDetail.promptContext.promptPreviews.length)}
+              />
+              <InlineMetricPill
+                label={t.featureExplorer.toolPatternsLabel}
+                value={String(featureDetail.promptContext.toolCallCounts.length)}
+              />
+              <InlineMetricPill
+                label={t.featureExplorer.fileOperationPatternsLabel}
+                value={String(featureDetail.promptContext.fileOperationCounts.length)}
+              />
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-desktop-text-secondary">
+                  {t.featureExplorer.promptPatternsLabel}
+                </div>
+                <CountSummaryList
+                  items={featureDetail.promptContext.promptPreviews}
+                  emptyMessage={t.featureExplorer.noLearnedPrompts}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-desktop-text-secondary">
+                  {t.featureExplorer.toolPatternsLabel}
+                </div>
+                <CountSummaryList
+                  items={featureDetail.promptContext.toolCallCounts}
+                  emptyMessage={t.featureExplorer.noLearnedTools}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-[10px] font-medium text-desktop-text-secondary">
+                  {t.featureExplorer.fileOperationPatternsLabel}
+                </div>
+                <CountSummaryList
+                  items={featureDetail.promptContext.fileOperationCounts}
+                  emptyMessage={t.featureExplorer.noLearnedFileOperations}
+                />
+              </div>
+            </div>
+          </div>
+        </ContextSection>
+      ) : null}
+
       <ContextSection title={t.featureExplorer.selectedFileSignals}>
         {selectedFileCount > 0 ? (
           selectedScopeSessions.length > 0 ? (
@@ -245,6 +351,7 @@ export function ContextPanel({
                   ? session.promptHistory
                   : (session.promptSnippet ? [session.promptSnippet] : []);
                 const visiblePrompts = isExpanded ? promptHistory : promptHistory.slice(0, 2);
+                const relatedFiles = sanitizeChangedFiles(session.changedFiles);
 
                 return (
                   <div
@@ -321,13 +428,13 @@ export function ContextPanel({
                       </button>
                     ) : null}
 
-                    {session.changedFiles.length > 0 ? (
+                    {relatedFiles.length > 0 ? (
                       <div className="mt-2 space-y-1">
                         <div className="text-[10px] font-medium text-desktop-text-secondary">
                           {t.featureExplorer.relatedFiles}
                         </div>
                         <div className="max-h-24 space-y-1 overflow-y-auto pr-1">
-                          {session.changedFiles.map((filePath) => (
+                          {relatedFiles.map((filePath) => (
                             <div
                               key={`${sessionKey}:${filePath}`}
                               className="rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[10px] text-desktop-text-secondary"
@@ -366,6 +473,34 @@ export function ContextPanel({
           </div>
         </ContextSection>
       ) : null}
+
+      <ContextSection title={t.featureExplorer.sessionAnalysisTitle}>
+        <div className="space-y-2">
+          <div className="text-[11px] leading-5 text-desktop-text-secondary">
+            {canOpenSessionAnalysis
+              ? t.featureExplorer.sessionAnalysisDescription
+              : t.featureExplorer.sessionAnalysisEmpty}
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <InlineMetricPill label={t.featureExplorer.filesLabel} value={String(selectedFileCount)} />
+            <InlineMetricPill label={t.featureExplorer.sessionsLabel} value={String(selectedScopeSessions.length)} />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onOpenSessionAnalysis?.()}
+            disabled={!canOpenSessionAnalysis}
+            className={`inline-flex w-full items-center justify-center whitespace-nowrap rounded-sm border px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              canOpenSessionAnalysis
+                ? "border-desktop-accent bg-desktop-bg-active text-desktop-text-primary hover:bg-desktop-bg-primary"
+                : "cursor-not-allowed border-desktop-border bg-desktop-bg-primary/40 text-desktop-text-secondary/60"
+            }`}
+          >
+            {t.featureExplorer.sessionAnalysisOpen}
+          </button>
+        </div>
+      </ContextSection>
     </div>
   );
 }
@@ -431,6 +566,18 @@ export function ApiPanel({
   const apiPath = selectedApi.endpoint;
   const nextjsSources: string[] = [...new Set(selectedApi.nextjsSourceFiles ?? [])];
   const rustSources: string[] = [...new Set(selectedApi.rustSourceFiles ?? [])];
+  const implementationSourceGroups = (selectedApi.implementationSources ?? [])
+    .map((entry) => ({
+      label: entry.label,
+      sourceFiles: [...new Set(entry.sourceFiles)],
+    }))
+    .filter((entry) => entry.sourceFiles.length > 0);
+  const resolvedImplementationSourceGroups = implementationSourceGroups.length > 0
+    ? implementationSourceGroups
+    : [
+      ...(nextjsSources.length > 0 ? [{ label: "nextjs", sourceFiles: nextjsSources }] : []),
+      ...(rustSources.length > 0 ? [{ label: "rust", sourceFiles: rustSources }] : []),
+    ];
 
   const methodTone = method === "GET"
     ? "border-emerald-300/70 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/12 dark:text-emerald-200"
@@ -471,7 +618,7 @@ export function ApiPanel({
           </span>
           <code className="truncate text-desktop-text-secondary">{apiPath}</code>
         </div>
-        {selectedApi.group || selectedApi.description || nextjsSources.length > 0 || rustSources.length > 0 ? (
+        {selectedApi.group || selectedApi.description || resolvedImplementationSourceGroups.length > 0 ? (
           <div className="mt-2 rounded-sm border border-desktop-border bg-desktop-bg-secondary px-2.5 py-2">
             {selectedApi.group ? (
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
@@ -483,34 +630,20 @@ export function ApiPanel({
                 {selectedApi.description}
               </div>
             ) : null}
-            {nextjsSources.length > 0 ? (
-              <div className="mt-2">
+            {resolvedImplementationSourceGroups.map((entry) => (
+              <div key={entry.label} className="mt-2">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
-                  Next.js
+                  {humanizeImplementationLabel(entry.label)}
                 </div>
                 <div className="mt-1 space-y-1">
-                  {nextjsSources.map((sourceFile) => (
+                  {entry.sourceFiles.map((sourceFile) => (
                     <div key={sourceFile} className="break-all text-[11px] text-desktop-text-secondary">
                       {sourceFile}
                     </div>
                   ))}
                 </div>
               </div>
-            ) : null}
-            {rustSources.length > 0 ? (
-              <div className="mt-2">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-desktop-text-secondary">
-                  Rust
-                </div>
-                <div className="mt-1 space-y-1">
-                  {rustSources.map((sourceFile) => (
-                    <div key={sourceFile} className="break-all text-[11px] text-desktop-text-secondary">
-                      {sourceFile}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            ))}
           </div>
         ) : null}
       </ContextSection>

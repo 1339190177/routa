@@ -32,6 +32,7 @@ function createFeatureTree(): FeatureTree {
     apiEndpoints: [],
     nextjsApiEndpoints: [],
     rustApiEndpoints: [],
+    implementationApiEndpoints: [],
   };
 }
 
@@ -56,6 +57,7 @@ function createDirectoryFallbackFeatureTree(): FeatureTree {
     apiEndpoints: [],
     nextjsApiEndpoints: [],
     rustApiEndpoints: [],
+    implementationApiEndpoints: [],
   };
 }
 
@@ -169,6 +171,7 @@ describe("feature explorer transcript stats", () => {
 
     const repoRoot = path.join(tempRoot, "repo");
     const worktreeRoot = path.join(tempRoot, "repo-worktree");
+    const branchName = `feature/worktree-stats-${path.basename(tempRoot)}`;
     ensureFile(path.join(repoRoot, "src/app/page.tsx"), "export default function Page() { return null; }\n");
 
     runGit(repoRoot, ["init"]);
@@ -176,7 +179,7 @@ describe("feature explorer transcript stats", () => {
     runGit(repoRoot, ["config", "user.email", "test@example.com"]);
     runGit(repoRoot, ["add", "src/app/page.tsx"]);
     runGit(repoRoot, ["commit", "-m", "init"]);
-    runGit(repoRoot, ["worktree", "add", "-b", "feature/worktree-stats", worktreeRoot]);
+    runGit(repoRoot, ["worktree", "add", "-b", branchName, worktreeRoot]);
 
     writeCodexTranscript(
       path.join(tempRoot, ".codex", "sessions", "worktree.jsonl"),
@@ -198,7 +201,6 @@ describe("feature explorer transcript stats", () => {
       sessions: 1,
     });
   });
-
   it("does not attribute unrelated changed files to every feature", () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-unrelated-"));
     process.env.HOME = tempRoot;
@@ -420,6 +422,16 @@ describe("feature explorer transcript stats", () => {
       resumeCommand: "codex resume 019d-signal-session",
       changedFiles: ["src/app/page.tsx"],
     });
+    expect(signal?.sessions[0]?.diagnostics).toMatchObject({
+      toolCallCount: 3,
+      failedToolCallCount: 0,
+      readFiles: ["src/app/page.tsx"],
+      writtenFiles: ["src/app/page.tsx"],
+    });
+    expect(signal?.sessions[0]?.diagnostics?.toolCallsByName).toMatchObject({
+      apply_patch: 1,
+      exec_command: 2,
+    });
     expect(signal?.sessions[0]?.promptHistory[0]).toContain("feature explorer file signals");
     expect(signal?.sessions[0]?.toolNames).toContain("apply_patch");
     expect(signal?.toolHistory).toContain("exec_command");
@@ -477,6 +489,93 @@ feature_metadata:
     ]);
   });
 
+  it("returns an empty feature tree when generated artifacts are missing", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-empty-"));
+    const repoRoot = path.join(tempRoot, "repo");
+
+    const featureTree = parseFeatureTree(repoRoot);
+
+    expect(featureTree).toEqual({
+      capabilityGroups: [],
+      features: [],
+      frontendPages: [],
+      apiEndpoints: [],
+      nextjsApiEndpoints: [],
+      rustApiEndpoints: [],
+      implementationApiEndpoints: [],
+    });
+  });
+
+  it("infers features from legacy generated markdown without feature metadata frontmatter", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-legacy-"));
+    const repoRoot = path.join(tempRoot, "repo");
+
+    ensureFile(
+      path.join(repoRoot, "docs/product-specs/FEATURE_TREE.md"),
+      `---
+status: generated
+purpose: Auto-generated route and API surface index for Routa.js.
+---
+
+# Product Feature Specification
+
+## Frontend Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| Feature Explorer | \`/workspace/:workspaceId/feature-explorer\` | Browse features |
+
+## API Endpoints
+
+### Feature-Explorer (1)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | \`/api/feature-explorer\` | List features |
+`,
+    );
+
+    const featureTree = parseFeatureTree(repoRoot);
+
+    expect(featureTree.capabilityGroups).toEqual([
+      {
+        id: "inferred-surfaces",
+        name: "Inferred Surfaces",
+        description: "Auto-inferred surface clusters derived from generated page and API tables.",
+      },
+    ]);
+    expect(featureTree.features).toEqual([
+      {
+        id: "feature-explorer",
+        name: "Feature Explorer",
+        group: "inferred-surfaces",
+        summary: "Auto-inferred from FEATURE_TREE surfaces (1 page, 1 API).",
+        status: "inferred",
+        pages: ["/workspace/:workspaceId/feature-explorer"],
+        apis: ["GET /api/feature-explorer"],
+        sourceFiles: [],
+        relatedFeatures: [],
+        domainObjects: [],
+      },
+    ]);
+    expect(featureTree.frontendPages).toEqual([
+      {
+        name: "Feature Explorer",
+        route: "/workspace/:workspaceId/feature-explorer",
+        sourceFile: "",
+        description: "Browse features",
+      },
+    ]);
+    expect(featureTree.apiEndpoints).toEqual([
+      {
+        group: "feature-explorer",
+        method: "GET",
+        endpoint: "/api/feature-explorer",
+        description: "List features",
+      },
+    ]);
+  });
+
   it("infers feature ownership for unmapped surfaces from the generated tables", () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-inferred-"));
     const repoRoot = path.join(tempRoot, "repo");
@@ -526,5 +625,68 @@ feature_metadata:
         "src/app/settings/agents/page.tsx",
       ],
     });
+  });
+
+  it("parses generic implementation API sections from generated markdown", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "feature-explorer-spring-"));
+    const repoRoot = path.join(tempRoot, "repo");
+
+    ensureFile(
+      path.join(repoRoot, "docs/product-specs/FEATURE_TREE.md"),
+      `---
+feature_metadata:
+  capability_groups:
+    - id: administration
+      name: Administration
+  features:
+    - id: admin-dashboard
+      name: Admin Dashboard
+      group: administration
+      pages:
+        - /admin/dashboard
+      apis:
+        - GET /admin/dashboard
+---
+
+# Product Feature Specification
+
+## Frontend Pages
+
+| Page | Route | Source File | Description |
+|------|-------|-------------|-------------|
+| Admin Dashboard | \`/admin/dashboard\` | \`src/main/resources/templates/dashboard.html\` |  |
+
+## API Contract Endpoints
+
+### Admin (1)
+
+| Method | Endpoint | Details |
+|--------|----------|---------|
+| GET | \`/admin/dashboard\` | Render Dashboard |
+
+## Spring MVC API Routes
+
+### Admin (1)
+
+| Method | Endpoint | Source Files |
+|--------|----------|--------------|
+| GET | \`/admin/dashboard\` | \`src/main/java/com/example/controller/AdminController.java\` |
+`,
+    );
+
+    const featureTree = parseFeatureTree(repoRoot);
+    expect(featureTree.implementationApiEndpoints).toEqual([
+      {
+        label: "springMvc",
+        group: "admin",
+        method: "GET",
+        endpoint: "/admin/dashboard",
+        sourceFiles: ["src/main/java/com/example/controller/AdminController.java"],
+      },
+    ]);
+    expect(featureTree.features[0]?.sourceFiles).toEqual([
+      "src/main/java/com/example/controller/AdminController.java",
+      "src/main/resources/templates/dashboard.html",
+    ]);
   });
 });

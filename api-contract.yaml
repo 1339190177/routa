@@ -6205,6 +6205,65 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/spec/feature-tree/generate:
+    post:
+      operationId: generateFeatureTree
+      summary: Scan the repository and generate FEATURE_TREE.md + feature-tree.index.json
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspaceId:
+                  type: string
+                codebaseId:
+                  type: string
+                repoPath:
+                  type: string
+                dryRun:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Generation result with detected frameworks, page/API counts, and written files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generatedAt:
+                    type: string
+                  frameworksDetected:
+                    type: array
+                    items:
+                      type: string
+                  wroteFiles:
+                    type: array
+                    items:
+                      type: string
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                  pagesCount:
+                    type: integer
+                  apisCount:
+                    type: integer
+        "400":
+          description: Missing or invalid repository context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Memory ──
   /api/memory:
     get:

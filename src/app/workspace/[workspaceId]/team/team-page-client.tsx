@@ -23,8 +23,7 @@ interface SpecialistSummary {
   role?: string;
 }
 
-interface TeamRunSummary {
-  session: SessionInfo;
+interface TeamRunSessionInfo extends SessionInfo {
   descendants: number;
   directDelegates: number;
 }
@@ -56,21 +55,6 @@ function buildTeamRunName(requirement: string): string {
   return normalized.length > 56 ? `Team - ${normalized.slice(0, 53)}...` : `Team - ${normalized}`;
 }
 
-function isTeamLeadRun(session: SessionInfo): boolean {
-  if (session.parentSessionId) return false;
-  if (session.specialistId === TEAM_LEAD_SPECIALIST_ID) return true;
-  if (session.role?.toUpperCase() !== "ROUTA") return false;
-
-  const normalizedName = (session.name ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-  if (!normalizedName) return false;
-
-  return (
-    normalizedName.startsWith("team -")
-    || normalizedName.startsWith("team run")
-    || normalizedName.includes("team lead")
-  );
-}
-
 export function TeamPageClient() {
   const { t } = useTranslation();
   const params = useParams();
@@ -83,7 +67,7 @@ export function TeamPageClient() {
 
   const workspacesHook = useWorkspaces();
 
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [teamRuns, setTeamRuns] = useState<TeamRunSessionInfo[]>([]);
   const [specialists, setSpecialists] = useState<SpecialistSummary[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isBenchPaused, setIsBenchPaused] = useState(false);
@@ -92,16 +76,16 @@ export function TeamPageClient() {
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await desktopAwareFetch(`/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&limit=100`, {
+        const res = await desktopAwareFetch(`/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&surface=team`, {
           cache: "no-store",
           signal: controller.signal,
         });
         const data = await res.json();
         if (controller.signal.aborted) return;
-        setSessions(Array.isArray(data?.sessions) ? data.sessions : []);
+        setTeamRuns(Array.isArray(data?.sessions) ? data.sessions : []);
       } catch {
         if (controller.signal.aborted) return;
-        setSessions([]);
+        setTeamRuns([]);
       }
     })();
     return () => controller.abort();
@@ -133,31 +117,8 @@ export function TeamPageClient() {
   const shouldAutoScrollBench = teamSpecialists.length > 4;
   const benchItems = shouldAutoScrollBench ? [...teamSpecialists, ...teamSpecialists] : teamSpecialists;
 
-  const teamRuns = useMemo<TeamRunSummary[]>(() => {
-    const childMap = new Map<string, SessionInfo[]>();
-    for (const session of sessions) {
-      if (!session.parentSessionId) continue;
-      const existing = childMap.get(session.parentSessionId) ?? [];
-      existing.push(session);
-      childMap.set(session.parentSessionId, existing);
-    }
-
-    const countDescendants = (sessionId: string): number => {
-      const children = childMap.get(sessionId) ?? [];
-      return children.reduce((total, child) => total + 1 + countDescendants(child.sessionId), 0);
-    };
-
-    return sessions
-      .filter((session) => isTeamLeadRun(session))
-      .map((session) => ({
-        session,
-        descendants: countDescendants(session.sessionId),
-        directDelegates: (childMap.get(session.sessionId) ?? []).length,
-      }));
-  }, [sessions]);
-
   const workspace = workspacesHook.workspaces.find((item) => item.id === workspaceId);
-  const activeRuns = teamRuns.filter((run) => run.session.acpStatus === "connecting" || run.session.acpStatus === "ready").length;
+  const activeRuns = teamRuns.filter((run) => run.acpStatus === "connecting" || run.acpStatus === "ready").length;
   const availableMembers = Math.max(teamSpecialists.length - 1, 0);
 
   const handleWorkspaceSelect = useCallback((nextWorkspaceId: string) => {
@@ -181,19 +142,19 @@ export function TeamPageClient() {
     sessionContext?: { cwd?: string; branch?: string; repoName?: string },
   ) => {
     const optimisticName = buildTeamRunName(promptText);
-    setSessions((current) => {
-      if (current.some((session) => session.sessionId === sessionId)) {
-        return current.map((session) => (
-          session.sessionId === sessionId
+    setTeamRuns((current) => {
+      if (current.some((run) => run.sessionId === sessionId)) {
+        return current.map((run) => (
+          run.sessionId === sessionId
             ? {
-              ...session,
+              ...run,
               name: optimisticName,
-              cwd: session.cwd || sessionContext?.cwd || "",
-              branch: session.branch ?? sessionContext?.branch,
-              role: session.role ?? "ROUTA",
-              specialistId: session.specialistId ?? TEAM_LEAD_SPECIALIST_ID,
+              cwd: run.cwd || sessionContext?.cwd || "",
+              branch: run.branch ?? sessionContext?.branch,
+              role: run.role ?? "ROUTA",
+              specialistId: run.specialistId ?? TEAM_LEAD_SPECIALIST_ID,
             }
-            : session
+            : run
         ));
       }
 
@@ -206,6 +167,8 @@ export function TeamPageClient() {
         role: "ROUTA",
         specialistId: TEAM_LEAD_SPECIALIST_ID,
         createdAt: new Date().toISOString(),
+        directDelegates: 0,
+        descendants: 0,
       }, ...current];
     });
 
@@ -399,27 +362,27 @@ export function TeamPageClient() {
               <div className="space-y-2">
                 {teamRuns.slice(0, 8).map((run) => (
                   <button
-                    key={run.session.sessionId}
+                    key={run.sessionId}
                     type="button"
-                    onClick={() => router.push(`/workspace/${workspaceId}/team/${run.session.sessionId}`)}
+                    onClick={() => router.push(`/workspace/${workspaceId}/team/${run.sessionId}`)}
                     className="w-full rounded-[18px] border border-black/6 bg-[#fbfaf7] px-4 py-3 text-left transition-colors hover:bg-white dark:border-white/8 dark:bg-white/4 dark:hover:bg-white/[0.07]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          {run.session.name ?? "Unnamed Team run"}
+                          {run.name ?? t.team.unnamedRun}
                         </div>
                         <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                          <span>{formatRelativeTime(run.session.createdAt)}</span>
-                          {run.session.branch ? (
+                          <span>{formatRelativeTime(run.createdAt)}</span>
+                          {run.branch ? (
                             <>
                               <span>·</span>
-                              <span className="truncate">{run.session.branch}</span>
+                              <span className="truncate">{run.branch}</span>
                             </>
                           ) : null}
                         </div>
                       </div>
-                      <StatusPill status={run.session.acpStatus} />
+                      <StatusPill status={run.acpStatus} />
                     </div>
                   </button>
                 ))}

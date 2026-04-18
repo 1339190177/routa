@@ -23,6 +23,8 @@ const MAX_FILE_SIGNAL_SESSIONS = 6;
 const MAX_FILE_SIGNAL_TOOLS = 8;
 const MAX_FILE_SIGNAL_PROMPTS = 6;
 const MAX_FILE_SIGNAL_CHANGED_FILES = 12;
+const MAX_FILE_SIGNAL_FAILED_TOOLS = 6;
+const MAX_FILE_SIGNAL_REPEATED_COMMANDS = 6;
 const IGNORED_PATHS = new Set([".git", "node_modules", ".next", "dist", "out", "target"]);
 
 type FallbackSourceDir = string;
@@ -60,9 +62,14 @@ export interface ApiEndpointDetail {
   description: string;
   nextjsSourceFiles?: string[];
   rustSourceFiles?: string[];
+  implementationSources?: Array<{
+    label: string;
+    sourceFiles: string[];
+  }>;
 }
 
 export interface ApiImplementationDetail {
+  label: string;
   group: string;
   method: string;
   endpoint: string;
@@ -76,12 +83,15 @@ export interface FeatureTree {
   apiEndpoints: ApiEndpointDetail[];
   nextjsApiEndpoints: ApiImplementationDetail[];
   rustApiEndpoints: ApiImplementationDetail[];
+  implementationApiEndpoints: ApiImplementationDetail[];
 }
 
 export type FeatureTreeParsed = FeatureTree;
 
 interface FeatureMetadataRaw {
+  schemaVersion?: number;
   capability_groups?: CapabilityGroup[];
+  capabilityGroups?: CapabilityGroup[];
   features?: Array<{
     id?: string;
     name?: string;
@@ -91,8 +101,11 @@ interface FeatureMetadataRaw {
     pages?: string[];
     apis?: string[];
     source_files?: string[];
+    sourceFiles?: string[];
     related_features?: string[];
+    relatedFeatures?: string[];
     domain_objects?: string[];
+    domainObjects?: string[];
   }>;
 }
 
@@ -101,6 +114,25 @@ interface FeatureTreeFrontmatter {
 }
 
 interface FeatureTreeIndexPayload {
+  metadata?: {
+    schemaVersion?: number;
+    capabilityGroups?: CapabilityGroup[];
+    features?: Array<{
+      id?: string;
+      name?: string;
+      group?: string;
+      summary?: string;
+      status?: string;
+      pages?: string[];
+      apis?: string[];
+      sourceFiles?: string[];
+      source_files?: string[];
+      relatedFeatures?: string[];
+      related_features?: string[];
+      domainObjects?: string[];
+      domain_objects?: string[];
+    }>;
+  };
   pages?: Array<{
     route?: string;
     title?: string;
@@ -120,12 +152,21 @@ interface FeatureTreeIndexPayload {
     summary?: string;
   }>;
   nextjsApis?: Array<{
+    label?: string;
     domain?: string;
     method?: string;
     path?: string;
     sourceFiles?: string[];
   }>;
   rustApis?: Array<{
+    label?: string;
+    domain?: string;
+    method?: string;
+    path?: string;
+    sourceFiles?: string[];
+  }>;
+  implementationApis?: Array<{
+    label?: string;
     domain?: string;
     method?: string;
     path?: string;
@@ -177,12 +218,30 @@ export interface FileSessionSignal {
   toolNames: string[];
   changedFiles?: string[];
   resumeCommand?: string;
+  diagnostics?: FileSessionDiagnostics;
 }
 
 export interface FileSignal {
   sessions: FileSessionSignal[];
   toolHistory: string[];
   promptHistory: string[];
+}
+
+export interface FileSessionToolFailure {
+  toolName: string;
+  command?: string;
+  message: string;
+}
+
+export interface FileSessionDiagnostics {
+  toolCallCount: number;
+  failedToolCallCount: number;
+  toolCallsByName: Record<string, number>;
+  readFiles: string[];
+  writtenFiles: string[];
+  repeatedReadFiles: string[];
+  repeatedCommands: string[];
+  failedTools: FileSessionToolFailure[];
 }
 
 export interface FeatureStats {
@@ -203,16 +262,20 @@ function toPosix(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function extractFrontmatter(raw: string): string | null {
   const trimmed = raw.replace(/^\uFEFF/, "");
   const match = trimmed.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   return match ? match[1] ?? null : null;
 }
 
-function readFeatureTreeContent(repoRoot: string): string {
+function readFeatureTreeContent(repoRoot: string): string | null {
   const featureTreePath = path.join(repoRoot, FEATURE_TREE_PATH);
   if (!fs.existsSync(featureTreePath)) {
-    throw new Error("FEATURE_TREE.md not found");
+    return null;
   }
   return fs.readFileSync(featureTreePath, "utf8");
 }
@@ -251,6 +314,38 @@ function normalizeDomainHeading(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function normalizeImplementationLabel(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const parts = normalized.split(/\s+/);
+  if (parts.join("") === "nextjs") {
+    return "nextjs";
+  }
+
+  return parts
+    .map((part, index) => (index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join("");
+}
+
+function implementationSectionLabelFromHeading(heading: string): string | null {
+  const match = heading
+    .trim()
+    .match(/^##\s+(.+?)\s+(?:API Routes|API Route Sources|API Source Files)$/u);
+  if (!match) {
+    return null;
+  }
+
+  const label = normalizeImplementationLabel(match[1] ?? "");
+  return label || null;
+}
+
 function parseSourceFilesCell(value: string): string[] {
   const codeMatches = [...value.matchAll(/`([^`]+)`/g)]
     .map((match) => stripCodeCell(match[1] ?? ""))
@@ -270,18 +365,21 @@ function parseFeatureTreeTables(raw: string): {
   apiEndpoints: ApiEndpointDetail[];
   nextjsApiEndpoints: ApiImplementationDetail[];
   rustApiEndpoints: ApiImplementationDetail[];
+  implementationApiEndpoints: ApiImplementationDetail[];
 } {
   const frontendPages: FrontendPageDetail[] = [];
   const apiEndpoints: ApiEndpointDetail[] = [];
   const nextjsApiEndpoints: ApiImplementationDetail[] = [];
   const rustApiEndpoints: ApiImplementationDetail[] = [];
+  const implementationApiEndpoints: ApiImplementationDetail[] = [];
 
-  let section: "frontend" | "contract" | "nextjs" | "rust" | null = null;
+  let section: "frontend" | "contract" | "implementation" | null = null;
   let inTable = false;
   let currentApiGroup = "";
+  let currentImplementationLabel = "";
 
   const frontMarker = "## Frontend Pages";
-  const apiMarkers = new Set(["## API Endpoints", "## API Contract Endpoints"]);
+  const apiMarkers = new Set(["## API Endpoints", "## API Contract Endpoints", "## HTTP Contract Endpoints"]);
   const nextjsMarkers = new Set(["## Next.js API Routes", "## Next.js-only API Routes"]);
   const rustMarkers = new Set(["## Rust API Routes", "## Rust-only API Routes"]);
 
@@ -301,20 +399,31 @@ function parseFeatureTreeTables(raw: string): {
     }
 
     if (nextjsMarkers.has(trimmed)) {
-      section = "nextjs";
+      section = "implementation";
       inTable = false;
+      currentImplementationLabel = "nextjs";
       continue;
     }
 
     if (rustMarkers.has(trimmed)) {
-      section = "rust";
+      section = "implementation";
       inTable = false;
+      currentImplementationLabel = "rust";
+      continue;
+    }
+
+    const implementationLabel = implementationSectionLabelFromHeading(trimmed);
+    if (implementationLabel) {
+      section = "implementation";
+      inTable = false;
+      currentImplementationLabel = implementationLabel;
       continue;
     }
 
     if (trimmed.startsWith("## ") && trimmed !== frontMarker && !apiMarkers.has(trimmed) && !nextjsMarkers.has(trimmed) && !rustMarkers.has(trimmed)) {
       section = null;
       inTable = false;
+      currentImplementationLabel = "";
       continue;
     }
 
@@ -349,7 +458,7 @@ function parseFeatureTreeTables(raw: string): {
       continue;
     }
 
-    if (section === "contract" || section === "nextjs" || section === "rust") {
+    if (section === "contract" || section === "implementation") {
       if (trimmed.startsWith("### ")) {
         currentApiGroup = normalizeDomainHeading(trimmed
           .replace(/^###\s+/, "")
@@ -402,36 +511,54 @@ function parseFeatureTreeTables(raw: string): {
           });
 
           if (nextjsSourceFiles.length > 0) {
-            nextjsApiEndpoints.push({
+            const nextjsApi = {
+              label: "nextjs",
               group: currentApiGroup,
               method: cells[0] ?? "",
               endpoint: stripCodeCell(cells[1] ?? ""),
               sourceFiles: nextjsSourceFiles,
-            });
+            };
+            nextjsApiEndpoints.push(nextjsApi);
+            implementationApiEndpoints.push(nextjsApi);
           }
 
           if (rustSourceFiles.length > 0) {
-            rustApiEndpoints.push({
+            const rustApi = {
+              label: "rust",
               group: currentApiGroup,
               method: cells[0] ?? "",
               endpoint: stripCodeCell(cells[1] ?? ""),
               sourceFiles: rustSourceFiles,
-            });
+            };
+            rustApiEndpoints.push(rustApi);
+            implementationApiEndpoints.push(rustApi);
           }
         } else {
-          const target = section === "nextjs" ? nextjsApiEndpoints : rustApiEndpoints;
-          target.push({
+          const implementationApi = {
+            label: currentImplementationLabel || "implementation",
             group: currentApiGroup,
             method: cells[0] ?? "",
             endpoint: stripCodeCell(cells[1] ?? ""),
             sourceFiles: parseSourceFilesCell(cells[2] ?? ""),
-          });
+          };
+          implementationApiEndpoints.push(implementationApi);
+          if (implementationApi.label === "nextjs") {
+            nextjsApiEndpoints.push(implementationApi);
+          } else if (implementationApi.label === "rust") {
+            rustApiEndpoints.push(implementationApi);
+          }
         }
       }
     }
   }
 
-  return { frontendPages, apiEndpoints, nextjsApiEndpoints, rustApiEndpoints };
+  return {
+    frontendPages,
+    apiEndpoints,
+    nextjsApiEndpoints,
+    rustApiEndpoints,
+    implementationApiEndpoints,
+  };
 }
 
 function toFrontendPagesFromIndex(payload: FeatureTreeIndexPayload | null): FrontendPageDetail[] {
@@ -466,7 +593,11 @@ function toApiEndpointsFromIndex(payload: FeatureTreeIndexPayload | null): ApiEn
 }
 
 function toImplementationApiEndpoints(
-  source: FeatureTreeIndexPayload["nextjsApis"] | FeatureTreeIndexPayload["rustApis"],
+  source:
+    | FeatureTreeIndexPayload["nextjsApis"]
+    | FeatureTreeIndexPayload["rustApis"]
+    | FeatureTreeIndexPayload["implementationApis"],
+  fallbackLabel?: string,
 ): ApiImplementationDetail[] {
   if (!Array.isArray(source)) {
     return [];
@@ -474,6 +605,7 @@ function toImplementationApiEndpoints(
 
   return source
     .map((api) => ({
+      label: normalizeImplementationLabel(api.label?.trim() ?? fallbackLabel ?? "implementation"),
       group: api.domain?.trim() ?? "",
       method: api.method?.trim() ?? "",
       endpoint: api.path?.trim() ?? "",
@@ -481,53 +613,133 @@ function toImplementationApiEndpoints(
         ? api.sourceFiles.map((file) => file.trim()).filter(Boolean)
         : [],
     }))
-    .filter((api) => api.method && api.endpoint);
+    .filter((api) => api.label && api.method && api.endpoint);
+}
+
+function mergeImplementationApiEndpoints(...lists: ApiImplementationDetail[][]): ApiImplementationDetail[] {
+  const merged = new Map<string, ApiImplementationDetail>();
+
+  for (const api of lists.flat()) {
+    const key = `${api.label}:${buildApiLookupKey(api.method, api.endpoint)}`;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.sourceFiles = [...new Set([...existing.sourceFiles, ...api.sourceFiles])].sort();
+      if (!existing.group && api.group) {
+        existing.group = api.group;
+      }
+      continue;
+    }
+
+    merged.set(key, {
+      label: api.label,
+      group: api.group,
+      method: api.method,
+      endpoint: api.endpoint,
+      sourceFiles: [...new Set(api.sourceFiles)].sort(),
+    });
+  }
+
+  return [...merged.values()].sort((left, right) =>
+    left.label.localeCompare(right.label)
+    || left.group.localeCompare(right.group)
+    || left.endpoint.localeCompare(right.endpoint)
+    || left.method.localeCompare(right.method),
+  );
+}
+
+function toSurfaceMetadata(
+  featureMetadata: FeatureMetadataRaw | FeatureTreeIndexPayload["metadata"] | null | undefined,
+) {
+  if (!featureMetadata) {
+    return null;
+  }
+
+  const capabilityGroups = Array.isArray((featureMetadata as FeatureMetadataRaw).capability_groups)
+    ? (featureMetadata as FeatureMetadataRaw).capability_groups ?? []
+    : Array.isArray((featureMetadata as { capabilityGroups?: CapabilityGroup[] }).capabilityGroups)
+      ? (featureMetadata as { capabilityGroups?: CapabilityGroup[] }).capabilityGroups ?? []
+      : [];
+  const features = Array.isArray(featureMetadata.features)
+    ? featureMetadata.features
+    : [];
+
+  return {
+    schemaVersion: typeof featureMetadata.schemaVersion === "number" ? featureMetadata.schemaVersion : 1,
+    capabilityGroups: capabilityGroups.map((group: CapabilityGroup) => ({
+      id: group.id ?? "",
+      name: group.name ?? "",
+      description: group.description ?? "",
+    })),
+    features: features.map((feature) => ({
+      id: feature.id ?? "",
+      name: feature.name ?? "",
+      group: feature.group ?? "",
+      summary: feature.summary ?? "",
+      status: feature.status ?? "",
+      pages: Array.isArray(feature.pages) ? [...feature.pages] : [],
+      apis: Array.isArray(feature.apis) ? [...feature.apis] : [],
+      sourceFiles: Array.isArray(feature.source_files)
+        ? [...feature.source_files]
+        : Array.isArray(feature.sourceFiles)
+          ? [...feature.sourceFiles]
+          : [],
+      relatedFeatures: Array.isArray(feature.related_features)
+        ? [...feature.related_features]
+        : Array.isArray(feature.relatedFeatures)
+          ? [...feature.relatedFeatures]
+          : [],
+      domainObjects: Array.isArray(feature.domain_objects)
+        ? [...feature.domain_objects]
+        : Array.isArray(feature.domainObjects)
+          ? [...feature.domainObjects]
+          : [],
+    })),
+  };
 }
 
 export function parseFeatureTree(repoRoot: string): FeatureTree {
   const raw = readFeatureTreeContent(repoRoot);
   const index = readFeatureTreeIndex(repoRoot);
-  const frontmatter = extractFrontmatter(raw);
-  if (!frontmatter) {
-    throw new Error("FEATURE_TREE.md frontmatter not found");
+  let metadata = toSurfaceMetadata(index?.metadata);
+
+  if (raw) {
+    const frontmatter = extractFrontmatter(raw);
+    if (frontmatter) {
+      try {
+        const parsed = yaml.load(frontmatter) as FeatureTreeFrontmatter | null;
+        metadata = toSurfaceMetadata(parsed?.feature_metadata) ?? metadata;
+      } catch {
+        // Fall back to generated index data or empty metadata when older markdown cannot be parsed.
+      }
+    }
   }
 
-  const parsed = yaml.load(frontmatter) as FeatureTreeFrontmatter | null;
-  const featureMetadata = parsed?.feature_metadata;
-  if (!featureMetadata) {
-    throw new Error("feature_metadata not found in frontmatter");
-  }
-
-  const fallbackTables = parseFeatureTreeTables(raw);
+  const fallbackTables = raw
+    ? parseFeatureTreeTables(raw)
+    : {
+        frontendPages: [],
+        apiEndpoints: [],
+        nextjsApiEndpoints: [],
+        rustApiEndpoints: [],
+        implementationApiEndpoints: [],
+      };
   const frontendPages = toFrontendPagesFromIndex(index);
   const apiEndpoints = toApiEndpointsFromIndex(index);
-  const nextjsApiEndpoints = toImplementationApiEndpoints(index?.nextjsApis);
-  const rustApiEndpoints = toImplementationApiEndpoints(index?.rustApis);
+  const nextjsApiEndpoints = toImplementationApiEndpoints(index?.nextjsApis, "nextjs");
+  const rustApiEndpoints = toImplementationApiEndpoints(index?.rustApis, "rust");
+  const implementationApiEndpoints = toImplementationApiEndpoints(index?.implementationApis);
   const resolvedFrontendPages = frontendPages.length > 0 ? frontendPages : fallbackTables.frontendPages;
   const resolvedApiEndpoints = apiEndpoints.length > 0 ? apiEndpoints : fallbackTables.apiEndpoints;
   const resolvedNextjsApiEndpoints = nextjsApiEndpoints.length > 0 ? nextjsApiEndpoints : fallbackTables.nextjsApiEndpoints;
   const resolvedRustApiEndpoints = rustApiEndpoints.length > 0 ? rustApiEndpoints : fallbackTables.rustApiEndpoints;
+  const resolvedImplementationApiEndpoints = mergeImplementationApiEndpoints(
+    implementationApiEndpoints,
+    resolvedNextjsApiEndpoints,
+    resolvedRustApiEndpoints,
+    fallbackTables.implementationApiEndpoints,
+  );
   const normalizedMetadata = normalizeSurfaceMetadata({
-    metadata: {
-      schemaVersion: 1,
-      capabilityGroups: (featureMetadata.capability_groups ?? []).map((group) => ({
-        id: group.id ?? "",
-        name: group.name ?? "",
-        description: group.description ?? "",
-      })),
-      features: (featureMetadata.features ?? []).map((feature) => ({
-        id: feature.id ?? "",
-        name: feature.name ?? "",
-        group: feature.group ?? "",
-        summary: feature.summary ?? "",
-        status: feature.status ?? "",
-        pages: Array.isArray(feature.pages) ? [...feature.pages] : [],
-        apis: Array.isArray(feature.apis) ? [...feature.apis] : [],
-        sourceFiles: Array.isArray(feature.source_files) ? [...feature.source_files] : [],
-        relatedFeatures: Array.isArray(feature.related_features) ? [...feature.related_features] : [],
-        domainObjects: Array.isArray(feature.domain_objects) ? [...feature.domain_objects] : [],
-      })),
-    },
+    metadata,
     pages: resolvedFrontendPages.map((page) => ({
       route: page.route,
       title: page.name,
@@ -547,6 +759,12 @@ export function parseFeatureTree(repoRoot: string): FeatureTree {
       sourceFiles: api.sourceFiles,
     })),
     rustApis: resolvedRustApiEndpoints.map((api) => ({
+      domain: api.group,
+      method: api.method,
+      path: api.endpoint,
+      sourceFiles: api.sourceFiles,
+    })),
+    implementationApis: resolvedImplementationApiEndpoints.map((api) => ({
       domain: api.group,
       method: api.method,
       path: api.endpoint,
@@ -576,6 +794,7 @@ export function parseFeatureTree(repoRoot: string): FeatureTree {
     apiEndpoints: resolvedApiEndpoints,
     nextjsApiEndpoints: resolvedNextjsApiEndpoints,
     rustApiEndpoints: resolvedRustApiEndpoints,
+    implementationApiEndpoints: resolvedImplementationApiEndpoints,
   };
 }
 
@@ -986,6 +1205,247 @@ function appendLimitedUnique(target: string[], value: string, limit: number): vo
   target.push(value);
 }
 
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function normalizeCommandSignature(command: string): string {
+  return command.replace(/\s+/g, " ").trim();
+}
+
+function truncateDiagnosticText(text: string, maxLength: number = 220): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+function unwrapShellCommand(command: string): string {
+  const tokens = shellLikeSplit(command);
+  if (tokens.length < 3) {
+    return command;
+  }
+
+  const executable = path.posix.basename(tokens[0] ?? "");
+  const shellLike = executable === "sh" || executable === "bash" || executable === "zsh";
+  if (!shellLike) {
+    return command;
+  }
+
+  const cFlagIndex = tokens.findIndex((token) => token === "-c" || token === "-lc");
+  if (cFlagIndex >= 0 && tokens[cFlagIndex + 1]) {
+    return tokens.slice(cFlagIndex + 1).join(" ");
+  }
+
+  return command;
+}
+
+function toolNameFromFeatureEvent(event: unknown): string | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+
+  if (event.type === "function_call" && typeof event.name === "string") {
+    return event.name;
+  }
+
+  if (typeof event.tool_name === "string") {
+    return event.tool_name;
+  }
+
+  if (event.type === "exec_command_end" || event.type === "exec_command_begin") {
+    return "exec_command";
+  }
+
+  return commandFromUnknown(event) ? "exec_command" : undefined;
+}
+
+function extractReadCandidatesFromCommand(command: string): string[] {
+  const innerCommand = unwrapShellCommand(command);
+  const tokens = shellLikeSplit(innerCommand);
+  if (tokens.length === 0) {
+    return [];
+  }
+
+  const executable = path.posix.basename(tokens[0] ?? "");
+  const readCommands = new Set(["bat", "cat", "head", "less", "more", "nl", "sed", "tail"]);
+  if (!readCommands.has(executable)) {
+    return [];
+  }
+
+  return tokens.slice(1).filter((token) => token !== "--" && !token.startsWith("-"));
+}
+
+function collectReadFilesFromToolLike(event: unknown, repoRoot: string, sessionCwd: string): string[] {
+  const candidates = new Set<string>();
+  const toolName = toolNameFromFeatureEvent(event)?.toLowerCase() ?? "";
+  const command = commandFromUnknown(event);
+  const directReadTool = toolName.includes("read")
+    || toolName === "open"
+    || toolName === "view"
+    || toolName === "fs/read_text_file";
+
+  if (directReadTool) {
+    collectFileValues(event, candidates);
+  }
+
+  if (command) {
+    for (const token of extractReadCandidatesFromCommand(command)) {
+      candidates.add(token);
+    }
+  }
+
+  const readFiles: string[] = [];
+  for (const candidate of candidates) {
+    const normalized = normalizeRepoRelative(repoRoot, candidate, sessionCwd);
+    if (normalized && !readFiles.includes(normalized)) {
+      readFiles.push(normalized);
+    }
+  }
+
+  return readFiles;
+}
+
+function detectFailedToolCall(event: unknown): FileSessionToolFailure | null {
+  if (!isRecord(event)) {
+    return null;
+  }
+
+  const exitCode = typeof event.exit_code === "number"
+    ? event.exit_code
+    : typeof event.exitCode === "number"
+      ? event.exitCode
+      : undefined;
+  const status = typeof event.status === "string" ? event.status.trim().toLowerCase() : "";
+  const failed = (typeof exitCode === "number" && exitCode !== 0)
+    || status === "failed"
+    || status === "error";
+
+  if (!failed) {
+    return null;
+  }
+
+  const toolName = toolNameFromFeatureEvent(event) ?? "tool";
+  const message = firstNonEmptyString(
+    event.stderr,
+    event.error,
+    event.message,
+    commandOutputFromUnknown(event),
+  ) ?? (typeof exitCode === "number" ? `Exit code ${exitCode}` : "Tool call failed");
+
+  return {
+    toolName,
+    ...(commandFromUnknown(event) ? { command: truncateDiagnosticText(commandFromUnknown(event) ?? "") } : {}),
+    message: truncateDiagnosticText(message),
+  };
+}
+
+function deriveTranscriptSessionDiagnostics(
+  transcript: ReturnType<typeof collectMatchingTranscriptSessions>[number],
+  repoRoot: string,
+  writtenFiles: string[],
+): FileSessionDiagnostics {
+  const toolCallsByName: Record<string, number> = {};
+  const readCounts = new Map<string, number>();
+  const repeatedCommandCounts = new Map<string, number>();
+  const failedTools: FileSessionToolFailure[] = [];
+  const pendingExecRequests = new Map<string, number>();
+  let failedToolCallCount = 0;
+
+  const incrementToolCall = (toolName: string) => {
+    toolCallsByName[toolName] = (toolCallsByName[toolName] ?? 0) + 1;
+  };
+
+  const incrementCommand = (signature: string) => {
+    if (!signature) {
+      return;
+    }
+    repeatedCommandCounts.set(signature, (repeatedCommandCounts.get(signature) ?? 0) + 1);
+  };
+
+  const appendFailure = (failure: FileSessionToolFailure | null) => {
+    if (!failure) {
+      return;
+    }
+    failedToolCallCount += 1;
+    if (failedTools.length < MAX_FILE_SIGNAL_FAILED_TOOLS) {
+      failedTools.push(failure);
+    }
+  };
+
+  for (const event of transcript.events) {
+    const toolName = toolNameFromFeatureEvent(event);
+    const command = commandFromUnknown(event);
+    const commandSignature = command ? normalizeCommandSignature(unwrapShellCommand(command)) : "";
+
+    for (const readFile of collectReadFilesFromToolLike(event, repoRoot, transcript.cwd)) {
+      readCounts.set(readFile, (readCounts.get(readFile) ?? 0) + 1);
+    }
+
+    if (!isRecord(event)) {
+      continue;
+    }
+
+    if (event.type === "function_call") {
+      if (toolName) {
+        incrementToolCall(toolName);
+      }
+      if (toolName === "exec_command" && commandSignature) {
+        pendingExecRequests.set(commandSignature, (pendingExecRequests.get(commandSignature) ?? 0) + 1);
+      }
+      incrementCommand(commandSignature);
+      appendFailure(detectFailedToolCall(event));
+      continue;
+    }
+
+    if (event.type === "exec_command_begin" || event.type === "exec_command_end") {
+      const pending = commandSignature ? (pendingExecRequests.get(commandSignature) ?? 0) : 0;
+      if (pending > 0 && commandSignature) {
+        pendingExecRequests.set(commandSignature, pending - 1);
+      } else {
+        incrementToolCall("exec_command");
+        incrementCommand(commandSignature);
+      }
+      appendFailure(detectFailedToolCall(event));
+      continue;
+    }
+
+    if (toolName) {
+      incrementToolCall(toolName);
+      incrementCommand(commandSignature);
+      appendFailure(detectFailedToolCall(event));
+    }
+  }
+
+  const sortedReadFiles = [...readCounts.keys()].sort((left, right) => left.localeCompare(right));
+  const repeatedReadFiles = [...readCounts.entries()]
+    .filter(([, count]) => count > 1)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([filePath, count]) => `${filePath} x${count}`);
+  const repeatedCommands = [...repeatedCommandCounts.entries()]
+    .filter(([, count]) => count > 1)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, MAX_FILE_SIGNAL_REPEATED_COMMANDS)
+    .map(([commandText, count]) => `${truncateDiagnosticText(commandText, 120)} x${count}`);
+
+  return {
+    toolCallCount: Object.values(toolCallsByName).reduce((sum, count) => sum + count, 0),
+    failedToolCallCount,
+    toolCallsByName,
+    readFiles: sortedReadFiles,
+    writtenFiles: [...new Set(writtenFiles)].sort((left, right) => left.localeCompare(right)),
+    repeatedReadFiles,
+    repeatedCommands,
+    failedTools,
+  };
+}
+
 function sanitizePathCandidate(candidate: string): string | null {
   const cleaned = toPosix(candidate)
     .trim()
@@ -1172,6 +1632,10 @@ export function collectFeatureSessionStats(repoRoot: string, featureTree: Featur
     }
 
     const transcriptKey = `${transcript.provider}:${transcript.sessionId}`;
+    const changedFiles = [...changedFromTranscript]
+      .slice(0, MAX_FILE_SIGNAL_CHANGED_FILES)
+      .sort((left, right) => left.localeCompare(right));
+    const diagnostics = deriveTranscriptSessionDiagnostics(transcript, repoRoot, changedFiles);
 
     for (const changedFile of changedFromTranscript) {
       const fileEntry = fileStats[changedFile] ?? {
@@ -1204,9 +1668,8 @@ export function collectFeatureSessionStats(repoRoot: string, featureTree: Featur
           promptSnippet: transcript.promptHistory[0] ?? "",
           promptHistory: transcript.promptHistory.slice(0, MAX_FILE_SIGNAL_PROMPTS),
           toolNames: transcript.toolHistory.slice(0, MAX_FILE_SIGNAL_TOOLS),
-          changedFiles: [...changedFromTranscript].slice(0, MAX_FILE_SIGNAL_CHANGED_FILES).sort((left, right) =>
-            left.localeCompare(right)
-          ),
+          changedFiles,
+          diagnostics,
           ...(transcript.resumeCommand ? { resumeCommand: transcript.resumeCommand } : {}),
         });
       }

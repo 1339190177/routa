@@ -19,6 +19,7 @@ type RunCommandOptions = {
   env?: NodeJS.ProcessEnv;
   onOutput?: (event: CommandOutputEvent) => void;
   stream?: boolean;
+  timeoutMs?: number;
 };
 
 export function tailOutput(output: string, maxChars = 6000): string {
@@ -43,6 +44,21 @@ export function runCommand(command: string, options: RunCommandOptions = {}): Pr
     env: { ...process.env, ...options.env },
     stdio: ["inherit", "pipe", "pipe"],
   });
+  let timeoutId: NodeJS.Timeout | undefined;
+  let timedOut = false;
+
+  if (options.timeoutMs && options.timeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      setTimeout(() => {
+        if (!child.killed) {
+          child.kill("SIGKILL");
+        }
+      }, 1_000).unref();
+    }, options.timeoutMs);
+    timeoutId.unref();
+  }
 
   let output = "";
 
@@ -67,10 +83,16 @@ export function runCommand(command: string, options: RunCommandOptions = {}): Pr
   return new Promise((resolve, reject) => {
     child.on("error", reject);
     child.on("close", (exitCode) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (timedOut) {
+        output += `\n[hook-runtime] Command timed out after ${options.timeoutMs}ms\n`;
+      }
       resolve({
         command,
         durationMs: Date.now() - startedAt,
-        exitCode: exitCode ?? 1,
+        exitCode: timedOut ? 124 : (exitCode ?? 1),
         output,
       });
     });

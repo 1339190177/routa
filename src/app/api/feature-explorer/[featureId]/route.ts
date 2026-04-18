@@ -52,6 +52,20 @@ interface FeatureDetailResponse {
       toolNames: string[];
       changedFiles?: string[];
       resumeCommand?: string;
+      diagnostics?: {
+        toolCallCount: number;
+        failedToolCallCount: number;
+        toolCallsByName: Record<string, number>;
+        readFiles: string[];
+        writtenFiles: string[];
+        repeatedReadFiles: string[];
+        repeatedCommands: string[];
+        failedTools: Array<{
+          toolName: string;
+          command?: string;
+          message: string;
+        }>;
+      };
     }>;
     toolHistory: string[];
     promptHistory: string[];
@@ -125,6 +139,12 @@ function toApiDetails(feature: FeatureTree["features"][number], featureTree: Fea
   return feature.apis.map((declaration) => {
     const parsed = splitDeclaredApi(declaration);
     const lookupKey = buildApiLookupKey(parsed.method, parsed.endpoint);
+    const implementationSources = featureTree.implementationApiEndpoints
+      .filter((api) => buildApiLookupKey(api.method, api.endpoint) === lookupKey)
+      .map((api) => ({
+        label: api.label,
+        sourceFiles: api.sourceFiles,
+      }));
     const nextjsSourceFiles = featureTree.nextjsApiEndpoints
       .filter((api) => buildApiLookupKey(api.method, api.endpoint) === lookupKey)
       .flatMap((api) => api.sourceFiles);
@@ -139,6 +159,7 @@ function toApiDetails(feature: FeatureTree["features"][number], featureTree: Fea
       ...matched,
       nextjsSourceFiles,
       rustSourceFiles,
+      ...(implementationSources.length > 0 ? { implementationSources } : {}),
     } : {
       group: "",
       method: parsed.method,
@@ -146,6 +167,7 @@ function toApiDetails(feature: FeatureTree["features"][number], featureTree: Fea
       description: "",
       nextjsSourceFiles,
       rustSourceFiles,
+      ...(implementationSources.length > 0 ? { implementationSources } : {}),
     };
   });
 }

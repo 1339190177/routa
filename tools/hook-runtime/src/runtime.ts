@@ -31,6 +31,24 @@ export type HookRuntimeProfile = {
 
 export type ReviewPhaseResult = ImportedReviewPhaseResult;
 
+export function splitMetricsByExecutionMode(metrics: HookMetric[]): {
+  parallelMetrics: HookMetric[];
+  serialMetrics: HookMetric[];
+} {
+  const parallelMetrics: HookMetric[] = [];
+  const serialMetrics: HookMetric[] = [];
+
+  for (const metric of metrics) {
+    if (metric.serial) {
+      serialMetrics.push(metric);
+    } else {
+      parallelMetrics.push(metric);
+    }
+  }
+
+  return { parallelMetrics, serialMetrics };
+}
+
 export type HookRuntimeOptions = {
   autoFix: boolean;
   dryRun: boolean;
@@ -441,6 +459,8 @@ async function runFitnessPhase(
   }
 
   const metrics = await metricProvider.loadMetrics(options.metricNames);
+  const { parallelMetrics, serialMetrics } = splitMetricsByExecutionMode(metrics);
+  const metricOrder = new Map(metrics.map((metric, index) => [metric, index + 1]));
   const fitnessChangedBase = await resolveFitnessChangedBase();
   const reporter =
     options.outputMode === "human"
@@ -456,8 +476,11 @@ async function runFitnessPhase(
   reporter?.start();
 
   try {
-    const batch = await runMetrics(
-      metrics,
+    const runMetricBatch = async (
+      batchMetrics: HookMetric[],
+      concurrency: number,
+    ) => runMetrics(
+      batchMetrics,
       async (metric) =>
         runMetric(metric, {
           env: {
@@ -468,28 +491,30 @@ async function runFitnessPhase(
           onOutput: (event) => reporter?.onMetricOutput(metric.name, event),
         }),
       {
-        concurrency: options.jobs,
+        concurrency,
         failFast: options.failFast,
-        onMetricStart: (metric, index, total) => {
-          reporter?.onMetricStart(metric, index, total);
+        onMetricStart: (metric) => {
+          const displayIndex = metricOrder.get(metric) ?? 0;
+          reporter?.onMetricStart(metric, displayIndex, metrics.length);
           emitEvent(options.outputMode, {
             event: "metric.start",
             phase: "fitness",
             name: metric.name,
-            index,
-            total,
+            index: displayIndex,
+            total: metrics.length,
             sourceFile: metric.sourceFile,
             command: metric.command,
           });
         },
-        onMetricComplete: (result, index, total) => {
-          reporter?.onMetricComplete(result, index, total);
+        onMetricComplete: (result) => {
+          const displayIndex = metricOrder.get(result.metric) ?? 0;
+          reporter?.onMetricComplete(result, displayIndex, metrics.length);
           emitEvent(options.outputMode, {
             event: "metric.complete",
             phase: "fitness",
             name: result.metric.name,
-            index,
-            total,
+            index: displayIndex,
+            total: metrics.length,
             passed: result.passed,
             durationMs: result.durationMs,
             exitCode: result.exitCode,
@@ -500,6 +525,19 @@ async function runFitnessPhase(
         },
       },
     );
+
+    const parallelBatch = await runMetricBatch(parallelMetrics, options.jobs);
+    const shouldRunSerialBatch = !options.failFast || parallelBatch.results.every((result) => result.passed);
+    const serialBatch = shouldRunSerialBatch
+      ? await runMetricBatch(serialMetrics, 1)
+      : {
+          results: [] as MetricExecution[],
+          skippedMetrics: serialMetrics,
+        };
+    const batch = {
+      results: [...parallelBatch.results, ...serialBatch.results],
+      skippedMetrics: [...parallelBatch.skippedMetrics, ...serialBatch.skippedMetrics],
+    };
     reporter?.close();
     reporterClosed = true;
 

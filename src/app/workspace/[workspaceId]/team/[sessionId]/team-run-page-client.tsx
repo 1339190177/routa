@@ -138,21 +138,6 @@ function delegationRoleMatchesSession(targetRosterId: string, child: SessionInfo
   return normalizedRole === "CRAFTER" || normalizedRole === "DEVELOPER";
 }
 
-function isTopLevelTeamRun(session: SessionInfo): boolean {
-  if (session.parentSessionId) return false;
-  if (session.specialistId === TEAM_LEAD_SPECIALIST_ID) return true;
-  if (session.role?.toUpperCase() !== "ROUTA") return false;
-
-  const normalizedName = (session.name ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-  if (!normalizedName) return false;
-
-  return (
-    normalizedName.startsWith("team -")
-    || normalizedName.startsWith("team run")
-    || normalizedName.includes("team lead")
-  );
-}
-
 export function TeamRunPageClient() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -183,6 +168,7 @@ export function TeamRunPageClient() {
   const notesHook = useNotes(workspaceId, sessionId);
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [workspaceSessions, setWorkspaceSessions] = useState<SessionInfo[]>([]);
+  const [teamRuns, setTeamRuns] = useState<SessionInfo[]>([]);
   const [specialists, setSpecialists] = useState<SpecialistSummary[]>([]);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [historiesBySessionId, setHistoriesBySessionId] = useState<Record<string, SessionHistoryEntry[]>>({});
@@ -300,14 +286,16 @@ export function TeamRunPageClient() {
 
   const fetchRunMetadata = useCallback(async () => {
     const contextKey = `${workspaceId}:${sessionId}`;
-    const [sessionRes, sessionsRes, agentsRes] = await Promise.all([
+    const [sessionRes, sessionsRes, teamRunsRes, agentsRes] = await Promise.all([
       desktopAwareFetch(`/api/sessions/${encodeURIComponent(sessionId)}`, { cache: "no-store" }),
-      desktopAwareFetch(`/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&limit=100`, { cache: "no-store" }),
+      desktopAwareFetch(`/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" }),
+      desktopAwareFetch(`/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&surface=team`, { cache: "no-store" }),
       desktopAwareFetch(`/api/agents?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: "no-store" }),
     ]);
 
     const sessionData = await sessionRes.json().catch(() => ({}));
     const sessionsData = await sessionsRes.json().catch(() => ({}));
+    const teamRunsData = await teamRunsRes.json().catch(() => ({}));
     const agentsData = await agentsRes.json().catch(() => ({}));
 
     if (contextKeyRef.current !== contextKey) return;
@@ -316,6 +304,9 @@ export function TeamRunPageClient() {
     }
     if (Array.isArray(sessionsData?.sessions)) {
       setWorkspaceSessions(sessionsData.sessions);
+    }
+    if (Array.isArray(teamRunsData?.sessions)) {
+      setTeamRuns(teamRunsData.sessions);
     }
     if (Array.isArray(agentsData?.agents)) {
       setAgents(agentsData.agents);
@@ -522,11 +513,6 @@ export function TeamRunPageClient() {
   }, [fetchSpecialists, flushMetadataRefresh, sessionId, workspaceId]);
 
   const workspace = workspacesHook.workspaces.find((item) => item.id === workspaceId);
-  const teamRuns = useMemo(() => (
-    [...workspaceSessions]
-      .filter((entry) => isTopLevelTeamRun(entry))
-      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-  ), [workspaceSessions]);
   const specialistsById = useMemo(
     () => new Map(specialists.map((specialist) => [specialist.id, specialist])),
     [specialists],

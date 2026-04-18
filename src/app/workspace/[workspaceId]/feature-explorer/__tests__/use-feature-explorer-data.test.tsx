@@ -143,4 +143,54 @@ describe("useFeatureExplorerData", () => {
       "/feature-explorer/feature-a?workspaceId=default&repoPath=%2Ftmp%2Flocal-project",
     );
   });
+
+  it("keeps the page usable when no generated feature tree exists", async () => {
+    desktopAwareFetch.mockReset();
+    desktopAwareFetch.mockImplementation(async (url: string) => {
+      if (url.startsWith("/feature-explorer?")) {
+        return okJson({
+          capabilityGroups: [],
+          features: [],
+        });
+      }
+
+      if (url.startsWith("/spec/surface-index?")) {
+        return okJson({
+          generatedAt: "",
+          pages: [],
+          apis: [],
+          contractApis: [],
+          nextjsApis: [],
+          rustApis: [],
+          implementationApis: [],
+          metadata: null,
+          repoRoot: "/tmp/local-project",
+          warnings: ["FEATURE_TREE.md not found; generate the feature tree to populate features."],
+        });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    const { result } = renderHook<ReturnType<typeof useFeatureExplorerData>, HookProps>(
+      (props: HookProps) => useFeatureExplorerData(props),
+      {
+        initialProps: {
+          workspaceId: "default",
+        } satisfies HookProps,
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.features).toEqual([]);
+    expect(result.current.initialFeatureId).toBe("");
+    expect(result.current.surfaceIndex.warnings[0]).toContain("FEATURE_TREE.md");
+    expect(desktopAwareFetch).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^\/feature-explorer\/[^?]+\?/),
+    );
+  });
 });
