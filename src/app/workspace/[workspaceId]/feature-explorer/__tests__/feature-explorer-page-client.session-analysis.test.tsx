@@ -752,8 +752,7 @@ describe("FeatureExplorerPageClient session analysis", () => {
     await waitFor(() => {
       expect(screen.getByText("019d-folder-b")).toBeTruthy();
     });
-
-    expect(screen.getByText("2 files selected")).toBeTruthy();
+    expect((screen.getByTestId("feature-tree-select-folder-workspace") as HTMLInputElement).checked).toBe(true);
   });
 
   it("hydrates file selection from the url and keeps it in sync", async () => {

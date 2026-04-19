@@ -1012,10 +1012,12 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.getByTestId("feature-tree-updated-folder-src").textContent).not.toBe("-");
 
     fireEvent.click(screen.getByTestId("feature-tree-select-folder-src"));
-    expect(screen.getByText("0 files selected")).toBeTruthy();
+    expect((screen.getByTestId("feature-tree-select-folder-src") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId("feature-tree-select-file-route") as HTMLInputElement).checked).toBe(false);
 
     fireEvent.click(screen.getByTestId("feature-tree-select-folder-src"));
-    expect(screen.getByText("1 files selected")).toBeTruthy();
+    expect((screen.getByTestId("feature-tree-select-folder-src") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId("feature-tree-select-file-route") as HTMLInputElement).checked).toBe(true);
   });
 
 });

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight,
   ChevronDown,
   ChevronRight,
   RefreshCw,
@@ -450,12 +449,6 @@ export function FeatureExplorerPageClient({
         setDesiredFilePath("");
       }
     }
-  };
-
-  const handleClearSelection = () => {
-    setSelectedFileIds([]);
-    setActiveFileId("");
-    setDesiredFilePath("");
   };
 
   useEffect(() => {
@@ -991,28 +984,6 @@ export function FeatureExplorerPageClient({
                 )}
               </div>
 
-              <div className="border-t border-desktop-border bg-desktop-bg-secondary/20 px-3 py-1.5">
-                <div className="flex min-w-0 items-center justify-between gap-3">
-                  <div className="truncate text-[11px] text-desktop-text-secondary">
-                    {selectedFileIds.length} {t.featureExplorer.filesSelectedLabel}
-                  </div>
-                  <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
-                    <button
-                      onClick={handleClearSelection}
-                      className="shrink-0 whitespace-nowrap rounded-sm border border-desktop-border bg-desktop-bg-primary px-2 py-1 text-[11px] text-desktop-text-secondary hover:bg-desktop-bg-active hover:text-desktop-text-primary"
-                    >
-                      {t.featureExplorer.clearSelection}
-                    </button>
-                    <button
-                      onClick={() => router.push(`/workspace/${encodeURIComponent(workspaceId)}/sessions`)}
-                      className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border border-desktop-accent bg-desktop-bg-active px-2 py-1 text-[11px] text-desktop-text-primary hover:bg-desktop-bg-primary"
-                    >
-                      {t.featureExplorer.continueAction}
-                      <ArrowRight className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
             </section>
 
             {isWideLayout ? (
