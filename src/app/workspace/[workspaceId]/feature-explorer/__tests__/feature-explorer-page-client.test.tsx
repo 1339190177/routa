@@ -425,6 +425,58 @@ describe("FeatureExplorerPageClient", () => {
     });
   });
 
+  it("closes the generate drawer after a successful quick-scan write", async () => {
+    sessionLaunchState.desktopAwareFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          repoRoot: "/repo/default",
+          selectedScanRoot: "/repo/default",
+          frameworksDetected: ["nextjs"],
+          adapters: [{ id: "nextjs-app-router", confidence: "high", signals: ["src/app"] }],
+          candidateRoots: [],
+          warnings: [],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    sessionLaunchState.desktopAwareFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          generatedAt: "2026-04-18T07:50:22.614Z",
+          frameworksDetected: ["nextjs"],
+          wroteFiles: [
+            "docs/product-specs/FEATURE_TREE.md",
+            "docs/product-specs/feature-tree.index.json",
+          ],
+          warnings: [],
+          pagesCount: 28,
+          apisCount: 737,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    fireEvent.click(screen.getByTestId("generate-feature-tree-button"));
+
+    expect(screen.getByTestId("generate-feature-tree-drawer")).toBeTruthy();
+
+    await screen.findByText("Quick scan");
+    fireEvent.click(screen.getByRole("button", { name: "Quick scan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("generate-feature-tree-drawer")).toBeNull();
+    });
+  });
+
   it("runs agent-first generation and auto-commits returned metadata after turn completion", async () => {
     analysisAcpState.createSession.mockResolvedValue({ sessionId: "feature-tree-session-1" });
     sessionLaunchState.desktopAwareFetch
