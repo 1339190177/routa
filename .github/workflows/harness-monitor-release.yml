@@ -74,7 +74,14 @@ jobs:
             "apps/desktop/src-tauri/Cargo.toml"
             "apps/desktop/src-tauri/tauri.conf.json"
             "packages/routa-cli/package.json"
+            "packages/entrix/package.json"
             "packages/harness-monitor/package.json"
+            "crates/routa-core/Cargo.toml"
+            "crates/routa-rpc/Cargo.toml"
+            "crates/routa-scanner/Cargo.toml"
+            "crates/routa-server/Cargo.toml"
+            "crates/routa-cli/Cargo.toml"
+            "crates/entrix/Cargo.toml"
             "crates/harness-monitor/Cargo.toml"
           )
 
@@ -150,7 +157,14 @@ jobs:
             "apps/desktop/src-tauri/Cargo.toml"
             "apps/desktop/src-tauri/tauri.conf.json"
             "packages/routa-cli/package.json"
+            "packages/entrix/package.json"
             "packages/harness-monitor/package.json"
+            "crates/routa-core/Cargo.toml"
+            "crates/routa-rpc/Cargo.toml"
+            "crates/routa-scanner/Cargo.toml"
+            "crates/routa-server/Cargo.toml"
+            "crates/routa-cli/Cargo.toml"
+            "crates/entrix/Cargo.toml"
             "crates/harness-monitor/Cargo.toml"
           )
 
