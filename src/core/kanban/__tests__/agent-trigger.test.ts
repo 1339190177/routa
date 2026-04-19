@@ -664,7 +664,7 @@ describe("triggerAssignedTaskAgent ACP prompt lifecycle", () => {
     dispatchSessionPromptMock.mockReset();
   });
 
-  it("does not emit AGENT_COMPLETED when ACP prompt submission succeeds", async () => {
+  it("emits AGENT_COMPLETED when ACP prompt submission succeeds", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
         jsonrpc: "2.0",
@@ -714,9 +714,13 @@ describe("triggerAssignedTaskAgent ACP prompt lifecycle", () => {
       workspaceId: "default",
       cwd: "/tmp/project",
     }));
-    expect(eventBus.emit).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
       type: AgentEventType.AGENT_COMPLETED,
       agentId: "sess-1",
+      data: expect.objectContaining({
+        sessionId: "sess-1",
+        success: true,
+      }),
     }));
   });
 

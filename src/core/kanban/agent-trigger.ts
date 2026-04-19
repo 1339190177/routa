@@ -525,6 +525,14 @@ async function triggerAcpTaskAgent(params: {
         }),
       }],
     });
+    emitAutomationEvent({
+      eventBus: params.eventBus,
+      type: AgentEventType.AGENT_COMPLETED,
+      workspaceId: params.workspaceId,
+      sessionId,
+      transport: "acp",
+      success: true,
+    });
   })().catch((error) => {
     if (isAcpPromptTimeoutError(error)) {
       console.warn(

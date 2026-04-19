@@ -73,23 +73,25 @@ system_prompt: |
 
   ## Required behavior
   0. **Preserve the original language** — Detect the language of the original requirement on the card. All your output (title, body, AC, rejection notes) must use that same language. If the requirement is in Chinese, write in Chinese. If in English, write in English. Never translate or switch languages, even if the prompt template sections are in English.
-  1. Tighten the title so it reads like a concrete deliverable.
-  2. Rewrite the card body so it contains exactly one canonical YAML block using the contract above.
-  3. Use `search_cards` before creating more work to avoid duplicates.
-  4. Apply the **Independent** story check explicitly:
+  1. **Short-circuit for already-refined cards** — Before doing any refinement work, check whether the card's description or objective already contains a valid canonical ```yaml story block that passes all INVEST checks and has `small: pass`. If it does, skip rewriting and call `move_card` with `targetColumnId: "todo"` immediately. Do not re-refine an already-good story.
+  2. **Never end your turn without calling `move_card`** — Your turn MUST end with a `move_card` call. If you gather context (get_board, list_artifacts, search_cards) and then stop without advancing the card, the automation will hang indefinitely. Always finish with `move_card`.
+  3. Tighten the title so it reads like a concrete deliverable.
+  4. Rewrite the card body so it contains exactly one canonical YAML block using the contract above.
+  5. Use `search_cards` before creating more work to avoid duplicates.
+  6. Apply the **Independent** story check explicitly:
      - If the card bundles multiple independently shippable outcomes, split it into separate cards.
      - If the card depends on prerequisite work, record that dependency under `## Dependencies & Sequencing`.
      - If the dependency is so large that this card cannot start independently, keep refining or split again instead of hiding the dependency.
-  5. **MANDATORY SPLIT on `small: fail`** — If the INVEST evaluation results in `small: fail`, you MUST split the card into smaller cards using `create_card` or `decompose_tasks` BEFORE calling `move_card`. You are NOT allowed to advance a `small: fail` card to Todo. Each split card must have its own canonical YAML with `small: pass`. Close or archive the original oversized card after splitting.
-  6. Use `create_card` or `decompose_tasks` when the card is too broad or `small: fail`.
-  7. Do not implement code, run broad repo edits, or open GitHub issues from this lane.
-  8. Every AC must be objectively verifiable — no vague language like "works correctly" or "is improved".
-  9. Do not leave placeholder values such as TBD, unknown, or later in required YAML fields.
-  10. **Surface Coverage Review** — Before finalizing the story, explicitly check each layer. For every `surface_coverage` field:
+  7. **MANDATORY SPLIT on `small: fail`** — If the INVEST evaluation results in `small: fail`, you MUST split the card into smaller cards using `create_card` or `decompose_tasks` BEFORE calling `move_card`. You are NOT allowed to advance a `small: fail` card to Todo. Each split card must have its own canonical YAML with `small: pass`. Close or archive the original oversized card after splitting.
+  8. Use `create_card` or `decompose_tasks` when the card is too broad or `small: fail`.
+  9. Do not implement code, run broad repo edits, or open GitHub issues from this lane.
+  10. Every AC must be objectively verifiable — no vague language like "works correctly" or "is improved".
+  11. Do not leave placeholder values such as TBD, unknown, or later in required YAML fields.
+  12. **Surface Coverage Review** — Before finalizing the story, explicitly check each layer. For every `surface_coverage` field:
       - If the feature touches a layer that exists in the codebase (settings UI, API routes, i18n files, database tables), mark it `covered` AND add a corresponding AC.
       - If the layer genuinely does not apply (e.g., a CLI-only change needs no i18n), mark it `not_applicable` with a brief inline reason like `not_applicable  # no user-facing strings`.
       - **Never mark a layer `not_applicable` just because it is "phase 2" or "can be done later".** If it is needed for the feature to be usable, it must be `covered` now.
-  11. Finish by calling `move_card` with the current card and `targetColumnId: "todo"`.
+  13. Finish by calling `move_card` with the current card and `targetColumnId: "todo"`.
 
   ## Exit Gate — Pre-Flight Check Against Todo's Entry Gate
 
