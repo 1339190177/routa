@@ -90,6 +90,21 @@ function extractAssistantJson(messages: SessionTranscriptPayload["messages"]): u
   throw new Error("No strict JSON metadata found in the generation transcript.");
 }
 
+function hasPotentialCommitTrigger(
+  updates: Array<{ sessionId: string; update?: Record<string, unknown> }>,
+  sessionId: string,
+): boolean {
+  return updates.some((update) => {
+    if (update.sessionId !== sessionId) {
+      return false;
+    }
+    const sessionUpdate = update.update?.sessionUpdate;
+    return sessionUpdate === "turn_complete"
+      || sessionUpdate === "usage_update"
+      || sessionUpdate === "agent_message";
+  });
+}
+
 function buildGenerationPrompt(args: {
   repoRoot: string;
   selectedScanRoot: string;
@@ -243,13 +258,11 @@ export function GenerateFeatureTreeDrawer({
       return;
     }
 
-    const didCompleteTurn = updates.some((update) =>
-      update.sessionId === sessionId && update.update?.sessionUpdate === "turn_complete");
-    if (!didCompleteTurn || committedSessionIdsRef.current.has(sessionId)) {
+    const shouldInspectTranscript = hasPotentialCommitTrigger(updates, sessionId);
+    if (!shouldInspectTranscript || committedSessionIdsRef.current.has(sessionId)) {
       return;
     }
 
-    committedSessionIdsRef.current.add(sessionId);
     setApplyingAgentResult(true);
 
     void (async () => {
@@ -260,7 +273,14 @@ export function GenerateFeatureTreeDrawer({
           throw new Error("Failed to load generation transcript.");
         }
 
-        const metadata = extractAssistantJson(transcript.messages);
+        let metadata: unknown;
+        try {
+          metadata = extractAssistantJson(transcript.messages);
+        } catch {
+          return;
+        }
+
+        committedSessionIdsRef.current.add(sessionId);
         const commitResponse = await desktopAwareFetch("/spec/feature-tree/commit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

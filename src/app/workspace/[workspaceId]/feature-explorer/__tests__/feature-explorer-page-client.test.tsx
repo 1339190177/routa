@@ -467,7 +467,7 @@ describe("FeatureExplorerPageClient", () => {
                 }),
               },
             ],
-            latestEventKind: "turn_complete",
+            latestEventKind: "usage_update",
           }),
           {
             status: 200,
@@ -527,7 +527,7 @@ describe("FeatureExplorerPageClient", () => {
     analysisAcpState.updates = [
       {
         sessionId: "feature-tree-session-1",
-        update: { sessionUpdate: "turn_complete" },
+        update: { sessionUpdate: "usage_update" },
       },
     ];
 
