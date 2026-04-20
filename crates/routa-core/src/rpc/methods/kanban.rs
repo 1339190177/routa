@@ -320,6 +320,7 @@ mod tests {
             workspace_id: "default".to_string(),
             name: "Board".to_string(),
             is_default: true,
+            github_token: None,
             columns: vec![KanbanColumn {
                 id: "todo".to_string(),
                 name: "Todo".to_string(),

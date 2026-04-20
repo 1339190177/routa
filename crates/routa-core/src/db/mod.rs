@@ -247,6 +247,7 @@ impl Database {
                     workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                     name            TEXT NOT NULL,
                     is_default      INTEGER NOT NULL DEFAULT 0,
+                    github_token    TEXT,
                     columns         TEXT NOT NULL DEFAULT '[]',
                     created_at      INTEGER NOT NULL,
                     updated_at      INTEGER NOT NULL
@@ -401,6 +402,7 @@ impl Database {
                     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                     name TEXT NOT NULL,
                     is_default INTEGER NOT NULL DEFAULT 0,
+                    github_token TEXT,
                     columns TEXT NOT NULL DEFAULT '[]',
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL
@@ -427,6 +429,9 @@ impl Database {
                 );
                 CREATE INDEX IF NOT EXISTS idx_artifacts_task ON artifacts(task_id);
                 CREATE INDEX IF NOT EXISTS idx_artifacts_workspace ON artifacts(workspace_id);"
+            )?;
+            Self::ignore_duplicate_column(
+                conn.execute("ALTER TABLE kanban_boards ADD COLUMN github_token TEXT", []),
             )?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE kanban_boards ADD COLUMN columns TEXT NOT NULL DEFAULT '[]'", []))?;
             let _ = conn.execute("UPDATE kanban_boards SET columns = columns_json WHERE (columns IS NULL OR columns = '[]') AND columns_json IS NOT NULL", []);

@@ -34,6 +34,7 @@ async fn list_automations_returns_column_automation_info() {
         workspace_id: "default".to_string(),
         name: "Auto Board".to_string(),
         is_default: false,
+        github_token: None,
         columns: vec![
             KanbanColumn {
                 id: "backlog".to_string(),

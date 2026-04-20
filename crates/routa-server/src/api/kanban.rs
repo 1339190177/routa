@@ -602,6 +602,7 @@ async fn list_boards(
         )
         .await?;
         let mut board = strip_board_cards(&rpc_board);
+        sanitize_board_response(&mut board);
         add_board_runtime_meta(&state, &mut board, &metadata, &workspace_id).await?;
         boards.push(board);
     }
@@ -668,7 +669,7 @@ async fn create_board(
     State(state): State<AppState>,
     Json(body): Json<CreateBoardRequest>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ServerError> {
-    let rpc_result = rpc_result(
+    let mut rpc_result = rpc_result(
         &state,
         "kanban.createBoard",
         serde_json::json!({
@@ -679,6 +680,10 @@ async fn create_board(
         }),
     )
     .await?;
+
+    if let Some(board) = rpc_result.get_mut("board") {
+        sanitize_board_response(board);
+    }
 
     Ok((
         axum::http::StatusCode::CREATED,
@@ -707,6 +712,7 @@ async fn get_board(
         .unwrap_or_default();
 
     let mut board = strip_board_cards(&rpc_result);
+    sanitize_board_response(&mut board);
     add_board_runtime_meta(&state, &mut board, &metadata, workspace_id).await?;
     Ok(Json(serde_json::json!({ "board": board })))
 }
@@ -786,6 +792,7 @@ async fn update_board(
         .map(|workspace| workspace.metadata)
         .unwrap_or_default();
     let mut board = board;
+    sanitize_board_response(&mut board);
     add_board_runtime_meta(&state, &mut board, &metadata, &workspace_id).await?;
 
     Ok(Json(serde_json::json!({ "board": board })))
@@ -1174,6 +1181,24 @@ fn strip_board_cards(board: &serde_json::Value) -> serde_json::Value {
     board
 }
 
+fn sanitize_board_response(board: &mut serde_json::Value) {
+    let Some(object) = board.as_object_mut() else {
+        return;
+    };
+
+    let github_token_configured = object
+        .get("githubToken")
+        .and_then(|value| value.as_str())
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+
+    object.remove("githubToken");
+    object.insert(
+        "githubTokenConfigured".to_string(),
+        serde_json::json!(github_token_configured),
+    );
+}
+
 async fn add_board_runtime_meta(
     state: &AppState,
     board: &mut serde_json::Value,
@@ -1216,8 +1241,9 @@ mod tests {
     use super::{
         default_dev_session_supervision, get_dev_session_supervision,
         normalize_dev_session_supervision, persisted_session_is_explicitly_terminal,
-        sanitize_stale_current_lane_automation, translate_agent_event_to_kanban_payload,
-        PartialKanbanDevSessionSupervision, UpdateBoardRequest,
+        sanitize_board_response, sanitize_stale_current_lane_automation,
+        translate_agent_event_to_kanban_payload, PartialKanbanDevSessionSupervision,
+        UpdateBoardRequest,
     };
     use chrono::Utc;
     use routa_core::events::{AgentEvent, AgentEventType};
@@ -1407,6 +1433,19 @@ mod tests {
 
         assert_eq!(request.github_token.as_deref(), Some("github_pat_test"));
         assert_eq!(request.clear_github_token, Some(true));
+    }
+
+    #[test]
+    fn sanitize_board_response_hides_raw_token_and_exposes_configured_flag() {
+        let mut board = serde_json::json!({
+            "id": "board-1",
+            "githubToken": " github_pat_test ",
+        });
+
+        sanitize_board_response(&mut board);
+
+        assert_eq!(board.get("githubToken"), None);
+        assert_eq!(board["githubTokenConfigured"], json!(true));
     }
 
     #[tokio::test]

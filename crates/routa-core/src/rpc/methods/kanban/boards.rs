@@ -148,6 +148,8 @@ pub struct GetBoardResult {
     pub workspace_id: String,
     pub name: String,
     pub is_default: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub github_token: Option<String>,
     pub columns: Vec<KanbanColumnWithCards>,
     pub created_at: chrono::DateTime<Utc>,
     pub updated_at: chrono::DateTime<Utc>,
@@ -172,6 +174,10 @@ pub struct UpdateBoardParams {
     pub name: Option<String>,
     pub columns: Option<Vec<KanbanColumn>>,
     pub is_default: Option<bool>,
+    #[serde(rename = "githubToken")]
+    pub github_token: Option<String>,
+    #[serde(rename = "clearGitHubToken")]
+    pub clear_github_token: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -201,6 +207,13 @@ pub async fn update_board(
 
     if let Some(columns) = params.columns {
         board.columns = normalize_columns(columns)?;
+    }
+
+    if params.clear_github_token == Some(true) {
+        board.github_token = None;
+    } else if let Some(github_token) = params.github_token {
+        board.github_token =
+            Some(github_token.trim().to_string()).filter(|value| !value.is_empty());
     }
 
     let should_promote_to_default = params.is_default == Some(true) && !board.is_default;
@@ -425,6 +438,7 @@ pub(super) async fn build_board_result(
         workspace_id: board.workspace_id,
         name: board.name,
         is_default: board.is_default,
+        github_token: board.github_token,
         columns,
         created_at: board.created_at,
         updated_at: board.updated_at,
@@ -489,6 +503,8 @@ mod tests {
                 name: None,
                 columns: None,
                 is_default: Some(true),
+                github_token: None,
+                clear_github_token: None,
             },
         )
         .await
@@ -519,6 +535,8 @@ mod tests {
                 name: None,
                 columns: None,
                 is_default: Some(true),
+                github_token: None,
+                clear_github_token: None,
             },
         )
         .await
@@ -541,5 +559,87 @@ mod tests {
 
         assert!(first_board.is_default);
         assert!(!second_board.is_default);
+    }
+
+    #[tokio::test]
+    async fn update_board_persists_and_clears_github_token() {
+        let state = setup_state().await;
+
+        create_board(
+            &state,
+            CreateBoardParams {
+                workspace_id: "default".to_string(),
+                name: "Board".to_string(),
+                columns: None,
+                is_default: Some(true),
+                id: Some("board-token".to_string()),
+            },
+        )
+        .await
+        .expect("board create should succeed");
+
+        let updated = update_board(
+            &state,
+            UpdateBoardParams {
+                board_id: "board-token".to_string(),
+                name: None,
+                columns: None,
+                is_default: None,
+                github_token: Some(" github_pat_test ".to_string()),
+                clear_github_token: None,
+            },
+        )
+        .await
+        .expect("token update should succeed");
+
+        assert_eq!(
+            updated.board.github_token.as_deref(),
+            Some("github_pat_test")
+        );
+
+        let persisted = state
+            .kanban_store
+            .get("board-token")
+            .await
+            .expect("board lookup should succeed")
+            .expect("board should exist");
+        assert_eq!(persisted.github_token.as_deref(), Some("github_pat_test"));
+
+        let cleared = update_board(
+            &state,
+            UpdateBoardParams {
+                board_id: "board-token".to_string(),
+                name: None,
+                columns: None,
+                is_default: None,
+                github_token: Some("should-be-ignored".to_string()),
+                clear_github_token: Some(true),
+            },
+        )
+        .await
+        .expect("token clear should succeed");
+
+        assert_eq!(cleared.board.github_token, None);
+
+        let persisted = state
+            .kanban_store
+            .get("board-token")
+            .await
+            .expect("board lookup after clear should succeed")
+            .expect("board should still exist");
+        assert_eq!(persisted.github_token, None);
+    }
+
+    #[test]
+    fn update_board_params_deserialize_github_token_fields() {
+        let params: UpdateBoardParams = serde_json::from_value(serde_json::json!({
+            "boardId": "board-1",
+            "githubToken": "github_pat_test",
+            "clearGitHubToken": true
+        }))
+        .expect("params should deserialize");
+
+        assert_eq!(params.github_token.as_deref(), Some("github_pat_test"));
+        assert_eq!(params.clear_github_token, Some(true));
     }
 }
