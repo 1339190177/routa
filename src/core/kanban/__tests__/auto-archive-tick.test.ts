@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 
 import { createTask, TaskStatus, type Task, type TaskLaneSession } from "@/core/models/task";
