@@ -735,6 +735,10 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     behindCount: "落后 {count} 个提交",
     fromPath: "来自",
     cancel: "取消",
+    // Dependency badges on kanban cards
+    blockedBadge: "已阻塞",
+    blockedBadgeTooltip: "被 {count} 个未完成的依赖任务阻塞",
+    dependencyCountBadge: "{count} 个依赖",
   },
 
   kanbanDetail: {
@@ -907,6 +911,19 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     branchStrategyCancel: "取消",
     branchStrategyNameRequired: "自定义策略需要输入分支名",
     branchStrategyActiveSessionWarning: "当前任务有活跃会话，此操作将终止它。",
+    // Dependencies
+    dependencies: "依赖关系",
+    dependenciesHint: "管理此任务的前置依赖和阻塞状态。",
+    dependsOnLabel: "前置依赖",
+    blockedByLabel: "被阻塞于",
+    noDependencies: "无前置依赖。",
+    noBlockedBy: "无任务依赖此任务。",
+    addDependency: "添加依赖",
+    removeDependency: "移除",
+    dependencySearchPlaceholder: "搜索任务…",
+    dependencyAlreadyAdded: "已添加",
+    dependencySelfReference: "不能依赖自身",
+    dependencyUpdateFailed: "更新依赖失败",
   },
 
   kanbanModals: {
@@ -1205,6 +1222,9 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     linkRepositories: "关联仓库",
     noSelectionHint: "未选择 → 将关联工作区内所有仓库。",
     create: "创建",
+    dependencies: "依赖",
+    dependenciesPlaceholder: "搜索任务…",
+    dependenciesHint: "此任务将在所选任务完成后才能开始。",
   },
 
   kanbanImport: {

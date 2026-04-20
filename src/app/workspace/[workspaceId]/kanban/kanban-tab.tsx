@@ -1564,6 +1564,7 @@ export function KanbanTab({
         labels: draft.labels.split(",").map((label) => label.trim()).filter(Boolean),
         createGitHubIssue: draft.createGitHubIssue,
         creationSource: "manual",
+        dependencies: draft.dependencies,
         repoPath: effectiveCodebaseIds.length > 0
           ? codebases.find((codebase) => codebase.id === effectiveCodebaseIds[0])?.repoPath
           : defaultCodebase?.repoPath,
@@ -2001,6 +2002,7 @@ export function KanbanTab({
     activeTaskId,
     activeTask,
     board,
+    boardTasks: localTasks,
     resolveSpecialist,
     acp,
     boardAutoProviderId,
@@ -2043,6 +2045,7 @@ export function KanbanTab({
     githubAvailable,
     codebases,
     allCodebaseIds,
+    boardTasks: localTasks.map((task) => ({ id: task.id, title: task.title })),
   };
 
   const githubImportModalProps = {
