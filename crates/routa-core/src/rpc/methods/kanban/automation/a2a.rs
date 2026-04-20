@@ -597,6 +597,24 @@ mod tests {
     }
 
     #[test]
+    fn is_a2a_step_detects_transport_and_agent_card_url() {
+        let via_transport = KanbanAutomationStep {
+            transport: Some(KanbanTransport::A2a),
+            ..Default::default()
+        };
+        let via_card_url = KanbanAutomationStep {
+            agent_card_url: Some("https://example.com/.well-known/agent-card.json".to_string()),
+            ..Default::default()
+        };
+        let non_a2a = KanbanAutomationStep::default();
+
+        assert!(is_a2a_step(Some(&via_transport)));
+        assert!(is_a2a_step(Some(&via_card_url)));
+        assert!(!is_a2a_step(Some(&non_a2a)));
+        assert!(!is_a2a_step(None));
+    }
+
+    #[test]
     fn absolutize_url_resolves_relative_urls_against_agent_card() {
         let resolved = absolutize_url("https://example.com/.well-known/agent-card.json", "/rpc")
             .expect("relative URLs should resolve");
@@ -629,6 +647,23 @@ mod tests {
         assert_eq!(
             extract_a2a_status_message(&task),
             Some("first part second part".to_string())
+        );
+    }
+
+    #[test]
+    fn terminal_state_helpers_keep_auth_required_terminal_and_failed() {
+        assert!(is_terminal_a2a_state("auth-required"));
+        assert_eq!(
+            map_a2a_terminal_status("completed"),
+            TaskLaneSessionStatus::Completed
+        );
+        assert_eq!(
+            map_a2a_terminal_status("auth-required"),
+            TaskLaneSessionStatus::Failed
+        );
+        assert_eq!(
+            map_a2a_terminal_status("canceled"),
+            TaskLaneSessionStatus::Failed
         );
     }
 
