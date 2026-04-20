@@ -735,6 +735,10 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     behindCount: "{count} behind",
     fromPath: "from",
     cancel: "Cancel",
+    // Dependency badges on kanban cards
+    blockedBadge: "Blocked",
+    blockedBadgeTooltip: "Blocked by {count} unfinished dependencies",
+    dependencyCountBadge: "{count} deps",
   },
 
   kanbanDetail: {
@@ -914,6 +918,19 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     childTaskStatusColumn: "{column}",
     noChildTasks: "No child tasks.",
     viewParentTask: "View parent task",
+    // Dependencies
+    dependencies: "Dependencies",
+    dependenciesHint: "Manage prerequisite dependencies and blocked status for this task.",
+    dependsOnLabel: "Depends On",
+    blockedByLabel: "Blocked By",
+    noDependencies: "No dependencies.",
+    noBlockedBy: "No tasks depend on this one.",
+    addDependency: "Add dependency",
+    removeDependency: "Remove",
+    dependencySearchPlaceholder: "Search tasks…",
+    dependencyAlreadyAdded: "Already added",
+    dependencySelfReference: "Cannot depend on itself",
+    dependencyUpdateFailed: "Failed to update dependencies",
   },
 
   kanbanModals: {
@@ -1212,6 +1229,9 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     linkRepositories: "Link Repositories",
     noSelectionHint: "No selection → all workspace repositories will be linked.",
     create: "Create",
+    dependencies: "Dependencies",
+    dependenciesPlaceholder: "Search tasks…",
+    dependenciesHint: "This task will start only after selected tasks are completed.",
   },
 
   kanbanImport: {

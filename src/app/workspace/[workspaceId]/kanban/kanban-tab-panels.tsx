@@ -566,6 +566,7 @@ export function KanbanCreateTaskModal({
   githubAvailable,
   codebases,
   allCodebaseIds,
+  boardTasks,
 }: {
   showCreateModal: boolean;
   draft: TaskDraft;
@@ -575,6 +576,7 @@ export function KanbanCreateTaskModal({
   githubAvailable: boolean;
   codebases: CodebaseData[];
   allCodebaseIds: string[];
+  boardTasks?: Array<{ id: string; title: string }>;
 }) {
   if (!showCreateModal) return null;
 
@@ -587,6 +589,7 @@ export function KanbanCreateTaskModal({
       githubAvailable={githubAvailable}
       codebases={codebases}
       allCodebaseIds={allCodebaseIds}
+      boardTasks={boardTasks}
     />
   );
 }
@@ -683,6 +686,7 @@ export function KanbanTaskDetailOverlay({
   activeTaskId,
   activeTask,
   board,
+  boardTasks,
   resolveSpecialist,
   acp,
   boardAutoProviderId,
@@ -714,6 +718,7 @@ export function KanbanTaskDetailOverlay({
   activeTaskId: string | null;
   activeTask: TaskInfo | null;
   board: KanbanBoardInfo | null;
+  boardTasks?: TaskInfo[];
   resolveSpecialist: ReturnType<typeof import("./kanban-card-session-utils").createKanbanSpecialistResolver>;
   acp?: UseAcpState & UseAcpActions;
   boardAutoProviderId?: string;
@@ -847,6 +852,7 @@ export function KanbanTaskDetailOverlay({
                   task={task}
                   refreshSignal={refreshSignal}
                   boardColumns={board?.columns ?? []}
+                  boardTasks={boardTasks}
                   availableProviders={availableProviders}
                   specialists={specialists}
                   specialistLanguage={specialistLanguage}

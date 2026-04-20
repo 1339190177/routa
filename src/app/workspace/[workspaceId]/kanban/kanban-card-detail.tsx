@@ -29,7 +29,7 @@ import { KanbanCardArtifacts } from "./kanban-card-artifacts";
 import { KanbanCardProviderOverrideDropdown } from "./kanban-card-provider-override-dropdown";
 // Legacy imports - removed, functionality replaced by KanbanTaskGitWorkflowPanel
 // import { TaskFileDiffPreview, TaskCommitDiffPreview, CommitRow } from "./kanban-diff-preview";
-import { StoryReadinessPanel, EvidenceBundlePanel, ReviewFeedbackPanel, TaskHierarchyPanel } from "./kanban-detail-panels";
+import { StoryReadinessPanel, EvidenceBundlePanel, ReviewFeedbackPanel, TaskHierarchyPanel, DependenciesPanel } from "./kanban-detail-panels";
 import { getKanbanSessionCopy } from "./i18n/kanban-session-copy";
 import {
   findSpecialistById,
@@ -44,6 +44,7 @@ export interface KanbanCardDetailProps {
   task: TaskInfo;
   refreshSignal?: number;
   boardColumns?: KanbanColumnInfo[];
+  boardTasks?: Array<{ id: string; title: string; status?: string; columnId?: string; dependencies?: string[] }>;
   availableProviders: AcpProviderInfo[];
   specialists: SpecialistOption[];
   specialistLanguage: KanbanSpecialistLanguage;
@@ -288,6 +289,7 @@ export function KanbanCardDetail({
   task,
   refreshSignal,
   boardColumns,
+  boardTasks = [],
   availableProviders,
   specialists,
   specialistLanguage,
@@ -700,6 +702,18 @@ export function KanbanCardDetail({
                     </div>
                   )}
                 </div>
+              </DetailSection>
+
+              <DetailSection
+                title={t.kanbanDetail.dependencies}
+                description={compactMode ? undefined : t.kanbanDetail.dependenciesHint}
+                compact={compactMode}
+              >
+                <DependenciesPanel
+                  task={task}
+                  boardTasks={boardTasks}
+                  onPatchTask={onPatchTask}
+                />
               </DetailSection>
             </>
           )}

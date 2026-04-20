@@ -739,6 +739,10 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     workspaceIdLabel: string;
     yesLabel: string;
     cancel: string;
+    // Dependency badges (used on kanban cards)
+    blockedBadge: string;
+    blockedBadgeTooltip: string;
+    dependencyCountBadge: string;
   };
 
   // Kanban card detail
@@ -919,6 +923,18 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     childTaskStatusColumn: string;
     noChildTasks: string;
     viewParentTask: string;
+    dependencies: string;
+    dependenciesHint: string;
+    dependsOnLabel: string;
+    blockedByLabel: string;
+    noDependencies: string;
+    noBlockedBy: string;
+    addDependency: string;
+    removeDependency: string;
+    dependencySearchPlaceholder: string;
+    dependencyAlreadyAdded: string;
+    dependencySelfReference: string;
+    dependencyUpdateFailed: string;
   };
 
   // Kanban modal dialogs
@@ -1224,6 +1240,9 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     linkRepositories: string;
     noSelectionHint: string;
     create: string;
+    dependencies: string;
+    dependenciesPlaceholder: string;
+    dependenciesHint: string;
   };
 
   kanbanImport: {

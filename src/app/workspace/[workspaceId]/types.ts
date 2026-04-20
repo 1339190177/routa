@@ -194,6 +194,8 @@ export interface TaskInfo {
   isPullRequest?: boolean;
   sessionId?: string;
   dependencies?: string[];
+  dependencyStatus?: "clear" | "blocked";
+  blocking?: string[];
   parallelGroup?: string;
   /** Parent task ID for sub-task hierarchy */
   parentTaskId?: string;

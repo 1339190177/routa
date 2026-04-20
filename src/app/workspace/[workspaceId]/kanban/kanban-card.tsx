@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import React, { type CSSProperties } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useTranslation } from "@/i18n";
 import type { AcpProviderInfo } from "@/client/acp-client";
@@ -11,7 +11,7 @@ import { formatArtifactLabel, resolveKanbanTransitionArtifacts } from "@/core/ka
 import type { KanbanColumnInfo, SessionInfo, TaskInfo, WorktreeInfo } from "../types";
 import { type KanbanSpecialistLanguage } from "./kanban-specialist-language";
 import { createKanbanSpecialistResolver } from "./kanban-card-session-utils";
-import { GripVertical, Trash2 } from "lucide-react";
+import { GripVertical, Trash2, Link2, ShieldAlert } from "lucide-react";
 
 
 interface SpecialistOption {
@@ -391,6 +391,26 @@ function KanbanCardSurface({
           <span className={`inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${priorityTone}`}>
             {prioritySizeLabel}
           </span>
+          {task.dependencyStatus === "blocked" && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-semibold text-orange-700 ring-1 ring-inset ring-orange-300 dark:bg-orange-900/20 dark:text-orange-300 dark:ring-orange-800/50"
+              title={t.kanban.blockedBadgeTooltip.replace("{count}", String(task.dependencies?.length ?? 0))}
+              data-testid="kanban-card-blocked-badge"
+            >
+              <ShieldAlert className="h-3 w-3" />
+              {t.kanban.blockedBadge}
+            </span>
+          )}
+          {task.dependencyStatus !== "blocked" && task.dependencies && task.dependencies.length > 0 && (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-500 ring-1 ring-inset ring-slate-200 dark:bg-[#181c28] dark:text-slate-400 dark:ring-white/5"
+              title={t.kanban.dependencyCountBadge.replace("{count}", String(task.dependencies.length))}
+              data-testid="kanban-card-dep-count-badge"
+            >
+              <Link2 className="h-3 w-3" />
+              {task.dependencies.length}
+            </span>
+          )}
         </div>
       </div>
 
@@ -505,7 +525,7 @@ function KanbanCardSurface({
   );
 }
 
-export function KanbanCard({
+export const KanbanCard = React.memo(function KanbanCard({
   ...props
 }: KanbanCardProps) {
   const {
@@ -530,7 +550,7 @@ export function KanbanCard({
       style={isDragging ? { opacity: 0.16 } : undefined}
     />
   );
-}
+});
 
 export function KanbanCardOverlay(props: KanbanCardProps) {
   return <KanbanCardSurface {...props} dragOverlay />;

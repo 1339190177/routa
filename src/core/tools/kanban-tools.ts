@@ -72,6 +72,7 @@ import {
   resolveCurrentOrNextContractGate,
 } from "../kanban/task-contract-readiness";
 import { resolveTaskWorktreeTruth } from "../kanban/task-worktree-truth";
+import { checkCanMoveToNextColumn } from "../kanban/dependency-gate";
 
 const DESCRIPTION_FROZEN_STAGES = new Set<KanbanColumnStage>(["dev", "review", "blocked", "done"]);
 
@@ -282,6 +283,19 @@ export class KanbanTools {
         }
       } catch {
         // Orchestrator may not be initialized in all contexts; skip cross-column check
+      }
+    }
+
+    // AC3: Check dependency gate before allowing transition
+    if (task.dependencies && task.dependencies.length > 0 && fromColumnId !== params.targetColumnId) {
+      const depCheck = await checkCanMoveToNextColumn(
+        task,
+        params.targetColumnId,
+        board.columns,
+        this.taskStore,
+      );
+      if (!depCheck.canMove) {
+        return errorResult(depCheck.message ?? `Cannot move card to "${targetColumn.name}": blocked by unfinished dependencies: ${depCheck.blockedBy.join(", ")}`);
       }
     }
 
@@ -888,6 +902,8 @@ export class KanbanTools {
       assignee: task.assignee,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+      dependencies: task.dependencies,
+      dependencyStatus: task.dependencyStatus,
     };
   }
 
