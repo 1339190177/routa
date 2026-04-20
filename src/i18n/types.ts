@@ -93,6 +93,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     concurrency: string;
     crafters: string;
     routaModeToast: string;
+    archive: string;
   };
 
   // Home page
