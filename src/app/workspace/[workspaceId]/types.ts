@@ -194,6 +194,8 @@ export interface TaskInfo {
   isPullRequest?: boolean;
   sessionId?: string;
   dependencies?: string[];
+  dependencyStatus?: "clear" | "blocked";
+  blocking?: string[];
   parallelGroup?: string;
   creationSource?: "manual" | "agent" | "api" | "session";
   /** Associated codebase IDs for this task */

@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useMemo, useCallback } from "react";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import { useTranslation } from "@/i18n";
+import { Link2, AlertTriangle } from "lucide-react";
 import type { TaskInfo } from "../types";
 
 function formatReadinessFieldLabel(field: string, t: ReturnType<typeof useTranslation>["t"]): string {
@@ -341,6 +343,198 @@ export function ReviewFeedbackPanel({
       ) : (
         <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
           {t.kanbanDetail.reportMissing}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export interface DependenciesPanelProps {
+  task: TaskInfo;
+  boardTasks: Array<{ id: string; title: string; status?: string; columnId?: string; dependencies?: string[] }>;
+  onPatchTask: (taskId: string, payload: Record<string, unknown>) => Promise<TaskInfo>;
+  onOpenTask?: (taskId: string) => void;
+}
+
+export function DependenciesPanel({
+  task,
+  boardTasks,
+  onPatchTask,
+  onOpenTask,
+}: DependenciesPanelProps) {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const [updating, setUpdating] = useState(false);
+
+  const deps = task.dependencies ?? [];
+  const blockedByTasks = useMemo(
+    () => boardTasks.filter((bt) => (bt.dependencies ?? []).includes(task.id)),
+    [boardTasks, task.id],
+  );
+
+  const filteredTasks = useMemo(() => {
+    if (!search.trim()) return boardTasks.slice(0, 20);
+    const q = search.toLowerCase();
+    return boardTasks.filter((bt) => bt.title.toLowerCase().includes(q)).slice(0, 20);
+  }, [boardTasks, search]);
+
+  const updateDeps = useCallback(
+    async (next: string[]) => {
+      setUpdating(true);
+      try {
+        await onPatchTask(task.id, { dependencies: next });
+      } catch {
+        // Error handling is done by the caller via toast
+      } finally {
+        setUpdating(false);
+      }
+    },
+    [task.id, onPatchTask],
+  );
+
+  const removeDep = (depId: string) => {
+    void updateDeps(deps.filter((id) => id !== depId));
+  };
+
+  const addDep = (depId: string) => {
+    if (depId === task.id) return;
+    if (deps.includes(depId)) return;
+    void updateDeps([...deps, depId]);
+    setSearch("");
+  };
+
+  const isTerminal = (status?: string) => status === "done" || status === "completed";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          {t.kanbanDetail.dependsOnLabel}
+        </span>
+        {updating && (
+          <span className="text-[10px] text-slate-400 dark:text-slate-500">…</span>
+        )}
+      </div>
+
+      {deps.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          {deps.map((depId) => {
+            const depTask = boardTasks.find((bt) => bt.id === depId);
+            const completed = isTerminal(depTask?.status);
+            return (
+              <div
+                key={depId}
+                className="group flex items-center gap-2 rounded-lg border border-slate-200/70 bg-white px-2 py-1.5 text-sm dark:border-slate-700/60 dark:bg-[#0d1018]"
+              >
+                <span
+                  className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${
+                    completed ? "bg-emerald-500" : "bg-amber-400"
+                  }`}
+                />
+                {depTask && onOpenTask ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTask(depId)}
+                    className="min-w-0 truncate text-slate-700 underline decoration-slate-300 underline-offset-2 transition hover:text-amber-600 dark:text-slate-200 dark:decoration-slate-600 dark:hover:text-amber-300"
+                  >
+                    {depTask.title}
+                  </button>
+                ) : (
+                  <span className="min-w-0 truncate text-slate-700 dark:text-slate-200">
+                    {depTask?.title ?? depId.slice(0, 8)}
+                  </span>
+                )}
+                <span className="ml-auto shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
+                  {completed ? "✓" : depTask?.columnId ?? ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeDep(depId)}
+                  className="shrink-0 rounded px-1 py-0.5 text-[10px] text-slate-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100 dark:hover:bg-rose-900/20 dark:hover:text-rose-300"
+                  title={t.kanbanDetail.removeDependency}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          {t.kanbanDetail.noDependencies}
+        </div>
+      )}
+
+      {/* Add dependency search */}
+      <div className="relative">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t.kanbanDetail.dependencySearchPlaceholder}
+          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400/40 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-100"
+          disabled={updating}
+        />
+        {search.trim() && (
+          <div className="absolute left-0 top-full z-10 mt-1 max-h-36 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-[#12141c]">
+            {filteredTasks.length === 0 && (
+              <div className="px-2.5 py-2 text-xs text-slate-400">{t.kanbanDetail.noDependencies}</div>
+            )}
+            {filteredTasks.map((bt) => {
+              const isSelected = deps.includes(bt.id);
+              const isSelf = bt.id === task.id;
+              return (
+                <button
+                  key={bt.id}
+                  type="button"
+                  disabled={isSelected || isSelf}
+                  onClick={() => addDep(bt.id)}
+                  className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors ${
+                    isSelected || isSelf
+                      ? "cursor-not-allowed text-slate-400 dark:text-slate-500"
+                      : "text-slate-700 hover:bg-amber-50 dark:text-slate-200 dark:hover:bg-amber-900/10"
+                  }`}
+                >
+                  <span className="min-w-0 truncate">{bt.title}</span>
+                  {isSelf && (
+                    <span className="shrink-0 text-[10px] text-slate-400">{t.kanbanDetail.dependencySelfReference}</span>
+                  )}
+                  {isSelected && !isSelf && (
+                    <span className="shrink-0 text-[10px] text-slate-400">{t.kanbanDetail.dependencyAlreadyAdded}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Blocked by */}
+      {blockedByTasks.length > 0 && (
+        <div className="mt-2 border-t border-slate-200/70 pt-2 dark:border-slate-700/70">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            {t.kanbanDetail.blockedByLabel}
+          </div>
+          <div className="flex flex-col gap-1">
+            {blockedByTasks.map((bt) => (
+              <div
+                key={bt.id}
+                className="flex items-center gap-2 rounded-lg border border-amber-200/70 bg-amber-50/50 px-2 py-1.5 text-xs dark:border-amber-900/30 dark:bg-amber-900/10"
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                {onOpenTask ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTask(bt.id)}
+                    className="min-w-0 truncate text-amber-700 underline decoration-amber-300 underline-offset-2 transition hover:text-amber-600 dark:text-amber-300 dark:decoration-amber-700"
+                  >
+                    {bt.title}
+                  </button>
+                ) : (
+                  <span className="min-w-0 truncate text-amber-700 dark:text-amber-300">{bt.title}</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
