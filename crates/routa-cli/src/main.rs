@@ -89,6 +89,16 @@ enum Commands {
 
     /// Manage Kanban boards, cards, and columns
     Kanban {
+        /// Prefer this Routa server for Kanban RPC calls.
+        #[arg(
+            long,
+            env = "ROUTA_SERVER_URL",
+            default_value = "http://127.0.0.1:3210"
+        )]
+        server_url: String,
+        /// Emit JSON results without the JSON-RPC transport envelope.
+        #[arg(long, default_value_t = false)]
+        json: bool,
         #[command(subcommand)]
         action: KanbanAction,
     },
@@ -614,6 +624,7 @@ enum FeatureTreeAction {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    std::env::set_var("ROUTA_DB_PATH", &cli.db);
 
     // Initialize tracing
     tracing_subscriber::fmt()
@@ -875,7 +886,17 @@ async fn main() {
                 }
             }
 
-            Commands::Kanban { action } => {
+            Commands::Kanban {
+                server_url,
+                json,
+                action,
+            } => {
+                std::env::set_var("ROUTA_SERVER_URL", &server_url);
+                if json {
+                    std::env::set_var("ROUTA_KANBAN_JSON", "1");
+                } else {
+                    std::env::remove_var("ROUTA_KANBAN_JSON");
+                }
                 let state = commands::init_state(&cli.db).await;
                 handle_kanban_action(&state, action).await
             }
