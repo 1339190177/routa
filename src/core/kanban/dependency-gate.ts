@@ -12,6 +12,12 @@ export interface DependencyGateResult {
   pendingDependencies: string[];
 }
 
+export interface CanMoveResult {
+  canMove: boolean;
+  blockedBy: string[];
+  message?: string;
+}
+
 export async function checkDependencyGate(
   task: { dependencies: string[] },
   boardColumns: Array<{ id: string; stage?: string }>,
@@ -41,6 +47,109 @@ export async function checkDependencyGate(
   }
 
   return { blocked: pending.length > 0, pendingDependencies: pending };
+}
+
+/**
+ * Check if a task can move to a target column by verifying all dependencies
+ * are completed before that column.
+ *
+ * AC2: Implement canMoveToNextColumn(taskId, targetColumn) function
+ */
+export async function checkCanMoveToNextColumn(
+  task: { dependencies: string[]; columnId?: string; title?: string },
+  targetColumnId: string,
+  boardColumns: Array<{ id: string; position: number }>,
+  taskStore: { get(id: string): Promise<Task | undefined | null> },
+): Promise<CanMoveResult> {
+  if (!task.dependencies || task.dependencies.length === 0) {
+    return { canMove: true, blockedBy: [] };
+  }
+
+  const targetColumn = boardColumns.find((c) => c.id === targetColumnId);
+  if (!targetColumn) {
+    return { canMove: false, blockedBy: [], message: `Unknown target column: ${targetColumnId}` };
+  }
+
+  const gateResult = await checkDependencyGate(task, boardColumns, taskStore);
+  if (!gateResult.blocked) {
+    return { canMove: true, blockedBy: [] };
+  }
+
+  const pendingDepTasks: string[] = [];
+  for (const depId of task.dependencies) {
+    const depTask = await taskStore.get(depId);
+    if (depTask) {
+      const depColumn = boardColumns.find((c) => c.id === depTask.columnId);
+      const targetPos = targetColumn.position;
+      const depPos = depColumn?.position ?? 0;
+      if (depPos >= targetPos) {
+        pendingDepTasks.push(depTask.title || depId);
+      }
+    }
+  }
+
+  if (pendingDepTasks.length > 0) {
+    return {
+      canMove: false,
+      blockedBy: pendingDepTasks,
+      message: `Cannot move "${task.title}" to "${targetColumnId}": blocked by unfinished dependencies: ${pendingDepTasks.join(", ")}`,
+    };
+  }
+
+  return { canMove: true, blockedBy: [] };
+}
+
+/**
+ * Get dependency status for UI display.
+ *
+ * AC4: Return dependency status information for UI rendering
+ */
+export async function getDependencyStatus(
+  task: Task,
+  taskStore: { get(id: string): Promise<Task | undefined | null> },
+): Promise<{
+  hasDependencies: boolean;
+  dependencies: Array<{
+    id: string;
+    title: string;
+    status: string;
+    columnId: string;
+    isCompleted: boolean;
+  }>;
+  isBlocked: boolean;
+}> {
+  const deps = task.dependencies ?? [];
+  if (deps.length === 0) {
+    return { hasDependencies: false, dependencies: [], isBlocked: false };
+  }
+
+  const depDetails: Array<{
+    id: string;
+    title: string;
+    status: string;
+    columnId: string;
+    isCompleted: boolean;
+  }> = [];
+  let isBlocked = false;
+
+  for (const depId of deps) {
+    const depTask = await taskStore.get(depId);
+    if (depTask) {
+      const isCompleted = depTask.status === TaskStatus.COMPLETED || depTask.columnId === "done";
+      if (!isCompleted) {
+        isBlocked = true;
+      }
+      depDetails.push({
+        id: depTask.id,
+        title: depTask.title,
+        status: depTask.status,
+        columnId: depTask.columnId ?? "backlog",
+        isCompleted,
+      });
+    }
+  }
+
+  return { hasDependencies: true, dependencies: depDetails, isBlocked };
 }
 
 /**
