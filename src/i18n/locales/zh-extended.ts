@@ -907,6 +907,13 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     branchStrategyCancel: "取消",
     branchStrategyNameRequired: "自定义策略需要输入分支名",
     branchStrategyActiveSessionWarning: "当前任务有活跃会话，此操作将终止它。",
+    parentTask: "父任务",
+    childTasks: "子任务",
+    childTasksProgress: "{completed}/{total} 已完成",
+    childTaskCompleted: "已完成",
+    childTaskStatusColumn: "{column}",
+    noChildTasks: "暂无子任务。",
+    viewParentTask: "查看父任务",
   },
 
   kanbanModals: {
