@@ -278,6 +278,12 @@ fn collect_session_stats(
     match trace_parser::collect_broad_transcript_summaries(repo_root) {
         Ok(transcripts) => {
             for transcript in &transcripts {
+                let raw_events = load_raw_transcript_events(Path::new(&transcript.transcript_path));
+                let raw_changed_files = collect_changed_files_from_raw_events(
+                    &raw_events,
+                    repo_root,
+                    Path::new(&transcript.cwd),
+                );
                 let normalized_session =
                     if transcript.client == "codex" || transcript.client == "claude" {
                         normalized_registry
@@ -289,13 +295,20 @@ fn collect_session_stats(
                 let input = normalized_session
                     .as_ref()
                     .and_then(|session| {
-                        build_feature_trace_input_from_normalized_session(repo_root, session)
+                        build_feature_trace_input_from_normalized_session(
+                            repo_root,
+                            session,
+                            &raw_changed_files,
+                            &raw_events,
+                        )
                     })
                     .unwrap_or_else(|| {
                         build_feature_trace_input_from_transcript(
                             repo_root,
                             transcript,
                             &normalized_registry,
+                            &raw_changed_files,
+                            &raw_events,
                         )
                     });
                 let changed_files = input.changed_files.clone();
@@ -312,6 +325,7 @@ fn collect_session_stats(
                     repo_root,
                     transcript,
                     normalized_session.as_ref(),
+                    &raw_events,
                     &changed_files,
                 );
 
@@ -368,19 +382,28 @@ fn build_feature_trace_input_from_transcript(
     repo_root: &Path,
     transcript: &trace_parser::TranscriptSessionBackfill,
     normalized_registry: &trace_parser::AdapterRegistry,
+    raw_changed_files: &[String],
+    raw_events: &[Value],
 ) -> FeatureTraceInput {
     if transcript.client == "codex" {
         if let Ok(session) = normalized_registry.parse_path(Path::new(&transcript.transcript_path))
         {
-            if let Some(input) =
-                build_feature_trace_input_from_normalized_session(repo_root, &session)
-            {
+            if let Some(input) = build_feature_trace_input_from_normalized_session(
+                repo_root,
+                &session,
+                raw_changed_files,
+                raw_events,
+            ) {
                 return input;
             }
         }
     }
 
-    let changed_files = collect_changed_files_from_events(repo_root, &transcript.recovered_events);
+    let changed_files = if raw_changed_files.is_empty() {
+        collect_changed_files_from_events(repo_root, &transcript.recovered_events)
+    } else {
+        raw_changed_files.to_vec()
+    };
     let tool_call_names = transcript
         .recovered_events
         .iter()
@@ -401,27 +424,46 @@ fn build_feature_trace_input_from_transcript(
 fn build_feature_trace_input_from_normalized_session(
     repo_root: &Path,
     session: &trace_parser::NormalizedSession,
+    raw_changed_files: &[String],
+    raw_events: &[Value],
 ) -> Option<FeatureTraceInput> {
-    let changed_files = session
-        .file_events
-        .iter()
-        .filter_map(|event| normalize_repo_relative(repo_root, &event.path))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    let tool_call_names = session
-        .tool_calls
-        .iter()
-        .map(|tool_call| tool_call.tool_name.clone())
-        .collect::<Vec<_>>();
-    let prompt_previews = session
-        .prompts
-        .iter()
-        .filter(|prompt| prompt.role == trace_parser::PromptRole::User)
-        .map(|prompt| prompt.text.trim())
-        .filter(|prompt| !prompt.is_empty())
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
+    let changed_files = if raw_changed_files.is_empty() {
+        session
+            .file_events
+            .iter()
+            .filter_map(|event| normalize_repo_relative(repo_root, &event.path))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+    } else {
+        raw_changed_files.to_vec()
+    };
+    let tool_call_names = {
+        let raw_tool_history = collect_tool_history_from_raw_events(raw_events);
+        if raw_tool_history.is_empty() {
+            session
+                .tool_calls
+                .iter()
+                .map(|tool_call| tool_call.tool_name.clone())
+                .collect::<Vec<_>>()
+        } else {
+            raw_tool_history
+        }
+    };
+    let prompt_previews = {
+        let raw_prompt_history = collect_prompt_history_from_raw_events(raw_events);
+        if raw_prompt_history.is_empty() {
+            session
+                .prompts
+                .iter()
+                .filter(|prompt| prompt.role == trace_parser::PromptRole::User)
+                .map(|prompt| normalize_user_prompt(&prompt.text))
+                .filter(|prompt| !prompt.is_empty())
+                .collect::<Vec<_>>()
+        } else {
+            raw_prompt_history
+        }
+    };
     let file_operations = session
         .file_events
         .iter()
@@ -545,38 +587,52 @@ fn build_session_signal_context(
     repo_root: &Path,
     transcript: &trace_parser::TranscriptSessionBackfill,
     normalized_session: Option<&trace_parser::NormalizedSession>,
+    raw_events: &[Value],
     changed_files: &[String],
 ) -> SessionSignalContext {
-    let prompt_history = normalized_session
-        .map(collect_prompt_history_from_normalized_session)
-        .filter(|history| !history.is_empty())
-        .unwrap_or_else(|| {
-            transcript
-                .prompt
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(|value| vec![value.to_string()])
-                .unwrap_or_default()
-        });
-    let tool_history = normalized_session
-        .map(collect_tool_history_from_normalized_session)
-        .filter(|history| !history.is_empty())
-        .unwrap_or_else(|| {
-            transcript
-                .recovered_events
-                .iter()
-                .map(|event| match event {
-                    trace_parser::TranscriptRecoveredEvent::ToolUse { tool_name, .. } => {
-                        tool_name.clone()
-                    }
+    let prompt_history = {
+        let raw_prompt_history = collect_prompt_history_from_raw_events(raw_events);
+        if raw_prompt_history.is_empty() {
+            normalized_session
+                .map(collect_prompt_history_from_normalized_session)
+                .filter(|history| !history.is_empty())
+                .unwrap_or_else(|| {
+                    transcript
+                        .prompt
+                        .as_deref()
+                        .map(normalize_user_prompt)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| vec![value])
+                        .unwrap_or_default()
                 })
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .take(MAX_FILE_SIGNAL_TOOLS)
-                .collect()
-        });
-    let raw_events = load_raw_transcript_events(Path::new(&transcript.transcript_path));
+        } else {
+            raw_prompt_history
+        }
+    };
+    let tool_history = {
+        let raw_tool_history = collect_tool_history_from_raw_events(raw_events);
+        if raw_tool_history.is_empty() {
+            normalized_session
+                .map(collect_tool_history_from_normalized_session)
+                .filter(|history| !history.is_empty())
+                .unwrap_or_else(|| {
+                    transcript
+                        .recovered_events
+                        .iter()
+                        .map(|event| match event {
+                            trace_parser::TranscriptRecoveredEvent::ToolUse {
+                                tool_name, ..
+                            } => tool_name.clone(),
+                        })
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .take(MAX_FILE_SIGNAL_TOOLS)
+                        .collect()
+                })
+        } else {
+            raw_tool_history
+        }
+    };
 
     SessionSignalContext {
         provider: transcript.client.clone(),
@@ -616,6 +672,28 @@ fn load_raw_transcript_events(transcript_path: &Path) -> Vec<Value> {
     events
 }
 
+fn collect_prompt_history_from_raw_events(events: &[Value]) -> Vec<String> {
+    let mut prompts = Vec::new();
+    for event in events {
+        let Some(prompt) = user_prompt_from_feature_event(event) else {
+            continue;
+        };
+        let text = normalize_user_prompt(&prompt);
+        if text.is_empty()
+            || prompts.iter().any(|existing: &String| {
+                existing == &text || existing.starts_with(&text) || text.starts_with(existing)
+            })
+        {
+            continue;
+        }
+        if prompts.len() >= MAX_FILE_SIGNAL_PROMPTS {
+            break;
+        }
+        prompts.push(text);
+    }
+    prompts
+}
+
 fn collect_prompt_history_from_normalized_session(
     session: &trace_parser::NormalizedSession,
 ) -> Vec<String> {
@@ -639,6 +717,23 @@ fn collect_prompt_history_from_normalized_session(
         prompts.push(text);
     }
     prompts
+}
+
+fn collect_tool_history_from_raw_events(events: &[Value]) -> Vec<String> {
+    let mut tools = Vec::new();
+    for event in events {
+        let Some(tool_name) = tool_name_from_feature_event(event) else {
+            continue;
+        };
+        if tools.iter().any(|existing| existing == &tool_name) {
+            continue;
+        }
+        if tools.len() >= MAX_FILE_SIGNAL_TOOLS {
+            break;
+        }
+        tools.push(tool_name);
+    }
+    tools
 }
 
 fn collect_tool_history_from_normalized_session(
@@ -677,10 +772,27 @@ fn normalize_signal_prompt_text(text: &str) -> String {
 
 fn normalize_user_prompt(text: &str) -> String {
     let mut normalized = text.trim().to_string();
+    if normalized.starts_with("<cwd>") || normalized.starts_with("<turn_aborted>") {
+        return String::new();
+    }
     if let Some(end_index) = normalized.rfind("</INSTRUCTIONS>") {
         normalized = normalized[end_index + "</INSTRUCTIONS>".len()..]
             .trim()
             .to_string();
+    }
+
+    for (start_marker, end_marker) in [
+        ("<environment_context>", "</environment_context>"),
+        ("<image", "</image>"),
+    ] {
+        while let Some(start) = normalized.find(start_marker) {
+            let end = if let Some(end_rel) = normalized[start..].find(end_marker) {
+                start + end_rel + end_marker.len()
+            } else {
+                normalized.len()
+            };
+            normalized.replace_range(start..end, " ");
+        }
     }
 
     for marker in [
@@ -690,6 +802,14 @@ fn normalize_user_prompt(text: &str) -> String {
         "</environment_context>",
     ] {
         normalized = normalized.replace(marker, " ");
+    }
+
+    while let Some(start) = normalized.find('<') {
+        let Some(end_rel) = normalized[start..].find('>') else {
+            break;
+        };
+        let end = start + end_rel;
+        normalized.replace_range(start..=end, " ");
     }
 
     truncate_diagnostic_text(&normalize_signal_prompt_text(&normalized), 180)
@@ -789,6 +909,18 @@ fn looks_like_file_path_token(token: &str) -> bool {
         )
 }
 
+fn path_looks_file_like(candidate: &str) -> bool {
+    let base = Path::new(candidate)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(candidate);
+    base.contains('.')
+        || matches!(
+            base,
+            "Dockerfile" | "Makefile" | "Cargo.toml" | "Cargo.lock"
+        )
+}
+
 fn normalize_repo_relative_with_cwd(
     repo_root: &Path,
     session_cwd: &Path,
@@ -807,25 +939,49 @@ fn normalize_repo_relative_with_cwd(
     if !looks_like_file_path_token(&clean) {
         return None;
     }
+    if clean.chars().any(char::is_whitespace) {
+        return None;
+    }
 
     let candidate_path = Path::new(&clean);
     if candidate_path.is_absolute() {
-        return candidate_path
+        if candidate_path.is_dir() {
+            return None;
+        }
+        let relative = candidate_path
             .strip_prefix(repo_root)
             .ok()
-            .map(|path| path.to_string_lossy().replace('\\', "/"));
+            .map(|path| path.to_string_lossy().replace('\\', "/"))?;
+        if !candidate_path.is_file() && !path_looks_file_like(&relative) {
+            return None;
+        }
+        return Some(relative);
     }
 
     let session_resolved = session_cwd.join(&clean);
     if let Ok(relative) = session_resolved.strip_prefix(repo_root) {
-        return Some(relative.to_string_lossy().replace('\\', "/"));
+        if session_resolved.is_dir() {
+            return None;
+        }
+        let relative = relative.to_string_lossy().replace('\\', "/");
+        if !session_resolved.is_file() && !path_looks_file_like(&relative) {
+            return None;
+        }
+        return Some(relative);
     }
 
     let repo_resolved = repo_root.join(&clean);
-    repo_resolved
+    if repo_resolved.is_dir() {
+        return None;
+    }
+    let relative = repo_resolved
         .strip_prefix(repo_root)
         .ok()
-        .map(|path| path.to_string_lossy().replace('\\', "/"))
+        .map(|path| path.to_string_lossy().replace('\\', "/"))?;
+    if !repo_resolved.is_file() && !path_looks_file_like(&relative) {
+        return None;
+    }
+    Some(relative)
 }
 
 fn tool_name_from_feature_event(event: &Value) -> Option<String> {
@@ -839,6 +995,45 @@ fn tool_name_from_feature_event(event: &Value) -> Option<String> {
         Some("exec_command_begin") | Some("exec_command_end") => Some("exec_command".to_string()),
         _ => command_from_feature_event(event).map(|_| "exec_command".to_string()),
     }
+}
+
+fn extract_user_prompt_from_response_item(event: &Value) -> Option<String> {
+    if event.get("type").and_then(Value::as_str) != Some("message")
+        || event.get("role").and_then(Value::as_str) != Some("user")
+    {
+        return None;
+    }
+
+    let mut parts = Vec::new();
+    for item in event
+        .get("content")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let is_input_text = item.get("type").and_then(Value::as_str) == Some("input_text");
+        let text = item.get("text").and_then(Value::as_str).map(str::trim);
+        if is_input_text && text.is_some_and(|text| !text.is_empty()) {
+            parts.push(text.unwrap().to_string());
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
+}
+
+fn user_prompt_from_feature_event(event: &Value) -> Option<String> {
+    if event.get("type").and_then(Value::as_str) == Some("user_message") {
+        return event
+            .get("message")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
+    }
+
+    extract_user_prompt_from_response_item(event)
 }
 
 fn command_from_feature_event(event: &Value) -> Option<String> {
@@ -956,6 +1151,87 @@ fn extract_read_files_from_event(
     read_files
 }
 
+fn extract_changed_files_from_command_output(command: &str, output: &str) -> Vec<String> {
+    let mut changed = HashSet::new();
+    let lines = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+
+    if command.contains("git status --short") {
+        for line in &lines {
+            let path_candidate = line
+                .split_whitespace()
+                .last()
+                .map(str::trim)
+                .or(Some(*line))
+                .unwrap_or_default();
+            let path_candidate = path_candidate
+                .split(" -> ")
+                .last()
+                .map(str::trim)
+                .unwrap_or(path_candidate);
+            if !path_candidate.is_empty() {
+                changed.insert(path_candidate.to_string());
+            }
+        }
+    }
+
+    if command.contains("git diff --name-only") {
+        for line in &lines {
+            changed.insert((*line).to_string());
+        }
+    }
+
+    if command.contains("git diff") || command.contains("git show") {
+        for line in &lines {
+            if let Some(rest) = line.strip_prefix("diff --git a/") {
+                let path_candidate = rest.split(" b/").nth(1).map(str::trim).unwrap_or_default();
+                if !path_candidate.is_empty() {
+                    changed.insert(path_candidate.to_string());
+                }
+            }
+        }
+    }
+
+    changed.into_iter().collect()
+}
+
+fn collect_changed_files_from_raw_events(
+    raw_events: &[Value],
+    repo_root: &Path,
+    session_cwd: &Path,
+) -> Vec<String> {
+    let mut changed_files = BTreeSet::new();
+    for event in raw_events {
+        let mut candidates = HashSet::new();
+        collect_file_values(event, &mut candidates);
+        if let Some(command) = command_from_feature_event(event) {
+            for path in parse_patch_block(&command) {
+                candidates.insert(path);
+            }
+            for path in parse_command_paths(&command) {
+                candidates.insert(path);
+            }
+            if let Some(output) = command_output_from_feature_event(event) {
+                for path in extract_changed_files_from_command_output(&command, &output) {
+                    candidates.insert(path);
+                }
+            }
+        }
+
+        for candidate in candidates {
+            if let Some(normalized) =
+                normalize_repo_relative_with_cwd(repo_root, session_cwd, &candidate)
+            {
+                changed_files.insert(normalized);
+            }
+        }
+    }
+    changed_files.into_iter().collect()
+}
+
 fn detect_failed_tool_call(event: &Value) -> Option<FileSessionToolFailureResponse> {
     let exit_code = event
         .get("exit_code")
@@ -978,6 +1254,7 @@ fn detect_failed_tool_call(event: &Value) -> Option<FileSessionToolFailureRespon
         .or_else(|| event.get("error").and_then(Value::as_str))
         .or_else(|| event.get("message").and_then(Value::as_str))
         .or(command_output.as_deref())
+        .filter(|text| !text.trim().is_empty())
         .map(|text| truncate_diagnostic_text(text, 220))
         .unwrap_or_else(|| {
             exit_code
@@ -1730,7 +2007,8 @@ mod tests {
             recovered_events: Vec::new(),
         };
 
-        let input = build_feature_trace_input_from_transcript(&repo_root, &transcript, &registry);
+        let input =
+            build_feature_trace_input_from_transcript(&repo_root, &transcript, &registry, &[], &[]);
 
         assert_eq!(input.session_id, "sess-1");
         assert_eq!(input.changed_files, vec!["src/app/page.tsx".to_string()]);
