@@ -152,6 +152,8 @@ enum BackgroundResult {
         analysis_mode: TestMappingAnalysisMode,
         full_cache_key: Option<String>,
         result: Result<TestMappingSnapshot, String>,
+        /// Execution duration of the test-mapping command in milliseconds.
+        duration_ms: u64,
     },
     Scc {
         result: Result<SccSummary, String>,
@@ -218,6 +220,8 @@ pub(super) struct AppCache {
     feature_trace_load_attempted: bool,
     test_mapping_snapshot: Option<TestMappingSnapshot>,
     test_mapping_full_history: BTreeMap<String, TestMappingHistoryEntry>,
+    /// Recent Full analysis durations (ms) for degradation decisions.
+    test_mapping_full_timing_history: Vec<u64>,
     scc_summary: Option<SccSummary>,
     review_triggers: ReviewTriggerCache,
     preview_worker_tx: Sender<PreviewCommand>,
@@ -329,6 +333,7 @@ impl AppCache {
             feature_trace_load_attempted: false,
             test_mapping_snapshot: None,
             test_mapping_full_history: BTreeMap::new(),
+            test_mapping_full_timing_history: Vec::new(),
             scc_summary: None,
             review_triggers: ReviewTriggerCache::load(repo_root),
             preview_worker_tx,
@@ -535,6 +540,7 @@ impl AppCache {
                     analysis_mode,
                     full_cache_key,
                     result,
+                    duration_ms,
                 } => match result {
                     Ok(snapshot) => {
                         match analysis_mode {
@@ -544,6 +550,13 @@ impl AppCache {
                             TestMappingAnalysisMode::Full => {
                                 self.pending_test_mapping_full_key = None;
                                 self.test_mapping_full_refresh_note = None;
+                                // Track Full analysis duration for degradation decisions.
+                                self.test_mapping_full_timing_history.push(duration_ms);
+                                if self.test_mapping_full_timing_history.len()
+                                    > test_mapping::TEST_MAPPING_FULL_TIMING_WINDOW
+                                {
+                                    self.test_mapping_full_timing_history.remove(0);
+                                }
                             }
                         }
                         self.test_mapping_not_before_ms = None;
@@ -774,6 +787,15 @@ impl AppCache {
                     files.len(),
                     TEST_MAPPING_FULL_REFRESH_MAX_FILES
                 ));
+                return;
+            }
+            // Dynamic degradation: skip Full if recent Full analyses are too slow.
+            if test_mapping::should_degrade_to_fast(&self.test_mapping_full_timing_history) {
+                self.pending_test_mapping_full_key = None;
+                self.test_mapping_full_refresh_note = Some(
+                    "graph refresh skipped: recent Full analysis times exceed threshold"
+                        .to_string(),
+                );
                 return;
             }
             let _ = self.eval_worker_tx.send(EvalCommand::TestMapping {
@@ -1659,6 +1681,10 @@ fn eval_worker(
                 cache_key,
                 TestMappingAnalysisMode::Fast,
             );
+            let (result, duration_ms) = match result {
+                Ok((snapshot, dur)) => (Ok(snapshot), dur),
+                Err(e) => (Err(e), 0),
+            };
             send_background_result(
                 &tx,
                 &result_signal_tx,
@@ -1666,6 +1692,7 @@ fn eval_worker(
                     analysis_mode: TestMappingAnalysisMode::Fast,
                     full_cache_key,
                     result,
+                    duration_ms,
                 },
             );
         }
@@ -1678,6 +1705,10 @@ fn eval_worker(
                 cache_key,
                 TestMappingAnalysisMode::Full,
             );
+            let (result, duration_ms) = match result {
+                Ok((snapshot, dur)) => (Ok(snapshot), dur),
+                Err(e) => (Err(e), 0),
+            };
             send_background_result(
                 &tx,
                 &result_signal_tx,
@@ -1685,6 +1716,7 @@ fn eval_worker(
                     analysis_mode: TestMappingAnalysisMode::Full,
                     full_cache_key,
                     result,
+                    duration_ms,
                 },
             );
         }

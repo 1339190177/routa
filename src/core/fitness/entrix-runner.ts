@@ -329,4 +329,25 @@ export async function executeEntrixRun(params: {
   throw new Error(lastError);
 }
 
+/**
+ * Format an EntrixRunResponse as structured METRIC lines for pi-autoresearch consumption.
+ *
+ * Output format: `METRIC name=value` (one per line).
+ * Primary metric: `fitness_ms` (lower is better).
+ */
+export function formatEntrixMetricLines(response: EntrixRunResponse): string {
+  const lines: string[] = [];
+  const summary = response.summary;
+
+  lines.push(`METRIC fitness_ms=${response.durationMs}`);
+  lines.push(`METRIC checks_count=${summary.checksCount ?? summary.metricCount}`);
+  lines.push(`METRIC failed_checks=${summary.failedChecks ?? summary.failingMetricCount}`);
+  lines.push(`METRIC top_slowest_ms=${summary.slowestMetricMs ?? 0}`);
+  lines.push(`METRIC pass_rate=${summary.passRate ?? 1.0}`);
+  lines.push(`METRIC hard_gate_hits=${summary.hardGateBlocked ? 1 : 0}`);
+  lines.push(`METRIC final_score=${summary.finalScore ?? 0}`);
+
+  return lines.join("\n");
+}
+
 export { extractJsonOutput };

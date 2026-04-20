@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use entrix::evidence::load_dimensions;
 use entrix::governance::{filter_dimensions, GovernancePolicy};
-use entrix::model::{Dimension, ExecutionScope, Metric, MetricResult, Tier};
+use entrix::model::{Dimension, ExecutionScope, Gate, Metric, MetricResult, ResultState, Tier};
 use entrix::runner::ShellRunner;
 use entrix::scoring::{score_dimension, score_report};
 use serde::{Deserialize, Serialize};
@@ -9,6 +9,8 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
@@ -188,6 +190,11 @@ pub fn run_fitness(repo_root: &str, mode: FitnessRunMode) -> Result<FitnessSnaps
     let mut all_results = Vec::new();
     let mut coverage_metric_available = false;
 
+    // Shared signal: set to true when any hard-gate metric fails.
+    // Other dimension threads check this before starting their metrics
+    // so they can abort early instead of running doomed work.
+    let hard_gate_aborted = Arc::new(AtomicBool::new(false));
+
     thread::scope(|scope| {
         // When HARNESS_PARALLEL_DIMENSIONS is set to N, process dimensions in batches of N
         // so that at most N dimension threads are active at any time.  When unset, all
@@ -199,12 +206,58 @@ pub fn run_fitness(repo_root: &str, mode: FitnessRunMode) -> Result<FitnessSnaps
                 let name = dim.name.clone();
                 let dim = dim.clone();
                 let runner = &runner;
+                let abort_flag = Arc::clone(&hard_gate_aborted);
                 handles.push(scope.spawn(move || {
+                    // If a hard-gate failure has already been detected, skip this dimension
+                    // to avoid wasting time on metrics whose results are irrelevant.
+                    if abort_flag.load(AtomicOrdering::Relaxed) {
+                        let metrics: Vec<FitnessMetricSummary> = dim
+                            .metrics
+                            .iter()
+                            .map(|m| FitnessMetricSummary {
+                                name: m.name.clone(),
+                                passed: false,
+                                state: "skipped".to_string(),
+                                hard_gate: m.gate == Gate::Hard,
+                                duration_ms: 0.0,
+                                output_excerpt: Some(
+                                    "Skipped: hard-gate failure in another dimension".to_string(),
+                                ),
+                            })
+                            .collect();
+                        let metric_results: Vec<MetricResult> = dim
+                            .metrics
+                            .iter()
+                            .map(|m| {
+                                MetricResult::new(
+                                    m.name.clone(),
+                                    false,
+                                    "Skipped: hard-gate failure in another dimension",
+                                    m.tier,
+                                )
+                                .with_hard_gate(m.gate == Gate::Hard)
+                                .with_state(ResultState::Fail)
+                            })
+                            .collect();
+                        let dimension_score =
+                            score_dimension(&metric_results, &dim.name, dim.weight);
+                        return (name, dim.weight, dimension_score, false, metrics);
+                    }
+
                     let metric_results: Vec<MetricResult> = if dim.metrics.is_empty() {
                         Vec::new()
                     } else {
                         runner.run_batch(&dim.metrics, true, false, None)
                     };
+
+                    // Check if any hard-gate metric in this dimension failed.
+                    // If so, signal other dimensions to abort.
+                    let has_hard_gate_failure =
+                        metric_results.iter().any(|r| r.hard_gate && !r.passed);
+                    if has_hard_gate_failure {
+                        abort_flag.store(true, AtomicOrdering::Relaxed);
+                    }
+
                     let dimension_score = score_dimension(&metric_results, &dim.name, dim.weight);
                     let has_coverage_metric = metric_results.iter().any(|metric| {
                         metric.metric_name.to_lowercase().contains("coverage")
