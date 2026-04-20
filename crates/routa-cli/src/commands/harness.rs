@@ -112,7 +112,7 @@ pub struct HarnessEvolveArgs {
     #[arg(long, default_value_t = false)]
     pub learn: bool,
 
-    /// Run a single dry-run fitness speed experiment via harness-autoresearch.sh (experimental).
+    /// Run a single dry-run fitness speed experiment with native entrix metrics (experimental).
     #[arg(long, default_value_t = false)]
     pub speed_profile: bool,
 

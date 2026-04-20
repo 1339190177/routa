@@ -64,11 +64,12 @@ github_url: "https://github.com/phodal/routa/issues/482"
 
 ### 1) 增加 Harness Fitness 实验基线与指标采集
 
-- 新增 `autoresearch.sh`（或 `harness-autoresearch.sh`）：
+- 新增原生 speed-profile 入口：
+  - Rust CLI: `routa harness evolve --speed-profile` 直接执行 `entrix run --tier fast --scope local --json`。
+  - Next.js API: `/api/fitness/run` 支持 `outputFormat=metrics`，返回 `METRIC name=value` 文本。
   - 主指标: `METRIC fitness_ms=<elapsed_ms>`（目标越小越好）。
-  - 方向指标: `METRIC hard_gate_hits=<n>`，`METRIC slowest_metric_ms=<n>`，`METRIC changed_files=<n>`。
-  - 快速路径优先执行 `entrix run --tier fast`，必要时追加 `entrix run --tier normal --min-score 0`。
-  - 若已有 `harness` 目录中的快照，脚本可解析 `docs/fitness/reports/*latest*.json` 估算“回归”风险。
+  - 方向指标: `METRIC hard_gate_hits=<n>`，`METRIC top_slowest_ms=<n>`，`METRIC failed_checks=<n>`。
+  - 若 exit code 非 0 或 hard gate 阻塞，则附加 `checks_failed=1` 供 autoresearch gate 消费。
 
 ### 2) 与 Harness Agent 绑定（建议最小变更）
 
@@ -95,8 +96,10 @@ github_url: "https://github.com/phodal/routa/issues/482"
 - 被跳过的 dimension 标记为 `skipped`，避免浪费时间执行无意义的 metrics。
 - 性能影响：硬门控失败场景下 wall-time 减少 40-60%；正常通过场景仅增加 1 CPU cycle/dimension 的 `AtomicBool::load` 开销。
 
-**B. `entrix-runner.ts` — 添加 METRIC 行输出函数**
+**B. `entrix-runner.ts` + `/api/fitness/run` — 添加 METRIC 行输出函数并接入 Next.js**
 - 新增 `formatEntrixMetricLines()` 函数，将 `EntrixRunResponse` 转为 `METRIC name=value` 格式。
+- 新增 `formatEntrixAutoresearchOutput()`，在 exit code 非 0 或 hard gate 阻塞时附加 `checks_failed=1`。
+- `/api/fitness/run` 新增 `outputFormat=metrics` 分支，直接返回 autoresearch 可消费的纯文本输出。
 - 输出指标：`fitness_ms`, `checks_count`, `failed_checks`, `top_slowest_ms`, `pass_rate`, `hard_gate_hits`, `final_score`。
 - 纯函数，仅在需要 METRIC 输出时调用，零热路径开销。
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import type { EntrixRunScope, EntrixRunTier } from "@/core/fitness/entrix-run-types";
-import { executeEntrixRun } from "@/core/fitness/entrix-runner";
+import { executeEntrixRun, formatEntrixAutoresearchOutput } from "@/core/fitness/entrix-runner";
 import {
   isFitnessContextError,
   normalizeFitnessContextValue,
@@ -15,6 +15,7 @@ type RunFitnessBody = {
   repoPath?: string;
   tier?: string;
   scope?: string;
+  outputFormat?: string;
 };
 
 export const runtime = "nodejs";
@@ -42,6 +43,10 @@ function parseScope(value: string | undefined): EntrixRunScope {
     : "local";
 }
 
+function parseOutputFormat(value: string | undefined): "json" | "metrics" {
+  return value === "metrics" ? "metrics" : "json";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.json().catch(() => ({}));
@@ -54,6 +59,14 @@ export async function POST(request: NextRequest) {
       tier: parseTier(body.tier),
       scope: parseScope(body.scope),
     });
+    if (parseOutputFormat(body.outputFormat) === "metrics") {
+      return new NextResponse(`${formatEntrixAutoresearchOutput(payload)}\n`, {
+        status: 200,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+        },
+      });
+    }
     return NextResponse.json(payload);
   } catch (error) {
     const message = toMessage(error);

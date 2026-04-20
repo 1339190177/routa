@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { extractJsonOutput, formatEntrixMetricLines, summarizeEntrixReport } from "../entrix-runner";
+import {
+  extractJsonOutput,
+  formatEntrixAutoresearchOutput,
+  formatEntrixMetricLines,
+  summarizeEntrixReport,
+} from "../entrix-runner";
 
 describe("entrix-runner helpers", () => {
   it("extracts the trailing JSON object from command output", () => {
@@ -115,5 +120,44 @@ describe("entrix-runner helpers", () => {
     expect(lines).toContain("METRIC pass_rate=0.9");
     expect(lines).toContain("METRIC hard_gate_hits=0");
     expect(lines).toContain("METRIC final_score=95");
+  });
+
+  it("adds checks_failed gate line when hard gate blocks the run", () => {
+    const response = {
+      generatedAt: "2026-04-20T00:00:00Z",
+      repoRoot: "/tmp/test",
+      tier: "fast" as const,
+      scope: "local" as const,
+      command: "entrix",
+      args: ["run", "--tier", "fast", "--json"],
+      durationMs: 9000,
+      exitCode: 1,
+      report: {
+        finalScore: 72.5,
+        hardGateBlocked: true,
+        scoreBlocked: false,
+        dimensions: [],
+      },
+      summary: {
+        finalScore: 72.5,
+        hardGateBlocked: true,
+        scoreBlocked: false,
+        dimensionCount: 1,
+        metricCount: 3,
+        failingMetricCount: 1,
+        dimensions: [],
+        slowestMetricMs: 4100,
+        checksCount: 3,
+        failedChecks: 1,
+        passRate: 0.6667,
+        durationMs: 9000,
+      },
+    };
+
+    const output = formatEntrixAutoresearchOutput(response);
+
+    expect(output).toContain("METRIC fitness_ms=9000");
+    expect(output).toContain("METRIC hard_gate_hits=1");
+    expect(output).toContain("checks_failed=1");
   });
 });

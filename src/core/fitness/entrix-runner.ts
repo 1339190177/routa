@@ -350,4 +350,12 @@ export function formatEntrixMetricLines(response: EntrixRunResponse): string {
   return lines.join("\n");
 }
 
+export function formatEntrixAutoresearchOutput(response: EntrixRunResponse): string {
+  const lines = [formatEntrixMetricLines(response)];
+  if (response.exitCode !== 0 || response.summary.hardGateBlocked) {
+    lines.push("checks_failed=1");
+  }
+  return lines.join("\n");
+}
+
 export { extractJsonOutput };
