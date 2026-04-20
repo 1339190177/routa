@@ -1,6 +1,6 @@
 import { TaskStatus } from "./task";
 
-export type KanbanColumnStage = "backlog" | "todo" | "dev" | "review" | "blocked" | "done";
+export type KanbanColumnStage = "backlog" | "todo" | "dev" | "review" | "blocked" | "done" | "archived";
 export type KanbanDevSessionSupervisionMode = "disabled" | "watchdog_retry" | "ralph_loop";
 export type KanbanDevSessionCompletionRequirement =
   | "turn_complete"
@@ -138,6 +138,7 @@ export const DEFAULT_KANBAN_COLUMN_ORDER: KanbanColumnStage[] = [
   "review",
   "done",
   "blocked",
+  "archived",
 ];
 
 export const KANBAN_HAPPY_PATH_COLUMN_ORDER: Exclude<KanbanColumnStage, "blocked">[] = [
@@ -303,6 +304,8 @@ export function columnIdToTaskStatus(columnId?: string): TaskStatus {
       return TaskStatus.BLOCKED;
     case "done":
       return TaskStatus.COMPLETED;
+    case "archived":
+      return TaskStatus.CANCELLED;
     default:
       return TaskStatus.PENDING;
   }
@@ -318,6 +321,8 @@ export function columnStageToTaskStatus(stage?: KanbanColumnStage): TaskStatus {
       return TaskStatus.BLOCKED;
     case "done":
       return TaskStatus.COMPLETED;
+    case "archived":
+      return TaskStatus.CANCELLED;
     default:
       return TaskStatus.PENDING;
   }
