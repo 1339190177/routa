@@ -10,6 +10,14 @@ export type KanbanWorkspaceChangedEvent = {
   timestamp: string;
 };
 
+export type KanbanArchivedEvent = {
+  type: "kanban:archived";
+  cardId: string;
+  newStage: string;
+  workspaceId: string;
+  timestamp: string;
+};
+
 export type KanbanFitnessChangedEvent = {
   type: "fitness:changed";
   workspaceId: string;
@@ -20,7 +28,7 @@ export type KanbanFitnessChangedEvent = {
   status?: RuntimeFitnessEventStatus;
 };
 
-export type KanbanWorkspaceEvent = KanbanWorkspaceChangedEvent | KanbanFitnessChangedEvent;
+export type KanbanWorkspaceEvent = KanbanWorkspaceChangedEvent | KanbanArchivedEvent | KanbanFitnessChangedEvent;
 
 type SSEController = ReadableStreamDefaultController<Uint8Array>;
 
@@ -61,6 +69,14 @@ export class KanbanEventBroadcaster {
     this.broadcast({
       ...event,
       type: "kanban:changed",
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  notifyArchived(params: Omit<KanbanArchivedEvent, "type" | "timestamp">): void {
+    this.broadcast({
+      ...params,
+      type: "kanban:archived",
       timestamp: new Date().toISOString(),
     });
   }

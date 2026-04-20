@@ -404,7 +404,17 @@ export class KanbanTools {
     task.updatedAt = new Date();
 
     await this.taskStore.save(task);
-    this.notifyWorkspaceChanged(task.workspaceId, "task", fromColumnId !== params.targetColumnId ? "moved" : "updated", task.id);
+
+    // Use lightweight kanban:archived event for archived cards instead of kanban:changed
+    if (params.targetColumnId === "archived") {
+      this.kanbanBroadcaster.notifyArchived({
+        cardId: task.id,
+        newStage: "archived",
+        workspaceId: task.workspaceId,
+      });
+    } else {
+      this.notifyWorkspaceChanged(task.workspaceId, "task", fromColumnId !== params.targetColumnId ? "moved" : "updated", task.id);
+    }
 
     // Emit column transition event if column actually changed
     if (this.eventBus && fromColumnId !== params.targetColumnId) {
