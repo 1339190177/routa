@@ -12,6 +12,8 @@
 import type { RoutaSystem } from "../routa-system";
 import { enqueueKanbanTaskSession } from "./workflow-orchestrator-singleton";
 import { hasExceededNonDevAutomationRepeatLimit } from "./workflow-orchestrator";
+import { getHttpSessionStore } from "../acp/http-session-store";
+import { getTaskLaneSession, markTaskLaneSessionStatus } from "./task-lane-history";
 
 const SCAN_INTERVAL_MS = 30_000;
 
@@ -91,8 +93,27 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
       for (const task of boardTasks) {
         // Skip tasks not in an automated column
         if (!task.columnId || !automatedColumnIds.has(task.columnId)) continue;
-        // Skip tasks that already have an active trigger
-        if (task.triggerSessionId) continue;
+        // Skip tasks that already have an active trigger; clean up stale ones
+        if (task.triggerSessionId) {
+          const sessionStore = getHttpSessionStore();
+          const activity = sessionStore.getSessionActivity(task.triggerSessionId);
+          if (!activity || activity.terminalState) {
+            // Stale trigger — sanitize task before re-triggering
+            const staleSessionId = task.triggerSessionId;
+            const laneEntry = getTaskLaneSession(task, staleSessionId);
+            if (laneEntry?.status === "running") {
+              const terminalStatus = task.pullRequestUrl
+                ? ("completed" as const)
+                : ("timed_out" as const);
+              markTaskLaneSessionStatus(task, staleSessionId, terminalStatus);
+            }
+            task.triggerSessionId = undefined;
+            task.updatedAt = new Date();
+            await system.taskStore.save(task);
+          } else {
+            continue;
+          }
+        }
         // Skip completed/blocked tasks
         if (task.status === "COMPLETED" || task.status === "BLOCKED") continue;
         // Skip creation-source sessions (auto-generated from agent runs)

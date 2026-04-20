@@ -880,12 +880,12 @@ function DockerConfigModalContent({ open: _open, errorMessage, onClose, onSaved 
 }
 
 // ─── Main Settings Panel ───────────────────────────────────────────────────
-export function SettingsPanel({ open, onClose, providers, initialTab, onResetOnboarding, variant = "modal" }: SettingsPanelProps) {
+export function SettingsPanel({ open, onClose, providers, initialTab, onResetOnboarding, variant = "modal", workspaceId }: SettingsPanelProps) {
   if (!open) return null;
-  return <SettingsPanelContent onClose={onClose} providers={providers} initialTab={initialTab} onResetOnboarding={onResetOnboarding} variant={variant} />;
+  return <SettingsPanelContent onClose={onClose} providers={providers} initialTab={initialTab} onResetOnboarding={onResetOnboarding} variant={variant} workspaceId={workspaceId} />;
 }
 
-function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboarding, variant = "modal" }: Omit<SettingsPanelProps, "open">) {
+function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboarding, variant = "modal", workspaceId }: Omit<SettingsPanelProps, "open">) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<DefaultProviderSettings>(() => loadDefaultProviders());
   const [modelDefs, setModelDefs] = useState<ModelDefinition[]>(() => loadModelDefinitions());
@@ -979,7 +979,7 @@ function SettingsPanelContent({ onClose, providers, initialTab, onResetOnboardin
   if (isPageVariant) {
     return (
       <div className="flex h-full min-h-0 bg-desktop-bg-primary text-desktop-text-primary">
-        <SettingsCenterNav activeItem={activeTab} />
+        <SettingsCenterNav activeItem={activeTab} workspaceId={workspaceId} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="border-b border-desktop-border px-8 py-8">

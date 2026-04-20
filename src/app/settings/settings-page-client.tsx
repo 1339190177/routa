@@ -68,6 +68,7 @@ export function SettingsPageClient() {
         providers={providers}
         initialTab={initialTab}
         variant="page"
+        workspaceId={workspaceId}
       />
     </DesktopAppShell>
   );

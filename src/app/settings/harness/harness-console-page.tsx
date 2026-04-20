@@ -994,6 +994,9 @@ export default function HarnessConsolePage() {
             setSelectedWorkspaceId(nextWorkspaceId);
             setSelectedRepoOverrideState({ workspaceId: nextWorkspaceId, selection: null });
             setSelectedCodebaseId("");
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("workspaceId", nextWorkspaceId);
+            router.replace(`/settings/harness?${params.toString()}`);
           }}
           onCreate={async (title) => {
             const workspace = await workspacesHook.createWorkspace(title);
@@ -1001,6 +1004,9 @@ export default function HarnessConsolePage() {
               setSelectedWorkspaceId(workspace.id);
               setSelectedRepoOverrideState({ workspaceId: workspace.id, selection: null });
               setSelectedCodebaseId("");
+              const params = new URLSearchParams(searchParams.toString());
+              params.set("workspaceId", workspace.id);
+              router.replace(`/settings/harness?${params.toString()}`);
             }
           }}
           loading={workspacesHook.loading}

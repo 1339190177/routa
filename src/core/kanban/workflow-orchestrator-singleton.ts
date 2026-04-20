@@ -113,8 +113,8 @@ export async function enqueueKanbanTaskSession(
   if (task.triggerSessionId && !params.ignoreExistingTrigger) {
     const sessionStore = getHttpSessionStore();
     const activity = sessionStore.getSessionActivity(task.triggerSessionId);
-    if (activity?.terminalState) {
-      // Stale triggerSessionId from a terminated session — clear and continue
+    if (!activity || activity.terminalState) {
+      // Stale triggerSessionId — session terminated or evicted by forceCleanup
       task.triggerSessionId = undefined;
     } else {
       return { sessionId: task.triggerSessionId, queued: false };
@@ -191,8 +191,8 @@ async function startKanbanTaskSession(
   if (task.triggerSessionId && !params.ignoreExistingTrigger) {
     const sessionStore = getHttpSessionStore();
     const activity = sessionStore.getSessionActivity(task.triggerSessionId);
-    if (activity?.terminalState) {
-      // Stale triggerSessionId from a terminated session — clear and continue
+    if (!activity || activity.terminalState) {
+      // Stale triggerSessionId — session terminated or evicted by forceCleanup
       task.triggerSessionId = undefined;
       await system.taskStore.save(task);
     } else {
@@ -391,6 +391,41 @@ async function sendPromptToKanbanSession(
   });
 }
 
+async function scanStaleTaskTriggers(system: RoutaSystem): Promise<number> {
+  const sessionStore = getHttpSessionStore();
+  let cleanedCount = 0;
+
+  const workspaces = await system.workspaceStore.list();
+  for (const ws of workspaces) {
+    const tasks = await system.taskStore.listByWorkspace(ws.id);
+    for (const task of tasks) {
+      if (!task.triggerSessionId) continue;
+
+      const activity = sessionStore.getSessionActivity(task.triggerSessionId);
+      if (activity && !activity.terminalState) continue;
+
+      // Stale trigger — sanitize task
+      const staleSessionId = task.triggerSessionId;
+      const laneEntry = (task.laneSessions ?? []).find(
+        (s) => s.sessionId === staleSessionId && s.status === "running",
+      );
+      if (laneEntry) {
+        const terminalStatus = task.pullRequestUrl
+          ? ("completed" as const)
+          : ("timed_out" as const);
+        laneEntry.status = terminalStatus;
+        laneEntry.completedAt = new Date().toISOString();
+      }
+      task.triggerSessionId = undefined;
+      task.updatedAt = new Date();
+      await system.taskStore.save(task);
+      cleanedCount++;
+    }
+  }
+
+  return cleanedCount;
+}
+
 export function getKanbanSessionQueue(system: RoutaSystem): KanbanSessionQueue {
   const g = globalThis as Record<string, unknown>;
   let queue = g[QUEUE_KEY] as KanbanSessionQueue | undefined;
@@ -463,6 +498,7 @@ export function startWorkflowOrchestrator(system: RoutaSystem): void {
     sessionId: params.sessionId,
     prompt: params.prompt,
   }));
+  orchestrator.setScanStaleTaskTriggers(() => scanStaleTaskTriggers(system));
   orchestrator.start();
   queue.start();
   startWorktreeCleanupListener(system);

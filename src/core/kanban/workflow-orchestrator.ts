@@ -216,6 +216,9 @@ export type ResolveBranchRules = (params: {
   boardId: string;
 }) => Promise<KanbanBranchRules>;
 
+/** Callback to scan persisted tasks for stale triggerSessionIds */
+export type ScanStaleTaskTriggers = () => Promise<number>;
+
 export class KanbanWorkflowOrchestrator {
   private handlerKey = "kanban-workflow-orchestrator";
   private activeAutomations = new Map<string, ActiveAutomation>();
@@ -224,6 +227,8 @@ export class KanbanWorkflowOrchestrator {
   private resolveDevSessionSupervision?: ResolveDevSessionSupervision;
   private resolveBranchRules?: ResolveBranchRules;
   private sendKanbanSessionPrompt?: SendKanbanSessionPrompt;
+  private staleTriggerScanner?: ScanStaleTaskTriggers;
+  private staleTriggerScanCycle = 0;
   private watchdogTimer?: ReturnType<typeof setInterval>;
 
   constructor(
@@ -299,6 +304,11 @@ export class KanbanWorkflowOrchestrator {
   /** Set the callback used to send a prompt message into a live ACP session */
   setSendKanbanSessionPrompt(fn: SendKanbanSessionPrompt): void {
     this.sendKanbanSessionPrompt = fn;
+  }
+
+  /** Set the callback to scan persisted tasks for stale triggerSessionIds */
+  setScanStaleTaskTriggers(fn: ScanStaleTaskTriggers): void {
+    this.staleTriggerScanner = fn;
   }
 
   /** Get all active automations */
@@ -850,6 +860,22 @@ export class KanbanWorkflowOrchestrator {
           } as unknown as Record<string, unknown>,
           timestamp: new Date(),
         });
+      }
+    }
+
+    // ── Persistent stale-trigger scan ──────────────────────────────────────
+    // Run every 10th cycle (~5 minutes) to catch triggerSessionIds that point
+    // to sessions already evicted from HttpSessionStore (e.g. after restart).
+    this.staleTriggerScanCycle++;
+    if (this.staleTriggerScanner && this.staleTriggerScanCycle >= 10) {
+      this.staleTriggerScanCycle = 0;
+      try {
+        const cleaned = await this.staleTriggerScanner();
+        if (cleaned > 0) {
+          console.log(`[WorkflowOrchestrator] Stale-trigger scan cleaned ${cleaned} tasks`);
+        }
+      } catch (err) {
+        console.error("[WorkflowOrchestrator] Stale-trigger scan failed:", err instanceof Error ? err.message : err);
       }
     }
   }

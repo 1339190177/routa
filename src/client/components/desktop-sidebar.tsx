@@ -51,8 +51,7 @@ export function DesktopSidebar({
   const pathname = usePathname();
   const { t } = useTranslation();
   const normalizedWorkspaceId = workspaceId?.trim() || null;
-  const fallbackWorkspaceId = normalizedWorkspaceId || "default";
-  const workspaceBaseHref = `/workspace/${fallbackWorkspaceId}`;
+  const workspaceBaseHref = normalizedWorkspaceId ? `/workspace/${normalizedWorkspaceId}` : null;
   const settingsHarnessHref = normalizedWorkspaceId
     ? `/settings/harness?workspaceId=${encodeURIComponent(normalizedWorkspaceId)}`
     : "/settings/harness";
@@ -64,7 +63,7 @@ export function DesktopSidebar({
     {
       id: "home",
       label: t.nav.home,
-      href: "/",
+      href: workspaceBaseHref ? `${workspaceBaseHref}/kanban` : "/",
       icon: (
         <House className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}/>
       ),
