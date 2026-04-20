@@ -118,6 +118,12 @@ const RECOMMENDED_AUTOMATION_BY_STAGE: Partial<Record<KanbanColumnStage, KanbanC
     },
     autoAdvanceOnSuccess: false,
   },
+  archived: {
+    enabled: false,
+    steps: [],
+    transitionType: "entry",
+    autoAdvanceOnSuccess: false,
+  },
 };
 
 // Migration allowlists for older boards. New default lane automation is defined

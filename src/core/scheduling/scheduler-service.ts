@@ -5,6 +5,10 @@
  * Only active outside Vercel production.
  *
  * In production on Vercel, the tick is handled by Vercel Cron Jobs instead.
+ *
+ * Registered ticks:
+ *   - schedule tick: fires due user-defined schedules as background tasks
+ *   - auto-archive tick: archives stale done cards to the archived column
  */
 
 import nodeCron from "node-cron";
@@ -12,9 +16,11 @@ import type { ScheduledTask } from "node-cron";
 
 import { getRoutaSystem } from "../routa-system";
 import { runScheduleTick } from "./run-schedule-tick";
+import { runAutoArchiveTick } from "../kanban/auto-archive-tick";
 import { runWithSpan } from "../telemetry/tracing";
 
 let schedulerTask: ScheduledTask | null = null;
+let autoArchiveTask: ScheduledTask | null = null;
 let isStarted = false;
 
 export function startSchedulerService(): void {
@@ -48,11 +54,29 @@ export function startSchedulerService(): void {
     });
   });
 
+  // Auto-archive tick runs every hour (minute 0 of every hour)
+  autoArchiveTask = nodeCron.schedule("0 * * * *", () => {
+    void runWithSpan(
+      "routa.scheduler.auto_archive_tick",
+      {},
+      async (span) => {
+        const result = await runAutoArchiveTick(getRoutaSystem());
+        span.setAttribute("routa.auto_archive.examined", result.examined);
+        span.setAttribute("routa.auto_archive.archived", result.archived);
+        span.setAttribute("routa.auto_archive.skipped", result.skipped.length);
+      },
+    ).catch((error) => {
+      console.error("[Scheduler] Auto-archive tick failed:", error);
+    });
+  });
+
   isStarted = true;
 }
 
 export function stopSchedulerService(): void {
   schedulerTask?.stop();
+  autoArchiveTask?.stop();
   schedulerTask = null;
+  autoArchiveTask = null;
   isStarted = false;
 }
