@@ -6,6 +6,7 @@ import {
     ManagedProcess,
     NotificationHandler,
 } from "@/core/acp/processer";
+import {getAgentPortPool} from "@/core/acp/agent-port-pool";
 import {ClaudeCodeProcess, buildClaudeCodeConfig, mapClaudeModeToPermissionMode} from "@/core/acp/claude-code-process";
 import {
     cleanupMcpForProvider,
@@ -199,11 +200,13 @@ export class AcpProcessManager {
                 toolMode,
                 mcpProfile,
             );
+            const agentPort = await getAgentPortPool().allocate(sessionId);
+            const envWithPort: Record<string, string> = { ...extraEnv, PORT: String(agentPort) };
             const config = await buildConfigFromPreset(
                 presetId,
                 cwd,
                 this.combineProviderArgs(mcpSetup?.providerArgs, extraArgs),
-                extraEnv,
+                envWithPort,
                 mcpSetup?.mcpConfigs,
             );
             const proc = new AcpProcess(config, onNotification);
@@ -266,11 +269,12 @@ export class AcpProcessManager {
                 toolMode,
                 mcpProfile,
             );
+            const agentPort = await getAgentPortPool().allocate(sessionId);
             const config = await buildConfigFromPreset(
                 presetId,
                 cwd,
                 this.combineProviderArgs(mcpSetup?.providerArgs),
-                undefined,
+                { PORT: String(agentPort) },
                 mcpSetup?.mcpConfigs,
             );
             const proc = new AcpProcess(config, onNotification);
@@ -322,7 +326,9 @@ export class AcpProcessManager {
         onNotification: NotificationHandler,
         sessionContext?: Omit<AcpSessionContext, "sessionId">,
     ): Promise<string> {
+        const agentPort = await getAgentPortPool().allocate(sessionId);
         const config = buildConfigFromInline(command, args, cwd, displayName);
+        config.env = { ...config.env, PORT: String(agentPort) };
         const proc = new AcpProcess(config, onNotification);
 
         await proc.start();
@@ -354,6 +360,7 @@ export class AcpProcessManager {
         sessionId: string,
         onNotification: NotificationHandler
     ): Promise<string> {
+        await getAgentPortPool().allocate(sessionId);
         const serverUrl = getOpencodeServerUrl();
 
         if (serverUrl) {
@@ -410,12 +417,14 @@ export class AcpProcessManager {
         authJson?: string,
     ): Promise<string> {
         const dockerManager = getDockerProcessManager();
+        const agentPort = await getAgentPortPool().allocate(sessionId);
+        const envWithPort: Record<string, string> = { ...extraEnv, PORT: String(agentPort) };
         // Use acquireContainer for container reuse support
         const container = await dockerManager.acquireContainer({
             sessionId,
             image: image ?? DEFAULT_DOCKER_AGENT_IMAGE,
             workspacePath: cwd,
-            env: extraEnv,
+            env: envWithPort,
             authJson,
         });
 
@@ -512,7 +521,9 @@ export class AcpProcessManager {
         const permissionMode = role === "ROUTA"
             ? "bypassPermissions"
             : mapClaudeModeToPermissionMode(modeId);
-        const config = buildClaudeCodeConfig(cwd, mcpConfigs, permissionMode, extraEnv, allowedNativeTools);
+        const agentPort = await getAgentPortPool().allocate(sessionId);
+        const envWithPort: Record<string, string> = { ...extraEnv, PORT: String(agentPort) };
+        const config = buildClaudeCodeConfig(cwd, mcpConfigs, permissionMode, envWithPort, allowedNativeTools);
         const proc = new ClaudeCodeProcess(config, onNotification);
 
         await proc.start();
@@ -548,6 +559,7 @@ export class AcpProcessManager {
         lifecycleNotifier?: LifecycleNotifier,
     ): Promise<string> {
         logAcpDebug(`[AcpProcessManager] Using Claude Code SDK adapter for serverless environment`);
+        await getAgentPortPool().allocate(sessionId);
 
         const { adapter, resolved } = AgentInstanceFactory.createClaudeCodeSdkAdapter(
             cwd,
@@ -588,6 +600,7 @@ export class AcpProcessManager {
         options?: Omit<WorkspaceAgentAdapterOptions, never>,
     ): Promise<string> {
         logAcpDebug(`[AcpProcessManager] Creating Workspace Agent session`);
+        await getAgentPortPool().allocate(sessionId);
 
         const adapter = new WorkspaceAgentAdapter(cwd, onNotification, options);
         await adapter.connect();
@@ -1139,6 +1152,8 @@ export class AcpProcessManager {
      * Kill a session's agent process or adapter.
      */
     async killSession(sessionId: string): Promise<void> {
+        getAgentPortPool().release(sessionId);
+
         const managed = this.processes.get(sessionId);
         if (managed) {
             managed.process.kill();
@@ -1225,5 +1240,7 @@ export class AcpProcessManager {
 
         const sessionIds = Array.from(this.mcpSessionCleanups.keys());
         await Promise.all(sessionIds.map((sessionId) => this.cleanupSessionMcp(sessionId)));
+
+        getAgentPortPool().releaseAll();
     }
 }

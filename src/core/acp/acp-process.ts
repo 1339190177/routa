@@ -728,6 +728,16 @@ export class AcpProcess {
             case "terminal/create": {
                 const terminalManager = getTerminalManager();
                 const termParams = (params ?? {}) as Record<string, unknown>;
+                // Inject agent's isolated PORT into terminal environment so that
+                // commands like `npm run dev` / `next dev` bind to the allocated
+                // ephemeral port instead of colliding with the main Routa server.
+                const agentEnv = this._config.env ?? {};
+                if (Object.keys(agentEnv).length > 0) {
+                    const existingEnv = termParams.env;
+                    termParams.env = typeof existingEnv === "object" && existingEnv !== null
+                        ? { ...existingEnv as Record<string, string>, ...agentEnv }
+                        : { ...agentEnv };
+                }
                 const result = terminalManager.create(
                     termParams,
                     this._sessionId ?? "unknown",
