@@ -16,6 +16,7 @@ export enum TaskStatus {
   NEEDS_FIX = "NEEDS_FIX",
   BLOCKED = "BLOCKED",
   CANCELLED = "CANCELLED",
+  ARCHIVED = "ARCHIVED",
 }
 
 export enum TaskPriority {
