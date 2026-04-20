@@ -1565,6 +1565,34 @@ paths:
 }
 
 #[tokio::test]
+async fn api_feature_explorer_contract_for_workspace_repo() {
+    let fixture = ApiFixture::new().await;
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("workspace root")
+        .to_path_buf();
+
+    let response = fixture
+        .client
+        .get(fixture.endpoint("/api/feature-explorer"))
+        .query(&[("repoPath", repo_root.to_string_lossy().to_string())])
+        .send()
+        .await
+        .expect("get feature explorer payload");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let payload: Value = response
+        .json()
+        .await
+        .expect("decode feature explorer payload");
+
+    assert!(payload["features"].as_array().is_some());
+    assert!(payload["capabilityGroups"].as_array().is_some());
+}
+
+#[tokio::test]
 async fn api_spec_feature_tree_generate_contract() {
     let fixture = ApiFixture::new().await;
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

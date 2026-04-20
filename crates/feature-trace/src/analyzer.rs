@@ -231,10 +231,12 @@ fn normalize_prompt_preview(prompt: &str) -> String {
         return normalized;
     }
 
-    format!(
-        "{}...",
-        normalized[..MAX_PROMPT_PREVIEW_LENGTH.saturating_sub(3)].trim_end()
-    )
+    let preview = normalized
+        .chars()
+        .take(MAX_PROMPT_PREVIEW_LENGTH.saturating_sub(3))
+        .collect::<String>();
+
+    format!("{}...", preview.trim_end())
 }
 
 fn normalize_file_operation(operation: &str) -> String {
@@ -325,6 +327,18 @@ mod tests {
         );
         assert_eq!(analysis.file_operation_counts.get("modified"), Some(&2));
         assert_eq!(analysis.file_operation_counts.get("renamed"), Some(&1));
+    }
+
+    #[test]
+    fn normalize_prompt_preview_handles_multibyte_characters_without_panicking() {
+        let prompt = "分析一下，当前应用哪些高价值功能可以放在菜单栏？然后结合这个文档看看？同时支持 macOS 和 Windows、Linux 之类的？";
+        let repeated = prompt.repeat(4);
+
+        let normalized = normalize_prompt_preview(&repeated);
+
+        assert!(normalized.ends_with("..."));
+        assert!(normalized.chars().count() <= MAX_PROMPT_PREVIEW_LENGTH);
+        assert!(normalized.contains('分'));
     }
 
     #[test]
