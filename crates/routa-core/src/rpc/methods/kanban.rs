@@ -1391,7 +1391,6 @@ mod tests {
         assert_eq!(result.total, 1);
         assert_eq!(result.cards[0].title, "High priority card");
     }
-
 }
 
 #[cfg(test)]

@@ -521,7 +521,10 @@ async fn trigger_automation_can_use_column_override_without_moving_card() {
         .expect("task lookup should succeed")
         .expect("task should still exist");
     assert_eq!(saved.column_id.as_deref(), Some("backlog"));
-    assert_eq!(saved.assigned_provider.as_deref(), Some("override-provider"));
+    assert_eq!(
+        saved.assigned_provider.as_deref(),
+        Some("override-provider")
+    );
     assert_eq!(saved.assigned_role.as_deref(), Some("DEVELOPER"));
     assert_eq!(
         saved.assigned_specialist_id.as_deref(),
