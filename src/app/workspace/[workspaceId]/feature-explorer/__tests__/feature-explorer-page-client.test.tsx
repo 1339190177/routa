@@ -1261,7 +1261,7 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.queryByText("Capability group")).toBeNull();
   });
 
-  it("hides learned prompt context when a non-feature surface is selected", async () => {
+  it("keeps the inspector focused on surface evidence when a non-feature surface is selected", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,
       error: null,
@@ -1347,13 +1347,6 @@ describe("FeatureExplorerPageClient", () => {
         sessionCount: 12,
         changedFiles: 8,
         updatedAt: "2026-04-20T08:00:00.000Z",
-        promptContext: {
-          featureId: "feature-explorer",
-          sessionCount: 12,
-          promptPreviews: [{ name: "prompt", count: 5 }],
-          toolCallCounts: [{ name: "exec_command", count: 10 }],
-          fileOperationCounts: [{ name: "modified", count: 3 }],
-        },
         fileTree: [],
         fileStats: {},
       },
@@ -1364,8 +1357,6 @@ describe("FeatureExplorerPageClient", () => {
 
     render(<FeatureExplorerPageClient workspaceId="default" />);
 
-    expect(screen.getByText("Learned prompt context")).toBeTruthy();
-
     fireEvent.click(screen.getByLabelText("Expand Feature Explorer"));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "/api/feature-explorer" })).toBeTruthy();
@@ -1375,7 +1366,6 @@ describe("FeatureExplorerPageClient", () => {
     await waitFor(() => {
       expect(screen.getByText("Selected surface")).toBeTruthy();
     });
-
     expect(screen.queryByText("Learned prompt context")).toBeNull();
   });
 

@@ -5,8 +5,8 @@ use axum::{
     Json, Router,
 };
 use feature_trace::{
-    build_feature_prompt_context, FeaturePromptContext, FeatureSurfaceCatalog, FeatureTraceInput,
-    FeatureTreeCatalog, SessionAnalysis, SessionAnalyzer,
+    FeatureSurfaceCatalog, FeatureTraceInput, FeatureTreeCatalog, SessionAnalysis,
+    SessionAnalyzer,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -70,7 +70,6 @@ struct FeatureDetailResponse {
     session_count: usize,
     changed_files: usize,
     updated_at: String,
-    prompt_context: Option<FeaturePromptContext>,
     file_tree: Vec<FileTreeNode>,
     surface_links: Vec<SurfaceLinkResponse>,
     page_details: Vec<PageDetailResponse>,
@@ -1658,7 +1657,7 @@ async fn get_feature_detail(
     .map_err(map_context_error)?;
 
     let feature_tree = load_feature_tree(&repo_root).map_err(map_error)?;
-    let (session_stats, file_stats, file_signals, analyses) =
+    let (session_stats, file_stats, file_signals, _analyses) =
         collect_session_stats(&repo_root, &feature_tree);
 
     let feature = feature_tree
@@ -1787,10 +1786,6 @@ async fn get_feature_detail(
             "-".to_string()
         } else {
             updated_at
-        },
-        prompt_context: {
-            let context = build_feature_prompt_context(&feature.id, &analyses);
-            (context.session_count > 0).then_some(context)
         },
         file_tree,
         surface_links,
