@@ -77,17 +77,6 @@ const RECOMMENDED_AUTOMATION_BY_STAGE: Partial<Record<KanbanColumnStage, KanbanC
     },
     autoAdvanceOnSuccess: false,
   },
-  blocked: {
-    enabled: true,
-    steps: [{
-      id: "blocked-resolver",
-      role: "CRAFTER",
-      specialistId: "kanban-blocked-resolver",
-      specialistName: "Blocked Resolver",
-    }],
-    transitionType: "entry",
-    autoAdvanceOnSuccess: false,
-  },
   done: {
     enabled: true,
     steps: [{
@@ -126,12 +115,26 @@ function getStepIdentity(step: ReturnType<typeof getKanbanAutomationSteps>[numbe
   ].join("::");
 }
 
+function enforceManualOnlyStageRules(column: KanbanColumn): KanbanColumn {
+  if (column.stage !== "blocked" || !column.automation) {
+    return column;
+  }
+
+  return {
+    ...column,
+    automation: {
+      ...column.automation,
+      enabled: false,
+    },
+  };
+}
+
 export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): KanbanColumn[] {
   return columns.map((column) => {
     const recommended = RECOMMENDED_AUTOMATION_BY_STAGE[column.stage];
     const legacySpecialists = LEGACY_SPECIALIST_IDS_BY_STAGE[column.stage] ?? [];
     if (!recommended) {
-      return { ...column };
+      return enforceManualOnlyStageRules({ ...column });
     }
 
     const recommendedPrimaryStep = getPrimaryKanbanAutomationStep(recommended);
@@ -207,7 +210,7 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
       };
     });
 
-    return {
+    return enforceManualOnlyStageRules({
       ...column,
       automation: normalizeKanbanAutomation({
         ...recommended,
@@ -229,7 +232,7 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
         deliveryRules: currentAutomation.deliveryRules ?? recommended.deliveryRules,
         autoAdvanceOnSuccess: recommended.autoAdvanceOnSuccess,
       }),
-    };
+    });
   });
 }
 

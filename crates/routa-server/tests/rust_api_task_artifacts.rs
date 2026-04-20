@@ -587,6 +587,16 @@ boards:
         automation:
           providerId: routa-native
           role: GATE
+      - id: blocked
+        name: Blocked
+        stage: blocked
+        automation:
+          enabled: false
+          transitionType: entry
+          steps:
+            - id: blocked-resolver
+              role: CRAFTER
+              specialistName: Blocked Resolver
 "#
         }))
         .send()
@@ -617,6 +627,9 @@ boards:
     assert!(exported_yaml.contains("name: Sync Workspace Kanban"));
     assert!(exported_yaml.contains("name: Imported Board"));
     assert!(exported_yaml.contains("enabled: true"));
+    assert!(exported_yaml.contains("name: Blocked"));
+    assert!(exported_yaml.contains("specialistName: Blocked Resolver"));
+    assert!(exported_yaml.contains("enabled: false"));
 
     let missing_workspace = fixture
         .client

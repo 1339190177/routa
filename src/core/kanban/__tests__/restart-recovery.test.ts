@@ -304,4 +304,38 @@ describe("kanban restart recovery", () => {
       toColumnName: "Implementation",
     }));
   });
+
+  it("does not revive automation for the manual-only blocked lane", async () => {
+    kanbanBoardStore.get.mockResolvedValue({
+      id: "board-1",
+      columns: [{
+        id: "blocked",
+        name: "Blocked",
+        position: 0,
+        stage: "blocked",
+        automation: {
+          enabled: false,
+          transitionType: "entry",
+          steps: [{ id: "blocked-resolver", role: "CRAFTER" }],
+        },
+      }],
+    });
+    taskStore.listByWorkspace.mockResolvedValue([createTask({
+      id: "task-1",
+      title: "Blocked story",
+      objective: "Wait for unblock",
+      workspaceId: "workspace-1",
+      boardId: "board-1",
+      columnId: "blocked",
+      status: TaskStatus.BLOCKED,
+    })]);
+
+    await reviveMissingEntryAutomations(system as never, "workspace-1", "board-1", {
+      sessionStore: sessionStore as never,
+      processManager: processManager as never,
+    });
+
+    expect(processKanbanColumnTransition).not.toHaveBeenCalled();
+    expect(enqueueKanbanTaskSession).not.toHaveBeenCalled();
+  });
 });

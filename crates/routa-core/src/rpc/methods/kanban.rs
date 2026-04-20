@@ -576,6 +576,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn move_card_to_blocked_does_not_start_manual_only_lane_automation() {
+        let state = setup_state().await;
+        let created = create_card(
+            &state,
+            CreateCardParams {
+                workspace_id: "default".to_string(),
+                board_id: None,
+                column_id: Some("backlog".to_string()),
+                title: "Stop in blocked".to_string(),
+                description: None,
+                priority: None,
+                labels: None,
+            },
+        )
+        .await
+        .expect("create card should succeed");
+
+        move_card(
+            &state,
+            MoveCardParams {
+                card_id: created.card.id.clone(),
+                target_column_id: "blocked".to_string(),
+                position: None,
+            },
+        )
+        .await
+        .expect("move card should succeed");
+
+        let updated = state
+            .task_store
+            .get(&created.card.id)
+            .await
+            .expect("task lookup should succeed")
+            .expect("task should exist");
+        assert_eq!(updated.column_id.as_deref(), Some("blocked"));
+        assert!(updated.trigger_session_id.is_none());
+        assert!(!updated.lane_sessions.iter().any(|session| {
+            session.column_id.as_deref() == Some("blocked")
+                && session.status == TaskLaneSessionStatus::Running
+        }));
+    }
+
+    #[tokio::test]
     async fn update_card_rejects_description_changes_in_dev() {
         let state = setup_state().await;
         let created = create_card(

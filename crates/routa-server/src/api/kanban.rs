@@ -30,23 +30,10 @@ fn lane_session_uses_in_memory_runtime(transport: Option<&str>) -> bool {
     transport != Some("a2a")
 }
 
-fn automation_has_effective_config(
-    automation: &routa_core::models::kanban::KanbanColumnAutomation,
-) -> bool {
-    automation.provider_id.is_some()
-        || automation.role.is_some()
-        || automation.specialist_id.is_some()
-        || automation.specialist_name.is_some()
-        || automation
-            .steps
-            .as_ref()
-            .is_some_and(|steps| !steps.is_empty())
-}
-
 fn normalize_column_automation(column: &mut KanbanColumn) {
     if let Some(automation) = column.automation.as_mut() {
-        if !automation.enabled && automation_has_effective_config(automation) {
-            automation.enabled = true;
+        if column.stage == "blocked" {
+            automation.enabled = false;
         }
     }
 }
