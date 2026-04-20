@@ -1123,6 +1123,124 @@ describe("FeatureExplorerPageClient", () => {
     expect(screen.queryByText("Capability group")).toBeNull();
   });
 
+  it("hides learned prompt context when a non-feature surface is selected", async () => {
+    useFeatureExplorerData.mockReturnValue({
+      loading: false,
+      error: null,
+      capabilityGroups: [{ id: "workspace", name: "Workspace", description: "Workspace surfaces" }],
+      features: [
+        {
+          id: "feature-explorer",
+          name: "Feature Explorer",
+          group: "workspace",
+          summary: "Inspect feature surfaces",
+          status: "active",
+          sessionCount: 12,
+          changedFiles: 8,
+          updatedAt: "2026-04-20T08:00:00.000Z",
+          sourceFileCount: 2,
+          pageCount: 1,
+          apiCount: 1,
+        },
+      ],
+      surfaceIndex: {
+        generatedAt: "",
+        pages: [
+          {
+            route: "/workspace/:workspaceId/feature-explorer",
+            title: "Feature Explorer",
+            description: "Inspect feature surfaces",
+            sourceFile: "src/app/workspace/[workspaceId]/feature-explorer/page.tsx",
+          },
+        ],
+        apis: [],
+        contractApis: [
+          {
+            domain: "feature-explorer",
+            method: "GET",
+            path: "/api/feature-explorer",
+            operationId: "listFeatureExplorer",
+            summary: "List feature explorer features",
+          },
+        ],
+        nextjsApis: [
+          {
+            domain: "feature-explorer",
+            method: "GET",
+            path: "/api/feature-explorer",
+            sourceFiles: ["src/app/api/feature-explorer/route.ts"],
+          },
+        ],
+        rustApis: [],
+        metadata: {
+          schemaVersion: 1,
+          capabilityGroups: [{ id: "workspace", name: "Workspace", description: "Workspace surfaces" }],
+          features: [
+            {
+              id: "feature-explorer",
+              name: "Feature Explorer",
+              group: "workspace",
+              pages: ["/workspace/:workspaceId/feature-explorer"],
+              apis: ["GET /api/feature-explorer"],
+              sourceFiles: [
+                "src/app/workspace/[workspaceId]/feature-explorer/page.tsx",
+                "src/app/api/feature-explorer/route.ts",
+              ],
+            },
+          ],
+        },
+        repoRoot: "/repo/default",
+        warnings: [],
+      },
+      featureDetail: {
+        id: "feature-explorer",
+        name: "Feature Explorer",
+        group: "workspace",
+        summary: "Inspect feature surfaces",
+        status: "active",
+        pages: ["/workspace/:workspaceId/feature-explorer"],
+        apis: ["GET /api/feature-explorer"],
+        sourceFiles: [
+          "src/app/workspace/[workspaceId]/feature-explorer/page.tsx",
+          "src/app/api/feature-explorer/route.ts",
+        ],
+        relatedFeatures: [],
+        domainObjects: [],
+        sessionCount: 12,
+        changedFiles: 8,
+        updatedAt: "2026-04-20T08:00:00.000Z",
+        promptContext: {
+          featureId: "feature-explorer",
+          sessionCount: 12,
+          promptPreviews: [{ name: "prompt", count: 5 }],
+          toolCallCounts: [{ name: "exec_command", count: 10 }],
+          fileOperationCounts: [{ name: "modified", count: 3 }],
+        },
+        fileTree: [],
+        fileStats: {},
+      },
+      featureDetailLoading: false,
+      initialFeatureId: "feature-explorer",
+      fetchFeatureDetail: vi.fn().mockResolvedValue(null),
+    });
+
+    render(<FeatureExplorerPageClient workspaceId="default" />);
+
+    expect(screen.getByText("Learned prompt context")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Expand Feature Explorer"));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "/api/feature-explorer" })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "/api/feature-explorer" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Selected surface")).toBeTruthy();
+    });
+
+    expect(screen.queryByText("Learned prompt context")).toBeNull();
+  });
+
   it("summarizes folder session counts from descendant files", async () => {
     useFeatureExplorerData.mockReturnValue({
       loading: false,

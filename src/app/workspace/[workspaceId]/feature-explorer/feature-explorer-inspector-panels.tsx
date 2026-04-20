@@ -277,7 +277,7 @@ export function ContextPanel({
         </ContextSection>
       ) : null}
 
-      {featureDetail?.promptContext ? (
+      {featureDetail?.promptContext && (!selectedSurface || isFeatureSurface) ? (
         <ContextSection title={t.featureExplorer.learnedPromptContext}>
           <div className="space-y-2.5">
             <div className="text-[11px] leading-5 text-desktop-text-secondary">
