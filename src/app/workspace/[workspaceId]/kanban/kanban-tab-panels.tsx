@@ -998,8 +998,16 @@ export function KanbanTaskDetailOverlay({
                       const primaryCodebase = taskCodebaseIds.length > 0
                         ? codebases.find((codebase) => codebase.id === taskCodebaseIds[0])
                         : null;
-                      const taskRepoPath = sessionInfo?.cwd ?? primaryCodebase?.repoPath;
-                      const taskBranch = sessionInfo?.branch ?? primaryCodebase?.branch ?? undefined;
+                      const taskWorktree = task.worktreeId
+                        ? worktreeCache[task.worktreeId] ?? null
+                        : null;
+                      const taskRepoPath = primaryCodebase?.repoPath
+                        ?? taskWorktree?.worktreePath
+                        ?? sessionInfo?.cwd;
+                      const taskBranch = sessionInfo?.branch
+                        ?? taskWorktree?.branch
+                        ?? primaryCodebase?.branch
+                        ?? undefined;
                       const taskAdaptiveHarness = buildKanbanTaskAdaptiveHarnessOptions(task.title, {
                         locale: specialistLanguage,
                         role: task.assignedRole,

@@ -5,7 +5,11 @@ import type { AcpTaskAdaptiveHarnessOptions } from "@/client/acp-client";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import { desktopAwareFetch, toErrorMessage } from "@/client/utils/diagnostics";
 import { useTranslation } from "@/i18n";
-import type { TaskAdaptiveHarnessPack, TaskAdaptiveMatchedFileDetail } from "@/core/harness/task-adaptive";
+import type {
+  TaskAdaptiveHarnessPack,
+  TaskAdaptiveHistorySummary,
+  TaskAdaptiveMatchedFileDetail,
+} from "@/core/harness/task-adaptive";
 import type { TaskInfo } from "../types";
 import { buildKanbanTaskAdaptiveHarnessOptions } from "./kanban-task-adaptive";
 import type { KanbanSpecialistLanguage } from "./kanban-specialist-language";
@@ -132,6 +136,61 @@ function formatMatchedFileSeed(fileDetail: TaskAdaptiveMatchedFileDetail): strin
   return stats.length > 0 ? `${fileDetail.filePath} (${stats.join(", ")})` : fileDetail.filePath;
 }
 
+function uniquePreserveOrder(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function formatBulletList(items: string[], emptyFallback: string): string {
+  if (items.length === 0) {
+    return `- ${emptyFallback}`;
+  }
+
+  return items.map((item) => `- ${item}`).join("\n");
+}
+
+function formatOrderedList(items: string[], emptyFallback: string): string {
+  if (items.length === 0) {
+    return `- ${emptyFallback}`;
+  }
+
+  return items.map((item, index) => `${index + 1}. ${item}`).join("\n");
+}
+
+function buildTranscriptHints(sessionIds: string[]): string[] {
+  return uniquePreserveOrder(sessionIds.map((sessionId) => `~/.codex/sessions/**/${sessionId}*.jsonl`));
+}
+
+function resolveHistoryAnalysisSessionIds(
+  pack: TaskAdaptiveHarnessPack,
+  fallback: string[] | undefined,
+): string[] | undefined {
+  const matchedTranscriptSessionIds = pack.sessions
+    .map((session) => session.sessionId)
+    .filter((sessionId) => sessionId.trim().length > 0);
+  if (matchedTranscriptSessionIds.length > 0) {
+    return matchedTranscriptSessionIds;
+  }
+
+  const summarizedSeedSessionIds = (pack.historySummary?.seedSessions ?? [])
+    .map((session) => session.sessionId)
+    .filter((sessionId) => sessionId.trim().length > 0);
+  if (summarizedSeedSessionIds.length > 0) {
+    return summarizedSeedSessionIds;
+  }
+
+  return fallback;
+}
+
+type PreloadedTaskHistorySummaryResult = {
+  historySummary: TaskAdaptiveHistorySummary | null;
+  featureId?: string;
+  featureName?: string;
+  selectedFiles: string[];
+  matchedFileDetails: TaskAdaptiveMatchedFileDetail[];
+  matchedSessionIds: string[];
+  warnings: string[];
+};
+
 function buildJitContextSessionPrompt(
   task: TaskInfo,
   pack: TaskAdaptiveHarnessPack,
@@ -142,7 +201,9 @@ function buildJitContextSessionPrompt(
   const warningLines = pack.warnings.slice(0, 3).map((warning) => `- ${warning}`);
   const failureLines = pack.failures.slice(0, 3).map((failure) => `- ${failure.message} [${failure.toolName}] (${failure.sessionId})`);
   const repeatedReadLines = pack.repeatedReadFiles.slice(0, 5).map((filePath) => `- ${filePath}`);
-  const sessionLines = (pack.historySummary?.seedSessions ?? pack.sessions).slice(0, 3).map((session) => `- ${session.sessionId}: ${session.promptSnippet}`);
+  const sessionLines = (pack.sessions.length > 0 ? pack.sessions : pack.historySummary?.seedSessions ?? [])
+    .slice(0, 3)
+    .map((session) => `- ${session.sessionId}: ${session.promptSnippet}`);
   const historySummary = pack.historySummary?.overview?.trim() || pack.summary;
 
   if (specialistLanguage === "zh-CN") {
@@ -167,7 +228,7 @@ function buildJitContextSessionPrompt(
       repeatedReadLines.length > 0 ? "重复读取热点：" : null,
       ...repeatedReadLines,
       "",
-      sessionLines.length > 0 ? "优先看的种子会话：" : null,
+      sessionLines.length > 0 ? "优先看的命中会话：" : null,
       ...sessionLines,
       "",
       "下一步：先阅读优先文件，再继续当前卡片最小的下一步实现、修复或验证动作。",
@@ -195,7 +256,7 @@ function buildJitContextSessionPrompt(
     repeatedReadLines.length > 0 ? "Repeated-read hotspots:" : null,
     ...repeatedReadLines,
     "",
-    sessionLines.length > 0 ? "Start from these history seed sessions:" : null,
+    sessionLines.length > 0 ? "Start from these matched history sessions:" : null,
     ...sessionLines,
     "",
     "Next: inspect the priority files first, then continue with the smallest useful implementation, debugging, or verification step for this card.",
@@ -269,99 +330,193 @@ function buildJitHistoryAnalysisPrompt(
   pack: TaskAdaptiveHarnessPack,
   matchedFileDetails: TaskAdaptiveMatchedFileDetail[],
   specialistLanguage: KanbanSpecialistLanguage,
-  workspaceId: string | undefined,
-  repoPath: string | null | undefined,
-  harnessOptions: AcpTaskAdaptiveHarnessOptions,
+  toolArgs: Record<string, unknown>,
+  preloadedSummary: PreloadedTaskHistorySummaryResult,
 ): string {
-  const toolArgs = buildHistorySummaryToolArgs(workspaceId, repoPath, harnessOptions);
-  const toolArgsBlock = JSON.stringify(toolArgs, null, 2);
-  const historySummary = pack.historySummary?.overview?.trim() || pack.summary.trim();
+  const historySummary = preloadedSummary.historySummary?.overview?.trim()
+    || pack.historySummary?.overview?.trim()
+    || pack.summary.trim();
+  const historySummaryData = preloadedSummary.historySummary ?? pack.historySummary;
   const featureLine = pack.featureName ?? pack.featureId;
-  const fileLines = matchedFileDetails
+  const fileSeedLines = matchedFileDetails
     .slice(0, 8)
-    .map((fileDetail, index) => `${index + 1}. ${formatMatchedFileSeed(fileDetail)}`);
-  const seedSessionLines = (pack.historySummary?.seedSessions ?? [])
+    .map((fileDetail) => formatMatchedFileSeed(fileDetail));
+  const matchedSessions = pack.sessions.slice(0, 6);
+  const matchedSessionLines = matchedSessions
     .slice(0, 5)
-    .map((session, index) => `${index + 1}. ${session.sessionId}: ${session.promptSnippet}`);
-  const warningLines = pack.warnings.slice(0, 4).map((warning) => `- ${warning}`);
-  const reasonLines = pack.matchReasons.slice(0, 4).map((reason) => `- ${reason}`);
+    .map((session) => [
+      `${session.sessionId} [${session.provider}]`,
+      `   - Prompt: ${session.promptSnippet}`,
+      `   - Matched files: ${
+        session.matchedFiles.length > 0
+          ? session.matchedFiles.join(", ")
+          : session.matchedReadFiles.length > 0
+            ? session.matchedReadFiles.join(", ")
+            : "None"
+      }`,
+    ].join("\n"));
+  const seedSessionLines = (historySummaryData?.seedSessions ?? [])
+    .slice(0, 5)
+    .map((session) => [
+      `${session.sessionId} [${session.provider}]`,
+      `   - Prompt: ${session.promptSnippet}`,
+      `   - Touched files: ${session.touchedFiles.length > 0 ? session.touchedFiles.join(", ") : "None"}`,
+    ].join("\n"));
+  const transcriptHints = buildTranscriptHints(
+    matchedSessions.length > 0
+      ? matchedSessions.map((session) => session.sessionId)
+      : preloadedSummary.matchedSessionIds,
+  );
+  const warningLines = pack.warnings.slice(0, 4);
+  const reasonLines = pack.matchReasons.slice(0, 4);
+  const failureLines = pack.failures
+    .slice(0, 4)
+    .map((failure) => `${failure.message} [${failure.toolName}] (${failure.sessionId})`);
+  const repeatedReadLines = pack.repeatedReadFiles.slice(0, 4);
+  const workspaceLabel = typeof toolArgs.workspaceId === "string" ? toolArgs.workspaceId : null;
+  const repoPathLabel = typeof toolArgs.repoPath === "string" ? toolArgs.repoPath : null;
+  const taskTypeLabel = typeof toolArgs.taskType === "string" ? toolArgs.taskType : null;
+  const retrievalSummaryZh = [
+    `- 预执行工具: summarize_task_history_context`,
+    featureLine ? `- 当前命中功能: ${featureLine}` : null,
+    `- 命中置信度: ${pack.matchConfidence}`,
+    historySummaryData ? `- 种子会话数: ${historySummaryData.seedSessionCount}` : null,
+    historySummaryData ? `- 最终命中会话数: ${historySummaryData.recoveredSessionCount}` : null,
+    `- 候选文件数: ${matchedFileDetails.length}`,
+  ].filter(Boolean) as string[];
+  const retrievalSummaryEn = [
+    "- Preloaded tool: summarize_task_history_context",
+    featureLine ? `- Current matched feature: ${featureLine}` : null,
+    `- Match confidence: ${pack.matchConfidence}`,
+    historySummaryData ? `- Seed sessions: ${historySummaryData.seedSessionCount}` : null,
+    historySummaryData ? `- Recovered matched sessions: ${historySummaryData.recoveredSessionCount}` : null,
+    `- Candidate files: ${matchedFileDetails.length}`,
+  ].filter(Boolean) as string[];
 
   if (specialistLanguage === "zh-CN") {
     return [
-      "为这张 Kanban 卡片启动一次 History Summary 分析。",
+      "请对这张 Kanban 卡片的历史实现线索做一次只读复盘，目标是压缩上下文、指出最值得继续深挖的历史证据，并给下一次实现会话更好的注入方式。",
       "",
-      "先做这件事：",
-      "1. 首先调用 `summarize_task_history_context`，参数如下：",
-      "```json",
-      toolArgsBlock,
-      "```",
+      "你的任务：",
+      "1. 先区分“种子会话”和“最终命中会话”，不要把所有历史 session 当成同等证据。",
+      "2. 先基于下面已经预加载的摘要证据做综合分析，再决定是否需要回读少量 transcript JSONL。",
+      "3. 优先解释这些命中会话和候选文件，到底为当前 story 提供了什么上下文，而不是复述 transcript。",
+      "4. 把问题拆开：一类是需求/上下文输入问题，一类是代码定位问题，一类是工具/路径/读取失败问题。",
+      "5. 明确区分“证据支持”的判断和“你的推断”；尽量引用具体 session ID 或文件。",
+      "6. 给出下一次实现/规划会话最值得注入的上下文，避免再次把 10+ 个 session 全量塞给模型。",
+      "7. 产出 2 到 4 条可直接复用的后续提示词。",
       "",
-      "卡片上下文：",
+      "输出格式：",
+      "## 会话分层",
+      "## 结论",
+      "## 输入问题 vs 定位问题 vs 工具问题",
+      "## 最值得继续深挖的 3-5 个线索",
+      "## 建议注入到下一次会话的上下文",
+      "## 可复用的后续提示词",
+      "## 证据与推断边界",
+      "",
+      "上下文：",
       `- 标题：${task.title}`,
       task.objective ? `- 目标：${task.objective}` : null,
-      featureLine ? `- 当前命中功能：${featureLine}` : null,
-      historySummary ? `- 当前 History Summary：${historySummary}` : null,
+      workspaceLabel ? `- Workspace: ${workspaceLabel}` : null,
+      repoPathLabel ? `- Repo Path: ${repoPathLabel}` : null,
+      taskTypeLabel ? `- Task Type: ${taskTypeLabel}` : null,
       "",
-      fileLines.length > 0 ? "当前候选文件：" : null,
-      ...fileLines,
+      "### 检索总览",
+      ...retrievalSummaryZh,
       "",
-      seedSessionLines.length > 0 ? "当前种子会话：" : null,
-      ...seedSessionLines,
+      historySummary ? "### 预加载 History Summary" : null,
+      historySummary || null,
       "",
-      reasonLines.length > 0 ? "当前命中原因：" : null,
-      ...reasonLines,
+      "### 当前候选文件",
+      formatOrderedList(fileSeedLines, "无"),
       "",
-      warningLines.length > 0 ? "当前检索警告：" : null,
-      ...warningLines,
+      "### 最终命中的 Codex/Claude 会话",
+      formatOrderedList(matchedSessionLines, "无"),
       "",
-      "输出要求：",
-      "1. 解释这些种子会话到底提供了什么上下文，而不是复述全部 transcript。",
-      "2. 区分“种子会话”和“最终命中会话”。",
-      "3. 给出最值得继续深挖的 3-5 个会话或文件。",
-      "4. 总结最高信号的历史问题、重复读取热点、路径/读取失败。",
-      "5. 明确推荐下一次实现/规划会话应该注入哪些上下文。",
-      "6. 产出 2-4 条可直接复用的后续提示词。",
+      "### 种子会话（弱一些的上游线索）",
+      formatOrderedList(seedSessionLines, "无"),
       "",
-      "除非摘要明显不足，否则不要重新通读全部 14 个会话。",
+      "### Transcript Hints（可选：仅在摘要不足、需要恢复真实开场或确认范围漂移时，优先少量读取高相关 JSONL）",
+      formatBulletList(transcriptHints, "无"),
+      "",
+      "### 命中原因",
+      formatBulletList(reasonLines, "无额外命中原因"),
+      "",
+      "### 检索警告",
+      formatBulletList(warningLines, "无"),
+      "",
+      "### 历史问题",
+      formatBulletList(failureLines, "没有额外的高信号历史问题"),
+      "",
+      "### 重复读取热点",
+      formatBulletList(repeatedReadLines, "没有额外的重复读取热点"),
+      "",
+      "除非你需要用不同 hints 刷新结果，否则不要再次调用 `summarize_task_history_context`。",
+      "除非上面的摘要证据明显不足，否则不要回读 task 上挂着的全部 ACP 会话。",
     ].filter(Boolean).join("\n");
   }
 
   return [
-    "Start a History Summary analysis for this Kanban card.",
+    "Run a read-only retrospective on the history signals for this Kanban card. The goal is to compress context, surface the strongest evidence, and recommend what should be injected into the next implementation session.",
     "",
-    "Do this first:",
-    "1. Call `summarize_task_history_context` with the following arguments:",
-    "```json",
-    toolArgsBlock,
-    "```",
+    "Your tasks:",
+    "1. Distinguish retrieval seed sessions from the final matched sessions. Do not treat every historical session as equally trustworthy.",
+    "2. Start from the preloaded summary evidence below before deciding whether any transcript rereads are necessary.",
+    "3. Explain what the matched sessions and files contribute to the current story instead of replaying transcripts.",
+    "4. Split the findings into request/context-input issues, code-location issues, and tooling/path/read failures.",
+    "5. Separate evidence-backed conclusions from your own inference and cite concrete session IDs or files when possible.",
+    "6. Recommend what context should be injected into the next planning or implementation session so the model does not need all 10+ sessions again.",
+    "7. Produce 2 to 4 reusable follow-up prompts.",
     "",
-    "Card context:",
+    "Output format:",
+    "## Session Layers",
+    "## Conclusion",
+    "## Input vs Location vs Tooling Friction",
+    "## Top 3-5 Follow-up Leads",
+    "## Context To Inject Next Time",
+    "## Reusable Follow-up Prompts",
+    "## Evidence vs Inference",
+    "",
+    "Context:",
     `- Title: ${task.title}`,
     task.objective ? `- Objective: ${task.objective}` : null,
-    featureLine ? `- Current matched feature: ${featureLine}` : null,
-    historySummary ? `- Current History Summary: ${historySummary}` : null,
+    workspaceLabel ? `- Workspace: ${workspaceLabel}` : null,
+    repoPathLabel ? `- Repo Path: ${repoPathLabel}` : null,
+    taskTypeLabel ? `- Task Type: ${taskTypeLabel}` : null,
     "",
-    fileLines.length > 0 ? "Current candidate files:" : null,
-    ...fileLines,
+    "### Retrieval Summary",
+    ...retrievalSummaryEn,
+      "",
+    historySummary ? "### Preloaded History Summary" : null,
+    historySummary || null,
+      "",
+    "### Candidate Files",
+    formatOrderedList(fileSeedLines, "None"),
+      "",
+    "### Final Matched Codex Or Claude Sessions",
+    formatOrderedList(matchedSessionLines, "None"),
+      "",
+    "### Seed Sessions (weaker upstream evidence)",
+    formatOrderedList(seedSessionLines, "None"),
+      "",
+    "### Transcript Hints (optional: only inspect a few high-relevance JSONL files if the summary is insufficient or you need the true opening request)",
+    formatBulletList(transcriptHints, "None"),
+      "",
+    "### Match Reasons",
+    formatBulletList(reasonLines, "No additional match reasons"),
+      "",
+    "### Retrieval Warnings",
+    formatBulletList(warningLines, "None"),
     "",
-    seedSessionLines.length > 0 ? "Current seed sessions:" : null,
-    ...seedSessionLines,
+    "### Historical Friction",
+    formatBulletList(failureLines, "No additional high-signal historical friction"),
     "",
-    reasonLines.length > 0 ? "Current match reasons:" : null,
-    ...reasonLines,
+    "### Repeated-Read Hotspots",
+    formatBulletList(repeatedReadLines, "No additional repeated-read hotspots"),
     "",
-    warningLines.length > 0 ? "Current retrieval warnings:" : null,
-    ...warningLines,
-    "",
-    "Output requirements:",
-    "1. Explain what these seed sessions actually contribute instead of replaying every transcript.",
-    "2. Distinguish retrieval seeds from recovered file-grounded sessions.",
-    "3. Recommend the top 3-5 sessions or files worth deeper follow-up.",
-    "4. Summarize the highest-signal historical issues, repeated-read hotspots, and failed reads.",
-    "5. State exactly what context should be injected into the next implementation or planning session.",
-    "6. Produce 2-4 reusable follow-up prompts.",
-    "",
-    "Do not reread all linked sessions end to end unless the summary is clearly insufficient.",
+    "Do not call `summarize_task_history_context` again unless you need to refresh the result with different hints.",
+    "Do not reread every linked ACP session end to end unless the summary is clearly insufficient.",
   ].filter(Boolean).join("\n");
 }
 
@@ -832,15 +987,45 @@ export function JitContextPanel({
     setAnalysisSuccess(false);
 
     try {
+      const refreshedHarnessOptions: AcpTaskAdaptiveHarnessOptions = {
+        ...harnessOptions,
+        featureId: pack.featureId ?? harnessOptions.featureId,
+        featureIds: pack.featureId
+          ? [pack.featureId]
+          : harnessOptions.featureIds,
+        filePaths: matchedFileDetails.length > 0
+          ? matchedFileDetails.map((fileDetail) => fileDetail.filePath)
+          : harnessOptions.filePaths,
+        historySessionIds: resolveHistoryAnalysisSessionIds(pack, harnessOptions.historySessionIds),
+        maxFiles: matchedFileDetails.length > 0
+          ? Math.max(harnessOptions.maxFiles ?? 0, matchedFileDetails.length)
+          : harnessOptions.maxFiles,
+        maxSessions: pack.sessions.length > 0
+          ? Math.max(harnessOptions.maxSessions ?? 0, Math.min(pack.sessions.length, 6))
+          : harnessOptions.maxSessions,
+      };
+      const toolArgs = buildHistorySummaryToolArgs(workspaceId, repoPath, refreshedHarnessOptions);
+      const summaryResponse = await desktopAwareFetch("/api/harness/task-adaptive/history-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(toolArgs),
+      });
+      const preloadedSummary = await summaryResponse.json().catch(() => ({})) as PreloadedTaskHistorySummaryResult & {
+        error?: string;
+        details?: string;
+      };
+      if (!summaryResponse.ok) {
+        throw new Error(preloadedSummary.details ?? preloadedSummary.error ?? t.kanbanDetail.jitContextHistoryAnalysisFailed);
+      }
+
       await onOpenHistoryAnalysis(
         buildJitHistoryAnalysisPrompt(
           task,
           pack,
           matchedFileDetails,
           specialistLanguage,
-          workspaceId,
-          repoPath,
-          harnessOptions,
+          toolArgs,
+          preloadedSummary,
         ),
         targetWindow,
       );
@@ -1049,6 +1234,51 @@ export function JitContextPanel({
                         {session.touchedFiles.length > 0 ? (
                           <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                             {t.kanbanDetail.matchedFiles}: {session.touchedFiles.join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : pack.sessions.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                    {t.kanbanDetail.relatedSessions}
+                  </div>
+                  <div className="space-y-2">
+                    {pack.sessions.map((session) => (
+                      <div
+                        key={`matched:${session.provider}:${session.sessionId}`}
+                        className="rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2.5 dark:border-slate-700/70 dark:bg-slate-900/20"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                          <span>{session.sessionId}</span>
+                          <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                            {session.provider}
+                          </span>
+                          {formatTimestamp(session.updatedAt) ? (
+                            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                              {formatTimestamp(session.updatedAt)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-2 text-sm text-slate-700 dark:text-slate-200">
+                          {session.promptSnippet}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          {session.failedReadSignals.length > 0 ? (
+                            <span>{t.kanbanDetail.historicalIssues}: {session.failedReadSignals.length}</span>
+                          ) : null}
+                          {session.repeatedReadFiles.length > 0 ? (
+                            <span>{t.kanbanDetail.repeatedReadHotspots}: {session.repeatedReadFiles.length}</span>
+                          ) : null}
+                          {session.toolNames.length > 0 ? (
+                            <span>{session.toolNames.join(", ")}</span>
+                          ) : null}
+                        </div>
+                        {session.matchedFiles.length > 0 ? (
+                          <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                            {t.kanbanDetail.matchedFiles}: {session.matchedFiles.join(", ")}
                           </div>
                         ) : null}
                       </div>

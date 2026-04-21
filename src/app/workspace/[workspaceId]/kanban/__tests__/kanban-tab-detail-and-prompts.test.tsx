@@ -319,7 +319,32 @@ describe("KanbanCardDetail repository health", () => {
   it("loads JIT Context lazily from history-session retrieval", async () => {
     desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/harness/task-adaptive") {
+      if (url.includes("/api/harness/task-adaptive/history-summary")) {
+        return new Response(JSON.stringify({
+          historySummary: {
+            overview: "Started from 1 linked transcript session and narrowed to 1 recovered session plus 1 candidate file.",
+            seedSessionCount: 1,
+            recoveredSessionCount: 1,
+            matchedFileCount: 1,
+            seedSessions: [],
+          },
+          featureId: "kanban-workflow",
+          featureName: "Kanban Workflow",
+          selectedFiles: ["src/app/page.tsx"],
+          matchedFileDetails: [{
+            filePath: "src/app/page.tsx",
+            changes: 1,
+            sessions: 1,
+            updatedAt: "2026-04-21T02:03:00.000Z",
+          }],
+          matchedSessionIds: ["session-codex"],
+          warnings: ["Prefer the API route before the UI shell."],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/harness/task-adaptive")) {
         return new Response(JSON.stringify({
           summary: "history summary",
           historySummary: {
@@ -460,7 +485,32 @@ describe("KanbanCardDetail repository health", () => {
   it("opens a dedicated history analysis flow from JIT Context", async () => {
     desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === "/api/harness/task-adaptive") {
+      if (url.includes("/api/harness/task-adaptive/history-summary")) {
+        return new Response(JSON.stringify({
+          historySummary: {
+            overview: "Started from 1 linked transcript session and narrowed to 1 recovered session plus 1 candidate file.",
+            seedSessionCount: 1,
+            recoveredSessionCount: 1,
+            matchedFileCount: 1,
+            seedSessions: [],
+          },
+          featureId: "kanban-workflow",
+          featureName: "Kanban Workflow",
+          selectedFiles: ["src/app/page.tsx"],
+          matchedFileDetails: [{
+            filePath: "src/app/page.tsx",
+            changes: 1,
+            sessions: 1,
+            updatedAt: "2026-04-21T02:03:00.000Z",
+          }],
+          matchedSessionIds: ["session-codex"],
+          warnings: ["Prefer the API route before the UI shell."],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.includes("/api/harness/task-adaptive")) {
         return new Response(JSON.stringify({
           summary: "history summary",
           historySummary: {
@@ -489,10 +539,22 @@ describe("KanbanCardDetail repository health", () => {
             sessions: 1,
             updatedAt: "2026-04-21T02:03:00.000Z",
           }],
-          matchedSessionIds: [],
+          matchedSessionIds: ["session-codex"],
           failures: [],
           repeatedReadFiles: [],
-          sessions: [],
+          sessions: [{
+            provider: "codex",
+            sessionId: "session-codex",
+            updatedAt: "2026-04-21T02:03:00.000Z",
+            promptSnippet: "Inspect the Kanban API route before touching the UI shell.",
+            matchedFiles: ["src/app/page.tsx"],
+            matchedChangedFiles: ["src/app/page.tsx"],
+            matchedReadFiles: ["src/app/page.tsx"],
+            matchedWrittenFiles: [],
+            repeatedReadFiles: [],
+            toolNames: ["exec_command"],
+            failedReadSignals: [],
+          }],
         }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -561,14 +623,22 @@ describe("KanbanCardDetail repository health", () => {
         targetWindow,
       );
     });
-    expect(onOpenHistoryAnalysis).toHaveBeenCalledWith(
-      expect.stringContaining("\"repoPath\": \"/tmp/repo-a\""),
-      targetWindow,
-    );
-    expect(onOpenHistoryAnalysis).toHaveBeenCalledWith(
-      expect.stringContaining("Current History Summary: Started from 3 linked history sessions"),
-      targetWindow,
-    );
+    const lastOpenHistoryAnalysisCall = onOpenHistoryAnalysis.mock.calls.at(-1) as [unknown, unknown] | undefined;
+    expect(lastOpenHistoryAnalysisCall).toBeTruthy();
+    if (!lastOpenHistoryAnalysisCall) {
+      throw new Error("expected history analysis prompt");
+    }
+    const historyAnalysisPrompt = String(lastOpenHistoryAnalysisCall[0] ?? "");
+    const historyTargetWindow = lastOpenHistoryAnalysisCall[1];
+    expect(historyTargetWindow).toBe(targetWindow);
+    expect(historyAnalysisPrompt).toContain("- Repo Path: /tmp/repo-a");
+    expect(historyAnalysisPrompt).toContain("- Task Type: planning");
+    expect(historyAnalysisPrompt).toContain("### Transcript Hints");
+    expect(historyAnalysisPrompt).toContain("~/.codex/sessions/**/session-codex*.jsonl");
+    expect(historyAnalysisPrompt).toContain("### Final Matched Codex Or Claude Sessions");
+    expect(historyAnalysisPrompt).toContain("Inspect the Kanban API route before touching the UI shell.");
+    expect(historyAnalysisPrompt).not.toContain("Preloaded tool result:");
+    expect(historyAnalysisPrompt).not.toContain("The system already executed `summarize_task_history_context` before this session started.");
     expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
     expect(screen.getByText("History analysis opened in a new page.")).toBeTruthy();
     openSpy.mockRestore();

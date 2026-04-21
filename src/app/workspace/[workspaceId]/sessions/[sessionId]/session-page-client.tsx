@@ -861,15 +861,7 @@ export function SessionPageClient() {
 
       {isPlanningSession && !isEmbedMode ? (
         <div className="border-b border-black/6 bg-[#f7f3ea] px-5 py-4 dark:border-white/8 dark:bg-[#10161d]">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
-                {t.workspace.planningSessionTitle}
-              </div>
-              <div className="mt-1 text-sm text-slate-700 dark:text-slate-200">
-                {t.workspace.planningSessionDescription}
-              </div>
-            </div>
+          <div className="mx-auto flex w-full max-w-6xl items-center justify-end">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"

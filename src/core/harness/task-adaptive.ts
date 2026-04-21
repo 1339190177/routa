@@ -353,6 +353,26 @@ function normalizeUniqueStringArray(values: readonly string[] | undefined): stri
   )];
 }
 
+function mergePreferredStringGroups(
+  ...groups: Array<readonly string[] | undefined>
+): string[] {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const group of groups) {
+    for (const value of group ?? []) {
+      const normalized = normalizeString(value);
+      if (!normalized || seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      merged.push(normalized);
+    }
+  }
+
+  return merged;
+}
+
 function toPosix(value: string): string {
   return value.replace(/\\/g, "/");
 }
@@ -2566,7 +2586,11 @@ function buildTaskAdaptiveHistorySummary(input: {
         priorityFailures.length > 0
           ? `优先关注的历史读取问题：${priorityFailures.map((failure) => failure.message).join("；")}。`
           : null,
-        "如果要继续深挖，优先看下面列出的种子会话，而不是一次性回读全部 transcript。",
+        input.seedSessions.length > 0
+          ? "如果要继续深挖，优先看下面列出的种子会话，而不是一次性回读全部 transcript。"
+          : input.matchedSessionIds.length > 0
+            ? "当前还没有可直接展开的种子会话摘要，优先看下面恢复出来的 Codex/Claude 命中会话。"
+            : "当前还没有恢复出可展示的 transcript 种子摘要；继续分析前，先补更强的文件或 feature 线索。",
       ]
     : [
         `Started from ${seedSessionCount} linked history sessions and narrowed the search to ${input.matchedSessionIds.length} recovered sessions plus ${input.selectedFiles.length} candidate files.`,
@@ -2579,7 +2603,11 @@ function buildTaskAdaptiveHistorySummary(input: {
         priorityFailures.length > 0
           ? `Priority historical read failures: ${priorityFailures.map((failure) => failure.message).join("; ")}.`
           : null,
-        "If you need deeper analysis, start from the seed sessions below instead of rereading every transcript.",
+        input.seedSessions.length > 0
+          ? "If you need deeper analysis, start from the seed sessions below instead of rereading every transcript."
+          : input.matchedSessionIds.length > 0
+            ? "No seed-session summaries were materialized from the linked ACP sessions, so start from the recovered Codex or Claude sessions below."
+            : "No transcript-level seed-session summaries were recovered yet; add stronger file or feature hints before going deeper.",
       ];
 
   return {
@@ -2667,12 +2695,12 @@ async function assembleTaskAdaptiveHarnessRaw(
   const primaryFeature = features[0];
 
   const selectedFiles = trimTo(
-    uniqueSorted([
-      ...(options.filePaths ?? []),
-      ...inferredSeed.filePaths,
-      ...features.flatMap((feature) => collectFeatureFiles(feature, maxFiles)),
-      ...inferFilesFromSessionIds(options.historySessionIds, fileSignals, maxFiles),
-    ]),
+    mergePreferredStringGroups(
+      options.filePaths,
+      inferredSeed.filePaths,
+      features.flatMap((feature) => collectFeatureFiles(feature, maxFiles)),
+      inferFilesFromSessionIds(options.historySessionIds, fileSignals, maxFiles),
+    ),
     maxFiles,
   );
 
@@ -2910,11 +2938,11 @@ export async function assembleTaskAdaptiveHarness(
     .map((featureId) => mergedFeatureTree.find((item) => item.id === featureId))
     .filter((feature): feature is FeatureTreeFeature => Boolean(feature));
   const selectedFiles = trimTo(
-    uniqueSorted([
-      ...(options.filePaths ?? []),
-      ...inferredSeed.filePaths,
-      ...features.flatMap((feature) => collectFeatureFiles(feature, maxFiles)),
-    ]),
+    mergePreferredStringGroups(
+      options.filePaths,
+      inferredSeed.filePaths,
+      features.flatMap((feature) => collectFeatureFiles(feature, maxFiles)),
+    ),
     maxFiles,
   );
   const snapshot = loadTaskAdaptiveFrictionProfilesSnapshot(repoRoot);

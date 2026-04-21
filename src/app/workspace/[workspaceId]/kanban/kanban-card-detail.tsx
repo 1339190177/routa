@@ -287,6 +287,15 @@ export function KanbanCardDetail({
     return primaryCodebase?.repoPath ?? null;
   };
 
+  const getTaskHistoryRepositoryPath = (): string | null => {
+    const taskCodebaseIds = task.codebaseIds && task.codebaseIds.length > 0 ? task.codebaseIds : allCodebaseIds;
+    if (taskCodebaseIds.length === 0) {
+      return getTaskRepositoryPath();
+    }
+    const primaryCodebase = codebases.find((codebase) => codebase.id === taskCodebaseIds[0]);
+    return primaryCodebase?.repoPath ?? getTaskRepositoryPath();
+  };
+
   const currentLane = useMemo(
     () => boardColumns?.find((column) => column.id === (task.columnId ?? "backlog")),
     [boardColumns, task.columnId],
@@ -769,7 +778,7 @@ export function KanbanCardDetail({
             <JitContextPanel
               task={task}
               workspaceId={resolvedWorkspaceId || undefined}
-              repoPath={getTaskRepositoryPath()}
+              repoPath={getTaskHistoryRepositoryPath()}
               specialistLanguage={specialistLanguage}
               activeSessionId={jitContextSessionId}
               onLoadIntoSession={onLoadJitContextIntoSession}

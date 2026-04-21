@@ -265,6 +265,61 @@ describe("assembleTaskAdaptiveHarness", () => {
     expect(pack.recommendedAllowedNativeTools).toEqual(["Read", "Grep", "Glob"]);
   });
 
+  it("keeps explicit file paths ahead of history-session inferred files", async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "task-adaptive-harness-priority-"));
+    process.env.HOME = tempRoot;
+    process.env.CLAUDE_CONFIG_DIR = "";
+
+    const repoRoot = path.join(tempRoot, "repo");
+    ensureFile(path.join(repoRoot, "src/explicit.ts"), "export const explicit = true;\n");
+    ensureFile(path.join(repoRoot, "src/inferred-a.ts"), "export const inferredA = true;\n");
+    ensureFile(path.join(repoRoot, "src/inferred-b.ts"), "export const inferredB = true;\n");
+
+    writeTranscript(
+      path.join(tempRoot, ".codex", "sessions", "session-priority.jsonl"),
+      repoRoot,
+      "session-priority",
+      [
+        {
+          timestamp: "2026-04-21T03:01:00.000Z",
+          type: "event_msg",
+          payload: {
+            type: "user_message",
+            message: "Inspect inferred files first",
+          },
+        },
+        {
+          timestamp: "2026-04-21T03:02:00.000Z",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            name: "exec_command",
+            arguments: "{\"cmd\":\"sed -n '1,120p' src/inferred-a.ts\"}",
+          },
+        },
+        {
+          timestamp: "2026-04-21T03:03:00.000Z",
+          type: "event_msg",
+          payload: {
+            type: "exec_command_end",
+            command: ["/bin/zsh", "-lc", "git status --short"],
+            aggregated_output: " M src/inferred-a.ts\n M src/inferred-b.ts\n",
+            exit_code: 0,
+          },
+        },
+      ],
+    );
+
+    const pack = await assembleTaskAdaptiveHarness(repoRoot, {
+      filePaths: ["src/explicit.ts"],
+      historySessionIds: ["session-priority"],
+      maxFiles: 1,
+      taskType: "analysis",
+    });
+
+    expect(pack.selectedFiles).toEqual(["src/explicit.ts"]);
+  });
+
   it("infers features and files from context search hints when history and files are absent", async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "task-adaptive-harness-hints-"));
     process.env.HOME = tempRoot;
