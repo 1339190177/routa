@@ -2,7 +2,8 @@
 title: "Global Kanban flow learning should be agent-driven and produce actionable guidance"
 date: "2026-04-16"
 kind: issue
-status: open
+status: resolved
+resolved_at: "2026-04-20"
 severity: medium
 area: kanban
 tags:
@@ -18,7 +19,7 @@ related_issues:
   - "https://github.com/phodal/routa/issues/294"
   - "https://github.com/phodal/routa/issues/466"
 github_issue: 466
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/466"
 ---
 
@@ -89,3 +90,8 @@ The learned output should not be limited to dashboards or raw metrics. It should
 
 - Parent issue candidate: `phodal/routa#294`
 - Local tracker: `docs/issues/2026-03-19-kanban-flow-observability-and-control-gaps.md`
+
+## Resolution Update (2026-04-21)
+
+- Synced the local tracker to the already-closed GitHub issue `#466`.
+- Recorded the upstream resolution date as `2026-04-20`; this tracker required no further local implementation beyond status cleanup.

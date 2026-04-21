@@ -2,14 +2,15 @@
 title: "Review lane may remain ambiguous after QA verdict writes"
 date: "2026-04-13"
 kind: issue
-status: investigating
+status: resolved
+resolved_at: "2026-04-14"
 severity: medium
 area: "kanban"
 tags: ["review-lane", "kanban", "dual-backend", "qa"]
 reported_by: "codex"
 related_issues: ["https://github.com/phodal/routa/issues/417"]
 github_issue: 417
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/417"
 ---
 
@@ -49,3 +50,8 @@ Once the final review step has produced a durable verdict, the task should conve
 ## References
 
 - https://github.com/phodal/routa/issues/417
+
+## Resolution Update (2026-04-21)
+
+- Synced the local tracker to the already-closed GitHub issue `#417`.
+- Recorded the upstream resolution date as `2026-04-14`; this cleanup only fixes local/GitHub status drift.

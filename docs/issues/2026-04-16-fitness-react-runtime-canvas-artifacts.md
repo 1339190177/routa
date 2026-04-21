@@ -2,7 +2,8 @@
 title: "Fitness should support constrained React runtime canvas artifacts for analytical outputs"
 date: "2026-04-16"
 kind: issue
-status: open
+status: resolved
+resolved_at: "2026-04-16"
 severity: medium
 area: "fitness"
 tags: ["fitness", "canvas", "react-runtime", "artifacts", "ui", "agent-output"]
@@ -12,7 +13,7 @@ related_issues:
   - "docs/issues/2026-03-28-harness-execution-plan-react-flow.md"
   - "docs/issues/2026-04-14-kanban-entrix-live-fitness-surface.md"
 github_issue: 474
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/474"
 ---
 
@@ -88,3 +89,8 @@ Fitness 应该支持一种类似 Cursor Canvas 的受限 React runtime 产物模
 - `https://github.com/phodal/routa/issues/54`
 - `https://github.com/phodal/routa/issues/241`
 - `https://github.com/phodal/routa/issues/442`
+
+## Resolution Update (2026-04-21)
+
+- Synced the local tracker to the already-closed GitHub issue `#474`.
+- Recorded the upstream resolution date as `2026-04-16`; the remaining work here was status hygiene rather than missing code changes.

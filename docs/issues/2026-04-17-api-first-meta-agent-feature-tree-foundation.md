@@ -2,7 +2,8 @@
 title: "API-first Meta Agent foundation for cross-framework FEATURE_TREE generation"
 date: "2026-04-17"
 kind: issue
-status: open
+status: resolved
+resolved_at: "2026-04-18"
 severity: medium
 area: "feature-tree"
 tags: ["feature-tree", "meta-agent", "openapi", "spring-boot", "eggjs", "specialists"]
@@ -11,7 +12,7 @@ related_issues:
   - "https://github.com/phodal/routa/issues/481"
   - "https://github.com/phodal/routa/issues/483"
 github_issue: 483
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/483"
 ---
 
@@ -68,3 +69,8 @@ Without this foundation:
 
 - https://github.com/phodal/routa/issues/481
 - https://github.com/phodal/routa/issues/483
+
+## Resolution Update (2026-04-21)
+
+- Synced the local tracker to the already-closed GitHub issue `#483`.
+- Recorded the upstream resolution date as `2026-04-18`; the only remaining gap was local tracker state drift.

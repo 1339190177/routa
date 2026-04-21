@@ -6,4 +6,5 @@ last_cleanup_summary: |
   2026-04-21 cleanup:
   - Verified `cargo test api_mcp_tools_delegate_task_to_agent_contract -- --nocapture` passes and marked the local smoke-test tracker as resolved
   - Normalized local issue taxonomy by changing `status: closed` to `status: resolved` for the routa-watch fast fitness tracker
-  - Recounted active local `kind: issue` trackers after cleanup; 11 remain open/investigating/in_progress and no local/GitHub state drift was found
+  - Synced local/remote status drift for already-closed GitHub issues `#412`, `#417`, `#466`, `#474`, `#482`, `#483`, and `#498`
+  - Remaining active local `kind: issue` trackers are limited to unresolved work rather than stale GitHub state

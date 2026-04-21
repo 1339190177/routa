@@ -2,7 +2,8 @@
 title: "Harness Fitness 加速：引入 pi-autoresearch 进行自动化闭环实验"
 date: "2026-04-17"
 kind: issue
-status: in_progress
+status: resolved
+resolved_at: "2026-04-20"
 severity: high
 area: "harness"
 tags: ["fitness", "harness-monitor", "entrix", "autoresearch", "performance", "automated-optimization"]
@@ -12,7 +13,7 @@ related_issues:
   - "docs/issues/2026-04-14-kanban-entrix-live-fitness-surface.md"
   - "docs/issues/2026-03-28-harness-execution-plan-react-flow.md"
 github_issue: 482
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/482"
 ---
 
@@ -122,3 +123,8 @@ github_url: "https://github.com/phodal/routa/issues/482"
 - https://github.com/davebcn87/pi-autoresearch
 - `docs/fitness/README.md`
 - `docs/features/harness-trace-learning.md`
+
+## Resolution Update (2026-04-21)
+
+- Synced the local tracker to the already-closed GitHub issue `#482`.
+- Recorded the upstream resolution date as `2026-04-20`; this cleanup reflects tracker hygiene rather than newly shipped code in this turn.

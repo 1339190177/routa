@@ -2,7 +2,8 @@
 title: "Cross-language test mapping and missing-test gates should be first-class in entrix and visible in harness-monitor"
 date: "2026-04-12"
 kind: issue
-status: open
+status: resolved
+resolved_at: "2026-04-12"
 severity: medium
 area: "entrix"
 tags: ["entrix", "harness-monitor", "testability", "pre-push", "tree-sitter", "cross-language"]
@@ -13,7 +14,7 @@ related_issues: [
   "https://github.com/phodal/routa/issues/412"
 ]
 github_issue: 412
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/412"
 ---
 
@@ -118,6 +119,11 @@ github_url: "https://github.com/phodal/routa/issues/412"
   - `missing`：高信号，可作为 warn/block 候选
   - `unknown`：只提示，不默认阻断
 - `harness-monitor` 应消费 entrix 输出，不重复实现一套独立规则。
+
+## Resolution Update (2026-04-21)
+
+- Synced the local tracker to the already-closed GitHub issue `#412`.
+- Recorded the upstream resolution date as `2026-04-12`; no additional local implementation work was pending in this tracker.
 
 ## References
 
