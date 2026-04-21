@@ -15,10 +15,12 @@ import { ToolResult } from "../tools/tool-result";
 import {
   assembleTaskAdaptiveHarnessFromToolArgs,
   FILE_SESSION_CONTEXT_TOOL_NAME,
+  inspectTranscriptTurnsFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
   TASK_ADAPTIVE_HARNESS_TOOL_NAME,
   TASK_HISTORY_SUMMARY_TOOL_NAME,
+  TRANSCRIPT_TURN_INSPECTION_TOOL_NAME,
 } from "../harness/task-adaptive-tool";
 import { readCanvasSdkResource } from "../canvas/sdk-resource-contract";
 import { readFeatureTreeSpecResource } from "../spec/feature-tree-spec-resource-contract";
@@ -38,6 +40,33 @@ const taskContextSearchSpecSchema = z.object({
   apiCandidates: z.array(z.string()).optional().describe("Candidate API paths or RPC surfaces related to the task."),
   moduleHints: z.array(z.string()).optional().describe("Module or subsystem hints to narrow history search."),
   symptomHints: z.array(z.string()).optional().describe("User-visible errors, failure symptoms, or friction hints."),
+});
+
+const taskJitContextAnalysisSchema = z.object({
+  updatedAt: z.string().optional().describe("ISO timestamp for when this structured history analysis was produced."),
+  summary: z.string().describe("Compressed explanation of what the matched history means for this task."),
+  sessionLayers: z.object({
+    seedSessions: z.array(z.string()).optional().describe("Seed sessions that helped localization."),
+    matchedSessions: z.array(z.string()).optional().describe("Final matched transcript sessions worth reading first."),
+    explanation: z.string().optional().describe("Brief explanation of how seed sessions differ from matched sessions."),
+  }).optional(),
+  issues: z.object({
+    input: z.array(z.string()).optional().describe("Task-input or context-quality issues found in history."),
+    location: z.array(z.string()).optional().describe("Code-location or entry-point issues found in history."),
+    tooling: z.array(z.string()).optional().describe("Tooling, path, or read-failure issues found in history."),
+  }).optional(),
+  topFiles: z.array(z.string()).optional().describe("Highest-priority files to inspect first."),
+  topSessions: z.array(z.object({
+    sessionId: z.string().describe("Matched Codex/Claude session ID."),
+    provider: z.string().optional().describe("Provider label for the matched session."),
+    reason: z.string().describe("Why this session is worth following up."),
+  })).optional().describe("Highest-priority sessions to inspect first."),
+  topLeads: z.array(z.string()).optional().describe("Top 3-5 next leads to follow up."),
+  contextToInject: z.array(z.string()).optional().describe("Specific context slices to inject into the next session."),
+  reusablePrompts: z.array(z.string()).optional().describe("2-4 reusable follow-up prompts."),
+  recommendedContextSearchSpec: taskContextSearchSpecSchema.optional().describe("Structured retrieval hints to reuse in future JIT Context loads."),
+  evidence: z.array(z.string()).optional().describe("Evidence-backed statements from the history summary or matched sessions."),
+  inference: z.array(z.string()).optional().describe("Inferences or recommended interpretations beyond the raw evidence."),
 });
 
 type DelegationOrchestrator = {
@@ -172,6 +201,7 @@ export class RoutaMcpToolManager {
       register(TASK_ADAPTIVE_HARNESS_TOOL_NAME, () => this.registerAssembleTaskAdaptiveHarness(server));
       register(TASK_HISTORY_SUMMARY_TOOL_NAME, () => this.registerSummarizeTaskHistoryContext(server));
       register(FILE_SESSION_CONTEXT_TOOL_NAME, () => this.registerSummarizeFileSessionContext(server));
+      register(TRANSCRIPT_TURN_INSPECTION_TOOL_NAME, () => this.registerInspectTranscriptTurns(server));
       return;
     }
 
@@ -241,6 +271,7 @@ export class RoutaMcpToolManager {
     register(TASK_ADAPTIVE_HARNESS_TOOL_NAME, () => this.registerAssembleTaskAdaptiveHarness(server));
     register(TASK_HISTORY_SUMMARY_TOOL_NAME, () => this.registerSummarizeTaskHistoryContext(server));
     register(FILE_SESSION_CONTEXT_TOOL_NAME, () => this.registerSummarizeFileSessionContext(server));
+    register(TRANSCRIPT_TURN_INSPECTION_TOOL_NAME, () => this.registerInspectTranscriptTurns(server));
   }
 
   private shouldRegisterTool(toolName: string): boolean {
@@ -327,6 +358,7 @@ export class RoutaMcpToolManager {
         verificationCommands: z.array(z.string()).optional().describe("Update verification commands"),
         testCases: z.array(z.string()).optional().describe("Update test cases"),
         contextSearchSpec: taskContextSearchSpecSchema.optional().describe("Structured retrieval hints for JIT Context and history search."),
+        jitContextAnalysis: taskJitContextAnalysisSchema.nullable().optional().describe("Structured JIT/history analysis to persist on the task for later reuse."),
       },
       async (params) => {
         const { taskId, expectedVersion, agentId, ...updates } = params;
@@ -1585,6 +1617,38 @@ Can be in response to a request or proactively provided.`,
       async (params) => {
         try {
           const result = await summarizeFileSessionContextFromToolArgs(params, this.workspaceId);
+          return this.toMcpResult({
+            success: true,
+            data: result,
+          });
+        } catch (error) {
+          return this.toMcpResult({
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    );
+  }
+
+  private registerInspectTranscriptTurns(server: McpServer) {
+    server.tool(
+      TRANSCRIPT_TURN_INSPECTION_TOOL_NAME,
+      "Inspect specific transcript sessions and extract real user turns, file-targeted commands, failed commands, and scope-drift prompts for read-only specialist analysis.",
+      {
+        workspaceId: z.string().optional().describe("Workspace ID override. Uses the current MCP session workspace when omitted."),
+        codebaseId: z.string().optional().describe("Optional codebase ID override."),
+        repoPath: z.string().optional().describe("Optional repository path override."),
+        sessionIds: z.array(z.string()).optional().describe("Explicit session IDs to inspect. Prefer the highest-relevance sessions first."),
+        historySessionIds: z.array(z.string()).optional().describe("Alias for sessionIds for compatibility with existing task-adaptive flows."),
+        featureId: z.string().optional().describe("Optional Feature Explorer feature ID used to preserve feature-level evidence."),
+        filePaths: z.array(z.string()).optional().describe("Optional repository-relative focus files. Signals are filtered to these files when provided."),
+        maxUserPrompts: z.number().int().positive().optional().describe("Maximum number of user prompts to keep per inspected session."),
+        maxSignals: z.number().int().positive().optional().describe("Maximum number of relevant signals and failed signals to keep per session."),
+      },
+      async (params) => {
+        try {
+          const result = await inspectTranscriptTurnsFromToolArgs(params, this.workspaceId);
           return this.toMcpResult({
             success: true,
             data: result,

@@ -6,6 +6,9 @@ const MAX_TRANSCRIPT_FILES = 200;
 const MAX_TRANSCRIPT_FILE_SIZE = 10 * 1024 * 1024;
 const BROAD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_PROMPT_SNIPPET_LENGTH = 180;
+const MAX_SIGNAL_EXCERPT_LENGTH = 240;
+const DEFAULT_TURN_INSPECTION_MAX_USER_PROMPTS = 6;
+const DEFAULT_TURN_INSPECTION_MAX_SIGNALS = 8;
 const IGNORED_PATHS = new Set([".git", "node_modules", ".next", "dist", "out", "target"]);
 
 export type TranscriptProvider = "codex" | "qoder" | "augment" | "claude" | "unknown";
@@ -27,9 +30,53 @@ export interface ParsedFeatureTranscript {
   events: unknown[];
 }
 
+export interface TranscriptInspectionSignal {
+  kind: "command" | "patch" | "failure";
+  toolName: string;
+  command?: string;
+  excerpt: string;
+  matchedFilePaths: string[];
+  mentionsFeature: boolean;
+  exitCode?: number;
+  outputSnippet?: string;
+}
+
+export interface InspectedTranscriptSession {
+  provider: TranscriptProvider;
+  sessionId: string;
+  updatedAt: string;
+  transcriptPath: string;
+  openingUserPrompt?: string;
+  followUpUserPrompts: string[];
+  matchedFilePaths: string[];
+  relevantSignals: TranscriptInspectionSignal[];
+  failedSignals: TranscriptInspectionSignal[];
+  scopeDriftPrompts: string[];
+  resumeCommand?: string;
+}
+
+export interface TranscriptTurnInspectionOptions {
+  sessionIds: string[];
+  filePaths?: string[];
+  featureId?: string;
+  maxUserPrompts?: number;
+  maxSignals?: number;
+}
+
+export interface TranscriptTurnInspectionResult {
+  sessions: InspectedTranscriptSession[];
+  missingSessionIds: string[];
+  warnings: string[];
+}
+
 interface RepoIdentity {
   topLevel: string;
   commonDir: string;
+}
+
+interface ResolvedTranscriptSession extends ParsedFeatureTranscript {
+  transcriptPath: string;
+  modifiedMs: number;
 }
 
 function stringifyCommand(value: unknown): string | undefined {
@@ -76,6 +123,15 @@ function truncatePrompt(text: string): string {
     return text;
   }
   return `${text.slice(0, MAX_PROMPT_SNIPPET_LENGTH - 3)}...`;
+}
+
+function truncateSignalExcerpt(text: string): string {
+  const normalized = normalizeSignalPromptText(text);
+  if (normalized.length <= MAX_SIGNAL_EXCERPT_LENGTH) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, MAX_SIGNAL_EXCERPT_LENGTH - 3)}...`;
 }
 
 function normalizeUserPrompt(text: string): string {
@@ -213,6 +269,72 @@ function toolNameFromUnknown(event: unknown): string | undefined {
   return commandFromUnknown(event) ? "exec_command" : undefined;
 }
 
+function inspectionToolNameFromUnknown(event: unknown): string | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+
+  if (typeof event.type === "string" && event.type === "custom_tool_call" && typeof event.name === "string") {
+    return event.name;
+  }
+
+  return toolNameFromUnknown(event);
+}
+
+function inspectionInputFromUnknown(event: unknown): string | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+
+  if (typeof event.type === "string" && event.type === "custom_tool_call" && typeof event.input === "string") {
+    return event.input;
+  }
+
+  return commandFromUnknown(event);
+}
+
+function exitCodeFromUnknown(event: unknown): number | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+
+  if (typeof event.exit_code === "number") {
+    return event.exit_code;
+  }
+
+  if (isRecord(event.tool_output) && typeof event.tool_output.exit_code === "number") {
+    return event.tool_output.exit_code;
+  }
+
+  return undefined;
+}
+
+function statusFromUnknown(event: unknown): string | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+
+  if (typeof event.status === "string") {
+    return event.status;
+  }
+
+  if (isRecord(event.tool_output) && typeof event.tool_output.status === "string") {
+    return event.tool_output.status;
+  }
+
+  return undefined;
+}
+
+function isFailedCommandEvent(event: unknown): boolean {
+  const exitCode = exitCodeFromUnknown(event);
+  if (typeof exitCode === "number") {
+    return exitCode !== 0;
+  }
+
+  const status = statusFromUnknown(event);
+  return status === "failed" || status === "error";
+}
+
 function collectTranscriptPromptHistory(events: unknown[]): string[] {
   const prompts: string[] = [];
 
@@ -250,6 +372,16 @@ function collectTranscriptToolHistory(events: unknown[]): string[] {
   }
 
   return tools;
+}
+
+function repoLikePathsFromPrompt(value: string): string[] {
+  const matches = value.match(/(?:src|docs|crates|apps|resources|tools)\/[^\s"'`]+/g) ?? [];
+  return [...new Set(matches.map((match) => match.replace(/[),.;]+$/u, "")))].sort((left, right) => left.localeCompare(right));
+}
+
+function promptFeatureParam(value: string): string | undefined {
+  const match = value.match(/[?&]feature=([^&\s]+)/u);
+  return match?.[1] ? decodeURIComponent(match[1]) : undefined;
 }
 
 function buildResumeCommand(provider: TranscriptProvider, sessionId: string): string | undefined {
@@ -568,6 +700,230 @@ function parseTranscriptSession(
   };
 }
 
+function parseResolvedTranscriptSession(
+  transcriptPath: string,
+  modifiedMs: number,
+  provider: TranscriptProvider,
+): ResolvedTranscriptSession | null {
+  const transcript = parseTranscriptSession(transcriptPath, modifiedMs, provider);
+  if (!transcript) {
+    return null;
+  }
+
+  return {
+    ...transcript,
+    transcriptPath,
+    modifiedMs,
+  };
+}
+
+function collectResolvedTranscriptSessions(): ResolvedTranscriptSession[] {
+  const sessions: ResolvedTranscriptSession[] = [];
+
+  for (const candidate of collectTranscriptCandidates()) {
+    if (sessions.length >= MAX_TRANSCRIPT_FILES) {
+      break;
+    }
+
+    const transcript = parseResolvedTranscriptSession(
+      candidate.transcriptPath,
+      candidate.modifiedMs,
+      candidate.provider,
+    );
+    if (transcript) {
+      sessions.push(transcript);
+    }
+  }
+
+  return sessions;
+}
+
+function findTranscriptSessionById(
+  sessionId: string,
+  transcripts: ResolvedTranscriptSession[],
+): ResolvedTranscriptSession | null {
+  const normalizedSessionId = sessionId.trim();
+  if (!normalizedSessionId) {
+    return null;
+  }
+
+  const directPathMatch = transcripts.find((transcript) => transcript.transcriptPath.includes(normalizedSessionId));
+  if (directPathMatch) {
+    return directPathMatch;
+  }
+
+  return transcripts.find((transcript) => transcript.sessionId === normalizedSessionId) ?? null;
+}
+
+function normalizeFocusFileCandidates(repoRoot: string, filePath: string): string[] {
+  const relative = filePath.replace(/\\/g, "/");
+  const absolute = path.join(repoRoot, filePath).replace(/\\/g, "/");
+  return [relative.toLowerCase(), absolute.toLowerCase()];
+}
+
+function matchFocusFilesInText(
+  repoRoot: string,
+  filePaths: string[],
+  value: string,
+): string[] {
+  const normalizedValue = value.replace(/\\/g, "/").toLowerCase();
+  return filePaths.filter((filePath) =>
+    normalizeFocusFileCandidates(repoRoot, filePath)
+      .some((candidate) => normalizedValue.includes(candidate)));
+}
+
+function signalExcerptFromInput(
+  toolName: string,
+  input: string,
+  outputSnippet?: string,
+): string {
+  if (toolName === "apply_patch") {
+    const patchHeaders = input.match(/\*\*\* (?:Update|Add|Delete) File: [^\n]+/g)?.slice(0, 2);
+    if (patchHeaders && patchHeaders.length > 0) {
+      return truncateSignalExcerpt(patchHeaders.join(" | "));
+    }
+  }
+
+  return truncateSignalExcerpt(outputSnippet || input);
+}
+
+function buildInspectionSignal(
+  event: unknown,
+  repoRoot: string,
+  filePaths: string[],
+  featureId: string | undefined,
+): TranscriptInspectionSignal | null {
+  if (!isRecord(event) || typeof event.type !== "string") {
+    return null;
+  }
+
+  const toolName = inspectionToolNameFromUnknown(event);
+  const input = inspectionInputFromUnknown(event);
+  const outputSnippet = commandOutputFromUnknown(event);
+  const featureMentioned = Boolean(featureId && truncateSignalExcerpt(`${input ?? ""} ${outputSnippet ?? ""}`).toLowerCase().includes(featureId.toLowerCase()));
+  const matchedFilePaths = matchFocusFilesInText(
+    repoRoot,
+    filePaths,
+    `${input ?? ""}\n${outputSnippet ?? ""}`,
+  );
+
+  if (event.type === "function_call" && toolName === "exec_command" && input) {
+    if (matchedFilePaths.length === 0 && !featureMentioned) {
+      return null;
+    }
+
+    return {
+      kind: "command",
+      toolName,
+      command: input,
+      excerpt: signalExcerptFromInput(toolName, input),
+      matchedFilePaths,
+      mentionsFeature: featureMentioned,
+    };
+  }
+
+  if (event.type === "custom_tool_call" && toolName === "apply_patch" && input) {
+    if (matchedFilePaths.length === 0 && !featureMentioned) {
+      return null;
+    }
+
+    return {
+      kind: "patch",
+      toolName,
+      command: input,
+      excerpt: signalExcerptFromInput(toolName, input),
+      matchedFilePaths,
+      mentionsFeature: featureMentioned,
+    };
+  }
+
+  if (event.type === "exec_command_end" && isFailedCommandEvent(event)) {
+    const command = commandFromUnknown(event);
+    if (!command) {
+      return null;
+    }
+
+    if (matchedFilePaths.length === 0 && !featureMentioned) {
+      return null;
+    }
+
+    return {
+      kind: "failure",
+      toolName: toolName ?? "exec_command",
+      command,
+      excerpt: signalExcerptFromInput(toolName ?? "exec_command", command, outputSnippet),
+      matchedFilePaths,
+      mentionsFeature: featureMentioned,
+      exitCode: exitCodeFromUnknown(event),
+      outputSnippet: outputSnippet ? truncateSignalExcerpt(outputSnippet) : undefined,
+    };
+  }
+
+  return null;
+}
+
+function dedupeInspectionSignals(
+  signals: TranscriptInspectionSignal[],
+  limit: number,
+): TranscriptInspectionSignal[] {
+  const seen = new Set<string>();
+  const deduped: TranscriptInspectionSignal[] = [];
+
+  for (const signal of signals) {
+    const key = [
+      signal.kind,
+      signal.toolName,
+      signal.command ?? "",
+      signal.excerpt,
+      signal.matchedFilePaths.join(","),
+      signal.exitCode ?? "",
+    ].join("|");
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(signal);
+    if (deduped.length >= limit) {
+      break;
+    }
+  }
+
+  return deduped;
+}
+
+function collectScopeDriftPrompts(
+  prompts: string[],
+  filePaths: string[],
+  featureId: string | undefined,
+  limit: number,
+): string[] {
+  if (prompts.length < 2) {
+    return [];
+  }
+
+  const focusSet = new Set(filePaths);
+  const drifts: string[] = [];
+
+  for (const prompt of prompts.slice(1)) {
+    const featureParam = promptFeatureParam(prompt);
+    if (featureId && featureParam && featureParam !== featureId) {
+      drifts.push(prompt);
+      continue;
+    }
+
+    const promptPaths = repoLikePathsFromPrompt(prompt);
+    if (promptPaths.length > 0 && promptPaths.every((filePath) => !focusSet.has(filePath))) {
+      drifts.push(prompt);
+    }
+
+    if (drifts.length >= limit) {
+      break;
+    }
+  }
+
+  return drifts;
+}
+
 export function collectMatchingTranscriptSessions(repoRoot: string): ParsedFeatureTranscript[] {
   const now = Date.now();
   const repoIdentity = resolveRepoIdentity(repoRoot);
@@ -595,4 +951,72 @@ export function collectMatchingTranscriptSessions(repoRoot: string): ParsedFeatu
   }
 
   return matched;
+}
+
+export function inspectTranscriptTurns(
+  repoRoot: string,
+  options: TranscriptTurnInspectionOptions,
+): TranscriptTurnInspectionResult {
+  const sessionIds = [...new Set(options.sessionIds.map((value) => value.trim()).filter(Boolean))];
+  const filePaths = [...new Set((options.filePaths ?? []).map((value) => value.trim()).filter(Boolean))];
+  const maxUserPrompts = Math.max(1, options.maxUserPrompts ?? DEFAULT_TURN_INSPECTION_MAX_USER_PROMPTS);
+  const maxSignals = Math.max(1, options.maxSignals ?? DEFAULT_TURN_INSPECTION_MAX_SIGNALS);
+  const transcripts = collectResolvedTranscriptSessions();
+  const repoIdentity = resolveRepoIdentity(repoRoot);
+  const identityCache = new Map<string, RepoIdentity | null>();
+  const warnings: string[] = [];
+  const missingSessionIds: string[] = [];
+  const sessions: InspectedTranscriptSession[] = [];
+
+  for (const sessionId of sessionIds) {
+    const transcript = findTranscriptSessionById(sessionId, transcripts);
+    if (!transcript) {
+      missingSessionIds.push(sessionId);
+      continue;
+    }
+
+    if (!repoPathMatches(repoRoot, transcript.cwd, repoIdentity, identityCache)) {
+      warnings.push(`Session ${sessionId} was resolved outside the current repo root: ${transcript.cwd}`);
+    }
+
+    const relevantSignals: TranscriptInspectionSignal[] = [];
+    const failedSignals: TranscriptInspectionSignal[] = [];
+    const matchedFilePaths = new Set<string>();
+
+    for (const event of transcript.events) {
+      const signal = buildInspectionSignal(event, repoRoot, filePaths, options.featureId);
+      if (!signal) {
+        continue;
+      }
+
+      signal.matchedFilePaths.forEach((filePath) => matchedFilePaths.add(filePath));
+
+      if (signal.kind === "failure") {
+        failedSignals.push(signal);
+      } else {
+        relevantSignals.push(signal);
+      }
+    }
+
+    const promptHistory = transcript.promptHistory.slice(0, maxUserPrompts);
+    sessions.push({
+      provider: transcript.provider,
+      sessionId: transcript.sessionId,
+      updatedAt: transcript.updatedAt,
+      transcriptPath: transcript.transcriptPath,
+      openingUserPrompt: promptHistory[0],
+      followUpUserPrompts: promptHistory.slice(1),
+      matchedFilePaths: [...matchedFilePaths].sort((left, right) => left.localeCompare(right)),
+      relevantSignals: dedupeInspectionSignals(relevantSignals, maxSignals),
+      failedSignals: dedupeInspectionSignals(failedSignals, maxSignals),
+      scopeDriftPrompts: collectScopeDriftPrompts(transcript.promptHistory, filePaths, options.featureId, maxSignals),
+      ...(transcript.resumeCommand ? { resumeCommand: transcript.resumeCommand } : {}),
+    });
+  }
+
+  return {
+    sessions,
+    missingSessionIds,
+    warnings: [...new Set(warnings)].sort((left, right) => left.localeCompare(right)),
+  };
 }

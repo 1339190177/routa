@@ -13,10 +13,12 @@ import { getRoutaOrchestrator } from "@/core/orchestration/orchestrator-singleto
 import {
   assembleTaskAdaptiveHarnessFromToolArgs,
   FILE_SESSION_CONTEXT_TOOL_NAME,
+  inspectTranscriptTurnsFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
   TASK_ADAPTIVE_HARNESS_TOOL_NAME,
   TASK_HISTORY_SUMMARY_TOOL_NAME,
+  TRANSCRIPT_TURN_INSPECTION_TOOL_NAME,
 } from "@/core/harness/task-adaptive-tool";
 import { readFeatureTreeSpecResource } from "@/core/spec/feature-tree-spec-resource-contract";
 import { ToolMode } from "./routa-mcp-tool-manager";
@@ -79,6 +81,107 @@ const TASK_CONTEXT_SEARCH_SPEC_SCHEMA = {
   },
 } as const;
 
+const TASK_JIT_CONTEXT_ANALYSIS_SCHEMA = {
+  type: "object",
+  properties: {
+    updatedAt: {
+      type: "string",
+      description: "ISO timestamp for when this structured history analysis was produced. Optional; the server can fill it.",
+    },
+    summary: {
+      type: "string",
+      description: "Compressed explanation of what the matched history actually means for this task.",
+    },
+    sessionLayers: {
+      type: "object",
+      properties: {
+        seedSessions: {
+          type: "array",
+          items: { type: "string" },
+          description: "Upstream seed sessions that helped localization but are weaker evidence than final matched sessions.",
+        },
+        matchedSessions: {
+          type: "array",
+          items: { type: "string" },
+          description: "Final matched Codex/Claude transcript sessions worth reading first.",
+        },
+        explanation: {
+          type: "string",
+          description: "Short explanation of how seed sessions differ from matched sessions in this analysis.",
+        },
+      },
+    },
+    issues: {
+      type: "object",
+      properties: {
+        input: {
+          type: "array",
+          items: { type: "string" },
+          description: "Task-input or context-quality issues found in history.",
+        },
+        location: {
+          type: "array",
+          items: { type: "string" },
+          description: "Code-location or entry-point issues found in history.",
+        },
+        tooling: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tooling, path, or read-failure issues found in history.",
+        },
+      },
+    },
+    topFiles: {
+      type: "array",
+      items: { type: "string" },
+      description: "Highest-priority files to inspect first next time.",
+    },
+    topSessions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          sessionId: { type: "string" },
+          provider: { type: "string" },
+          reason: { type: "string" },
+        },
+        required: ["sessionId", "reason"],
+      },
+      description: "Highest-priority matched sessions to inspect first next time.",
+    },
+    topLeads: {
+      type: "array",
+      items: { type: "string" },
+      description: "Top 3-5 next leads to follow up.",
+    },
+    contextToInject: {
+      type: "array",
+      items: { type: "string" },
+      description: "Specific context slices that should be injected into the next planning or implementation session.",
+    },
+    reusablePrompts: {
+      type: "array",
+      items: { type: "string" },
+      description: "2-4 reusable follow-up prompts.",
+    },
+    recommendedContextSearchSpec: {
+      ...TASK_CONTEXT_SEARCH_SPEC_SCHEMA,
+      description: "Structured retrieval hints that should be reused by future JIT Context loads.",
+    },
+    evidence: {
+      type: "array",
+      items: { type: "string" },
+      description: "Evidence-backed statements from the history summary, matched files, or matched sessions.",
+    },
+    inference: {
+      type: "array",
+      items: { type: "string" },
+      description: "Inferences or recommended interpretations that go beyond direct evidence.",
+    },
+  },
+  required: ["summary"],
+} as const;
+
 /**
  * Essential tools for weak models - minimum viable coordination.
  * Core coordination tools plus Kanban and artifact tools for card-assigned agents.
@@ -109,6 +212,7 @@ const ESSENTIAL_TOOL_NAMES = new Set([
   TASK_ADAPTIVE_HARNESS_TOOL_NAME,
   TASK_HISTORY_SUMMARY_TOOL_NAME,
   FILE_SESSION_CONTEXT_TOOL_NAME,
+  TRANSCRIPT_TURN_INSPECTION_TOOL_NAME,
 ]);
 
 export async function executeMcpTool(
@@ -247,6 +351,7 @@ export async function executeMcpTool(
             verificationCommands: args.verificationCommands as string[] | undefined,
             testCases: args.testCases as string[] | undefined,
             contextSearchSpec: args.contextSearchSpec as Record<string, unknown> | undefined,
+            jitContextAnalysis: args.jitContextAnalysis as Record<string, unknown> | null | undefined,
           },
         })
       );
@@ -340,6 +445,11 @@ export async function executeMcpTool(
       return formatResult({
         success: true,
         data: await summarizeFileSessionContextFromToolArgs(args, workspace),
+      });
+    case TRANSCRIPT_TURN_INSPECTION_TOOL_NAME:
+      return formatResult({
+        success: true,
+        data: await inspectTranscriptTurnsFromToolArgs(args, workspace),
       });
     case "send_message_to_task_agent":
       return formatResult(await tools.sendMessageToTaskAgent(args as never));
@@ -861,6 +971,36 @@ export function getMcpToolDefinitions(
         },
       },
     },
+    {
+      name: TRANSCRIPT_TURN_INSPECTION_TOOL_NAME,
+      description: "Inspect specific transcript sessions and extract real user turns, file-targeted commands, failed commands, and scope-drift prompts for read-only specialist analysis.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspaceId: { type: "string", description: "Workspace ID. Uses the current MCP session workspace when omitted." },
+          codebaseId: { type: "string", description: "Optional codebase ID override for repository resolution." },
+          repoPath: { type: "string", description: "Optional repository path override for repository resolution." },
+          sessionIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Explicit session IDs to inspect. Prefer the highest-relevance sessions first.",
+          },
+          historySessionIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Alias for sessionIds for compatibility with existing task-adaptive flows.",
+          },
+          featureId: { type: "string", description: "Optional Feature Explorer feature ID used to preserve feature-level evidence." },
+          filePaths: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional repository-relative focus files. Signals are filtered to these files when provided.",
+          },
+          maxUserPrompts: { type: "number", minimum: 1, description: "Maximum number of user prompts to keep per inspected session." },
+          maxSignals: { type: "number", minimum: 1, description: "Maximum number of relevant signals and failed signals to keep per session." },
+        },
+      },
+    },
     // ── Web fetch tool ───────────────────────────────────────────────
     {
       name: "fetch_webpage",
@@ -1215,6 +1355,7 @@ export function getMcpToolDefinitions(
           verificationCommands: { type: "array", items: { type: "string" } },
           testCases: { type: "array", items: { type: "string" } },
           contextSearchSpec: TASK_CONTEXT_SEARCH_SPEC_SCHEMA,
+          jitContextAnalysis: TASK_JIT_CONTEXT_ANALYSIS_SCHEMA,
         },
         required: ["taskId"],
       },

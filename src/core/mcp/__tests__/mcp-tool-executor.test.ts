@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const {
   assembleTaskAdaptiveHarnessFromToolArgs,
+  inspectTranscriptTurnsFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
 } = vi.hoisted(() => ({
@@ -52,13 +53,32 @@ const {
     matchConfidence: "high",
     matchReasons: ["Started from 1 explicit related files on the card."],
   })),
+  inspectTranscriptTurnsFromToolArgs: vi.fn(async () => ({
+    sessions: [{
+      provider: "codex",
+      sessionId: "session-123",
+      updatedAt: "2026-04-21T12:00:00.000Z",
+      transcriptPath: "/tmp/session-123.jsonl",
+      openingUserPrompt: "Inspect the selected test history first",
+      followUpUserPrompts: [],
+      matchedFilePaths: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+      relevantSignals: [],
+      failedSignals: [],
+      scopeDriftPrompts: [],
+      resumeCommand: "codex resume session-123",
+    }],
+    missingSessionIds: [],
+    warnings: [],
+  })),
 }));
 
 vi.mock("@/core/harness/task-adaptive-tool", () => ({
   TASK_ADAPTIVE_HARNESS_TOOL_NAME: "assemble_task_adaptive_harness",
   TASK_HISTORY_SUMMARY_TOOL_NAME: "summarize_task_history_context",
   FILE_SESSION_CONTEXT_TOOL_NAME: "summarize_file_session_context",
+  TRANSCRIPT_TURN_INSPECTION_TOOL_NAME: "inspect_transcript_turns",
   assembleTaskAdaptiveHarnessFromToolArgs,
+  inspectTranscriptTurnsFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
 }));
@@ -125,6 +145,9 @@ describe("executeMcpTool", () => {
     expect(
       getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "summarize_file_session_context"),
     ).toBe(true);
+    expect(
+      getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "inspect_transcript_turns"),
+    ).toBe(true);
   });
 
   it("builds compressed history summaries from MCP args", async () => {
@@ -174,6 +197,31 @@ describe("executeMcpTool", () => {
     });
     expect((result as { content: Array<{ text: string }> }).content[0]?.text).toContain(
       '"focusFiles": [',
+    );
+  });
+
+  it("inspects transcript turns from MCP args", async () => {
+    const result = await executeMcpTool(
+      {} as never,
+      "inspect_transcript_turns",
+      {
+        workspaceId: "workspace-1",
+        sessionIds: ["session-123"],
+        filePaths: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+      },
+    );
+
+    expect(inspectTranscriptTurnsFromToolArgs).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      sessionIds: ["session-123"],
+      filePaths: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+    }, "workspace-1");
+    expect(result).toMatchObject({
+      content: [{ type: "text" }],
+      isError: false,
+    });
+    expect((result as { content: Array<{ text: string }> }).content[0]?.text).toContain(
+      '"transcriptPath": "/tmp/session-123.jsonl"',
     );
   });
 });

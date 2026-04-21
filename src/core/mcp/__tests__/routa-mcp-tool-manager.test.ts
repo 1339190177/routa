@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const {
   assembleTaskAdaptiveHarnessFromToolArgs,
+  inspectTranscriptTurnsFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
 } = vi.hoisted(() => ({
@@ -52,13 +53,32 @@ const {
     matchConfidence: "high",
     matchReasons: ["Started from 1 explicit related files on the card."],
   })),
+  inspectTranscriptTurnsFromToolArgs: vi.fn(async () => ({
+    sessions: [{
+      provider: "codex",
+      sessionId: "session-123",
+      updatedAt: "2026-04-21T12:00:00.000Z",
+      transcriptPath: "/tmp/session-123.jsonl",
+      openingUserPrompt: "Inspect the selected test history first",
+      followUpUserPrompts: [],
+      matchedFilePaths: ["src/core/mcp/routa-mcp-tool-manager.ts"],
+      relevantSignals: [],
+      failedSignals: [],
+      scopeDriftPrompts: [],
+      resumeCommand: "codex resume session-123",
+    }],
+    missingSessionIds: [],
+    warnings: [],
+  })),
 }));
 
 vi.mock("@/core/harness/task-adaptive-tool", () => ({
   TASK_ADAPTIVE_HARNESS_TOOL_NAME: "assemble_task_adaptive_harness",
   TASK_HISTORY_SUMMARY_TOOL_NAME: "summarize_task_history_context",
   FILE_SESSION_CONTEXT_TOOL_NAME: "summarize_file_session_context",
+  TRANSCRIPT_TURN_INSPECTION_TOOL_NAME: "inspect_transcript_turns",
   assembleTaskAdaptiveHarnessFromToolArgs,
+  inspectTranscriptTurnsFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
 }));
@@ -173,6 +193,7 @@ describe("RoutaMcpToolManager", () => {
     expect(registrations.some((entry) => entry.name === "assemble_task_adaptive_harness")).toBe(true);
     expect(registrations.some((entry) => entry.name === "summarize_task_history_context")).toBe(true);
     expect(registrations.some((entry) => entry.name === "summarize_file_session_context")).toBe(true);
+    expect(registrations.some((entry) => entry.name === "inspect_transcript_turns")).toBe(true);
 
     const createTaskTool = registrations.find((entry) => entry.name === "create_task");
     const noteTool = registrations.find((entry) => entry.name === "create_note");
@@ -182,6 +203,7 @@ describe("RoutaMcpToolManager", () => {
     const taskAdaptiveHarnessTool = registrations.find((entry) => entry.name === "assemble_task_adaptive_harness");
     const historySummaryTool = registrations.find((entry) => entry.name === "summarize_task_history_context");
     const fileSessionContextTool = registrations.find((entry) => entry.name === "summarize_file_session_context");
+    const transcriptTurnInspectionTool = registrations.find((entry) => entry.name === "inspect_transcript_turns");
     expect(createTaskTool).toBeDefined();
     expect(noteTool).toBeDefined();
     expect(delegateTool).toBeDefined();
@@ -190,6 +212,7 @@ describe("RoutaMcpToolManager", () => {
     expect(taskAdaptiveHarnessTool).toBeDefined();
     expect(historySummaryTool).toBeDefined();
     expect(fileSessionContextTool).toBeDefined();
+    expect(transcriptTurnInspectionTool).toBeDefined();
 
     await createTaskTool!.handler({
       title: "Task",
@@ -301,6 +324,22 @@ describe("RoutaMcpToolManager", () => {
       content: [{ type: "text" }],
       isError: false,
     });
+
+    const transcriptTurnInspectionResult = await transcriptTurnInspectionTool!.handler({
+      sessionIds: ["session-123"],
+      filePaths: ["src/core/mcp/routa-mcp-tool-manager.ts"],
+    });
+    expect(inspectTranscriptTurnsFromToolArgs).toHaveBeenCalledWith({
+      sessionIds: ["session-123"],
+      filePaths: ["src/core/mcp/routa-mcp-tool-manager.ts"],
+    }, "ws-1");
+    expect(transcriptTurnInspectionResult).toMatchObject({
+      content: [{ type: "text" }],
+      isError: false,
+    });
+    expect((transcriptTurnInspectionResult as { content: Array<{ text: string }> }).content[0]?.text).toContain(
+      '"transcriptPath": "/tmp/session-123.jsonl"',
+    );
   });
 
   it("returns MCP errors when orchestrator or note tools are unavailable", async () => {
