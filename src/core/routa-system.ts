@@ -32,6 +32,8 @@ import { WorkflowRunStore, InMemoryWorkflowRunStore } from "./workflows/workflow
 import { InMemoryKanbanBoardStore, KanbanBoardStore } from "./store/kanban-board-store";
 import { InMemoryArtifactStore, ArtifactStore } from "./store/artifact-store";
 import { PermissionStore } from "./tools/permission-store";
+import { startWorkflowOrchestrator } from "./kanban/workflow-orchestrator-singleton";
+import { startLaneScanner } from "./kanban/kanban-lane-scanner";
 import { getKanbanEventBroadcaster } from "./kanban/kanban-event-broadcaster";
 import { AgentEventType } from "./events/event-bus";
 import { decorateSystemWithTiming } from "./http/store-timing-proxy";
@@ -353,10 +355,6 @@ export function getRoutaSystem(): RoutaSystem {
 
     // Start the workflow orchestrator to listen for column transitions
     const system = g[GLOBAL_KEY] as RoutaSystem;
-    const { startWorkflowOrchestrator } =
-      require("./kanban/workflow-orchestrator-singleton") as typeof import("./kanban/workflow-orchestrator-singleton");
-    const { startLaneScanner } =
-      require("./kanban/kanban-lane-scanner") as typeof import("./kanban/kanban-lane-scanner");
     startWorkflowOrchestrator(system);
 
     // Start the lane scanner to auto-trigger automation for idle cards
