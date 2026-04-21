@@ -544,6 +544,12 @@ export async function POST(request: NextRequest) {
           routaAgentId: manager.getAcpSessionId(sessionId) ?? recoveredSession.routaAgentId,
           provider,
           role,
+          toolMode: "toolMode" in recoveredSession
+            ? (recoveredSession as { toolMode?: "essential" | "full" }).toolMode
+            : undefined,
+          mcpProfile: "mcpProfile" in recoveredSession
+            ? (recoveredSession as { mcpProfile?: McpServerProfile }).mcpProfile
+            : undefined,
           modeId: recoveredSession.modeId,
           model: recoveredSession.model,
           parentSessionId: recoveredSession.parentSessionId,
@@ -582,8 +588,12 @@ export async function POST(request: NextRequest) {
             forwardSessionUpdate,
             provider,
             workspaceId,
-            storedSession?.toolMode,
-            storedSession?.mcpProfile,
+            "toolMode" in recoveredSession
+              ? (recoveredSession as { toolMode?: "essential" | "full" }).toolMode
+              : undefined,
+            "mcpProfile" in recoveredSession
+              ? (recoveredSession as { mcpProfile?: McpServerProfile }).mcpProfile
+              : undefined,
             {
               provider,
               role,
@@ -602,12 +612,16 @@ export async function POST(request: NextRequest) {
           cwd,
           forwardSessionUpdate,
           provider,
-          storedSession?.modeId,
+          recoveredSession.modeId,
           undefined,
           undefined,
           workspaceId,
-          storedSession?.toolMode,
-          storedSession?.mcpProfile,
+          "toolMode" in recoveredSession
+            ? (recoveredSession as { toolMode?: "essential" | "full" }).toolMode
+            : undefined,
+          "mcpProfile" in recoveredSession
+            ? (recoveredSession as { mcpProfile?: McpServerProfile }).mcpProfile
+            : undefined,
           {
             provider,
             role,
@@ -626,6 +640,12 @@ export async function POST(request: NextRequest) {
         routaAgentId: acpSessionId,
         provider,
         role,
+        toolMode: "toolMode" in recoveredSession
+          ? (recoveredSession as { toolMode?: "essential" | "full" }).toolMode
+          : undefined,
+        mcpProfile: "mcpProfile" in recoveredSession
+          ? (recoveredSession as { mcpProfile?: McpServerProfile }).mcpProfile
+          : undefined,
         modeId: recoveredSession.modeId,
         model: recoveredSession.model,
         parentSessionId: recoveredSession.parentSessionId,

@@ -260,11 +260,14 @@ export class AcpProcess {
      * Create a new ACP session.
      * Throws AcpError with authMethods if authentication is required.
      */
-    async newSession(cwd?: string): Promise<string> {
+    async newSession(
+        cwd?: string,
+        mcpServers?: Array<Record<string, unknown>>,
+    ): Promise<string> {
         try {
             const result = (await this.sendRequest("session/new", {
                 cwd: cwd || this._config.cwd,
-                mcpServers: [],
+                mcpServers: mcpServers ?? [],
             })) as { sessionId: string };
 
             this._sessionId = result.sessionId;
@@ -306,12 +309,16 @@ export class AcpProcess {
      * Load an existing ACP session.
      * Used by providers such as codex-acp that can resume persisted threads.
      */
-    async loadSession(sessionId: string, cwd?: string): Promise<void> {
+    async loadSession(
+        sessionId: string,
+        cwd?: string,
+        mcpServers?: Array<Record<string, unknown>>,
+    ): Promise<void> {
         try {
             await this.sendRequest("session/load", {
                 sessionId,
                 cwd: cwd || this._config.cwd,
-                mcpServers: [],
+                mcpServers: mcpServers ?? [],
             });
             this._sessionId = sessionId;
             console.log(

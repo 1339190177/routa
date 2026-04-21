@@ -528,6 +528,8 @@ describe("/api/acp POST", () => {
       provider: "codex",
       role: "DEVELOPER",
       routaAgentId: "codex-thread-1",
+      toolMode: "full",
+      mcpProfile: "kanban-planning",
       createdAt: new Date("2026-04-08T00:00:00.000Z"),
     });
     acpProcessManager.loadSession.mockResolvedValue("session-codex");
@@ -552,8 +554,8 @@ describe("/api/acp POST", () => {
       expect.any(Function),
       "codex",
       "workspace-1",
-      undefined,
-      undefined,
+      "full",
+      "kanban-planning",
       {
         provider: "codex",
         role: "DEVELOPER",
@@ -582,6 +584,8 @@ describe("/api/acp POST", () => {
       workspaceId: "workspace-1",
       provider: "codex",
       role: "CRAFTER",
+      toolMode: "full",
+      mcpProfile: "kanban-planning",
       createdAt: new Date("2026-04-08T00:00:00.000Z"),
     });
     acpProcessManager.loadSession.mockRejectedValue(new Error("rollout missing"));
@@ -610,8 +614,8 @@ describe("/api/acp POST", () => {
       undefined,
       undefined,
       "workspace-1",
-      undefined,
-      undefined,
+      "full",
+      "kanban-planning",
       {
         provider: "codex",
         role: "CRAFTER",

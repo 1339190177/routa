@@ -61,6 +61,13 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
+export interface AcpHttpMcpServerConfig {
+  name: string;
+  type: "http";
+  url: string;
+  headers?: Array<{ name: string; value: string }>;
+}
+
 /**
  * Generate MCP configuration JSON for connecting to Routa MCP server.
  *
@@ -117,6 +124,20 @@ export function generateMultipleRoutaMcpConfigs(
   configs: RoutaMcpConfig[]
 ): McpServerConfig[] {
   return configs.map(generateRoutaMcpConfig);
+}
+
+export function buildAcpHttpMcpServers(
+  config: RoutaMcpConfig,
+): AcpHttpMcpServerConfig[] {
+  const mcpEndpoint = config.mcpEndpoint || `${config.routaServerUrl}/api/mcp`;
+  return [
+    {
+      name: "routa-coordination",
+      type: "http",
+      url: mcpEndpoint,
+      headers: [],
+    },
+  ];
 }
 
 /**

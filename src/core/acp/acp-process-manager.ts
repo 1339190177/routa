@@ -13,7 +13,7 @@ import {
     parseMcpServersFromConfigs,
     providerSupportsMcp,
 } from "@/core/acp/mcp-setup";
-import {getDefaultRoutaMcpConfig} from "@/core/acp/mcp-config-generator";
+import {buildAcpHttpMcpServers, getDefaultRoutaMcpConfig} from "@/core/acp/mcp-config-generator";
 import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
 import {OpencodeSdkAdapter, OpencodeSdkDirectAdapter, shouldUseOpencodeAdapter, getOpencodeServerUrl, isOpencodeServerConfigured, isOpencodeDirectApiConfigured} from "@/core/acp/opencode-sdk-adapter";
 import {ClaudeCodeSdkAdapter, shouldUseClaudeCodeSdkAdapter} from "@/core/acp/claude-code-sdk-adapter";
@@ -124,7 +124,7 @@ export class AcpProcessManager {
         workspaceId?: string,
         toolMode?: "essential" | "full",
         mcpProfile?: McpServerProfile,
-    ): Promise<{ mcpConfigs?: string[]; providerArgs?: string[] } | undefined> {
+    ): Promise<{ mcpConfigs?: string[]; providerArgs?: string[]; acpMcpServers?: Array<Record<string, unknown>> } | undefined> {
         if (!providerSupportsMcp(presetId)) {
             return undefined;
         }
@@ -142,6 +142,9 @@ export class AcpProcessManager {
             mcpConfigs: mcpResult.mcpConfigs.length > 0 ? mcpResult.mcpConfigs : undefined,
             providerArgs: mcpResult.providerArgs && mcpResult.providerArgs.length > 0
                 ? mcpResult.providerArgs
+                : undefined,
+            acpMcpServers: presetId === "codex"
+                ? buildAcpHttpMcpServers(baseConfig) as Array<Record<string, unknown>>
                 : undefined,
         };
     }
@@ -218,7 +221,7 @@ export class AcpProcessManager {
 
             await proc.start();
             await proc.initialize();
-            const acpSessionId = await proc.newSession(cwd);
+            const acpSessionId = await proc.newSession(cwd, mcpSetup?.acpMcpServers);
             proc.setSessionContext({
                 sessionId,
                 provider: sessionContext?.provider ?? presetId,
@@ -286,7 +289,7 @@ export class AcpProcessManager {
             await proc.start();
             await proc.initialize();
             const resolvedProviderSessionId = providerSessionId ?? sessionId;
-            await proc.loadSession(resolvedProviderSessionId, cwd);
+            await proc.loadSession(resolvedProviderSessionId, cwd, mcpSetup?.acpMcpServers);
             proc.setSessionContext({
                 sessionId,
                 provider: sessionContext?.provider ?? presetId,

@@ -11,6 +11,7 @@ const buildConfigFromPresetMock = vi.hoisted(() => vi.fn());
 const buildClaudeCodeConfigMock = vi.hoisted(() => vi.fn());
 const mapClaudeModeToPermissionModeMock = vi.hoisted(() => vi.fn());
 const getDefaultRoutaMcpConfigMock = vi.hoisted(() => vi.fn());
+const buildAcpHttpMcpServersMock = vi.hoisted(() => vi.fn());
 const getHttpSessionStoreMock = vi.hoisted(() => vi.fn());
 const isServerlessEnvironmentMock = vi.hoisted(() => vi.fn());
 const getDatabaseDriverMock = vi.hoisted(() => vi.fn());
@@ -93,6 +94,7 @@ vi.mock("@/core/acp/mcp-setup", () => ({
 
 vi.mock("@/core/acp/mcp-config-generator", () => ({
   getDefaultRoutaMcpConfig: getDefaultRoutaMcpConfigMock,
+  buildAcpHttpMcpServers: buildAcpHttpMcpServersMock,
 }));
 
 vi.mock("@/core/acp/opencode-sdk-adapter", () => ({
@@ -240,6 +242,9 @@ describe("AcpProcessManager", () => {
     buildClaudeCodeConfigMock.mockReturnValue({ command: "claude" });
     mapClaudeModeToPermissionModeMock.mockReturnValue("acceptEdits");
     getDefaultRoutaMcpConfigMock.mockReturnValue({ type: "http" });
+    buildAcpHttpMcpServersMock.mockReturnValue([
+      { name: "routa-coordination", type: "http", url: "http://localhost/api/mcp", headers: [] },
+    ]);
     getOpencodeServerUrlMock.mockReturnValue("http://opencode.local");
     isOpencodeDirectApiConfiguredMock.mockReturnValue(false);
     opencodeConnectMock.mockResolvedValue(undefined);
@@ -288,6 +293,9 @@ describe("AcpProcessManager", () => {
       ["mcp-config"],
     );
     expect((acpInstances[0]?.newSession as ReturnType<typeof vi.fn>)?.mock.calls[0]?.[0]).toBe("/repo");
+    expect((acpInstances[0]?.newSession as ReturnType<typeof vi.fn>)?.mock.calls[0]?.[1]).toEqual([
+      { name: "routa-coordination", type: "http", url: "http://localhost/api/mcp", headers: [] },
+    ]);
     expect(manager.getProcess("session-1")).toBeDefined();
     expect(manager.getAcpSessionId("session-1")).toBe("acp-session-1");
     expect(manager.getPresetId("session-1")).toBe("codex");
@@ -438,6 +446,27 @@ describe("AcpProcessManager", () => {
       undefined,
       ["mcp-config"],
     );
+  });
+
+  it("injects ACP mcpServers when resuming codex sessions", async () => {
+    const manager = new AcpProcessManager();
+
+    const acpSessionId = await manager.loadSession(
+      "session-load",
+      "/repo",
+      vi.fn(),
+      "codex",
+      "ws-1",
+      "essential",
+      "kanban-planning",
+    );
+
+    expect(acpSessionId).toBe("session-load");
+    expect((acpInstances[0]?.loadSession as ReturnType<typeof vi.fn>)?.mock.calls[0]).toEqual([
+      "session-load",
+      "/repo",
+      [{ name: "routa-coordination", type: "http", url: "http://localhost/api/mcp", headers: [] }],
+    ]);
   });
 
   it("routes explicit opencode-sdk sessions to the direct api adapter when no server url is set", async () => {
