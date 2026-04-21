@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
   await ensureDefaultBoard(system, workspaceId);
   const boards = await system.kanbanBoardStore.listByWorkspace(workspaceId);
   const workspace = await system.workspaceStore.get(workspaceId);
+  const tasks = await system.taskStore.listByWorkspace(workspaceId);
   const queue = getKanbanSessionQueue(system);
   const sessionStore = getHttpSessionStore();
   const processManager = getAcpProcessManager();
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
       autoProviderId: getKanbanAutoProvider(workspace?.metadata, board.id),
       sessionConcurrencyLimit: getKanbanSessionConcurrencyLimit(workspace?.metadata, board.id),
       devSessionSupervision: getKanbanDevSessionSupervision(workspace?.metadata, board.id),
-      queue: await queue.getBoardSnapshot(board.id),
+      queue: await queue.getBoardSnapshot(board.id, tasks),
     }))),
   });
 }

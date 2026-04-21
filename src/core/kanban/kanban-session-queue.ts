@@ -114,7 +114,16 @@ export class KanbanSessionQueue {
     return this.startEntry(entry);
   }
 
-  async getBoardSnapshot(boardId: string): Promise<KanbanBoardQueueSnapshot> {
+  /**
+   * Snapshot of queue state for a board.
+   * @param boardId Board to snapshot
+   * @param tasks Optional pre-loaded workspace tasks to reconcile orphaned running sessions.
+   *   Tasks with triggerSessionId set but no queue entry are counted as running.
+   */
+  async getBoardSnapshot(
+    boardId: string,
+    tasks?: Array<{ id: string; boardId?: string; triggerSessionId?: string; title: string }>,
+  ): Promise<KanbanBoardQueueSnapshot> {
     await this.reconcileBoardEntries(boardId);
 
     const queuedEntries = this.queuedByBoard.get(boardId) ?? [];
@@ -122,17 +131,34 @@ export class KanbanSessionQueue {
       queuedEntries.map((entry, index) => [entry.cardId, index + 1]),
     );
 
+    const queueRunning = Array.from(this.jobsByCardId.values())
+      .filter((entry) => entry.boardId === boardId && entry.status === "running")
+      .map((entry) => ({ cardId: entry.cardId, cardTitle: entry.cardTitle }));
+
+    const orphanedRunning = this.findOrphanedRunning(boardId, queueRunning, tasks);
+
     return {
       boardId,
-      runningCount: this.countRunning(boardId),
-      runningCards: Array.from(this.jobsByCardId.values())
-        .filter((entry) => entry.boardId === boardId && entry.status === "running")
-        .map((entry) => ({ cardId: entry.cardId, cardTitle: entry.cardTitle })),
+      runningCount: queueRunning.length + orphanedRunning.length,
+      runningCards: [...queueRunning, ...orphanedRunning],
       queuedCount: queuedEntries.length,
       queuedCardIds: queuedEntries.map((entry) => entry.cardId),
       queuedCards: queuedEntries.map((entry) => ({ cardId: entry.cardId, cardTitle: entry.cardTitle })),
       queuedPositions,
     };
+  }
+
+  /** Find tasks with triggerSessionId set but no queue entry (orphaned running sessions). */
+  private findOrphanedRunning(
+    boardId: string,
+    queueRunning: Array<{ cardId: string }>,
+    tasks?: Array<{ id: string; boardId?: string; triggerSessionId?: string; title: string }>,
+  ): Array<{ cardId: string; cardTitle: string }> {
+    if (!tasks || tasks.length === 0) return [];
+    const queueRunningIds = new Set(queueRunning.map((e) => e.cardId));
+    return tasks
+      .filter((t) => t.boardId === boardId && t.triggerSessionId && !queueRunningIds.has(t.id))
+      .map((t) => ({ cardId: t.id, cardTitle: t.title }));
   }
 
   private async reconcileBoardEntries(boardId: string): Promise<void> {

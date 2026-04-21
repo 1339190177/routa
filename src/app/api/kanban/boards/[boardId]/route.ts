@@ -72,6 +72,7 @@ export async function GET(
   }
 
   const workspace = await system.workspaceStore.get(board.workspaceId);
+  const tasks = await system.taskStore.listByWorkspace(board.workspaceId);
   const queue = getKanbanSessionQueue(system);
   return NextResponse.json({
     board: sanitizeBoard(board, {
@@ -79,7 +80,7 @@ export async function GET(
       sessionConcurrencyLimit: getKanbanSessionConcurrencyLimit(workspace?.metadata, board.id),
       devSessionSupervision: getKanbanDevSessionSupervision(workspace?.metadata, board.id),
       branchRules: getKanbanBranchRules(workspace?.metadata, board.id),
-      queue: await queue.getBoardSnapshot(board.id),
+      queue: await queue.getBoardSnapshot(board.id, tasks),
     }),
   });
 }
@@ -172,6 +173,7 @@ export async function PATCH(
   });
 
   const workspace = await system.workspaceStore.get(existing.workspaceId);
+  const tasks = await system.taskStore.listByWorkspace(existing.workspaceId);
   const queue = getKanbanSessionQueue(system);
   return NextResponse.json({
     board: sanitizeBoard(updated, {
@@ -179,7 +181,7 @@ export async function PATCH(
       sessionConcurrencyLimit: getKanbanSessionConcurrencyLimit(workspace?.metadata, boardId),
       devSessionSupervision: getKanbanDevSessionSupervision(workspace?.metadata, boardId),
       branchRules: getKanbanBranchRules(workspace?.metadata, boardId),
-      queue: await queue.getBoardSnapshot(boardId),
+      queue: await queue.getBoardSnapshot(boardId, tasks),
     }),
   });
 }

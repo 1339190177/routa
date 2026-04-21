@@ -31,6 +31,7 @@ const system = {
 const sessionStore = {
   hydrateFromDb: vi.fn<() => Promise<void>>(),
   getSession: vi.fn(),
+  isHydrated: vi.fn<() => boolean>(),
 };
 
 const processManager = {
@@ -93,6 +94,7 @@ describe("/api/kanban/boards GET", () => {
     ensureDefaultBoard.mockResolvedValue(undefined);
     taskStore.save.mockResolvedValue(undefined);
     sessionStore.hydrateFromDb.mockResolvedValue(undefined);
+    sessionStore.isHydrated.mockReturnValue(true);
     sessionStore.getSession.mockReturnValue(undefined);
     processManager.hasActiveSession.mockReturnValue(false);
     workspaceStore.get.mockResolvedValue({
