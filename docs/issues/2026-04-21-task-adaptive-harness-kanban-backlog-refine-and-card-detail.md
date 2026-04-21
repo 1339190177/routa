@@ -81,6 +81,9 @@ Specifically:
 - move-blocked remediation also passes task-adaptive inputs, which confirms the harness is relevant to planning-style repair flows
 - automation and recovery paths still create sessions outside that explicit Kanban prompt path
 - card detail already has tabs for readiness, execution, changes, evidence, and runs, so a harness/context panel can fit the existing information architecture without inventing a brand-new surface
+- 2026-04-21 browser validation against `http://localhost:3000/workspace/default/kanban?boardId=4e8e567c-e308-48cd-a4f6-e3d8e1d17839` confirms the `JIT CONTEXT` tab is rendered in card detail for task `8370421b-46fd-4cd3-bd98-89390b7c2006`
+- the same validation also shows a card-detail interaction bug: clicking `JIT CONTEXT` repeatedly leaves the content pane on the `Overview` body instead of switching to the JIT panel
+- this means the current empty-user-perception risk is not only retrieval quality; there is also a tab-switching/UI state problem in card detail that can hide working JIT data entirely
 
 ## References
 
