@@ -156,6 +156,7 @@ export function getDefaultRoutaMcpConfig(
   sessionId?: string,
   toolMode?: ToolMode,
   mcpProfile?: McpServerProfile,
+  serverUrlOverride?: string,
 ): RoutaMcpConfig {
   const effectiveWorkspaceId = workspaceId || process.env.ROUTA_WORKSPACE_ID || "";
 
@@ -180,7 +181,7 @@ export function getDefaultRoutaMcpConfig(
   const withWsParam = withContextParams;
 
   // Try to determine the server URL
-  let routaServerUrl = process.env.ROUTA_SERVER_URL;
+  let routaServerUrl = serverUrlOverride || process.env.ROUTA_SERVER_URL;
   
   if (!routaServerUrl) {
     // Check if standalone MCP server is running (provides WebSocket + HTTP)

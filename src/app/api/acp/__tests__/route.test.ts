@@ -556,6 +556,7 @@ describe("/api/acp POST", () => {
       "workspace-1",
       "full",
       "kanban-planning",
+      "http://localhost",
       {
         provider: "codex",
         role: "DEVELOPER",
@@ -616,6 +617,7 @@ describe("/api/acp POST", () => {
       "workspace-1",
       "full",
       "kanban-planning",
+      "http://localhost",
       {
         provider: "codex",
         role: "CRAFTER",

@@ -31,17 +31,17 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 
 const ACP_DEBUG = process.env.ROUTA_DEBUG_ACP === "1";
 
+function logAcpDebug(message: string): void {
+    if (ACP_DEBUG) {
+        console.info(message);
+    }
+}
+
 interface ManagedProcess {
     process: AcpProcess;
     acpSessionId: string;
     presetId: string;
     createdAt: Date;
-}
-
-function logAcpDebug(message: string): void {
-    if (ACP_DEBUG) {
-        console.info(message);
-    }
 }
 
 /**
@@ -124,12 +124,13 @@ export class AcpProcessManager {
         workspaceId?: string,
         toolMode?: "essential" | "full",
         mcpProfile?: McpServerProfile,
+        serverUrlOverride?: string,
     ): Promise<{ mcpConfigs?: string[]; providerArgs?: string[]; acpMcpServers?: Array<Record<string, unknown>> } | undefined> {
         if (!providerSupportsMcp(presetId)) {
             return undefined;
         }
 
-        const baseConfig = getDefaultRoutaMcpConfig(workspaceId, sessionId, toolMode, mcpProfile);
+        const baseConfig = getDefaultRoutaMcpConfig(workspaceId, sessionId, toolMode, mcpProfile, serverUrlOverride);
         const mcpConfig = cwd ? { ...baseConfig, cwd } : baseConfig;
         const mcpResult = await ensureMcpForProvider(presetId, mcpConfig);
         if (mcpResult.cleanup) {
@@ -137,7 +138,6 @@ export class AcpProcessManager {
         } else {
             this.mcpSessionCleanups.delete(sessionId);
         }
-        logAcpDebug(`[AcpProcessManager] MCP setup for ${presetId}: ${mcpResult.summary}`);
         return {
             mcpConfigs: mcpResult.mcpConfigs.length > 0 ? mcpResult.mcpConfigs : undefined,
             providerArgs: mcpResult.providerArgs && mcpResult.providerArgs.length > 0
@@ -156,8 +156,7 @@ export class AcpProcessManager {
         }
 
         this.mcpSessionCleanups.delete(sessionId);
-        const summary = await cleanupMcpForProvider(cleanup);
-        logAcpDebug(`[AcpProcessManager] MCP cleanup for ${sessionId}: ${summary}`);
+        await cleanupMcpForProvider(cleanup);
     }
 
     hasActiveSession(sessionId: string): boolean {
@@ -194,6 +193,7 @@ export class AcpProcessManager {
         workspaceId?: string,
         toolMode?: "essential" | "full",
         mcpProfile?: McpServerProfile,
+        serverUrlOverride?: string,
         sessionContext?: Omit<AcpSessionContext, "sessionId">,
     ): Promise<string> {
         // Check if we should use OpenCode SDK adapter (serverless + configured)
@@ -209,6 +209,7 @@ export class AcpProcessManager {
                 workspaceId,
                 toolMode,
                 mcpProfile,
+                serverUrlOverride,
             );
             const config = await buildConfigFromPreset(
                 presetId,
@@ -265,6 +266,7 @@ export class AcpProcessManager {
         workspaceId?: string,
         toolMode?: "essential" | "full",
         mcpProfile?: McpServerProfile,
+        serverUrlOverride?: string,
         sessionContext?: Omit<AcpSessionContext, "sessionId">,
         providerSessionId?: string,
     ): Promise<string> {
@@ -276,6 +278,7 @@ export class AcpProcessManager {
                 workspaceId,
                 toolMode,
                 mcpProfile,
+                serverUrlOverride,
             );
             const config = await buildConfigFromPreset(
                 presetId,

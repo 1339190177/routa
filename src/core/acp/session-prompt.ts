@@ -242,6 +242,7 @@ async function ensurePromptSessionExists(args: {
   createSessionUpdateForwarder: SessionUpdateForwarderFactory;
   buildMcpConfigForClaude: ClaudeMcpConfigBuilder;
   requireWorkspaceId: WorkspaceIdResolver;
+  serverUrlOverride?: string;
 }): Promise<Response | null> {
   const {
     id,
@@ -251,6 +252,7 @@ async function ensurePromptSessionExists(args: {
     createSessionUpdateForwarder,
     buildMcpConfigForClaude,
     requireWorkspaceId,
+    serverUrlOverride,
   } = args;
   const { getAcpProcessManager } = await import("@/core/acp/processer");
   const manager = getAcpProcessManager();
@@ -389,6 +391,7 @@ async function ensurePromptSessionExists(args: {
           workspaceId,
           toolMode,
           mcpProfile,
+          serverUrlOverride,
           {
             provider,
             role,
@@ -409,6 +412,7 @@ async function ensurePromptSessionExists(args: {
           workspaceId,
           toolMode,
           mcpProfile,
+          serverUrlOverride,
           {
             provider,
             role,
@@ -427,6 +431,7 @@ async function ensurePromptSessionExists(args: {
         workspaceId,
         toolMode,
         mcpProfile,
+        serverUrlOverride,
         {
           provider,
           role,
@@ -532,6 +537,7 @@ interface HandleSessionPromptArgs {
   buildMcpConfigForClaude: ClaudeMcpConfigBuilder;
   requireWorkspaceId: WorkspaceIdResolver;
   encodeSsePayload: SsePayloadEncoder;
+  serverUrlOverride?: string;
 }
 
 export async function handleSessionPrompt({
@@ -542,6 +548,7 @@ export async function handleSessionPrompt({
   buildMcpConfigForClaude,
   requireWorkspaceId,
   encodeSsePayload,
+  serverUrlOverride,
 }: HandleSessionPromptArgs): Promise<Response> {
   const p = params;
   const sessionId = p.sessionId as string;
@@ -595,6 +602,7 @@ export async function handleSessionPrompt({
     createSessionUpdateForwarder,
     buildMcpConfigForClaude,
     requireWorkspaceId,
+    serverUrlOverride,
   });
   if (autoCreateResponse) {
     return autoCreateResponse;

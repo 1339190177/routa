@@ -455,6 +455,7 @@ export async function POST(request: NextRequest) {
     // For `claude` provider: spawns Claude Code with stream-json + MCP.
     // Supports idempotencyKey to prevent duplicate session creation.
     if (method === "session/new") {
+      const requestServerUrl = resolveRequestServerUrl(request);
       const resolvedMcpProfile = resolveMcpServerProfile(
         typeof (params as Record<string, unknown> | undefined)?.mcpProfile === "string"
           ? ((params as Record<string, unknown>).mcpProfile as string)
@@ -470,9 +471,11 @@ export async function POST(request: NextRequest) {
         },
         jsonrpcResponse,
         createSessionUpdateForwarder,
-        buildMcpConfigForClaude,
+        buildMcpConfigForClaude: (workspaceId, sessionId, toolMode, mcpProfile) =>
+          buildMcpConfigForClaude(workspaceId, sessionId, toolMode, mcpProfile, requestServerUrl),
         requireWorkspaceId,
         pushAndPersistForwardedNotification,
+        serverUrlOverride: requestServerUrl,
       });
     }
 
@@ -480,14 +483,17 @@ export async function POST(request: NextRequest) {
     // Forward prompt to the ACP agent process (or Claude Code).
     // If session doesn't exist, auto-create one with default settings.
     if (method === "session/prompt") {
+      const requestServerUrl = resolveRequestServerUrl(request);
       return handleSessionPrompt({
         id: id ?? null,
         params: (params ?? {}) as Record<string, unknown>,
         jsonrpcResponse,
         createSessionUpdateForwarder,
-        buildMcpConfigForClaude,
+        buildMcpConfigForClaude: (workspaceId, sessionId, toolMode, mcpProfile) =>
+          buildMcpConfigForClaude(workspaceId, sessionId, toolMode, mcpProfile, requestServerUrl),
         requireWorkspaceId,
         encodeSsePayload,
+        serverUrlOverride: requestServerUrl,
       });
     }
 
@@ -572,6 +578,7 @@ export async function POST(request: NextRequest) {
       }
 
       const forwardSessionUpdate = createSessionUpdateForwarder(store, sessionId);
+      const requestServerUrl = resolveRequestServerUrl(request);
       let acpSessionId: string;
       let resumeMode: "native" | "recreated" = "recreated";
       let nativeResumeError: string | undefined;
@@ -594,6 +601,7 @@ export async function POST(request: NextRequest) {
             "mcpProfile" in recoveredSession
               ? (recoveredSession as { mcpProfile?: McpServerProfile }).mcpProfile
               : undefined,
+            requestServerUrl,
             {
               provider,
               role,
@@ -622,6 +630,7 @@ export async function POST(request: NextRequest) {
           "mcpProfile" in recoveredSession
             ? (recoveredSession as { mcpProfile?: McpServerProfile }).mcpProfile
             : undefined,
+          requestServerUrl,
           {
             provider,
             role,
@@ -1193,6 +1202,10 @@ function jsonrpcResponse(
   return NextResponse.json({ jsonrpc: "2.0", id, result });
 }
 
+function resolveRequestServerUrl(request: NextRequest): string {
+  return request.nextUrl.origin;
+}
+
 /**
  * Build MCP configuration JSON for Claude Code.
  * Injects the routa-mcp server so Claude Code can use Routa coordination tools.
@@ -1205,12 +1218,13 @@ async function buildMcpConfigForClaude(
   sessionId?: string,
   toolMode?: "essential" | "full",
   mcpProfile?: McpServerProfile,
+  serverUrlOverride?: string,
 ): Promise<string[]> {
   // Keep Claude MCP setup consistent with all other providers.
   // Pass workspace ID and session ID so they're embedded in the MCP endpoint URL
   // (?wsId=...&sid=...) allowing the MCP server to scope notes to the correct session.
   const config = workspaceId
-    ? getDefaultRoutaMcpConfig(workspaceId, sessionId, toolMode, mcpProfile)
+    ? getDefaultRoutaMcpConfig(workspaceId, sessionId, toolMode, mcpProfile, serverUrlOverride)
     : undefined;
   const result = await ensureMcpForProvider("claude", config);
   console.log(`[ACP Route] MCP config for Claude Code: ${result.summary}`);

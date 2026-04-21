@@ -283,7 +283,7 @@ describe("AcpProcessManager", () => {
     );
 
     expect(acpSessionId).toBe("acp-session-1");
-    expect(getDefaultRoutaMcpConfigMock).toHaveBeenCalledWith("ws-1", "session-1", "full", undefined);
+    expect(getDefaultRoutaMcpConfigMock).toHaveBeenCalledWith("ws-1", "session-1", "full", undefined, undefined);
     expect(ensureMcpForProviderMock).toHaveBeenCalledWith("codex", { type: "http", cwd: "/repo" });
     expect(buildConfigFromPresetMock).toHaveBeenCalledWith(
       "codex",
@@ -413,7 +413,7 @@ describe("AcpProcessManager", () => {
     );
 
     expect(acpSessionId).toBe("acp-session-1");
-    expect(getDefaultRoutaMcpConfigMock).toHaveBeenCalledWith("ws-qoder", "session-qoder", "full", undefined);
+    expect(getDefaultRoutaMcpConfigMock).toHaveBeenCalledWith("ws-qoder", "session-qoder", "full", undefined, undefined);
     expect(ensureMcpForProviderMock).toHaveBeenCalledWith("qoder", { type: "http", cwd: "/repo" });
 
     await manager.killSession("session-qoder");

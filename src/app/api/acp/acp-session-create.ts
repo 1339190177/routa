@@ -153,6 +153,7 @@ interface HandleSessionNewArgs {
   buildMcpConfigForClaude: ClaudeMcpConfigBuilder;
   requireWorkspaceId: WorkspaceIdResolver;
   pushAndPersistForwardedNotification: ForwardedNotificationWriter;
+  serverUrlOverride?: string;
 }
 
 export async function handleSessionNew({
@@ -163,6 +164,7 @@ export async function handleSessionNew({
   buildMcpConfigForClaude,
   requireWorkspaceId,
   pushAndPersistForwardedNotification,
+  serverUrlOverride,
 }: HandleSessionNewArgs): Promise<Response> {
   const p = params;
   let cwd = (p.cwd as string | undefined) ?? process.cwd();
@@ -536,6 +538,7 @@ export async function handleSessionNew({
           workspaceId,
           resolvedToolMode,
           resolvedMcpProfile,
+          serverUrlOverride,
           {
             provider,
             role,
