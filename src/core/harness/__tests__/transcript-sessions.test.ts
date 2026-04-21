@@ -40,6 +40,11 @@ function writeTranscript(
   );
 }
 
+function setModifiedMs(filePath: string, modifiedMs: number): void {
+  const timestamp = new Date(modifiedMs);
+  fs.utimesSync(filePath, timestamp, timestamp);
+}
+
 describe("inspectTranscriptTurns", () => {
   const originalHome = process.env.HOME;
   const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
@@ -105,6 +110,18 @@ describe("inspectTranscriptTurns", () => {
         },
         {
           timestamp: "2026-04-21T02:04:00.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{
+              type: "input_text",
+              text: "<turn_aborted>\nThe user interrupted the previous turn on purpose. Any running unified exec processes may still be running in the background.\n</turn_aborted>",
+            }],
+          },
+        },
+        {
+          timestamp: "2026-04-21T02:04:30.000Z",
           type: "event_msg",
           payload: {
             type: "exec_command_end",
@@ -141,6 +158,10 @@ describe("inspectTranscriptTurns", () => {
       transcriptPath: expect.stringContaining("session-focus.jsonl"),
     });
     expect(result.sessions[0]?.openingUserPrompt).not.toContain("permissions instructions");
+    expect(result.sessions[0]?.followUpUserPrompts).toEqual([
+      expect.stringContaining("feature=workspace-overview"),
+    ]);
+    expect(result.sessions[0]?.followUpUserPrompts.join("\n")).not.toContain("interrupted the previous turn");
     expect(result.sessions[0]?.relevantSignals).toEqual(expect.arrayContaining([
       expect.objectContaining({
         kind: "command",
@@ -180,5 +201,49 @@ describe("inspectTranscriptTurns", () => {
 
     expect(result.sessions).toEqual([]);
     expect(result.missingSessionIds).toEqual(["missing-session"]);
+  });
+
+  it("finds explicitly requested sessions even when they are older than the recent transcript window", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "transcript-turn-older-"));
+    process.env.HOME = tempRoot;
+    process.env.CLAUDE_CONFIG_DIR = "";
+
+    const repoRoot = path.join(tempRoot, "repo");
+    const focusFile = "src/app/workspace/[workspaceId]/feature-explorer/__tests__/feature-explorer-page-client.test.tsx";
+    ensureFile(path.join(repoRoot, focusFile), "export const ready = true;\n");
+
+    const sessionDir = path.join(tempRoot, ".codex", "sessions");
+    const baseTime = Date.parse("2026-04-21T03:00:00.000Z");
+    const olderTargetPath = path.join(sessionDir, "rollout-older-session-target.jsonl");
+    writeTranscript(olderTargetPath, repoRoot, "older-session-target", [
+      {
+        timestamp: "2026-04-21T01:00:00.000Z",
+        type: "event_msg",
+        payload: {
+          type: "user_message",
+          message: `只分析 ${focusFile} 对应的历史会话`,
+        },
+      },
+    ]);
+    setModifiedMs(olderTargetPath, baseTime);
+
+    for (let index = 0; index < 205; index += 1) {
+      const fillerPath = path.join(sessionDir, `filler-${index}.jsonl`);
+      writeTranscript(fillerPath, repoRoot, `filler-${index}`, []);
+      setModifiedMs(fillerPath, baseTime + index + 1);
+    }
+
+    const result = inspectTranscriptTurns(repoRoot, {
+      sessionIds: ["older-session-target"],
+      filePaths: [focusFile],
+    });
+
+    expect(result.missingSessionIds).toEqual([]);
+    expect(result.sessions).toHaveLength(1);
+    expect(result.sessions[0]).toMatchObject({
+      sessionId: "older-session-target",
+      transcriptPath: expect.stringContaining("older-session-target"),
+      openingUserPrompt: expect.stringContaining(focusFile),
+    });
   });
 });

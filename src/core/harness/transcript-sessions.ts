@@ -149,6 +149,13 @@ function normalizeUserPrompt(text: string): string {
   return truncatePrompt(normalizeSignalPromptText(normalized));
 }
 
+function isSyntheticUserPrompt(text: string): boolean {
+  const normalized = normalizeSignalPromptText(text).toLowerCase();
+  return normalized.includes("<turn_aborted>")
+    || normalized.includes("the user interrupted the previous turn on purpose")
+    || normalized.includes("any running unified exec processes may still be running in the background");
+}
+
 function extractUserPromptFromResponseItem(event: Record<string, unknown>): string | undefined {
   if (event.type !== "message" || event.role !== "user" || !Array.isArray(event.content)) {
     return undefined;
@@ -340,7 +347,7 @@ function collectTranscriptPromptHistory(events: unknown[]): string[] {
 
   for (const event of events) {
     const prompt = userPromptFromUnknown(event);
-    if (!prompt) {
+    if (!prompt || isSyntheticUserPrompt(prompt)) {
       continue;
     }
 
@@ -717,12 +724,51 @@ function parseResolvedTranscriptSession(
   };
 }
 
-function collectResolvedTranscriptSessions(): ResolvedTranscriptSession[] {
-  const sessions: ResolvedTranscriptSession[] = [];
+function resolveTranscriptSessionsById(sessionIds: string[]): ResolvedTranscriptSession[] {
+  const pending = new Set(sessionIds.map((value) => value.trim()).filter(Boolean));
+  if (pending.size === 0) {
+    return [];
+  }
 
-  for (const candidate of collectTranscriptCandidates()) {
-    if (sessions.length >= MAX_TRANSCRIPT_FILES) {
-      break;
+  const candidates = collectTranscriptCandidates();
+  const resolved = new Map<string, ResolvedTranscriptSession>();
+  const parsedTranscriptPaths = new Set<string>();
+  const directPathCandidates = candidates.filter((candidate) =>
+    [...pending].some((sessionId) => candidate.transcriptPath.includes(sessionId)));
+
+  for (const candidate of directPathCandidates) {
+    const transcript = parseResolvedTranscriptSession(
+      candidate.transcriptPath,
+      candidate.modifiedMs,
+      candidate.provider,
+    );
+    if (!transcript) {
+      continue;
+    }
+    parsedTranscriptPaths.add(candidate.transcriptPath);
+
+    if (pending.has(transcript.sessionId)) {
+      resolved.set(transcript.sessionId, transcript);
+      pending.delete(transcript.sessionId);
+    }
+
+    for (const sessionId of [...pending]) {
+      if (candidate.transcriptPath.includes(sessionId)) {
+        resolved.set(sessionId, transcript);
+        pending.delete(sessionId);
+      }
+    }
+
+    if (pending.size === 0) {
+      return sessionIds
+        .map((sessionId) => resolved.get(sessionId.trim()))
+        .filter((session): session is ResolvedTranscriptSession => Boolean(session));
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (parsedTranscriptPaths.has(candidate.transcriptPath)) {
+      continue;
     }
 
     const transcript = parseResolvedTranscriptSession(
@@ -730,29 +776,21 @@ function collectResolvedTranscriptSessions(): ResolvedTranscriptSession[] {
       candidate.modifiedMs,
       candidate.provider,
     );
-    if (transcript) {
-      sessions.push(transcript);
+    if (!transcript || !pending.has(transcript.sessionId)) {
+      continue;
+    }
+
+    parsedTranscriptPaths.add(candidate.transcriptPath);
+    resolved.set(transcript.sessionId, transcript);
+    pending.delete(transcript.sessionId);
+    if (pending.size === 0) {
+      break;
     }
   }
 
-  return sessions;
-}
-
-function findTranscriptSessionById(
-  sessionId: string,
-  transcripts: ResolvedTranscriptSession[],
-): ResolvedTranscriptSession | null {
-  const normalizedSessionId = sessionId.trim();
-  if (!normalizedSessionId) {
-    return null;
-  }
-
-  const directPathMatch = transcripts.find((transcript) => transcript.transcriptPath.includes(normalizedSessionId));
-  if (directPathMatch) {
-    return directPathMatch;
-  }
-
-  return transcripts.find((transcript) => transcript.sessionId === normalizedSessionId) ?? null;
+  return sessionIds
+    .map((sessionId) => resolved.get(sessionId.trim()))
+    .filter((session): session is ResolvedTranscriptSession => Boolean(session));
 }
 
 function normalizeFocusFileCandidates(repoRoot: string, filePath: string): string[] {
@@ -905,6 +943,10 @@ function collectScopeDriftPrompts(
   const drifts: string[] = [];
 
   for (const prompt of prompts.slice(1)) {
+    if (isSyntheticUserPrompt(prompt)) {
+      continue;
+    }
+
     const featureParam = promptFeatureParam(prompt);
     if (featureId && featureParam && featureParam !== featureId) {
       drifts.push(prompt);
@@ -961,7 +1003,7 @@ export function inspectTranscriptTurns(
   const filePaths = [...new Set((options.filePaths ?? []).map((value) => value.trim()).filter(Boolean))];
   const maxUserPrompts = Math.max(1, options.maxUserPrompts ?? DEFAULT_TURN_INSPECTION_MAX_USER_PROMPTS);
   const maxSignals = Math.max(1, options.maxSignals ?? DEFAULT_TURN_INSPECTION_MAX_SIGNALS);
-  const transcripts = collectResolvedTranscriptSessions();
+  const transcripts = resolveTranscriptSessionsById(sessionIds);
   const repoIdentity = resolveRepoIdentity(repoRoot);
   const identityCache = new Map<string, RepoIdentity | null>();
   const warnings: string[] = [];
@@ -969,7 +1011,7 @@ export function inspectTranscriptTurns(
   const sessions: InspectedTranscriptSession[] = [];
 
   for (const sessionId of sessionIds) {
-    const transcript = findTranscriptSessionById(sessionId, transcripts);
+    const transcript = transcripts.find((entry) => entry.sessionId === sessionId || entry.transcriptPath.includes(sessionId));
     if (!transcript) {
       missingSessionIds.push(sessionId);
       continue;

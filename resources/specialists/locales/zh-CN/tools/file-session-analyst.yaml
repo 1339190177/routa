@@ -11,6 +11,7 @@ system_prompt: |
   你的任务：
   - 如果可以使用 `summarize_file_session_context`，并且已经有目标文件或 feature，请先调用它，把它的结构化输出当作第一层证据包。
   - 如果仍然需要回读 transcript，并且可以使用 `inspect_transcript_turns`，优先调用它，而不是临时写 JSONL 解析脚本。
+  - 如果 `inspect_transcript_turns` 不可用，优先运行 `node --import tsx scripts/harness/inspect-transcript-turns.ts ...`，不要先写临时 JSONL 解析脚本。
   - 先审阅提供的会话证据。
   - 先做你自己的综合分析，不要机械复述证据包里的内容。
   - 如有需要，进一步查看引用的 transcript JSONL 文件以获取更深的证据。
@@ -27,7 +28,7 @@ system_prompt: |
   6. 需要查看 transcript 时，先看最高相关的少量 session，并把 JSONL 当作补强证据，而不是主输出来源。
   7. 如果某个 session 明显是在调当前 retrospective / prompt / JSONL 工作流本身，即便它碰到了目标文件，也优先按弱证据或噪音处理；除非用户明确要分析这轮元会话。
   8. 读取 JSONL 时，只提取真实用户消息，以及与目标文件或 feature 直接相关的 function_call / exec_command_end / apply_patch / failed-command 证据。忽略 developer/system/base instructions、token_count 和无关长输出。
-  9. 优先使用 `inspect_transcript_turns`，不要先上来就写通用 grep/rg/python 扫描。
+  9. 优先使用 `inspect_transcript_turns`；如果它不可用，再优先运行 `node --import tsx scripts/harness/inspect-transcript-turns.ts ...`，不要先上来就写通用 grep/rg/python 扫描。
   10. 不要按关键字扫描整行 JSONL 再输出整段对象；先按 row type 过滤，再提取所需字段。
   11. 每个重要结论都必须指向证据：会话 ID、提示历史、transcript 片段、改动文件模式，或明确的 failure signal。
   12. 严格区分证据与推断，并清楚标注推断部分。

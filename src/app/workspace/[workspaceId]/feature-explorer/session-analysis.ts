@@ -421,8 +421,8 @@ function buildSessionBlocks(
         skippedMetaSessions.length > 0
           ? `- 已从 Transcript Hints 中省略明显是在调当前复盘 / prompt / JSONL 流程本身的元会话: ${skippedMetaSessions.join(", ")}`
           : "",
-        "- 如果可以使用 `inspect_transcript_turns`，优先用它抽取真实用户 turns、目标文件相关命令、失败命令和范围漂移，再决定是否需要额外回读原始 JSONL。",
-        "- 如有必要，请编写小脚本或使用工具批量提取 opening prompt、prompt history、selected-file read/write/change、failed tools、scope drift 等结构化信号，再基于结果分层判断。",
+        "- 如果可以使用 `inspect_transcript_turns`，优先用它抽取真实用户 turns、目标文件相关命令、失败命令和范围漂移；如果它不可用，优先运行 `node --import tsx scripts/harness/inspect-transcript-turns.ts --session-id <id> --file <path> [--feature-id <id>]`。",
+        "- 只有在上面的 tool / script 仍不足以支撑判断时，才编写临时小脚本补充 opening prompt、prompt history、selected-file read/write/change、failed tools、scope drift 等结构化信号。",
         "- 读取 JSONL 时，只提取真实用户 turns（例如 user_message、role=user 的 message），以及与选中文件或 feature 直接相关的 exec_command / apply_patch / failed command 信号。忽略 developer/system/base instructions、token_count 和无关长输出。",
         "- 不要用 rg/grep 按关键字扫描整行 JSONL 再回显整段对象；先按 row type 过滤，再抽需要字段。",
         "- 不要把任务改写成整个仓库的架构评审、静态 codebase review 或 ADR/ARCHITECTURE 对账；如果没有先读这些 session 的 JSONL，就不要下仓库级结论。",
@@ -434,8 +434,8 @@ function buildSessionBlocks(
         skippedMetaSessions.length > 0
           ? `- Transcript Hints already omit clear prompt/JSONL retrospective meta-sessions: ${skippedMetaSessions.join(", ")}`
           : "",
-        "- If `inspect_transcript_turns` is available, prefer it for extracting real user turns, target-file commands, failed commands, and scope drift before you reread raw JSONL.",
-        "- If needed, write a small script or use tools to batch-extract opening prompts, prompt history, selected-file reads/writes/changes, failed tools, scope drift, and other structured signals before drawing conclusions.",
+        "- If `inspect_transcript_turns` is available, prefer it for extracting real user turns, target-file commands, failed commands, and scope drift. If it is unavailable, prefer `node --import tsx scripts/harness/inspect-transcript-turns.ts --session-id <id> --file <path> [--feature-id <id>]`.",
+        "- Only write a one-off script after that tool/script path is still insufficient for opening prompts, prompt history, selected-file reads/writes/changes, failed tools, scope drift, and other structured signals.",
         "- When reading JSONL, only extract real user turns (for example user_message or role=user messages) plus exec_command/apply_patch/failed-command evidence that directly touches the selected file or feature. Ignore developer/system/base instructions, token_count, and unrelated long outputs.",
         "- Do not grep whole JSONL rows by generic keywords and print entire objects. Filter by row type first, then extract only the fields you need.",
         "- Do not turn this into a repo-wide architecture review, static codebase audit, or ADR/ARCHITECTURE consistency check. If you have not read the linked session JSONL files first, do not make repo-level conclusions.",
@@ -536,8 +536,8 @@ export function buildSessionAnalysisPrompt({
       "7. 明确区分“证据支持”的判断和“你的推断”。每条结论尽量引用具体 session ID。",
       "8. 给出更好的用户输入建议，重点是下一次应该怎样一句话开场、怎样补上下文、怎样限定范围。",
       "9. 产出 2 到 4 个可直接复用的提示词模板，偏向这个文件/这个 feature 的真实场景。",
-      "10. 如果 session 数量较多，优先直接读 Transcript Hints 里的 JSONL；必要时编写小脚本或使用工具批量提取证据，再做你的判断。",
-      "10a. 如果 MCP 里有 `inspect_transcript_turns`，优先调用它来抽取真实用户 turns、目标文件相关命令、失败命令和范围漂移，而不是手写临时 JSONL 解析。",
+      "10. 如果 session 数量较多，优先直接读 Transcript Hints 里的 JSONL；先走现成 tool / script，再决定是否需要临时补脚本。",
+      "10a. 如果 MCP 里有 `inspect_transcript_turns`，优先调用它来抽取真实用户 turns、目标文件相关命令、失败命令和范围漂移；如果没有，就优先运行 `node --import tsx scripts/harness/inspect-transcript-turns.ts --session-id <id> --file <path> [--feature-id <id>]`，而不是手写临时 JSONL 解析。",
       "11. 只有在下面的摘要证据仍不足以支撑判断，或者你需要恢复真实用户开场、确认范围漂移时，才去读少量 transcript JSONL。优先读取高相关 session；如果权限被拒或读取受阻，就基于现有证据继续，并把这个限制写出来。",
       "12. 不要把任务扩写成整个仓库的架构评审、工程治理盘点或 ADR/ARCHITECTURE 对账。除非这些结论直接来自目标 session 的 transcript 证据，否则不要输出仓库级判断。",
       "13. 对于多 session 模式，如果目标 JSONL 无法访问，就只输出限制、缺失证据和下一步需要的访问条件；不要用 git 历史、仓库文档或全仓扫描来替代 session 分析。",
@@ -594,8 +594,8 @@ export function buildSessionAnalysisPrompt({
     "7. Distinguish clearly between evidence-backed conclusions and your own inference. Cite concrete session IDs when possible.",
     "8. Recommend better user inputs for next time: how to open the request, what context to include up front, and how to constrain the scope.",
     "9. Produce 2 to 4 reusable prompt templates tailored to this file or feature, not generic prompt-engineering advice.",
-    "10. If there are many sessions, prefer reading the JSONL files from Transcript Hints directly; when useful, write a small script or use tools to batch-extract evidence before judging.",
-    "10a. If MCP exposes `inspect_transcript_turns`, prefer that tool for extracting real user turns, target-file commands, failed commands, and scope drift before doing any raw JSONL parsing.",
+    "10. If there are many sessions, prefer reading the JSONL files from Transcript Hints directly; use the provided tool/script path before deciding whether a one-off helper script is still necessary.",
+    "10a. If MCP exposes `inspect_transcript_turns`, prefer that tool for extracting real user turns, target-file commands, failed commands, and scope drift. If it does not, prefer `node --import tsx scripts/harness/inspect-transcript-turns.ts --session-id <id> --file <path> [--feature-id <id>]` before any raw JSONL parsing.",
     "11. Only inspect a small number of matching transcript JSONL files if the summarized evidence is still insufficient or if you need to recover the user's true opening request or confirm scope drift. If permissions are blocked, continue with the available evidence and state that limitation explicitly.",
     "12. Do not expand this into a repo-wide architecture review, engineering-governance audit, or ADR/ARCHITECTURE consistency check. Unless those conclusions come directly from the target session transcripts, do not make repo-level claims.",
     "13. In multi-session mode, if the target JSONL files are inaccessible, only report the limitation, the missing evidence, and the access you need next. Do not substitute git history, repository documents, or full-codebase scanning for session analysis.",

@@ -166,7 +166,8 @@ describe("session-analysis", () => {
 
     expect(prompt).toContain("如果 session 数量较多，优先直接读 Transcript Hints 里的 JSONL");
     expect(prompt).toContain("为避免 prompt 过长，这里不再内联逐条 session 证据块");
-    expect(prompt).toContain("编写小脚本或使用工具批量提取证据");
+    expect(prompt).toContain("先走现成 tool / script");
+    expect(prompt).toContain("scripts/harness/inspect-transcript-turns.ts");
     expect(prompt).toContain("已从 Transcript Hints 中省略明显是在调当前复盘 / prompt / JSONL 流程本身的元会话");
     expect(prompt).toContain("只提取真实用户 turns");
     expect(prompt).toContain("不要用 rg/grep 按关键字扫描整行 JSONL 再回显整段对象");

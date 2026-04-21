@@ -72,6 +72,7 @@
     "api:test:schema": "node --import tsx tests/api-contract/run.ts --suite=schema-validation",
     "api:test:schema:nextjs": "BASE_URL=http://localhost:3000 node --import tsx tests/api-contract/run.ts --suite=schema-validation",
     "api:test:schema:rust": "BASE_URL=http://localhost:3210 node --import tsx tests/api-contract/run.ts --suite=schema-validation",
+    "harness:inspect-transcript-turns": "node --import tsx scripts/harness/inspect-transcript-turns.ts",
     "api:schema:validate": "node --import tsx scripts/fitness/validate-openapi-schema.ts",
     "api:schema:validate:json": "node --import tsx scripts/fitness/validate-openapi-schema.ts --json",
     "api:schema:report": "node --import tsx scripts/fitness/validate-openapi-schema.ts --report",
