@@ -96,4 +96,35 @@ describe("useKanbanEvents", () => {
     secondSource.emit({ type: "connected" });
     expect(onInvalidate).toHaveBeenCalledTimes(1);
   });
+
+  it("silently ignores kanban:archived events without triggering onInvalidate", () => {
+    const onInvalidate = vi.fn();
+    vi.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+
+    render(<HookHarness workspaceId="workspace-1" onInvalidate={onInvalidate} />);
+
+    const source = MockEventSource.instances[0];
+    source.emit({ type: "connected" });
+
+    source.emit({ type: "kanban:archived", cardId: "card-1", newStage: "archived", workspaceId: "workspace-1" });
+    source.emit({ type: "kanban:archived", cardId: "card-2", newStage: "archived", workspaceId: "workspace-1" });
+
+    expect(onInvalidate).not.toHaveBeenCalled();
+  });
+
+  it("still triggers onInvalidate for kanban:changed events after kanban:archived events", () => {
+    const onInvalidate = vi.fn();
+    vi.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+
+    render(<HookHarness workspaceId="workspace-1" onInvalidate={onInvalidate} />);
+
+    const source = MockEventSource.instances[0];
+    source.emit({ type: "connected" });
+
+    source.emit({ type: "kanban:archived", cardId: "card-1", newStage: "archived", workspaceId: "workspace-1" });
+    expect(onInvalidate).not.toHaveBeenCalled();
+
+    source.emit({ type: "kanban:changed" });
+    expect(onInvalidate).toHaveBeenCalledTimes(1);
+  });
 });

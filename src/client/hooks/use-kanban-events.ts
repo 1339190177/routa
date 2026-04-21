@@ -61,6 +61,12 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
           }
           return;
         }
+        if (data.type === "kanban:archived") {
+          // Lightweight event for archived/restored cards.
+          // The card is no longer visible on the main board, so we silently
+          // ignore it rather than triggering a full board refetch.
+          return;
+        }
         if (data.type === "kanban:changed" || data.type === "fitness:changed") {
           const now = Date.now();
           const elapsed = now - lastInvalidateAtRef.current;
