@@ -338,11 +338,15 @@ function buildSessionBlocks(
         `- 当前共有 ${rankedSessions.length} 个已选 session。为避免 prompt 过长，这里不再内联逐条 session 证据块。`,
         "- 请直接使用上面的 Transcript Hints 读取对应 JSONL，并以你自己的分析为主。",
         "- 如有必要，请编写小脚本或使用工具批量提取 opening prompt、prompt history、selected-file read/write/change、failed tools、scope drift 等结构化信号，再基于结果分层判断。",
+        "- 不要把任务改写成整个仓库的架构评审、静态 codebase review 或 ADR/ARCHITECTURE 对账；如果没有先读这些 session 的 JSONL，就不要下仓库级结论。",
+        "- 如果这些 JSONL 读不到，就在输出中明确写出限制并停止，不要退化成基于 git 历史、仓库文档或全仓代码扫描的替代分析。",
       ].join("\n")
       : [
         `- There are ${rankedSessions.length} selected sessions. To keep the prompt compact, detailed per-session evidence blocks are omitted.`,
         "- Read the matching JSONL files from Transcript Hints directly and prioritize your own analysis over the pre-baked summary.",
         "- If needed, write a small script or use tools to batch-extract opening prompts, prompt history, selected-file reads/writes/changes, failed tools, scope drift, and other structured signals before drawing conclusions.",
+        "- Do not turn this into a repo-wide architecture review, static codebase audit, or ADR/ARCHITECTURE consistency check. If you have not read the linked session JSONL files first, do not make repo-level conclusions.",
+        "- If those JSONL files are inaccessible, state that limitation and stop. Do not fall back to git history, repository documents, or full-codebase scanning as a substitute analysis path.",
       ].join("\n");
   }
 
@@ -441,6 +445,8 @@ export function buildSessionAnalysisPrompt({
       "9. 产出 2 到 4 个可直接复用的提示词模板，偏向这个文件/这个 feature 的真实场景。",
       "10. 如果 session 数量较多，优先直接读 Transcript Hints 里的 JSONL；必要时编写小脚本或使用工具批量提取证据，再做你的判断。",
       "11. 只有在下面的摘要证据仍不足以支撑判断，或者你需要恢复真实用户开场、确认范围漂移时，才去读少量 transcript JSONL。优先读取高相关 session；如果权限被拒或读取受阻，就基于现有证据继续，并把这个限制写出来。",
+      "12. 不要把任务扩写成整个仓库的架构评审、工程治理盘点或 ADR/ARCHITECTURE 对账。除非这些结论直接来自目标 session 的 transcript 证据，否则不要输出仓库级判断。",
+      "13. 对于多 session 模式，如果目标 JSONL 无法访问，就只输出限制、缺失证据和下一步需要的访问条件；不要用 git 历史、仓库文档或全仓扫描来替代 session 分析。",
       "",
       "输出格式：",
       "## 会话相关性分层",
@@ -493,6 +499,8 @@ export function buildSessionAnalysisPrompt({
     "9. Produce 2 to 4 reusable prompt templates tailored to this file or feature, not generic prompt-engineering advice.",
     "10. If there are many sessions, prefer reading the JSONL files from Transcript Hints directly; when useful, write a small script or use tools to batch-extract evidence before judging.",
     "11. Only inspect a small number of matching transcript JSONL files if the summarized evidence is still insufficient or if you need to recover the user's true opening request or confirm scope drift. If permissions are blocked, continue with the available evidence and state that limitation explicitly.",
+    "12. Do not expand this into a repo-wide architecture review, engineering-governance audit, or ADR/ARCHITECTURE consistency check. Unless those conclusions come directly from the target session transcripts, do not make repo-level claims.",
+    "13. In multi-session mode, if the target JSONL files are inaccessible, only report the limitation, the missing evidence, and the access you need next. Do not substitute git history, repository documents, or full-codebase scanning for session analysis.",
     "",
     "Output format:",
     "## Session Relevance",
