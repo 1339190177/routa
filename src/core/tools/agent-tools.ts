@@ -29,7 +29,12 @@ import {
   ModelTier,
   createAgent as createAgentModel,
 } from "../models/agent";
-import { Task, TaskStatus, createTask as createTaskModel } from "../models/task";
+import {
+  normalizeTaskContextSearchSpec,
+  Task,
+  TaskStatus,
+  createTask as createTaskModel,
+} from "../models/task";
 import type { KanbanBoardStore } from "../store/kanban-board-store";
 import { MessageRole, createMessage, CompletionReport } from "../models/message";
 import {
@@ -853,6 +858,7 @@ export class AgentTools {
       acceptanceCriteria?: string[];
       verificationCommands?: string[];
       testCases?: string[];
+      contextSearchSpec?: import("../models/task").TaskContextSearchSpec;
     };
     agentId: string;
   }): Promise<ToolResult> {
@@ -891,6 +897,9 @@ export class AgentTools {
     if (updates.acceptanceCriteria !== undefined) task.acceptanceCriteria = updates.acceptanceCriteria;
     if (updates.verificationCommands !== undefined) task.verificationCommands = updates.verificationCommands;
     if (updates.testCases !== undefined) task.testCases = updates.testCases;
+    if (updates.contextSearchSpec !== undefined) {
+      task.contextSearchSpec = normalizeTaskContextSearchSpec(updates.contextSearchSpec);
+    }
 
     // Always check review lane convergence when verification verdict is updated
     // This ensures cards move out of review lane even when status is explicitly set

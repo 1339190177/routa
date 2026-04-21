@@ -3,7 +3,7 @@
 import type { AcpTaskAdaptiveHarnessOptions } from "@/client/acp-client";
 import type { McpServerProfile } from "@/core/mcp/mcp-server-profiles";
 import type { KanbanRequiredTaskField } from "@/core/models/kanban";
-import type { TaskAnalysisStatus } from "@/core/models/task";
+import type { TaskAnalysisStatus, TaskContextSearchSpec } from "@/core/models/task";
 import type { TaskDeliveryReadiness } from "@/core/kanban/task-delivery-readiness";
 
 export interface SessionInfo {
@@ -200,6 +200,7 @@ export interface TaskInfo {
   creationSource?: "manual" | "agent" | "api" | "session";
   /** Associated codebase IDs for this task */
   codebaseIds?: string[];
+  contextSearchSpec?: TaskContextSearchSpec;
   /** Git worktree ID for this task */
   worktreeId?: string;
   completionSummary?: string;

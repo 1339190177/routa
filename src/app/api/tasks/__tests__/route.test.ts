@@ -325,6 +325,41 @@ describe("/api/tasks GET", () => {
     expect(data.task.githubRepo).toBeUndefined();
   });
 
+  it("persists contextSearchSpec on created tasks", async () => {
+    const response = await POST(new NextRequest("http://localhost/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        title: "Backlog card with retrieval hints",
+        objective: "Seed JIT Context on first open",
+        workspaceId: "workspace-1",
+        contextSearchSpec: {
+          query: "kanban card detail jit context",
+          featureCandidates: ["kanban-workflow"],
+          relatedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"],
+          moduleHints: ["kanban"],
+          symptomHints: ["path read failed"],
+        },
+      }),
+      headers: { "Content-Type": "application/json" },
+    }));
+    const data = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(data.task.contextSearchSpec).toEqual({
+      query: "kanban card detail jit context",
+      featureCandidates: ["kanban-workflow"],
+      relatedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"],
+      moduleHints: ["kanban"],
+      symptomHints: ["path read failed"],
+    });
+    expect(taskStore.save).toHaveBeenCalledWith(expect.objectContaining({
+      contextSearchSpec: expect.objectContaining({
+        featureCandidates: ["kanban-workflow"],
+        relatedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"],
+      }),
+    }));
+  });
+
   it("imports an existing GitHub issue without creating a new one", async () => {
     system.codebaseStore.get.mockResolvedValue({
       id: "codebase-1",

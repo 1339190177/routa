@@ -1,5 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
+use routa_core::models::task::TaskContextSearchSpec;
 
 fn deserialize_explicit_nullable_string<'de, D>(
     deserializer: D,
@@ -181,6 +182,7 @@ pub struct CreateTaskRequest {
     pub create_github_issue: Option<bool>,
     pub repo_path: Option<String>,
     pub codebase_ids: Option<Vec<String>>,
+    pub context_search_spec: Option<TaskContextSearchSpec>,
     pub worktree_id: Option<serde_json::Value>,
     pub github_id: Option<String>,
     pub github_number: Option<i64>,
@@ -214,6 +216,7 @@ pub struct UpdateTaskRequest {
     pub assigned_specialist_name: Option<String>,
     pub trigger_session_id: Option<String>,
     pub codebase_ids: Option<Vec<String>>,
+    pub context_search_spec: Option<TaskContextSearchSpec>,
     pub verification_plan: Option<String>,
     pub verification_verdict: Option<String>,
     pub github_id: Option<String>,

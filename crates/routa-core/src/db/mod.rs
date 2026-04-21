@@ -221,6 +221,7 @@ impl Database {
                     verification_verdict    TEXT,
                     verification_report     TEXT,
                     codebase_ids            TEXT NOT NULL DEFAULT '[]',
+                    context_search_spec     TEXT,
                     worktree_id             TEXT,
                     version                 INTEGER NOT NULL DEFAULT 1,
                     created_at              INTEGER NOT NULL,
@@ -381,6 +382,7 @@ impl Database {
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN last_sync_error TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN test_cases TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN codebase_ids TEXT NOT NULL DEFAULT '[]'", []))?;
+            Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN context_search_spec TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN worktree_id TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN creation_source TEXT", []))?;
             Self::ignore_duplicate_column(conn.execute("ALTER TABLE tasks ADD COLUMN session_ids TEXT NOT NULL DEFAULT '[]'", []))?;

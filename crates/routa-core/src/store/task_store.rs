@@ -5,8 +5,8 @@ use serde::de::DeserializeOwned;
 use crate::db::Database;
 use crate::error::ServerError;
 use crate::models::task::{
-    Task, TaskCreationSource, TaskLaneHandoff, TaskLaneSession, TaskPriority, TaskStatus,
-    VerificationVerdict,
+    Task, TaskContextSearchSpec, TaskCreationSource, TaskLaneHandoff, TaskLaneSession,
+    TaskPriority, TaskStatus, VerificationVerdict,
 };
 
 #[derive(Clone)]
@@ -42,10 +42,10 @@ impl TaskStore {
                                          trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                                          github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id,
                                          creation_source, session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
-                                         verification_report, codebase_ids, worktree_id, version, created_at, updated_at)
+                                         verification_report, codebase_ids, context_search_spec, worktree_id, version, created_at, updated_at)
                                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
                                          ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36,
-                                         ?37, ?38, ?39, ?40, ?41, 1, ?42, ?43)
+                                         ?37, ?38, ?39, ?40, ?41, ?42, 1, ?43, ?44)
                      ON CONFLICT(id) DO UPDATE SET
                        title = excluded.title,
                        objective = excluded.objective,
@@ -86,6 +86,7 @@ impl TaskStore {
                        verification_verdict = excluded.verification_verdict,
                        verification_report = excluded.verification_report,
                        codebase_ids = excluded.codebase_ids,
+                       context_search_spec = excluded.context_search_spec,
                        worktree_id = excluded.worktree_id,
                        updated_at = excluded.updated_at",
                     rusqlite::params![
@@ -129,6 +130,9 @@ impl TaskStore {
                         t.verification_verdict.as_ref().map(|v| v.as_str()),
                         t.verification_report,
                         serde_json::to_string(&t.codebase_ids).unwrap_or_default(),
+                        t.context_search_spec
+                            .as_ref()
+                            .map(|value| serde_json::to_string(value).unwrap_or_default()),
                         t.worktree_id,
                         t.created_at.timestamp_millis(),
                         t.updated_at.timestamp_millis(),
@@ -150,7 +154,7 @@ impl TaskStore {
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id, creation_source,
                      session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
-                     verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     verification_report, codebase_ids, context_search_spec, worktree_id, created_at, updated_at
                      FROM tasks WHERE id = ?1",
                 )?;
                 stmt.query_row(rusqlite::params![id], |row| Ok(row_to_task(row)))
@@ -170,7 +174,7 @@ impl TaskStore {
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id, creation_source,
                      session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
-                     verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     verification_report, codebase_ids, context_search_spec, worktree_id, created_at, updated_at
                      FROM tasks WHERE workspace_id = ?1 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -192,7 +196,7 @@ impl TaskStore {
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id, creation_source,
                      session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
-                     verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     verification_report, codebase_ids, context_search_spec, worktree_id, created_at, updated_at
                      FROM tasks WHERE session_id = ?1 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -219,7 +223,7 @@ impl TaskStore {
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id, creation_source,
                      session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
-                     verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     verification_report, codebase_ids, context_search_spec, worktree_id, created_at, updated_at
                      FROM tasks WHERE workspace_id = ?1 AND status = ?2 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -243,7 +247,7 @@ impl TaskStore {
                      trigger_session_id, github_id, github_number, github_url, github_repo, github_state,
                      github_synced_at, last_sync_error, dependencies, parallel_group, workspace_id, session_id, creation_source,
                      session_ids, lane_sessions, lane_handoffs, completion_summary, verification_verdict,
-                     verification_report, codebase_ids, worktree_id, created_at, updated_at
+                     verification_report, codebase_ids, context_search_spec, worktree_id, created_at, updated_at
                      FROM tasks WHERE assigned_to = ?1 ORDER BY created_at DESC",
                 )?;
                 let rows = stmt
@@ -304,8 +308,8 @@ impl TaskStore {
 use rusqlite::Row;
 
 fn row_to_task(row: &Row<'_>) -> Task {
-    let created_ms: i64 = row.get(41).unwrap_or(0);
-    let updated_ms: i64 = row.get(42).unwrap_or(0);
+    let created_ms: i64 = row.get(42).unwrap_or(0);
+    let updated_ms: i64 = row.get(43).unwrap_or(0);
 
     let acceptance_criteria: Option<Vec<String>> = row
         .get::<_, Option<String>>(5)
@@ -395,7 +399,11 @@ fn row_to_task(row: &Row<'_>) -> Task {
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
-        worktree_id: row.get(40).unwrap_or(None),
+        context_search_spec: row
+            .get::<_, Option<String>>(40)
+            .unwrap_or(None)
+            .and_then(|s| serde_json::from_str::<TaskContextSearchSpec>(&s).ok()),
+        worktree_id: row.get(41).unwrap_or(None),
         created_at: chrono::DateTime::from_timestamp_millis(created_ms).unwrap_or_else(Utc::now),
         updated_at: chrono::DateTime::from_timestamp_millis(updated_ms).unwrap_or_else(Utc::now),
     }

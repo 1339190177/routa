@@ -23,7 +23,9 @@ import {
 import type { RoutaSystem } from "../routa-system";
 import {
   createTask,
+  normalizeTaskContextSearchSpec,
   Task,
+  TaskContextSearchSpec,
   TaskLaneHandoffRequestType,
   TaskLaneHandoffStatus,
   TaskPriority,
@@ -177,6 +179,7 @@ export class KanbanTools {
     columnId?: string;
     title: string;
     description?: string;
+    contextSearchSpec?: TaskContextSearchSpec;
     priority?: "low" | "medium" | "high" | "urgent";
     labels?: string[];
     assignedProvider?: string;
@@ -215,6 +218,7 @@ export class KanbanTools {
       priority: params.priority as TaskPriority | undefined,
       labels: params.labels,
       assignedProvider: params.assignedProvider,
+      contextSearchSpec: normalizeTaskContextSearchSpec(params.contextSearchSpec),
     });
 
     await this.taskStore.save(task);
@@ -758,7 +762,14 @@ export class KanbanTools {
   async decomposeTasks(params: {
     boardId?: string;
     workspaceId: string;
-    tasks: { title: string; description?: string; priority?: "low" | "medium" | "high" | "urgent"; labels?: string[]; assignedProvider?: string }[];
+    tasks: {
+      title: string;
+      description?: string;
+      contextSearchSpec?: TaskContextSearchSpec;
+      priority?: "low" | "medium" | "high" | "urgent";
+      labels?: string[];
+      assignedProvider?: string;
+    }[];
     columnId?: string;
   }): Promise<ToolResult> {
     const board = await this.resolveBoard(params.workspaceId, params.boardId);
@@ -796,6 +807,7 @@ export class KanbanTools {
         priority: item.priority as TaskPriority | undefined,
         labels: item.labels,
         assignedProvider: item.assignedProvider,
+        contextSearchSpec: normalizeTaskContextSearchSpec(item.contextSearchSpec),
       });
       await this.taskStore.save(task);
       await this.triggerCreatedCardAutomation(board, column, task);
@@ -834,6 +846,7 @@ export class KanbanTools {
       priority: task.priority,
       labels: task.labels,
       assignee: task.assignee,
+      contextSearchSpec: task.contextSearchSpec,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     };

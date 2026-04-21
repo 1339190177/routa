@@ -38,6 +38,43 @@ async function resolveSessionProvider(sessionId: string | undefined): Promise<st
   }
 }
 
+const TASK_CONTEXT_SEARCH_SPEC_SCHEMA = {
+  type: "object",
+  properties: {
+    query: { type: "string", description: "Free-text retrieval query for relevant history or feature context." },
+    featureCandidates: {
+      type: "array",
+      items: { type: "string" },
+      description: "Candidate Feature Tree IDs that may own this task.",
+    },
+    relatedFiles: {
+      type: "array",
+      items: { type: "string" },
+      description: "Repository-relative files already believed to be relevant.",
+    },
+    routeCandidates: {
+      type: "array",
+      items: { type: "string" },
+      description: "Candidate routes or pages related to the task.",
+    },
+    apiCandidates: {
+      type: "array",
+      items: { type: "string" },
+      description: "Candidate API paths or RPC surfaces related to the task.",
+    },
+    moduleHints: {
+      type: "array",
+      items: { type: "string" },
+      description: "Module or subsystem hints to narrow history search.",
+    },
+    symptomHints: {
+      type: "array",
+      items: { type: "string" },
+      description: "User-visible errors, failure symptoms, or friction hints.",
+    },
+  },
+} as const;
+
 /**
  * Essential tools for weak models - minimum viable coordination.
  * Core coordination tools plus Kanban and artifact tools for card-assigned agents.
@@ -203,6 +240,7 @@ export async function executeMcpTool(
             acceptanceCriteria: args.acceptanceCriteria as string[] | undefined,
             verificationCommands: args.verificationCommands as string[] | undefined,
             testCases: args.testCases as string[] | undefined,
+            contextSearchSpec: args.contextSearchSpec as Record<string, unknown> | undefined,
           },
         })
       );
@@ -503,6 +541,7 @@ export async function executeMcpTool(
           workspaceId: (args.workspaceId as string) ?? workspace,
           title: args.title as string,
           description: args.description as string | undefined,
+          contextSearchSpec: args.contextSearchSpec as Record<string, unknown> | undefined,
           columnId: (args.columnId as string | undefined) ?? (args.column as string | undefined) ?? "backlog",
           priority: args.priority as "low" | "medium" | "high" | "urgent" | undefined,
           labels: args.labels as string[] | undefined,
@@ -566,6 +605,7 @@ export async function executeMcpTool(
           tasks: ((args.tasks as Array<Record<string, unknown>> | undefined) ?? []).map((task) => ({
             title: task.title as string,
             description: task.description as string | undefined,
+            contextSearchSpec: task.contextSearchSpec as Record<string, unknown> | undefined,
             priority: task.priority as "low" | "medium" | "high" | "urgent" | undefined,
             labels: task.labels as string[] | undefined,
             assignedProvider: (task.assignedProvider as string | undefined) ?? defaultAssignedProvider,
@@ -643,6 +683,11 @@ export function getMcpToolDefinitions(
           taskLabel: { type: "string", description: "Short label for the current task or request." },
           locale: { type: "string", description: "Optional locale hint, e.g. en or zh-CN." },
           featureId: { type: "string", description: "Optional Feature Explorer feature ID to ground retrieval." },
+          featureIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional ordered candidate Feature Tree IDs to ground retrieval.",
+          },
           filePaths: {
             type: "array",
             items: { type: "string" },
@@ -1017,6 +1062,7 @@ export function getMcpToolDefinitions(
           acceptanceCriteria: { type: "array", items: { type: "string" } },
           verificationCommands: { type: "array", items: { type: "string" } },
           testCases: { type: "array", items: { type: "string" } },
+          contextSearchSpec: TASK_CONTEXT_SEARCH_SPEC_SCHEMA,
         },
         required: ["taskId"],
       },
@@ -1261,6 +1307,10 @@ export function getMcpToolDefinitions(
           boardId: { type: "string", description: "Optional board ID; uses default board if omitted" },
           title: { type: "string", description: "Card title" },
           description: { type: "string", description: "Card description" },
+          contextSearchSpec: {
+            ...TASK_CONTEXT_SEARCH_SPEC_SCHEMA,
+            description: "Structured retrieval hints to help JIT Context recover relevant history and Feature Tree context.",
+          },
           assignedProvider: { type: "string", description: "Provider override for the created card; defaults to the current session provider when available" },
           columnId: { type: "string", description: "Target column ID" },
           column: { type: "string", description: "Target column alias" },
@@ -1354,6 +1404,7 @@ export function getMcpToolDefinitions(
               properties: {
                 title: { type: "string", description: "Card title" },
                 description: { type: "string", description: "Card description" },
+                contextSearchSpec: TASK_CONTEXT_SEARCH_SPEC_SCHEMA,
                 priority: { type: "string", enum: ["low", "medium", "high", "urgent"], description: "Card priority" },
                 labels: { type: "array", items: { type: "string" }, description: "Card labels" },
               },

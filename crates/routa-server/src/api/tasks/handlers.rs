@@ -393,6 +393,7 @@ fn create_task_command(body: CreateTaskRequest) -> CreateTaskCommand {
         create_github_issue: body.create_github_issue,
         repo_path: body.repo_path,
         codebase_ids: body.codebase_ids,
+        context_search_spec: body.context_search_spec,
         github_id: body.github_id,
         github_number: body.github_number,
         github_url: body.github_url,
@@ -437,6 +438,7 @@ fn update_task_command(body: UpdateTaskRequest) -> UpdateTaskCommand {
         retry_trigger: body.retry_trigger,
         repo_path: body.repo_path,
         codebase_ids: body.codebase_ids,
+        context_search_spec: body.context_search_spec,
         worktree_id: body.worktree_id,
     }
 }

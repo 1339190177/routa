@@ -367,6 +367,7 @@ async fn trigger_workflow(
                     create_github_issue: Some(false),
                     repo_path: None,
                     codebase_ids: None,
+                    context_search_spec: None,
                     github_id: None,
                     github_number: None,
                     github_url: None,

@@ -26,6 +26,16 @@ import { readFeatureTreeSpecResource } from "../spec/feature-tree-spec-resource-
  */
 export type ToolMode = "essential" | "full";
 
+const taskContextSearchSpecSchema = z.object({
+  query: z.string().optional().describe("Free-text retrieval query for relevant history or feature context."),
+  featureCandidates: z.array(z.string()).optional().describe("Candidate Feature Tree IDs that may own this task."),
+  relatedFiles: z.array(z.string()).optional().describe("Repository-relative files already believed to be relevant."),
+  routeCandidates: z.array(z.string()).optional().describe("Candidate routes or pages related to the task."),
+  apiCandidates: z.array(z.string()).optional().describe("Candidate API paths or RPC surfaces related to the task."),
+  moduleHints: z.array(z.string()).optional().describe("Module or subsystem hints to narrow history search."),
+  symptomHints: z.array(z.string()).optional().describe("User-visible errors, failure symptoms, or friction hints."),
+});
+
 type DelegationOrchestrator = {
   getSessionForAgent(agentId: string): string | undefined;
   delegateTaskWithSpawn(params: {
@@ -308,6 +318,7 @@ export class RoutaMcpToolManager {
         acceptanceCriteria: z.array(z.string()).optional().describe("Update acceptance criteria"),
         verificationCommands: z.array(z.string()).optional().describe("Update verification commands"),
         testCases: z.array(z.string()).optional().describe("Update test cases"),
+        contextSearchSpec: taskContextSearchSpecSchema.optional().describe("Structured retrieval hints for JIT Context and history search."),
       },
       async (params) => {
         const { taskId, expectedVersion, agentId, ...updates } = params;
@@ -1009,6 +1020,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         column: z.string().optional().describe("Column ID alias"),
         title: z.string().describe("Card title"),
         description: z.string().optional().describe("Card description"),
+        contextSearchSpec: taskContextSearchSpecSchema.optional().describe("Structured retrieval hints for JIT Context and history search."),
         priority: z.enum(["low", "medium", "high", "urgent"]).optional().describe("Card priority"),
         labels: z.array(z.string()).optional().describe("Card labels"),
         workspaceId: z.string().optional().describe("Workspace ID (uses default if omitted)"),
@@ -1022,6 +1034,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
           columnId: params.columnId ?? params.column,
           title: params.title,
           description: params.description,
+          contextSearchSpec: params.contextSearchSpec,
           priority: params.priority,
           labels: params.labels,
           workspaceId: params.workspaceId ?? this.workspaceId,
@@ -1258,6 +1271,7 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         tasks: z.array(z.object({
           title: z.string().describe("Task title"),
           description: z.string().optional().describe("Task description"),
+          contextSearchSpec: taskContextSearchSpecSchema.optional().describe("Structured retrieval hints for JIT Context and history search."),
           priority: z.enum(["low", "medium", "high", "urgent"]).optional().describe("Task priority"),
           labels: z.array(z.string()).optional().describe("Task labels"),
         })).describe("Array of tasks to create"),

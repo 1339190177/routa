@@ -20,7 +20,14 @@ import {
 } from "drizzle-orm/sqlite-core";
 import type { TaskCreationSource } from "../kanban/task-creation-policy";
 import type { KanbanColumn } from "../models/kanban";
-import type { FallbackAgent, TaskCommentEntry, TaskDeliverySnapshot, TaskLaneHandoff, TaskLaneSession } from "../models/task";
+import type {
+  FallbackAgent,
+  TaskCommentEntry,
+  TaskContextSearchSpec,
+  TaskDeliverySnapshot,
+  TaskLaneHandoff,
+  TaskLaneSession,
+} from "../models/task";
 
 // ─── Workspaces ─────────────────────────────────────────────────────
 
@@ -111,6 +118,7 @@ export const tasks = sqliteTable("tasks", {
   creationSource: text("creation_source").$type<TaskCreationSource>(),
   /** Associated codebase IDs for this task */
   codebaseIds: text("codebase_ids", { mode: "json" }).$type<string[]>().default([]),
+  contextSearchSpec: text("context_search_spec", { mode: "json" }).$type<TaskContextSearchSpec>(),
   /** Git worktree ID created for this task when it enters the dev column */
   worktreeId: text("worktree_id"),
   deliverySnapshot: text("delivery_snapshot", { mode: "json" }).$type<TaskDeliverySnapshot>(),

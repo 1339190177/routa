@@ -202,6 +202,37 @@ describe("/api/tasks/[taskId]", () => {
     });
   });
 
+  it("updates contextSearchSpec through PATCH", async () => {
+    const response = await PATCH(new NextRequest("http://localhost/api/tasks/task-1", {
+      method: "PATCH",
+      body: JSON.stringify({
+        contextSearchSpec: {
+          query: "kanban jit context",
+          featureCandidates: ["kanban-workflow"],
+          relatedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"],
+        },
+      }),
+      headers: { "Content-Type": "application/json" },
+    }), {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(taskStore.save).toHaveBeenCalledWith(expect.objectContaining({
+      contextSearchSpec: {
+        query: "kanban jit context",
+        featureCandidates: ["kanban-workflow"],
+        relatedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"],
+      },
+    }));
+    expect(data.task.contextSearchSpec).toEqual({
+      query: "kanban jit context",
+      featureCandidates: ["kanban-workflow"],
+      relatedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"],
+    });
+  });
+
   it("keeps legacy appended comments as a single migrated note", async () => {
     taskStore.get.mockResolvedValueOnce(createTask({
       id: "task-legacy-comments",

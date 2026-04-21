@@ -10,7 +10,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { monitorApiRoute } from "@/core/http/api-route-observability";
 import { getRoutaSystem } from "@/core/routa-system";
-import { createTask, hydrateTaskComments, Task, TaskStatus, TaskPriority } from "@/core/models/task";
+import {
+  createTask,
+  hydrateTaskComments,
+  parseTaskContextSearchSpec,
+  Task,
+  TaskStatus,
+  TaskPriority,
+} from "@/core/models/task";
 import type { ArtifactStore } from "@/core/store/artifact-store";
 import type { CodebaseStore } from "@/core/db/pg-codebase-store";
 import type { KanbanBoardStore } from "@/core/store/kanban-board-store";
@@ -256,6 +263,7 @@ export async function POST(request: NextRequest) {
     creationSource,
     repoPath,
     codebaseIds,
+    contextSearchSpec,
     githubId,
     githubNumber,
     githubUrl,
@@ -298,6 +306,9 @@ export async function POST(request: NextRequest) {
   const requestedCodebaseIds = Array.isArray(codebaseIds)
     ? codebaseIds.filter((id): id is string => typeof id === "string")
     : [];
+  const normalizedContextSearchSpec = contextSearchSpec === null
+    ? undefined
+    : parseTaskContextSearchSpec(contextSearchSpec);
   const normalizedGitHubId = typeof githubId === "string" && githubId.trim()
     ? githubId.trim()
     : undefined;
@@ -424,6 +435,7 @@ export async function POST(request: NextRequest) {
     isPullRequest: normalizedIsPullRequest,
     creationSource: normalizedCreationSource,
     codebaseIds: normalizedCodebaseIds,
+    contextSearchSpec: normalizedContextSearchSpec,
   });
 
   await system.taskStore.save(task);
@@ -544,6 +556,7 @@ async function serializeTask(
     sessionId: task.sessionId,
     creationSource: task.creationSource,
     codebaseIds: task.codebaseIds ?? [],
+    contextSearchSpec: task.contextSearchSpec,
     worktreeId: task.worktreeId,
     completionSummary: task.completionSummary,
     ...(task.verificationVerdict != null && { verificationVerdict: task.verificationVerdict }),

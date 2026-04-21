@@ -18,7 +18,14 @@ import {
 } from "drizzle-orm/pg-core";
 import type { TaskCreationSource } from "../kanban/task-creation-policy";
 import type { KanbanColumn } from "../models/kanban";
-import type { FallbackAgent, TaskCommentEntry, TaskDeliverySnapshot, TaskLaneHandoff, TaskLaneSession } from "../models/task";
+import type {
+  FallbackAgent,
+  TaskCommentEntry,
+  TaskContextSearchSpec,
+  TaskDeliverySnapshot,
+  TaskLaneHandoff,
+  TaskLaneSession,
+} from "../models/task";
 
 // ─── Workspaces ─────────────────────────────────────────────────────
 
@@ -109,6 +116,7 @@ export const tasks = pgTable("tasks", {
   creationSource: text("creation_source").$type<TaskCreationSource>(),
   /** Associated codebase IDs for this task */
   codebaseIds: jsonb("codebase_ids").$type<string[]>().default([]),
+  contextSearchSpec: jsonb("context_search_spec").$type<TaskContextSearchSpec>(),
   /** Git worktree ID created for this task when it enters the dev column */
   worktreeId: text("worktree_id"),
   deliverySnapshot: jsonb("delivery_snapshot").$type<TaskDeliverySnapshot>(),

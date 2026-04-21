@@ -3,7 +3,8 @@ use chrono::Utc;
 use crate::error::ServerError;
 use crate::models::kanban::{column_id_to_task_status, task_status_to_column_id};
 use crate::models::task::{
-    Task, TaskCreationSource, TaskLaneSessionStatus, TaskPriority, TaskStatus,
+    Task, TaskContextSearchSpec, TaskCreationSource, TaskLaneSessionStatus, TaskPriority,
+    TaskStatus,
 };
 use crate::state::AppState;
 use routa_core::kanban::{
@@ -50,6 +51,7 @@ impl TaskApplicationService {
             create_github_issue,
             repo_path,
             codebase_ids,
+            context_search_spec,
             github_id,
             github_number,
             github_url,
@@ -90,6 +92,7 @@ impl TaskApplicationService {
         task.assigned_specialist_id = assigned_specialist_id;
         task.assigned_specialist_name = assigned_specialist_name;
         task.codebase_ids = codebase_ids.unwrap_or_default();
+        task.context_search_spec = context_search_spec;
         task.github_id = github_id;
         task.github_number = github_number;
         task.github_url = github_url;
@@ -276,6 +279,9 @@ impl TaskApplicationService {
         if let Some(ids) = command.codebase_ids {
             task.codebase_ids = ids;
         }
+        if let Some(context_search_spec) = command.context_search_spec {
+            task.context_search_spec = Some(context_search_spec);
+        }
         if let Some(wt) = command.worktree_id {
             task.worktree_id = wt;
         }
@@ -429,6 +435,7 @@ pub struct CreateTaskCommand {
     pub create_github_issue: Option<bool>,
     pub repo_path: Option<String>,
     pub codebase_ids: Option<Vec<String>>,
+    pub context_search_spec: Option<TaskContextSearchSpec>,
     pub github_id: Option<String>,
     pub github_number: Option<i64>,
     pub github_url: Option<String>,
@@ -472,6 +479,7 @@ pub struct UpdateTaskCommand {
     pub retry_trigger: Option<bool>,
     pub repo_path: Option<String>,
     pub codebase_ids: Option<Vec<String>>,
+    pub context_search_spec: Option<TaskContextSearchSpec>,
     pub worktree_id: Option<Option<String>>, // null clears, string sets
 }
 
@@ -582,6 +590,7 @@ mod tests {
                 create_github_issue: None,
                 repo_path: None,
                 codebase_ids: None,
+                context_search_spec: None,
                 github_id: None,
                 github_number: None,
                 github_url: None,
@@ -633,6 +642,7 @@ mod tests {
                 create_github_issue: Some(true),
                 repo_path: Some("/tmp/repo".to_string()),
                 codebase_ids: None,
+                context_search_spec: None,
                 github_id: None,
                 github_number: None,
                 github_url: None,
@@ -689,6 +699,7 @@ mod tests {
                 create_github_issue: None,
                 repo_path: None,
                 codebase_ids: None,
+                context_search_spec: None,
                 github_id: None,
                 github_number: None,
                 github_url: None,
@@ -731,6 +742,7 @@ mod tests {
                 create_github_issue: None,
                 repo_path: None,
                 codebase_ids: None,
+                context_search_spec: None,
                 github_id: None,
                 github_number: None,
                 github_url: None,

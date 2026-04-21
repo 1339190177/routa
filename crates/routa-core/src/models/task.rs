@@ -147,6 +147,25 @@ pub struct TaskLaneHandoff {
     pub response_summary: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskContextSearchSpec {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub feature_candidates: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub route_candidates: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub api_candidates: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub module_hints: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symptom_hints: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TaskPriority {
     #[serde(rename = "low")]
@@ -475,6 +494,8 @@ pub struct Task {
     /// Codebase IDs linked to this task
     #[serde(default)]
     pub codebase_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_search_spec: Option<TaskContextSearchSpec>,
     /// Worktree ID assigned to this task
     #[serde(skip_serializing_if = "Option::is_none")]
     pub worktree_id: Option<String>,
@@ -549,6 +570,7 @@ impl Task {
             session_id,
             creation_source,
             codebase_ids: Vec::new(),
+            context_search_spec: None,
             worktree_id: None,
             session_ids: Vec::new(),
             lane_sessions: Vec::new(),

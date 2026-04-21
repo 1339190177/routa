@@ -81,6 +81,7 @@ describe("sqlite foundation stores", () => {
         session_id TEXT,
         creation_source TEXT,
         codebase_ids TEXT DEFAULT '[]',
+        context_search_spec TEXT,
         worktree_id TEXT,
         delivery_snapshot TEXT,
         completion_summary TEXT,

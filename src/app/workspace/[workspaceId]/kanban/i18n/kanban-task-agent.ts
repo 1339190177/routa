@@ -66,6 +66,7 @@ export function buildKanbanTaskAgentPrompt(params: {
 - search_cards：搜索已有卡片
 - list_cards_by_column：查看指定列中的卡片
 - update_card：在规划阶段补充或修正卡片内容
+- update_task：为已有卡片补充结构化字段，例如 scope、acceptance criteria、verification plan，以及 contextSearchSpec
 
 当前工作区：${workspaceId}
 当前看板 ID：${boardId ?? "default"}
@@ -77,6 +78,8 @@ export function buildKanbanTaskAgentPrompt(params: {
 - 需要创建多张卡时，调用 decompose_tasks，并显式传入 tasks 和 columnId: "backlog"
 - 如果有 boardId，可传入 boardId: ${boardId ?? "default"}
 - 不要发明新的参数名，例如不要用 "column"，优先使用 "columnId"
+- 如果能推断出后续检索历史上下文所需的线索，在 create_card / decompose_tasks / update_task 里写入 contextSearchSpec
+- contextSearchSpec 优先填写 relatedFiles 和 featureCandidates；如果还不能确定文件，至少提供 query、moduleHints、symptomHints
 
 硬规则：
 1. 这条链路只做 backlog 规划，不做执行。
@@ -89,12 +92,14 @@ export function buildKanbanTaskAgentPrompt(params: {
 8. 如果请求包含多个彼此独立的任务，优先使用 decompose_tasks。
 9. 如果请求本质上是单个任务，就只创建一张 backlog 卡，标题尽量贴近用户原始表述。
 10. 只有在 backlog 或进行中的工作里已经存在完全重复的卡片时，才不要新建卡片。
-11. 新建 backlog 卡片时，description 必须包含一个唯一的 \`\`\`yaml 代码块，作为 canonical user story contract。
-12. 这个 YAML 代码块必须包含 story.version、language、title、problem_statement、user_value、acceptance_criteria、constraints_and_affected_areas、dependencies_and_sequencing、out_of_scope、invest。
-13. invest 下必须显式给出 Independent、Negotiable、Valuable、Estimable、Small、Testable 六项，每项都要有 status 和 reason。
-14. 如果 canonical YAML 解析失败或结构不合法，必须在 backlog 内重写整个 YAML block，不要指望 Todo 或下游 lane 替你修补。
-15. YAML 之外可以有极少量说明文字，但下游 gate 只信任这个 canonical YAML。
-16. 最后要明确汇报你创建了哪些 backlog 卡片，并说明 backlog 自动化会在创建后继续运行。
+11. 如果能合理推断历史上下文检索线索，必须写入 contextSearchSpec；不要把这类结构化信息塞进 comment。
+12. 不要编造没有把握的文件路径或 feature ID；宁可提供更宽泛但真实的 query、moduleHints、symptomHints。
+13. 新建 backlog 卡片时，description 必须包含一个唯一的 \`\`\`yaml 代码块，作为 canonical user story contract。
+14. 这个 YAML 代码块必须包含 story.version、language、title、problem_statement、user_value、acceptance_criteria、constraints_and_affected_areas、dependencies_and_sequencing、out_of_scope、invest。
+15. invest 下必须显式给出 Independent、Negotiable、Valuable、Estimable、Small、Testable 六项，每项都要有 status 和 reason。
+16. 如果 canonical YAML 解析失败或结构不合法，必须在 backlog 内重写整个 YAML block，不要指望 Todo 或下游 lane 替你修补。
+17. YAML 之外可以有极少量说明文字，但下游 gate 只信任这个 canonical YAML。
+18. 最后要明确汇报你创建了哪些 backlog 卡片，并说明 backlog 自动化会在创建后继续运行。
 
 canonical YAML 结构示例：
 \`\`\`yaml
@@ -154,6 +159,7 @@ Available Kanban tools:
 - search_cards: Search for cards
 - list_cards_by_column: List cards in a specific column
 - update_card: Update card details when needed during planning
+- update_task: Update structured task fields for an existing card, including story-readiness fields and contextSearchSpec
 
 Current workspace: ${workspaceId}
 Current board ID: ${boardId ?? "default"}
@@ -165,6 +171,8 @@ Preferred tool arguments:
 - When creating multiple cards, call decompose_tasks with tasks plus columnId: "backlog"
 - Pass boardId: ${boardId ?? "default"} when available
 - Do not invent alternate argument names such as "column"; prefer "columnId"
+- When you can infer history-context retrieval hints, include them as contextSearchSpec on create_card, decompose_tasks, or update_task
+- Prefer precise relatedFiles and featureCandidates; when exact files are unclear, provide query, moduleHints, and symptomHints instead
 
 Hard rules:
 1. This flow is backlog planning, not execution.
@@ -177,12 +185,14 @@ Hard rules:
 8. Prefer decompose_tasks when the request contains multiple independent tasks.
 9. If the request is a single task, create exactly one backlog card and keep the title close to the user's wording.
 10. Only avoid creating a new card when an exact duplicate already exists in backlog or active work.
-11. Every new backlog card description must contain exactly one \`\`\`yaml code block as the canonical user story contract.
-12. That YAML block must include story.version, language, title, problem_statement, user_value, acceptance_criteria, constraints_and_affected_areas, dependencies_and_sequencing, out_of_scope, and invest.
-13. The invest object must explicitly cover Independent, Negotiable, Valuable, Estimable, Small, and Testable with both status and reason.
-14. If the canonical YAML fails to parse or violates the schema, rewrite the whole YAML block in backlog. Do not expect Todo or downstream lanes to repair it for you.
-15. You may include a short human-readable summary outside the YAML block, but downstream gates only trust the canonical YAML.
-16. Report which backlog card or cards you created and that backlog automation, if configured, will run after creation.
+11. When you can infer history-context retrieval hints, write them into contextSearchSpec; do not bury them in free-form comments.
+12. Do not invent low-confidence file paths or feature IDs; if certainty is low, use a broader but truthful query, moduleHints, or symptomHints.
+13. Every new backlog card description must contain exactly one \`\`\`yaml code block as the canonical user story contract.
+14. That YAML block must include story.version, language, title, problem_statement, user_value, acceptance_criteria, constraints_and_affected_areas, dependencies_and_sequencing, out_of_scope, and invest.
+15. The invest object must explicitly cover Independent, Negotiable, Valuable, Estimable, Small, and Testable with both status and reason.
+16. If the canonical YAML fails to parse or violates the schema, rewrite the whole YAML block in backlog. Do not expect Todo or downstream lanes to repair it for you.
+17. You may include a short human-readable summary outside the YAML block, but downstream gates only trust the canonical YAML.
+18. Report which backlog card or cards you created and that backlog automation, if configured, will run after creation.
 
 Canonical YAML example:
 \`\`\`yaml

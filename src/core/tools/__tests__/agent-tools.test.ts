@@ -209,4 +209,35 @@ describe("AgentTools.updateTask synthetic completion", () => {
     expect(result.success).toBe(true);
     expect(events).not.toContain(AgentEventType.AGENT_COMPLETED);
   });
+
+  it("persists contextSearchSpec updates", async () => {
+    const task = createTask({
+      id: "task-context-search",
+      title: "Context search spec",
+      objective: "Persist retrieval hints on the task",
+      workspaceId: "workspace-1",
+      columnId: "backlog",
+    });
+    await taskStore.save(task);
+
+    const result = await tools.updateTask({
+      taskId: task.id,
+      updates: {
+        contextSearchSpec: {
+          query: "jit context kanban",
+          featureCandidates: ["kanban-workflow"],
+          relatedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"],
+        },
+      },
+      agentId: "system",
+    });
+
+    expect(result.success).toBe(true);
+    const updated = await taskStore.get(task.id);
+    expect(updated?.contextSearchSpec).toEqual({
+      query: "jit context kanban",
+      featureCandidates: ["kanban-workflow"],
+      relatedFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-card-detail.tsx"],
+    });
+  });
 });

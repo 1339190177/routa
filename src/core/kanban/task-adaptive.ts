@@ -1,4 +1,5 @@
 import type { TaskAdaptiveHarnessTaskType } from "@/core/harness/task-adaptive";
+import type { TaskContextSearchSpec } from "@/core/models/task";
 
 type TaskAdaptiveSource = {
   title: string;
@@ -7,11 +8,14 @@ type TaskAdaptiveSource = {
   triggerSessionId?: string;
   sessionIds?: string[];
   laneSessions?: Array<{ sessionId: string }>;
+  contextSearchSpec?: TaskContextSearchSpec;
 };
 
 export interface KanbanTaskAdaptiveHarnessOptions {
   taskLabel?: string;
   locale?: string;
+  featureIds?: string[];
+  filePaths?: string[];
   historySessionIds?: string[];
   taskType?: TaskAdaptiveHarnessTaskType;
   role?: string;
@@ -19,6 +23,16 @@ export interface KanbanTaskAdaptiveHarnessOptions {
 
 function uniqueNonEmptyStrings(values: Array<string | undefined | null>): string[] {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+function collectContextSearchFeatureIds(task: TaskAdaptiveSource | null | undefined): string[] | undefined {
+  const featureIds = uniqueNonEmptyStrings(task?.contextSearchSpec?.featureCandidates ?? []);
+  return featureIds.length > 0 ? featureIds : undefined;
+}
+
+function collectContextSearchFilePaths(task: TaskAdaptiveSource | null | undefined): string[] | undefined {
+  const filePaths = uniqueNonEmptyStrings(task?.contextSearchSpec?.relatedFiles ?? []);
+  return filePaths.length > 0 ? filePaths : undefined;
 }
 
 export function collectKanbanTaskHistorySessionIds(task: TaskAdaptiveSource | null | undefined): string[] | undefined {
@@ -60,6 +74,8 @@ export function buildKanbanTaskAdaptiveHarnessOptions(
 ): KanbanTaskAdaptiveHarnessOptions {
   return {
     taskLabel: options.task?.title ?? promptLabel.trim(),
+    featureIds: collectContextSearchFeatureIds(options.task),
+    filePaths: collectContextSearchFilePaths(options.task),
     historySessionIds: collectKanbanTaskHistorySessionIds(options.task),
     taskType: options.taskType ?? resolveKanbanTaskAdaptiveTaskType(options.task?.columnId),
     locale: options.locale,

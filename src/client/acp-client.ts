@@ -39,6 +39,7 @@ export interface AcpTaskAdaptiveHarnessOptions {
   taskLabel?: string;
   locale?: string;
   featureId?: string;
+  featureIds?: string[];
   filePaths?: string[];
   historySessionIds?: string[];
   taskType?: "implementation" | "planning" | "analysis" | "review";

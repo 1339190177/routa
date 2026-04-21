@@ -14,6 +14,7 @@ export interface TaskAdaptiveHarnessOptions {
   taskLabel?: string;
   locale?: string;
   featureId?: string;
+  featureIds?: string[];
   filePaths?: string[];
   historySessionIds?: string[];
   taskType?: TaskAdaptiveHarnessTaskType;
@@ -798,6 +799,7 @@ export function parseTaskAdaptiveHarnessOptions(value: unknown): TaskAdaptiveHar
     taskLabel: normalizeString(value.taskLabel),
     locale: normalizeString(value.locale),
     featureId: normalizeString(value.featureId),
+    featureIds: normalizeStringArray(value.featureIds),
     filePaths: normalizeStringArray(value.filePaths),
     historySessionIds: normalizeStringArray(value.historySessionIds),
     taskType: taskType === "planning" || taskType === "analysis" || taskType === "review" || taskType === "implementation"
@@ -1048,19 +1050,26 @@ export async function assembleTaskAdaptiveHarness(
   const warnings: string[] = [];
 
   const featureTree = { features: readFeatureTreeFeatures(repoRoot) };
-  const feature = options.featureId
-    ? featureTree.features.find((item) => item.id === options.featureId)
-    : undefined;
+  const requestedFeatureIds = uniqueSorted([
+    ...(options.featureId ? [options.featureId] : []),
+    ...(options.featureIds ?? []),
+  ]);
+  const features = requestedFeatureIds
+    .map((featureId) => featureTree.features.find((item) => item.id === featureId))
+    .filter((feature): feature is FeatureTreeFeature => Boolean(feature));
 
-  if (options.featureId && !feature) {
-    warnings.push(`Feature not found: ${options.featureId}`);
+  for (const featureId of requestedFeatureIds) {
+    if (!features.some((feature) => feature.id === featureId)) {
+      warnings.push(`Feature not found: ${featureId}`);
+    }
   }
+  const primaryFeature = features[0];
 
   const fileSignals = collectTaskAdaptiveFileSignals(repoRoot);
   const selectedFiles = trimTo(
     uniqueSorted([
       ...(options.filePaths ?? []),
-      ...collectFeatureFiles(feature, maxFiles),
+      ...features.flatMap((feature) => collectFeatureFiles(feature, maxFiles)),
       ...inferFilesFromSessionIds(options.historySessionIds, fileSignals, maxFiles),
     ]),
     maxFiles,
@@ -1183,8 +1192,8 @@ export async function assembleTaskAdaptiveHarness(
     summary: buildHarnessSummary({
       locale,
       taskLabel: options.taskLabel,
-      featureName: feature?.name,
-      featureId: feature?.id ?? options.featureId,
+      featureName: primaryFeature?.name,
+      featureId: primaryFeature?.id ?? requestedFeatureIds[0],
       selectedFiles,
       matchedSessionIds,
       failures,
@@ -1193,8 +1202,8 @@ export async function assembleTaskAdaptiveHarness(
       warnings,
     }),
     warnings,
-    featureId: feature?.id ?? options.featureId,
-    featureName: feature?.name,
+    featureId: primaryFeature?.id ?? requestedFeatureIds[0],
+    featureName: primaryFeature?.name,
     selectedFiles,
     matchedSessionIds,
     failures,

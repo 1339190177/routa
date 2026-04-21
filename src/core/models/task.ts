@@ -207,6 +207,93 @@ export interface FallbackAgent {
   specialistName?: string;
 }
 
+export interface TaskContextSearchSpec {
+  query?: string;
+  featureCandidates?: string[];
+  relatedFiles?: string[];
+  routeCandidates?: string[];
+  apiCandidates?: string[];
+  moduleHints?: string[];
+  symptomHints?: string[];
+}
+
+function normalizeTaskContextSearchText(value: string | undefined | null): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeTaskContextSearchItems(values: readonly string[] | undefined): string[] | undefined {
+  if (!Array.isArray(values)) {
+    return undefined;
+  }
+
+  const normalized = Array.from(new Set(
+    values
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  ));
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+export function normalizeTaskContextSearchSpec(
+  value: TaskContextSearchSpec | null | undefined,
+): TaskContextSearchSpec | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized: TaskContextSearchSpec = {
+    query: normalizeTaskContextSearchText(value.query),
+    featureCandidates: normalizeTaskContextSearchItems(value.featureCandidates),
+    relatedFiles: normalizeTaskContextSearchItems(value.relatedFiles),
+    routeCandidates: normalizeTaskContextSearchItems(value.routeCandidates),
+    apiCandidates: normalizeTaskContextSearchItems(value.apiCandidates),
+    moduleHints: normalizeTaskContextSearchItems(value.moduleHints),
+    symptomHints: normalizeTaskContextSearchItems(value.symptomHints),
+  };
+
+  return Object.values(normalized).some((entry) =>
+    typeof entry === "string" ? entry.length > 0 : Array.isArray(entry) && entry.length > 0
+  )
+    ? normalized
+    : undefined;
+}
+
+export function parseTaskContextSearchSpec(value: unknown): TaskContextSearchSpec | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return normalizeTaskContextSearchSpec({
+    query: typeof candidate.query === "string" ? candidate.query : undefined,
+    featureCandidates: Array.isArray(candidate.featureCandidates)
+      ? candidate.featureCandidates.filter((item): item is string => typeof item === "string")
+      : undefined,
+    relatedFiles: Array.isArray(candidate.relatedFiles)
+      ? candidate.relatedFiles.filter((item): item is string => typeof item === "string")
+      : undefined,
+    routeCandidates: Array.isArray(candidate.routeCandidates)
+      ? candidate.routeCandidates.filter((item): item is string => typeof item === "string")
+      : undefined,
+    apiCandidates: Array.isArray(candidate.apiCandidates)
+      ? candidate.apiCandidates.filter((item): item is string => typeof item === "string")
+      : undefined,
+    moduleHints: Array.isArray(candidate.moduleHints)
+      ? candidate.moduleHints.filter((item): item is string => typeof item === "string")
+      : undefined,
+    symptomHints: Array.isArray(candidate.symptomHints)
+      ? candidate.symptomHints.filter((item): item is string => typeof item === "string")
+      : undefined,
+  });
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -258,6 +345,8 @@ export interface Task {
   creationSource?: TaskCreationSource;
   /** Associated codebase IDs for this task */
   codebaseIds: string[];
+  /** Structured retrieval hints used to hydrate JIT Context and history search. */
+  contextSearchSpec?: TaskContextSearchSpec;
   /** Git worktree ID created for this task when it enters the dev column */
   worktreeId?: string;
   /** Frozen delivery evidence captured before PR / merge / base sync can erase base..HEAD */
@@ -308,6 +397,7 @@ export function createTask(params: {
   isPullRequest?: boolean;
   status?: TaskStatus;
   codebaseIds?: string[];
+  contextSearchSpec?: TaskContextSearchSpec;
   worktreeId?: string;
 }): Task {
   const now = new Date();
@@ -353,6 +443,7 @@ export function createTask(params: {
     sessionId: params.sessionId,
     creationSource: params.creationSource,
     codebaseIds: params.codebaseIds ?? [],
+    contextSearchSpec: normalizeTaskContextSearchSpec(params.contextSearchSpec),
     worktreeId: params.worktreeId,
     triggerSessionId: params.triggerSessionId,
     createdAt: now,

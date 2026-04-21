@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { monitorApiRoute } from "@/core/http/api-route-observability";
 import { getRoutaSystem } from "@/core/routa-system";
-import { hydrateTaskComments, TaskPriority, TaskStatus, VerificationVerdict, type Task } from "@/core/models/task";
+import {
+  hydrateTaskComments,
+  parseTaskContextSearchSpec,
+  TaskPriority,
+  TaskStatus,
+  VerificationVerdict,
+  type Task,
+} from "@/core/models/task";
 import { columnIdToTaskStatus, resolveTaskStatusForBoardColumn, taskStatusToColumnId } from "@/core/models/kanban";
 import { getKanbanEventBroadcaster } from "@/core/kanban/kanban-event-broadcaster";
 import { ensureTaskBoardContext } from "@/core/kanban/task-board-context";
@@ -235,6 +242,11 @@ export async function PATCH(
   if (body.boardId !== undefined) nextTask.boardId = body.boardId;
   if (body.codebaseIds !== undefined && Array.isArray(body.codebaseIds)) {
     nextTask.codebaseIds = body.codebaseIds.filter((id): id is string => typeof id === "string");
+  }
+  if ("contextSearchSpec" in body) {
+    nextTask.contextSearchSpec = body.contextSearchSpec === null
+      ? undefined
+      : parseTaskContextSearchSpec(body.contextSearchSpec);
   }
   if (body.worktreeId === null) nextTask.worktreeId = undefined;
   if (typeof body.worktreeId === "string") nextTask.worktreeId = body.worktreeId;
