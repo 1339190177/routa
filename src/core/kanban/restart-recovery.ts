@@ -187,12 +187,11 @@ export async function reviveMissingEntryAutomations(
   const board = await system.kanbanBoardStore.get(boardId);
   if (!board) return;
 
-  const tasks = await system.taskStore.listByWorkspace(workspaceId);
-  for (const originalTask of tasks) {
-    if (originalTask.boardId !== boardId || !originalTask.columnId) {
-      continue;
-    }
-
+  // Pre-filter tasks belonging to this board and having a column assignment.
+  // This avoids passing unrelated tasks through the expensive sanitize step.
+  const allTasks = await system.taskStore.listByWorkspace(workspaceId);
+  const boardTasks = allTasks.filter((t) => t.boardId === boardId && t.columnId);
+  for (const originalTask of boardTasks) {
     const task = await sanitizeStaleCurrentLaneAutomation(system, originalTask, options);
     if (task.triggerSessionId) continue;
 

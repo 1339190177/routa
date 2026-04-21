@@ -33,7 +33,7 @@ describe("board-branch-rules", () => {
     it("defaults autoCreatePullRequest to true for non-boolean values", () => {
       const rules = normalizeBranchRules({
         lifecycle: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           autoCreatePullRequest: "yes" as any,
         },
       });

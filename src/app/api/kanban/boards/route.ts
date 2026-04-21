@@ -78,10 +78,14 @@ export async function GET(request: NextRequest) {
   cleanupReviveTimestamps();
   if (reviveAllowed) {
     lastReviveByWorkspace.set(workspaceId, Date.now());
-    await Promise.all(boards.map((board) => reviveMissingEntryAutomations(system, workspaceId, board.id, {
-      sessionStore,
-      processManager,
-    })));
+    // Fire-and-forget: never block the boards response on revive logic.
+    // Revive is a background recovery operation and can take seconds with many tasks.
+    for (const board of boards) {
+      void reviveMissingEntryAutomations(system, workspaceId, board.id, {
+        sessionStore,
+        processManager,
+      });
+    }
   } else if (!sessionStore.isHydrated()) {
     void hydrationDone.then(() => {
       lastReviveByWorkspace.set(workspaceId, Date.now());

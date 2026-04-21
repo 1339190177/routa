@@ -20,6 +20,7 @@ import { AgentEventBridge, makeStartedEvent } from "./agent-event-bridge";
 import type { WorkspaceAgentEvent } from "./agent-event-bridge";
 import type { NormalizedSessionUpdate } from "./provider-adapter/types";
 import { getRoutaSystem } from "../routa-system";
+import type { BackgroundTaskStore } from "../store/background-task-store";
 import { EventBus, AgentEventType } from "../events/event-bus";
 import type { McpServerProfile } from "../mcp/mcp-server-profiles";
 
@@ -209,6 +210,8 @@ class HttpSessionStore {
   private lastAccessTime = new Map<string, number>();
   /** Sessions confirmed not linked to any BackgroundTask — skip future lookups. */
   private nonBackgroundSessions = new Set<string>();
+  /** Cache: sessionId → BackgroundTask for progress updates (avoids repeated DB lookups). */
+  private backgroundTaskCache = new Map<string, NonNullable<Awaited<ReturnType<BackgroundTaskStore["findBySessionId"]>>>>();
 
   enterStreamingMode(sessionId: string): void {
     this.streamingSessionIds.add(sessionId);
@@ -287,6 +290,7 @@ class HttpSessionStore {
     this.pendingNotifications.delete(sessionId);
     this.sessionAssistantOutput.delete(sessionId);
     this.nonBackgroundSessions.delete(sessionId);
+    this.backgroundTaskCache.delete(sessionId);
     // Clean up AgentEventBridge
     this.agentEventBridges.get(sessionId)?.cleanup();
     this.agentEventBridges.delete(sessionId);
@@ -1026,10 +1030,18 @@ class HttpSessionStore {
     try {
       if (this.nonBackgroundSessions.has(sessionId)) return;
       const system = getRoutaSystem();
-      const task = await system.backgroundTaskStore.findBySessionId(sessionId);
+      // First call hits DB; subsequent calls use in-memory cache.
+      // The cached task fields (toolCallCount, inputTokens, outputTokens) serve
+      // as initial values — they get overwritten by accumulated deltas from `updates`.
+      let task = this.backgroundTaskCache.get(sessionId);
       if (!task) {
-        this.nonBackgroundSessions.add(sessionId);
-        return;
+        const found = await system.backgroundTaskStore.findBySessionId(sessionId);
+        if (!found) {
+          this.nonBackgroundSessions.add(sessionId);
+          return;
+        }
+        this.backgroundTaskCache.set(sessionId, found);
+        task = found;
       }
 
       let latestOutput = task.taskOutput ?? "";
@@ -1118,6 +1130,21 @@ class HttpSessionStore {
         inputTokens,
         outputTokens,
       });
+
+      // Sync cache with the latest accumulated values so the next notification
+      // starts from the correct base instead of the stale first-lookup values.
+      if (didComplete) {
+        this.backgroundTaskCache.delete(sessionId);
+      } else {
+        this.backgroundTaskCache.set(sessionId, {
+          ...task,
+          taskOutput: latestOutput,
+          toolCallCount,
+          inputTokens,
+          outputTokens,
+          currentActivity,
+        });
+      }
     } catch {
       // Ignore errors - progress tracking is best-effort
     }
