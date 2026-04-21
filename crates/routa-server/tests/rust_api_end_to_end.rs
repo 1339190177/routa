@@ -1397,6 +1397,91 @@ async fn api_mcp_tools_accept_prefixed_tool_name() {
 }
 
 #[tokio::test]
+async fn api_mcp_tools_injects_workspace_from_header_when_args_omit_it() {
+    let fixture = ApiFixture::new().await;
+
+    let create_workspace = fixture
+        .client
+        .post(fixture.endpoint("/api/workspaces"))
+        .json(&json!({"title":"MCP Tools Header Workspace"}))
+        .send()
+        .await
+        .expect("create workspace");
+    assert_eq!(create_workspace.status(), StatusCode::OK);
+    let created_workspace: Value = create_workspace
+        .json()
+        .await
+        .expect("decode workspace create response");
+    let workspace_id = created_workspace["workspace"]["id"]
+        .as_str()
+        .expect("workspace id");
+
+    let create_card_response = fixture
+        .client
+        .post(fixture.endpoint("/api/mcp/tools"))
+        .header("Routa-Workspace-Id", workspace_id)
+        .json(&json!({
+            "name": "create_card",
+            "args": {
+                "title": "Header scoped card",
+                "description": "Should stay in the header workspace",
+                "columnId": "backlog"
+            }
+        }))
+        .send()
+        .await
+        .expect("call create_card");
+    assert_eq!(create_card_response.status(), StatusCode::OK);
+
+    let workspace_tasks_response = fixture
+        .client
+        .get(fixture.endpoint(&format!(
+            "/api/tasks?workspaceId={}",
+            urlencoding::encode(workspace_id)
+        )))
+        .send()
+        .await
+        .expect("list header workspace tasks");
+    assert_eq!(workspace_tasks_response.status(), StatusCode::OK);
+    let workspace_tasks: Value = workspace_tasks_response
+        .json()
+        .await
+        .expect("decode header workspace tasks");
+
+    let has_created_card = workspace_tasks["tasks"]
+        .as_array()
+        .expect("workspace tasks array")
+        .iter()
+        .any(|task| task.get("title").and_then(Value::as_str) == Some("Header scoped card"));
+    assert!(
+        has_created_card,
+        "header workspace should contain the MCP-created card"
+    );
+
+    let default_tasks_response = fixture
+        .client
+        .get(fixture.endpoint("/api/tasks?workspaceId=default"))
+        .send()
+        .await
+        .expect("list default tasks");
+    assert_eq!(default_tasks_response.status(), StatusCode::OK);
+    let default_tasks: Value = default_tasks_response
+        .json()
+        .await
+        .expect("decode default tasks");
+
+    let leaked_to_default = default_tasks["tasks"]
+        .as_array()
+        .expect("default tasks array")
+        .iter()
+        .any(|task| task.get("title").and_then(Value::as_str) == Some("Header scoped card"));
+    assert!(
+        !leaked_to_default,
+        "MCP tool fallback should not create the card in default workspace"
+    );
+}
+
+#[tokio::test]
 async fn api_mcp_tools_provide_and_list_artifacts() {
     let fixture = ApiFixture::new().await;
 

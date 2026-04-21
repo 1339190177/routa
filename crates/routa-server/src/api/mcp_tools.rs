@@ -3,7 +3,12 @@
 //! GET  /api/mcp/tools - List all MCP tool definitions
 //! POST /api/mcp/tools - Execute a specific tool by name
 
-use axum::{extract::State, routing::get, Json, Router};
+use axum::{
+    extract::{Query, State},
+    http::HeaderMap,
+    routing::get,
+    Json, Router,
+};
 use serde::Deserialize;
 
 use crate::error::ServerError;
@@ -25,13 +30,24 @@ async fn list_tools(State(_state): State<AppState>) -> Json<serde_json::Value> {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ExecuteToolRequest {
     name: Option<String>,
     args: Option<serde_json::Value>,
+    workspace_id: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExecuteToolQuery {
+    #[serde(rename = "wsId")]
+    ws_id: Option<String>,
 }
 
 async fn execute_tool(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ExecuteToolQuery>,
     Json(body): Json<ExecuteToolRequest>,
 ) -> Result<Json<serde_json::Value>, ServerError> {
     let name = body
@@ -39,7 +55,27 @@ async fn execute_tool(
         .as_deref()
         .ok_or_else(|| ServerError::BadRequest("Tool name is required".into()))?;
 
-    let args = body.args.unwrap_or(serde_json::json!({}));
+    let mut args = body.args.unwrap_or(serde_json::json!({}));
+    let workspace_id = args
+        .get("workspaceId")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or(body.workspace_id)
+        .or_else(|| {
+            headers
+                .get("routa-workspace-id")
+                .and_then(|value| value.to_str().ok())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        })
+        .or(query.ws_id);
+    if let Some(workspace_id) = workspace_id.as_deref() {
+        super::mcp_routes::inject_workspace_id(&mut args, workspace_id);
+    }
+
     let normalized_name = super::mcp_routes::normalize_tool_name_public(name);
     let known_tool = super::mcp_routes::build_tool_list_public()
         .iter()
