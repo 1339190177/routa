@@ -780,10 +780,13 @@ export class BrowserAcpClient {
         ? this.getOwnershipConflictRetryDelayMs(sessionId)
         : null;
 
+      const isExpiredLease = response.status === 409
+        && (message.includes("lease expired") || message.includes("cannot be resumed"));
+
       return {
         sessionId,
         message,
-        retryable: response.status !== 409 || ownershipConflictRetryDelayMs !== null,
+        retryable: !isExpiredLease && (response.status !== 409 || ownershipConflictRetryDelayMs !== null),
         status: response.status,
         ownerInstanceId: typeof payload?.ownerInstanceId === "string" ? payload.ownerInstanceId : undefined,
         leaseExpiresAt: typeof payload?.leaseExpiresAt === "string" ? payload.leaseExpiresAt : undefined,

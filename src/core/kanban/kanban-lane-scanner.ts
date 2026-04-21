@@ -10,12 +10,14 @@
  */
 
 import type { RoutaSystem } from "../routa-system";
-import { enqueueKanbanTaskSession } from "./workflow-orchestrator-singleton";
 import { hasExceededNonDevAutomationRepeatLimit } from "./workflow-orchestrator";
 import { getHttpSessionStore } from "../acp/http-session-store";
 import { clearStaleTriggerSession } from "./task-trigger-session";
+import { getKanbanAutomationSteps, type KanbanColumnStage } from "../models/kanban";
+import { AgentEventType } from "../events/event-bus";
 
 const SCAN_INTERVAL_MS = 30_000;
+const MAX_STEP_RESUME_ATTEMPTS = 3;
 
 let scanTimer: ReturnType<typeof setInterval> | null = null;
 let initialScanTimer: ReturnType<typeof setTimeout> | null = null;
@@ -106,32 +108,65 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
         // Skip tasks whose lane automation already completed successfully —
         // re-triggering would cause an infinite loop when the card has nowhere
         // to advance (e.g. done is the last column).
+        // For multi-step automations, find the highest completed step to avoid
+        // re-running earlier steps that already succeeded.
         const laneSessions = task.laneSessions ?? [];
-        const lastLaneSession = laneSessions.length > 0 ? laneSessions[laneSessions.length - 1] : undefined;
-        if (lastLaneSession?.columnId === task.columnId && lastLaneSession?.status === "completed") {
+        const currentColumn = board.columns.find(
+          (col: { id: string }) => col.id === task.columnId,
+        );
+        const steps = getKanbanAutomationSteps(currentColumn?.automation);
+        const lastCompletedStepIndex = findLastCompletedStepIndex(laneSessions, task.columnId!);
+
+        // All steps completed → nothing left to run
+        if (steps.length > 0 && lastCompletedStepIndex >= steps.length - 1) {
           continue;
         }
+
+        // For multi-step resume: check per-step attempt limit to prevent
+        // infinite retries when timed_out sessions don't count toward
+        // the global repeat limit.
+        let resumeStepIndex: number | undefined;
+        if (lastCompletedStepIndex >= 0 && lastCompletedStepIndex < steps.length - 1) {
+          const nextStepIndex = lastCompletedStepIndex + 1;
+          const stepAttempts = countStepAttempts(laneSessions, task.columnId!, nextStepIndex);
+          if (stepAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
+            continue;
+          }
+          resumeStepIndex = nextStepIndex;
+        }
+
         // Respect the repeat limit for this column/stage (including blocked)
         const stage = columnStageMap.get(task.columnId);
-        if (stage && hasExceededNonDevAutomationRepeatLimit(task, task.columnId, stage as import("../models/kanban").KanbanColumnStage)) {
+        if (stage && hasExceededNonDevAutomationRepeatLimit(task, task.columnId!, stage as KanbanColumnStage)) {
           continue;
         }
 
         scannedTasks++;
 
+        // Trigger via COLUMN_TRANSITION event so the Workflow Orchestrator
+        // manages the full multi-step flow (ActiveAutomation tracking,
+        // laneSession status updates, terminal guard, etc.).
         try {
-          const result = await enqueueKanbanTaskSession(system, {
-            task,
-            expectedColumnId: task.columnId,
+          system.eventBus.emit({
+            type: AgentEventType.COLUMN_TRANSITION,
+            agentId: "kanban-lane-scanner",
+            workspaceId: task.workspaceId,
+            data: {
+              cardId: task.id,
+              cardTitle: task.title,
+              boardId: board.id,
+              workspaceId: task.workspaceId,
+              fromColumnId: task.columnId,
+              toColumnId: task.columnId,
+              resumeStepIndex,
+            } as Record<string, unknown>,
+            timestamp: new Date(),
           });
-
-          if (result.sessionId || result.queued) {
-            triggeredTasks++;
-          }
+          triggeredTasks++;
         } catch (err) {
           errors++;
           console.warn(
-            `[LaneScanner] Failed to enqueue task ${task.id} in column ${task.columnId}:`,
+            `[LaneScanner] Failed to emit transition for task ${task.id} in column ${task.columnId}:`,
             err instanceof Error ? err.message : err,
           );
         }
@@ -195,4 +230,49 @@ export function stopLaneScanner(): void {
  */
 export function getLaneScannerStats(): LaneScannerStats {
   return getScannerState().stats;
+}
+
+/**
+ * Find the highest stepIndex that completed successfully for the given column.
+ * Returns -1 if no completed/transitioned step is found.
+ */
+function findLastCompletedStepIndex(
+  laneSessions: Array<{ columnId?: string; stepIndex?: number; status: string }>,
+  columnId: string,
+): number {
+  let result = -1;
+  for (const entry of laneSessions) {
+    if (
+      entry.columnId === columnId
+      && typeof entry.stepIndex === "number"
+      && (entry.status === "completed" || entry.status === "transitioned")
+      && entry.stepIndex > result
+    ) {
+      result = entry.stepIndex;
+    }
+  }
+  return result;
+}
+
+/**
+ * Count total attempts for a specific step in the given column (all statuses).
+ * Used to prevent infinite retries when timed_out sessions don't count toward
+ * the global repeat limit.
+ */
+function countStepAttempts(
+  laneSessions: Array<{ columnId?: string; stepIndex?: number; status: string }>,
+  columnId: string,
+  stepIndex: number,
+): number {
+  let count = 0;
+  for (const entry of laneSessions) {
+    if (
+      entry.columnId === columnId
+      && typeof entry.stepIndex === "number"
+      && entry.stepIndex === stepIndex
+    ) {
+      count++;
+    }
+  }
+  return count;
 }

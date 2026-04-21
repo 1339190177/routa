@@ -20,6 +20,8 @@ export interface ColumnTransitionData {
   toColumnId: string;
   fromColumnName?: string;
   toColumnName?: string;
+  /** When set, start the automation from this step index instead of 0 (used by Lane Scanner resume). */
+  resumeStepIndex?: number;
 }
 
 /**

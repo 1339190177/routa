@@ -512,6 +512,12 @@ export class KanbanWorkflowOrchestrator {
       }
     }
 
+    const startStepIndex = typeof data.resumeStepIndex === "number"
+      && data.resumeStepIndex >= 0
+      && data.resumeStepIndex < steps.length
+      ? data.resumeStepIndex
+      : 0;
+
     const automationEntry: ActiveAutomation = {
       cardId: data.cardId,
       cardTitle: data.cardTitle,
@@ -522,7 +528,7 @@ export class KanbanWorkflowOrchestrator {
       stage: targetColumn.stage,
       automation,
       steps,
-      currentStepIndex: 0,
+      currentStepIndex: startStepIndex,
       startedAt: new Date(),
       status: "queued",
       supervision,
@@ -544,8 +550,8 @@ export class KanbanWorkflowOrchestrator {
           columnId: targetColumn.id,
           columnName: targetColumn.name,
           automation,
-          step: steps[0],
-          stepIndex: 0,
+          step: steps[startStepIndex],
+          stepIndex: startStepIndex,
           supervision: this.buildSupervisionContext(automationEntry, laneObjective),
         });
         if (sessionId) {

@@ -357,9 +357,13 @@ export function useAcp(baseUrl: string = ""): UseAcpState & UseAcpActions {
         if (tearingDownRef.current) return;
         logRuntime("warn", "useAcp.sse", "Session stream issue", issue);
         const isRecoverableOwnershipConflict = issue.status === 409 && issue.retryable;
+        const isExpiredOwnershipLease = issue.status === 409 && !issue.retryable
+          && issue.message?.includes("lease expired");
         setState((s) => ({
           ...s,
-          error: isRecoverableOwnershipConflict ? null : formatConnectionIssue(issue),
+          error: (isRecoverableOwnershipConflict || isExpiredOwnershipLease)
+            ? null
+            : formatConnectionIssue(issue),
         }));
       });
 
