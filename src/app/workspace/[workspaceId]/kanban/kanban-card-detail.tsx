@@ -72,7 +72,7 @@ export interface KanbanCardDetailProps {
 }
 
 const ROLE_OPTIONS = ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"];
-type KanbanDetailTabId = "overview" | "readiness" | "execution" | "changes" | "evidence" | "runs";
+type KanbanDetailTabId = "overview" | "readiness" | "execution" | "jitContext" | "changes" | "evidence" | "runs";
 
 function getProviderName(providerId: string | undefined, availableProviders: AcpProviderInfo[]): string {
   if (!providerId) return "Workspace default";
@@ -310,6 +310,7 @@ export function KanbanCardDetail({
     { id: "overview" as const, label: t.kanbanDetail.overview },
     { id: "readiness" as const, label: t.kanbanDetail.storyReadiness },
     { id: "execution" as const, label: t.kanbanDetail.execution },
+    { id: "jitContext" as const, label: t.kanbanDetail.jitContext },
     { id: "changes" as const, label: t.kanbanDetail.changes },
     { id: "evidence" as const, label: t.kanbanDetail.evidenceBundle },
     { id: "runs" as const, label: t.kanbanDetail.runs },
@@ -470,16 +471,6 @@ export function KanbanCardDetail({
               </span>
             ))}
           </div>
-        </section>
-
-        <section className={compactMode ? "space-y-1.5 border-b border-slate-200/80 py-1.5 dark:border-[#232736]" : "space-y-2 border-b border-slate-200/70 py-2 dark:border-[#232736]"}>
-          <JitContextPanel
-            task={task}
-            workspaceId={resolvedWorkspaceId || undefined}
-            repoPath={getTaskRepositoryPath()}
-            specialistLanguage={specialistLanguage}
-            compact={compactMode}
-          />
         </section>
 
         <div className="border-b border-slate-200/80 dark:border-[#232736]">
@@ -746,6 +737,16 @@ export function KanbanCardDetail({
                 compact={compactMode}
               />
             </>
+          )}
+
+          {activeTab === "jitContext" && (
+            <JitContextPanel
+              task={task}
+              workspaceId={resolvedWorkspaceId || undefined}
+              repoPath={getTaskRepositoryPath()}
+              specialistLanguage={specialistLanguage}
+              compact={compactMode}
+            />
           )}
 
           {activeTab === "runs" && (
