@@ -48,6 +48,7 @@ import {
 import { getKanbanFileChangesSummary } from "./kanban-file-changes-panel";
 import { KanbanTabContent } from "./kanban-tab-content";
 import { useRuntimeFitnessStatus } from "./use-runtime-fitness-status";
+import { useKanbanWorktree } from "./hooks/use-kanban-worktree";
 
 interface SpecialistOption {
   id: string;
@@ -88,7 +89,7 @@ const KANBAN_BOARD_QUERY_KEY = "boardId";
 const KANBAN_DETAIL_TASK_QUERY_KEY = "taskId";
 const MIN_DETAIL_SPLIT_RATIO = 0.32;
 const MAX_DETAIL_SPLIT_RATIO = 0.72;
-const LIVE_SESSION_TAIL_POLL_MS = 15_000;
+const LIVE_SESSION_TAIL_POLL_MS = 30_000;
 
 type MoveBlockedState = {
   message: string;
@@ -271,9 +272,6 @@ export function KanbanTab({
   const [fetchLatestError, setFetchLatestError] = useState<string | null>(null);
   const [fetchLatestResult, setFetchLatestResult] = useState<string | null>(null);
 
-  // Worktree cache: worktreeId -> WorktreeInfo
-  const [worktreeCache, setWorktreeCache] = useState<Record<string, WorktreeInfo>>({});
-  const [missingWorktreeIds, setMissingWorktreeIds] = useState<Record<string, true>>({});
   const [liveSessionTails, setLiveSessionTails] = useState<Record<string, string>>({});
   const [backfilledSessions, setBackfilledSessions] = useState<Record<string, SessionInfo>>({});
 
@@ -293,6 +291,7 @@ export function KanbanTab({
   const emptySessionRecoveryRef = useRef<string | null>(null);
   const previousPreferredTaskSessionIdRef = useRef<string | null>(null);
   const userManuallySelectedSessionRef = useRef(false);
+  const refreshBurstCleanupRef = useRef<(() => void) | null>(null);
   const [isPageVisible, setIsPageVisible] = useState(() => (
     typeof document === "undefined" || document.visibilityState === "visible"
   ));
@@ -431,7 +430,8 @@ export function KanbanTab({
       });
       if (!sessionId) return;
       openAgentPanel(sessionId);
-      scheduleKanbanRefreshBurst(onRefresh);
+      refreshBurstCleanupRef.current?.();
+      refreshBurstCleanupRef.current = scheduleKanbanRefreshBurst(onRefresh);
       setAgentInput("");
     } catch (error) {
       console.error("[kanban] Failed to submit Kanban agent prompt:", error);
@@ -452,10 +452,24 @@ export function KanbanTab({
     workspaceId,
   ]);
 
+  const gitHubAccessCacheRef = useRef<{
+    key: string;
+    result: { available: boolean; source: "board" | "env" | "gh" | "none" };
+    expiry: number;
+  } | null>(null);
+
   useEffect(() => {
     if (!hasGitHubCodebase) {
       setGitHubAccessAvailable(false);
       setGitHubAccessSource("none");
+      return;
+    }
+
+    const cacheKey = selectedBoardId ?? "__no-board__";
+    const cached = gitHubAccessCacheRef.current;
+    if (cached && cached.key === cacheKey && Date.now() < cached.expiry) {
+      setGitHubAccessAvailable(cached.result.available);
+      setGitHubAccessSource(cached.result.source);
       return;
     }
 
@@ -478,8 +492,10 @@ export function KanbanTab({
         const source = payload?.source === "board" || payload?.source === "env" || payload?.source === "gh"
           ? payload.source
           : "none";
-        setGitHubAccessAvailable(available);
-        setGitHubAccessSource(available ? source : "none");
+        const result = { available, source: available ? source : "none" as const };
+        gitHubAccessCacheRef.current = { key: cacheKey, result, expiry: Date.now() + 60_000 };
+        setGitHubAccessAvailable(result.available);
+        setGitHubAccessSource(result.source);
       } catch {
         if (cancelled) return;
         setGitHubAccessAvailable(false);
@@ -532,6 +548,13 @@ export function KanbanTab({
     setLocalTasks((current) => current.map((task) => (task.id === taskId ? updated : task)));
     return updated;
   }, []);
+
+  // Worktree cache: managed by useKanbanWorktree hook (must be after patchTask)
+  const {
+    worktreeCache,
+    missingWorktreeIds: _missingWorktreeIds,
+    removeFromCache: _removeFromCache,
+  } = useKanbanWorktree({ localTasks, patchTask, setLocalTasks });
 
   useEffect(() => {
     setLocalTasks(tasks);
@@ -756,7 +779,9 @@ export function KanbanTab({
     }
 
     emptySessionRecoveryRef.current = recoveryKey;
-    return scheduleKanbanRefreshBurst(onRefresh);
+    refreshBurstCleanupRef.current?.();
+    refreshBurstCleanupRef.current = scheduleKanbanRefreshBurst(onRefresh);
+    return () => { refreshBurstCleanupRef.current?.(); refreshBurstCleanupRef.current = null; };
   }, [activeSessionId, activeTask, board?.columns, boardAutoProviderId, onRefresh, preferredActiveTaskSessionId, resolveSpecialist]);
 
   // Initialize visible columns when board changes
@@ -1000,7 +1025,9 @@ export function KanbanTab({
   useEffect(() => {
     if (!agentSessionId || !agentPanelOpen) return;
 
-    return scheduleKanbanRefreshBurst(onRefresh);
+    refreshBurstCleanupRef.current?.();
+    refreshBurstCleanupRef.current = scheduleKanbanRefreshBurst(onRefresh);
+    return () => { refreshBurstCleanupRef.current?.(); refreshBurstCleanupRef.current = null; };
   }, [agentPanelOpen, agentSessionId, onRefresh]);
 
   useEffect(() => {
@@ -1270,60 +1297,6 @@ export function KanbanTab({
     return () => window.removeEventListener("keydown", handleEscape);
   }, [activeTaskId, activeSessionId, showSettings, showCodebaseModal, closeTaskDetail]);
 
-  // Fetch worktrees for tasks that have worktreeId
-  useEffect(() => {
-    const worktreeIds = [...new Set(localTasks.map((t) => t.worktreeId).filter((id): id is string => Boolean(id)))];
-    const missing = worktreeIds.filter((id) => !worktreeCache[id] && !missingWorktreeIds[id]);
-    if (missing.length === 0) return;
-
-    (async () => {
-      const results: Record<string, WorktreeInfo> = {};
-      const staleIds = new Set<string>();
-      await Promise.allSettled(
-        missing.map(async (id) => {
-          try {
-            const res = await desktopAwareFetch(`/api/worktrees/${encodeURIComponent(id)}`, { cache: "no-store" });
-            if (res.ok) {
-              const data = await res.json();
-              if (data.worktree) results[id] = data.worktree as WorktreeInfo;
-              return;
-            }
-            if (res.status === 404) {
-              staleIds.add(id);
-            }
-          } catch { /* ignore */ }
-        })
-      );
-      if (Object.keys(results).length > 0) {
-        setWorktreeCache((prev) => ({ ...prev, ...results }));
-      }
-      if (staleIds.size > 0) {
-        const staleIdList = [...staleIds];
-        setMissingWorktreeIds((prev) => ({
-          ...prev,
-          ...Object.fromEntries(staleIdList.map((id) => [id, true] as const)),
-        }));
-        setLocalTasks((current) => current.map((task) => (
-          task.worktreeId && staleIds.has(task.worktreeId)
-            ? { ...task, worktreeId: undefined }
-            : task
-        )));
-
-        const linkedTasks = localTasks
-          .filter((task) => task.worktreeId && staleIds.has(task.worktreeId))
-          .map((task) => task.id);
-
-        await Promise.allSettled(linkedTasks.map(async (taskId) => {
-          try {
-            await patchTask(taskId, { worktreeId: null });
-          } catch {
-            // Ignore patch failures; the missing worktree cache prevents repeated 404 noise.
-          }
-        }));
-      }
-    })();
-  }, [localTasks, missingWorktreeIds, patchTask, worktreeCache]);
-
   const fetchCodebaseWorktrees = useCallback(async (codebase: CodebaseData) => {
     // Reset live branch info
     setLiveBranchInfo(null);
@@ -1536,19 +1509,13 @@ export function KanbanTab({
           : task
       )));
       setCodebaseWorktrees((current) => current.filter((item) => !worktreeIdSet.has(item.id)));
-      setWorktreeCache((current) => {
-        const next = { ...current };
-        for (const id of ids) {
-          delete next[id];
-        }
-        return next;
-      });
+      _removeFromCache(ids);
     } catch (error) {
       setWorktreeActionError(error instanceof Error ? error.message : "Failed to delete worktree");
     } finally {
       setDeletingWorktreeIds([]);
     }
-  }, [localTasks, patchTask]);
+  }, [localTasks, patchTask, _removeFromCache]);
 
   async function createTaskCard() {
     await ensureBoardAutoProviderPersisted();
@@ -1806,11 +1773,7 @@ export function KanbanTab({
           throw new Error(data.error ?? "Failed to remove worktree");
         }
         updated = await patchTask(taskId, { worktreeId: null });
-        setWorktreeCache((current) => {
-          const next = { ...current };
-          delete next[movingTask.worktreeId!];
-          return next;
-        });
+        _removeFromCache([movingTask.worktreeId!]);
       }
       if (updated.triggerSessionId && updated.triggerSessionId !== movingTask.triggerSessionId) {
         openSession(updated.triggerSessionId, updated);
@@ -1953,9 +1916,16 @@ export function KanbanTab({
     },
   } : undefined;
 
+  const handleDismissMoveError = useCallback(() => setMoveError(null), []);
+  const handleCloseAgentPanel = useCallback(() => setAgentPanelOpen(false), []);
+  const handleSetActiveSessionId = useCallback((id: string | null) => {
+    setActiveSessionId(id);
+    if (id) userManuallySelectedSessionRef.current = true;
+  }, []);
+
   const boardSurfaceProps = board ? {
     moveError,
-    onDismissMoveError: () => setMoveError(null),
+    onDismissMoveError: handleDismissMoveError,
     codebases,
     workspaceId,
     defaultCodebase,
@@ -1991,7 +1961,7 @@ export function KanbanTab({
     runTaskPullRequest,
     openTaskDetail,
     agentSession,
-    onCloseAgentPanel: () => setAgentPanelOpen(false),
+    onCloseAgentPanel: handleCloseAgentPanel,
     ensureKanbanAgentSession,
     kanbanRepoSelection,
     fileChangesOpen,
@@ -2026,10 +1996,7 @@ export function KanbanTab({
     runTaskPullRequest,
     confirmDeleteTask,
     onRefresh,
-    setActiveSessionId: (id: string | null) => {
-      setActiveSessionId(id);
-      if (id) userManuallySelectedSessionRef.current = true;
-    },
+    setActiveSessionId: handleSetActiveSessionId,
     sessionMap,
     workspaceId,
     isTaskDetailFullscreen,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 interface ArchiveLabelFilterProps {
   labels: string[];
@@ -19,7 +19,7 @@ export function ArchiveLabelFilter({
   onToggleLabel,
   onClearLabels,
   filterByLabel,
-  allLabels,
+  allLabels: _allLabels,
   clearLabel,
 }: ArchiveLabelFilterProps) {
   const [open, setOpen] = useState(false);

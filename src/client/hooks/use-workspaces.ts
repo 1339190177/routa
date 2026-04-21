@@ -87,10 +87,14 @@ export function useCodebases(workspaceId: string): {
   const fetchCodebases = useCallback(async () => {
     // Skip if workspaceId is missing or is a placeholder (static export mode)
     if (!workspaceId || workspaceId === "__placeholder__") return;
-    const res = await desktopAwareFetch(`/api/workspaces/${workspaceId}/codebases`);
-    if (!res.ok) return;
-    const data = await res.json();
-    setCodebases(data.codebases ?? []);
+    try {
+      const res = await desktopAwareFetch(`/api/workspaces/${workspaceId}/codebases`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setCodebases(data.codebases ?? []);
+    } catch {
+      // Network failure (e.g. SSE reconnect during navigation) — ignore silently
+    }
   }, [workspaceId]);
 
   useEffect(() => {

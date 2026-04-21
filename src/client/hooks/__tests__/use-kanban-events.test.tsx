@@ -70,7 +70,7 @@ describe("useKanbanEvents", () => {
 
     expect(onInvalidate).toHaveBeenCalledTimes(1);
 
-    vi.advanceTimersByTime(749);
+    vi.advanceTimersByTime(4_999);
     expect(onInvalidate).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(1);

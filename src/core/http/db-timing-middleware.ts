@@ -54,13 +54,13 @@ export function withSqliteTiming<T extends object>(sqlite: T, driverName = "sqli
  * Wrap a Postgres client to time queries.
  * Intercepts the `query` or underlying query execution.
  */
-export function withPostgresTiming<T extends object>(client: T, driverName = "pg"): T {
+export function withPostgresTiming<T extends object>(client: T, _driverName = "pg"): T {
   if (process.env.ROUTA_DB_TIMING !== "1") {
     return client;
   }
 
-  const threshold = Number(process.env.ROUTA_DB_SLOW_THRESHOLD_MS) || DB_SLOW_THRESHOLD_MS;
-  const clientAny = client as Record<string, unknown>;
+  const _threshold = Number(process.env.ROUTA_DB_SLOW_THRESHOLD_MS) || DB_SLOW_THRESHOLD_MS;
+  const _clientAny = client as Record<string, unknown>;
 
   // postgres-js uses .unsafe() / internal query methods
   // Neon uses HTTP, so timing is captured at the Drizzle level

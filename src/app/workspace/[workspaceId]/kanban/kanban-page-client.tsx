@@ -65,6 +65,7 @@ export function KanbanPageClient() {
     error: null,
   });
   const refreshBurstCleanupRef = useRef<(() => void) | null>(null);
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warmedupProvidersRef = useRef<Set<string>>(new Set());
   const autoSyncedWorkspaceRef = useRef<string | null>(null);
   const codebasesRef = useRef<CodebaseData[]>(codebases);
@@ -78,18 +79,38 @@ export function KanbanPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acp.connected, acp.loading]);
 
-  // Fetch boards
+  // Fetch boards, tasks, sessions in a single batch
   useEffect(() => {
     const controller = new AbortController();
     (async () => {
       try {
-        const res = await desktopAwareFetch(`/api/kanban/boards?workspaceId=${encodeURIComponent(workspaceId)}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const data = await res.json();
+        const [boardsRes, tasksRes, sessionsRes] = await Promise.all([
+          desktopAwareFetch(`/api/kanban/boards?workspaceId=${encodeURIComponent(workspaceId)}`, {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+          desktopAwareFetch(`/api/tasks?workspaceId=${encodeURIComponent(workspaceId)}`, {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+          desktopAwareFetch(`/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&limit=100`, {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+        ]);
         if (controller.signal.aborted) return;
-        setBoards(Array.isArray(data?.boards) ? data.boards : []);
+
+        const [boardsData, tasksData, sessionsData] = await Promise.all([
+          boardsRes.json(),
+          tasksRes.json(),
+          sessionsRes.json(),
+        ]);
+        if (controller.signal.aborted) return;
+
+        // React 18 auto-batches these setState calls
+        setBoards(Array.isArray(boardsData?.boards) ? boardsData.boards : []);
+        setTasks(Array.isArray(tasksData?.tasks) ? tasksData.tasks : []);
+        setSessions(Array.isArray(sessionsData?.sessions) ? sessionsData.sessions : []);
       } catch { /* ignore */ }
     })();
     return () => controller.abort();
@@ -157,34 +178,6 @@ export function KanbanPageClient() {
     [locale],
   );
 
-  // Fetch tasks
-  useEffect(() => {
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const res = await desktopAwareFetch(`/api/tasks?workspaceId=${encodeURIComponent(workspaceId)}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const data = await res.json();
-        if (controller.signal.aborted) return;
-        setTasks(Array.isArray(data?.tasks) ? data.tasks : []);
-      } catch { /* ignore */ }
-    })();
-    return () => controller.abort();
-  }, [workspaceId, refreshKey]);
-
-  // Fetch sessions
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await desktopAwareFetch(`/api/sessions?workspaceId=${encodeURIComponent(workspaceId)}&limit=100`, { cache: "no-store" });
-        const data = await res.json();
-        setSessions(Array.isArray(data?.sessions) ? data.sessions : []);
-      } catch { /* ignore */ }
-    })();
-  }, [workspaceId, refreshKey]);
-
   // Fetch specialists — skip the initial SSR locale and wait for the client-side
   // locale to stabilize to avoid double-fetching (e.g. en→zh-CN).
   const stableSpecialistLanguageRef = useRef<KanbanSpecialistLanguage | null>(null);
@@ -245,8 +238,14 @@ export function KanbanPageClient() {
   );
 
   const handleRefresh = useCallback(() => {
-    setRefreshKey((k) => k + 1);
-    void fetchCodebases();
+    if (refreshDebounceRef.current) {
+      clearTimeout(refreshDebounceRef.current);
+    }
+    refreshDebounceRef.current = setTimeout(() => {
+      refreshDebounceRef.current = null;
+      setRefreshKey((k) => k + 1);
+      void fetchCodebases();
+    }, 300);
   }, [fetchCodebases]);
 
   const syncCodebaseToLatest = useCallback(async (codebase: CodebaseData): Promise<void> => {
@@ -407,6 +406,10 @@ export function KanbanPageClient() {
     return () => {
       refreshBurstCleanupRef.current?.();
       refreshBurstCleanupRef.current = null;
+      if (refreshDebounceRef.current) {
+        clearTimeout(refreshDebounceRef.current);
+        refreshDebounceRef.current = null;
+      }
     };
   }, []);
 

@@ -591,7 +591,7 @@ export function KanbanCardDetail({
                   <TaskHierarchyPanel
                     task={task}
                     compact={compactMode}
-                    onViewTask={(taskId) => {
+                    onViewTask={(_taskId) => {
                       // Navigate to the task by refreshing with the task ID context
                       onRefresh();
                     }}

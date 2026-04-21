@@ -48,7 +48,7 @@ function ArchiveEmptyState({ t }: { t: ReturnType<typeof useTranslation>["t"] })
 function ArchiveCardItem({
   task,
   onClick,
-  t,
+  t: _t,
 }: {
   task: TaskInfo;
   onClick: () => void;

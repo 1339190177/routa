@@ -64,7 +64,7 @@ interface OverviewData {
 type Tab = "overview" | "sse" | "store" | "db";
 
 export function PerformanceDashboard() {
-  const { t } = useTranslation();
+  const { t: _t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceId = normalizeWorkspaceQueryId(searchParams.get("workspaceId"));

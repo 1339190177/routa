@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, X } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useRef } from "react";
 
 interface ArchiveSearchBarProps {
   value: string;

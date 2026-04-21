@@ -10,7 +10,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { useMemo, useState, type Dispatch, type SetStateAction, type ReactNode, type RefObject } from "react";
+import React, { useMemo, useState, type Dispatch, type SetStateAction, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "@/i18n";
 import type { AcpProviderInfo } from "@/client/acp-client";
@@ -195,7 +195,7 @@ function KanbanDropColumn({
   );
 }
 
-export function KanbanBoardSurface({
+export const KanbanBoardSurface = React.memo(function KanbanBoardSurface({
   moveError,
   onDismissMoveError,
   codebases,
@@ -555,7 +555,7 @@ export function KanbanBoardSurface({
       </div>
     </>
   );
-}
+});
 
 export function KanbanCreateTaskModal({
   showCreateModal,
@@ -681,7 +681,7 @@ function A2ASessionPane({
   );
 }
 
-export function KanbanTaskDetailOverlay({
+export const KanbanTaskDetailOverlay = React.memo(function KanbanTaskDetailOverlay({
   activeSessionId,
   activeTaskId,
   activeTask,
@@ -998,4 +998,4 @@ export function KanbanTaskDetailOverlay({
       </div>
     </div>
   );
-}
+});

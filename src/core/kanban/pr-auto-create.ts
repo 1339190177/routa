@@ -53,7 +53,7 @@ export async function executeAutoPrCreation(
     worktreeId: string;
   },
 ): Promise<string | undefined> {
-  const { cardId, cardTitle, boardId, worktreeId } = params;
+  const { cardId, cardTitle, boardId: _boardId, worktreeId } = params;
 
   console.log(
     `[PrAutoCreate] Creating PR for task ${cardId}.`,

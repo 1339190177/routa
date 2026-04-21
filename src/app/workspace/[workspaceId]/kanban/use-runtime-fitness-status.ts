@@ -6,7 +6,7 @@ import { resolveApiPath } from "@/client/config/backend";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import type { RuntimeFitnessStatusResponse } from "@/core/fitness/runtime-status-types";
 
-const RUNTIME_FITNESS_POLL_MS = 15_000;
+const RUNTIME_FITNESS_POLL_MS = 30_000;
 
 type UseRuntimeFitnessStatusOptions = {
   workspaceId: string;
@@ -29,7 +29,7 @@ function toMessage(error: unknown): string {
 }
 
 export function useRuntimeFitnessStatus({
-  workspaceId,
+  workspaceId: _workspaceId,
   codebaseId,
   repoPath,
   enabled = true,

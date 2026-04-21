@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import { useTranslation } from "@/i18n";
-import { Link2, AlertTriangle } from "lucide-react";
+
 import type { TaskInfo } from "../types";
 
 function formatReadinessFieldLabel(field: string, t: ReturnType<typeof useTranslation>["t"]): string {

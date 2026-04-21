@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { getDesktopApiBaseUrl } from "../utils/diagnostics";
 import { resolveApiPath } from "../config/backend";
 
-const KANBAN_INVALIDATE_THROTTLE_MS = 3_000;
-const FITNESS_INVALIDATE_THROTTLE_MS = 750;
+const UNIFIED_INVALIDATE_THROTTLE_MS = 5_000;
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 30_000;
 const RECONNECT_JITTER_MS = 500;
@@ -19,10 +18,8 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
-  const kanbanInvalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastKanbanInvalidateAtRef = useRef(0);
-  const fitnessInvalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastFitnessInvalidateAtRef = useRef(0);
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastInvalidateAtRef = useRef(0);
   const tearingDownRef = useRef(false);
   const hasConnectedOnceRef = useRef(false);
   const onInvalidateRef = useRef(onInvalidate);
@@ -64,39 +61,21 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
           }
           return;
         }
-        if (data.type === "kanban:changed") {
+        if (data.type === "kanban:changed" || data.type === "fitness:changed") {
           const now = Date.now();
-          const elapsed = now - lastKanbanInvalidateAtRef.current;
-          if (elapsed >= KANBAN_INVALIDATE_THROTTLE_MS) {
-            lastKanbanInvalidateAtRef.current = now;
+          const elapsed = now - lastInvalidateAtRef.current;
+          if (elapsed >= UNIFIED_INVALIDATE_THROTTLE_MS) {
+            lastInvalidateAtRef.current = now;
             onInvalidateRef.current();
             return;
           }
-          if (!kanbanInvalidateTimerRef.current) {
-            kanbanInvalidateTimerRef.current = setTimeout(() => {
-              kanbanInvalidateTimerRef.current = null;
-              lastKanbanInvalidateAtRef.current = Date.now();
+          if (!invalidateTimerRef.current) {
+            invalidateTimerRef.current = setTimeout(() => {
+              invalidateTimerRef.current = null;
+              lastInvalidateAtRef.current = Date.now();
               onInvalidateRef.current();
-            }, KANBAN_INVALIDATE_THROTTLE_MS - elapsed);
+            }, UNIFIED_INVALIDATE_THROTTLE_MS - elapsed);
           }
-          return;
-        }
-        if (data.type === "fitness:changed") {
-          const now = Date.now();
-          const elapsed = now - lastFitnessInvalidateAtRef.current;
-          if (elapsed >= FITNESS_INVALIDATE_THROTTLE_MS) {
-            lastFitnessInvalidateAtRef.current = now;
-            onInvalidateRef.current();
-            return;
-          }
-          if (fitnessInvalidateTimerRef.current) {
-            return;
-          }
-          fitnessInvalidateTimerRef.current = setTimeout(() => {
-            fitnessInvalidateTimerRef.current = null;
-            lastFitnessInvalidateAtRef.current = Date.now();
-            onInvalidateRef.current();
-          }, FITNESS_INVALIDATE_THROTTLE_MS - elapsed);
         }
       } catch {
         // Ignore malformed payloads.
@@ -141,7 +120,7 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
     tearingDownRef.current = false;
     hasConnectedOnceRef.current = false;
     reconnectAttemptRef.current = 0;
-    lastFitnessInvalidateAtRef.current = 0;
+    lastInvalidateAtRef.current = 0;
     connectSSE();
 
     // Reconnect SSE when page becomes visible after sleep/tab-switch
@@ -164,13 +143,9 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      if (fitnessInvalidateTimerRef.current) {
-        clearTimeout(fitnessInvalidateTimerRef.current);
-        fitnessInvalidateTimerRef.current = null;
-      }
-      if (kanbanInvalidateTimerRef.current) {
-        clearTimeout(kanbanInvalidateTimerRef.current);
-        kanbanInvalidateTimerRef.current = null;
+      if (invalidateTimerRef.current) {
+        clearTimeout(invalidateTimerRef.current);
+        invalidateTimerRef.current = null;
       }
       clearReconnectTimer();
     };
