@@ -690,6 +690,7 @@ async function ensureMcpForCodex(
 ): Promise<McpSetupResult> {
   try {
     const mcpServers = normalizeCodexServerConfigs(mcpEndpoint, customServers);
+    const providerArgs = buildCodexProviderArgs(cwd, mcpServers);
 
     await fs.promises.mkdir(ROUTA_CODEX_CONFIG_DIR, { recursive: true });
     await fs.promises.writeFile(
@@ -704,7 +705,7 @@ async function ensureMcpForCodex(
 
     return {
       mcpConfigs: [],
-      providerArgs: buildCodexProviderArgs(cwd, mcpServers),
+      providerArgs,
       summary: `codex: wrote private overlay ${ROUTA_CODEX_CONFIG_FILE}`,
     };
   } catch (err) {
