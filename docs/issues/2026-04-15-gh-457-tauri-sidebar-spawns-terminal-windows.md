@@ -2,14 +2,15 @@
 title: "GH-457 Tauri sidebar navigation spawns terminal windows on Windows"
 date: "2026-04-15"
 kind: issue
-status: investigating
+status: resolved
+resolved_at: "2026-04-21"
 severity: high
 area: "desktop"
 tags: [desktop, tauri, windows, git, process, sidebar]
 reported_by: "Codex"
 related_issues: ["https://github.com/phodal/routa/issues/457"]
 github_issue: 457
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/457"
 ---
 
@@ -51,3 +52,13 @@ Desktop background checks such as git status inspection and ACP warmup should ru
 ## References
 
 - https://github.com/phodal/routa/issues/457
+
+## Resolution Update (2026-04-21)
+
+- Verified the GitHub tracker `#457` is already closed; the remaining drift was in the local tracker metadata.
+- `crates/routa-core/src/git.rs` already routes git subprocesses through `git_command()` / `git_tokio_command()` with `CREATE_NO_WINDOW` on Windows, covering the workspace/codebase change probes that fire during sidebar navigation.
+- `crates/routa-core/src/acp/warmup.rs` already applies `CREATE_NO_WINDOW` to ACP package warmup commands.
+- Added the same Windows hidden-window behavior to desktop background server startup in `apps/desktop/src-tauri/src/lib.rs` for both local `npm run start:desktop:server` and embedded `node server.js` launch paths, so the desktop shell does not leave visible console windows as a fallback path.
+- Verified with:
+  - `cargo test -p routa-desktop --lib`
+  - `entrix run --tier fast`
