@@ -37,6 +37,7 @@ import { getHttpSessionStore } from "../acp/http-session-store";
 import { getSpecialistById } from "../orchestration/specialist-prompts";
 import { dispatchSessionPrompt } from "@/core/acp/session-prompt";
 import type { ColumnTransitionData } from "./column-transition";
+import { isTriggerSessionStale, clearStaleTriggerSession } from "./task-trigger-session";
 import { startWorktreeCleanupListener } from "./worktree-cleanup";
 import { startPrMergeListener } from "./pr-merge-listener";
 import { startPrAutoCreateListener, executeAutoPrCreation } from "./pr-auto-create";
@@ -114,14 +115,11 @@ export async function enqueueKanbanTaskSession(
   }
 
   if (task.triggerSessionId && !params.ignoreExistingTrigger) {
-    const sessionStore = getHttpSessionStore();
-    const activity = sessionStore.getSessionActivity(task.triggerSessionId);
-    if (!activity || activity.terminalState) {
-      // Stale triggerSessionId — session terminated or evicted by forceCleanup
-      task.triggerSessionId = undefined;
-    } else {
+    const staleId = isTriggerSessionStale(task.triggerSessionId, getHttpSessionStore());
+    if (!staleId) {
       return { sessionId: task.triggerSessionId, queued: false };
     }
+    task.triggerSessionId = undefined;
   }
 
   // Dependency gate: block enqueue if dependencies are unsatisfied
@@ -192,13 +190,8 @@ async function startKanbanTaskSession(
     return { error: `Task is no longer in column ${params.expectedColumnId}.` };
   }
   if (task.triggerSessionId && !params.ignoreExistingTrigger) {
-    const sessionStore = getHttpSessionStore();
-    const activity = sessionStore.getSessionActivity(task.triggerSessionId);
-    if (!activity || activity.terminalState) {
-      // Stale triggerSessionId — session terminated or evicted by forceCleanup
-      task.triggerSessionId = undefined;
-      await system.taskStore.save(task);
-    } else {
+    const cleaned = await clearStaleTriggerSession(task, getHttpSessionStore(), system.taskStore);
+    if (!cleaned) {
       return { sessionId: task.triggerSessionId };
     }
   }
@@ -220,6 +213,7 @@ async function startKanbanTaskSession(
   const preferredCodebase = initialWorktreeTruth?.codebase;
   let worktreeCwd = initialWorktreeTruth?.cwd ?? process.cwd();
   let worktreeBranch = initialWorktreeTruth?.branch;
+  let baseBranch = initialWorktreeTruth?.baseBranch ?? preferredCodebase?.branch;
   if (branchRules.triggers.worktreeCreationColumns.includes(params.expectedColumnId ?? nextTask.columnId ?? "") && preferredCodebase && !nextTask.worktreeId) {
     const result = await ensureTaskWorktree(nextTask, preferredCodebase, {
       worktreeStore: system.worktreeStore,
@@ -233,11 +227,17 @@ async function startKanbanTaskSession(
       await system.taskStore.save(nextTask);
       return { error: result.errorMessage };
     }
+    // Worktree was just created — read its truth directly from the store
+    // instead of doing another full resolveTaskWorktreeTruth call.
+    if (nextTask.worktreeId) {
+      const newWorktree = await system.worktreeStore.get(nextTask.worktreeId);
+      if (newWorktree?.worktreePath) {
+        worktreeCwd = newWorktree.worktreePath;
+        worktreeBranch = newWorktree.branch;
+        baseBranch = newWorktree.baseBranch ?? baseBranch;
+      }
+    }
   }
-  const resolvedWorktreeTruth = await resolveTaskWorktreeTruth(nextTask, system);
-  worktreeCwd = resolvedWorktreeTruth?.cwd ?? worktreeCwd;
-  worktreeBranch = resolvedWorktreeTruth?.branch ?? worktreeBranch;
-  const baseBranch = resolvedWorktreeTruth?.baseBranch ?? preferredCodebase?.branch;
 
   const effectiveAutomation = resolveEffectiveTaskAutomation(
     nextTask,
@@ -428,34 +428,14 @@ async function sendPromptToKanbanSession(
 }
 
 async function scanStaleTaskTriggers(system: RoutaSystem): Promise<number> {
-  const sessionStore = getHttpSessionStore();
   let cleanedCount = 0;
 
   const workspaces = await system.workspaceStore.list();
   for (const ws of workspaces) {
     const tasks = await system.taskStore.listByWorkspace(ws.id);
     for (const task of tasks) {
-      if (!task.triggerSessionId) continue;
-
-      const activity = sessionStore.getSessionActivity(task.triggerSessionId);
-      if (activity && !activity.terminalState) continue;
-
-      // Stale trigger — sanitize task
-      const staleSessionId = task.triggerSessionId;
-      const laneEntry = (task.laneSessions ?? []).find(
-        (s) => s.sessionId === staleSessionId && s.status === "running",
-      );
-      if (laneEntry) {
-        const terminalStatus = task.pullRequestUrl
-          ? ("completed" as const)
-          : ("timed_out" as const);
-        laneEntry.status = terminalStatus;
-        laneEntry.completedAt = new Date().toISOString();
-      }
-      task.triggerSessionId = undefined;
-      task.updatedAt = new Date();
-      await system.taskStore.save(task);
-      cleanedCount++;
+      const cleaned = await clearStaleTriggerSession(task, getHttpSessionStore(), system.taskStore);
+      if (cleaned) cleanedCount++;
     }
   }
 

@@ -196,10 +196,13 @@ export class SqliteTaskStore implements TaskStore {
       Pick<
         Task,
         | "status"
+        | "columnId"
+        | "triggerSessionId"
         | "completionSummary"
         | "verificationVerdict"
         | "verificationReport"
         | "assignedTo"
+        | "lastSyncError"
       >
     >,
   ): Promise<boolean> {
@@ -275,6 +278,7 @@ export class SqliteTaskStore implements TaskStore {
       completionSummary: row.completionSummary ?? undefined,
       verificationVerdict: row.verificationVerdict as import("../models/task").VerificationVerdict | undefined,
       verificationReport: row.verificationReport ?? undefined,
+      version: row.version ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

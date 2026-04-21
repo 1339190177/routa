@@ -226,6 +226,18 @@ export class KanbanSessionQueue {
 
   private async startEntry(entry: QueueEntry): Promise<{ sessionId?: string; queued: boolean; error?: string }> {
     this.removeQueuedEntry(entry.boardId, entry.cardId);
+
+    // Pre-flight check: verify the task is still in the expected column
+    // before starting an expensive agent session.
+    if (entry.columnId) {
+      const task = await this.taskStore.get(entry.cardId);
+      if (!task || task.columnId !== entry.columnId) {
+        this.jobsByCardId.delete(entry.cardId);
+        void this.drainQueue(entry.boardId, entry.workspaceId);
+        return { queued: false, error: "Task moved to a different column before session could start." };
+      }
+    }
+
     entry.status = "running";
 
     try {

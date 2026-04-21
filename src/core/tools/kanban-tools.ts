@@ -263,6 +263,20 @@ export class KanbanTools {
       return errorResult(`Cannot move card "${task.title}" out of Archived. Use a dedicated unarchive action to restore it.`);
     }
     const fromColumn = board.columns.find((c) => c.id === fromColumnId);
+    // Done-to-blocked guard: reject moves of APPROVED cards from done to blocked.
+    // An approved card should not be re-blocked — if there is a post-approval
+    // infrastructure issue, clear the verdict first or create a separate follow-up.
+    if (
+      fromColumn?.stage === "done"
+      && resolvedTargetColumn.stage === "blocked"
+      && task.verificationVerdict === "APPROVED"
+    ) {
+      return errorResult(
+        `Cannot move card "${task.title}" to Blocked: this card has verificationVerdict=APPROVED. ` +
+        "Approved cards should remain in Done. If there is a post-approval issue, " +
+        "clear the verificationVerdict first or create a separate follow-up card.",
+      );
+    }
     const allowReviewFallbackToDev = fromColumnId === "review"
       && params.targetColumnId === "dev"
       && task.verificationVerdict === "NOT_APPROVED";

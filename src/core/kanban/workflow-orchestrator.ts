@@ -411,11 +411,22 @@ export class KanbanWorkflowOrchestrator {
     steps.push(...fallbackSteps);
     if (steps.length === 0) return;
 
-    if (hasExceededNonDevAutomationRepeatLimit(task, targetColumn.id, targetColumn.stage, steps[0]?.id)) {
+    // Approved-card bypass: if a card in the blocked lane already has an APPROVED
+    // verification verdict, allow one more automation run to route it back to done,
+    // regardless of the repeat limit. This handles misrouted approved cards.
+    const isApprovedInBlockedLane = targetColumn.stage === "blocked"
+      && task?.verificationVerdict === "APPROVED";
+
+    if (isApprovedInBlockedLane) {
+      console.log(
+        `[WorkflowOrchestrator] Allowing blocked-lane automation for APPROVED card ${data.cardId} ` +
+        `despite repeat limit (recovery routing).`,
+      );
+    } else if (hasExceededNonDevAutomationRepeatLimit(task, targetColumn.id, targetColumn.stage)) {
       if (task) {
         task.lastSyncError = buildNonDevAutomationRepeatLimitMessage(
           targetColumn.name,
-          getNonDevAutomationRunCount(task, targetColumn.id, targetColumn.stage, steps[0]?.id),
+          getNonDevAutomationRunCount(task, targetColumn.id, targetColumn.stage),
           targetColumn.stage,
         );
         task.updatedAt = new Date();
@@ -459,16 +470,16 @@ export class KanbanWorkflowOrchestrator {
         return;
       }
 
-      // Debounce: if the current automation started very recently (< 5s),
+      // Debounce: if the current automation started very recently (< 2s),
       // the card is being rapidly moved (e.g. by user or upstream process).
       // Wait briefly to avoid tearing down a session that will immediately be replaced.
       const timeSinceStart = Date.now() - existingAutomation.startedAt.getTime();
-      if (timeSinceStart < 5_000) {
+      if (timeSinceStart < 2_000) {
         console.log(
           `[WorkflowOrchestrator] Debouncing rapid card move for ${data.cardId} ` +
           `(${existingAutomation.columnId} → ${targetColumn.id}, automation age ${timeSinceStart}ms)`,
         );
-        await new Promise(r => setTimeout(r, 5_000 - timeSinceStart));
+        await new Promise(r => setTimeout(r, 2_000 - timeSinceStart));
         // After waiting, re-check whether the card is still in the target column.
         const latestTask = await this.taskStore.get(data.cardId);
         if (latestTask?.columnId !== targetColumn.id) {
@@ -744,16 +755,31 @@ export class KanbanWorkflowOrchestrator {
           const currentBoard = await this.kanbanBoardStore.get(automation.boardId);
           if (currentBoard) {
             const sortedCols = currentBoard.columns.slice().sort((a, b) => a.position - b.position);
-            const doneIndex = sortedCols.findIndex((c) => c.id === automation.columnId);
-            const isLastColumn = doneIndex === sortedCols.length - 1;
-            if (isLastColumn && freshTask.status !== "COMPLETED") {
+            const doneCol = sortedCols.find((c) => c.id === automation.columnId);
+            // Use stage check instead of position — done is not the last column
+            // (blocked/archived come after it in position order).
+            const isTerminalStage = doneCol?.stage === "done" || doneCol?.stage === "archived";
+            if (isTerminalStage && freshTask.status !== "COMPLETED") {
               console.log(
                 `[WorkflowOrchestrator] Card ${cardId} completed done-lane (terminal column). ` +
                 `Setting status to COMPLETED to prevent re-trigger loops.`,
               );
-              freshTask.status = "COMPLETED" as import("../models/task").TaskStatus;
-              freshTask.updatedAt = new Date();
-              await this.taskStore.save(freshTask);
+              // Use atomic update to prevent overwriting concurrent modifications
+              if (freshTask.version !== undefined && this.taskStore.atomicUpdate) {
+                const ok = await this.taskStore.atomicUpdate(cardId, freshTask.version, {
+                  status: "COMPLETED" as import("../models/task").TaskStatus,
+                });
+                if (!ok) {
+                  console.log(
+                    `[WorkflowOrchestrator] Terminal guard version conflict for ${cardId}, ` +
+                    `task was modified concurrently.`,
+                  );
+                }
+              } else {
+                freshTask.status = "COMPLETED" as import("../models/task").TaskStatus;
+                freshTask.updatedAt = new Date();
+                await this.taskStore.save(freshTask);
+              }
             }
           }
         }
@@ -1400,17 +1426,46 @@ export class KanbanWorkflowOrchestrator {
       const nextColumn = sortedColumns[currentIndex + 1];
       if (!nextColumn) return;
 
-      task.columnId = nextColumn.id;
-      task.status = resolveTaskStatusForBoardColumn(board.columns, nextColumn.id);
-      if (task.triggerSessionId) {
-        if (!task.sessionIds) task.sessionIds = [];
-        if (!task.sessionIds.includes(task.triggerSessionId)) {
-          task.sessionIds.push(task.triggerSessionId);
-        }
+      // Terminal stage guard: done/archived are end-of-flow columns.
+      // Cards should never auto-advance from done into blocked/archived.
+      if (currentColumn.stage === "done" || currentColumn.stage === "archived") {
+        console.log(
+          `[WorkflowOrchestrator] Skipping auto-advance for card ${cardId}: ` +
+          `${currentColumn.stage} is a terminal stage.`,
+        );
+        return;
       }
-      task.triggerSessionId = undefined;
-      task.updatedAt = new Date();
-      await this.taskStore.save(task);
+
+      const nextStatus = resolveTaskStatusForBoardColumn(board.columns, nextColumn.id);
+
+      // Use atomic update to prevent TOCTOU race — concurrent move_card or
+      // autoAdvanceCard calls will conflict on version instead of overwriting.
+      if (task.version !== undefined && this.taskStore.atomicUpdate) {
+        const ok = await this.taskStore.atomicUpdate(cardId, task.version, {
+          columnId: nextColumn.id,
+          status: nextStatus,
+          triggerSessionId: undefined,
+        });
+        if (!ok) {
+          console.warn(
+            `[WorkflowOrchestrator] autoAdvanceCard version conflict for ${cardId}, skipping.`,
+          );
+          return;
+        }
+      } else {
+        // Fallback for stores without atomicUpdate
+        task.columnId = nextColumn.id;
+        task.status = nextStatus;
+        if (task.triggerSessionId) {
+          if (!task.sessionIds) task.sessionIds = [];
+          if (!task.sessionIds.includes(task.triggerSessionId)) {
+            task.sessionIds.push(task.triggerSessionId);
+          }
+        }
+        task.triggerSessionId = undefined;
+        task.updatedAt = new Date();
+        await this.taskStore.save(task);
+      }
 
       this.cleanupCardSession?.(cardId);
 

@@ -284,6 +284,8 @@ export interface Task {
    * branch instead of the codebase default. Cleared after use — never persisted to DB.
    */
   nextBaseBranchOverride?: string;
+  /** Optimistic-locking version; sourced from DB row, undefined for in-memory tasks */
+  version?: number;
   createdAt: Date;
   updatedAt: Date;
   completionSummary?: string;
@@ -385,6 +387,7 @@ export function createTask(params: {
     worktreeId: params.worktreeId,
     pullRequestUrl: params.pullRequestUrl,
     triggerSessionId: params.triggerSessionId,
+    version: undefined,
     createdAt: now,
     updatedAt: now,
   };

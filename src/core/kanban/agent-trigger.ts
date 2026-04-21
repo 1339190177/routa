@@ -132,6 +132,10 @@ export function buildTaskPrompt(
   const nextColumnId = transitionArtifacts.nextColumn?.id ?? fallbackNextColumnId;
   const boardId = task.boardId;
 
+  // Terminal columns (done/archived) have nowhere to advance to.
+  const currentColumnStage = boardColumns.find((c) => c.id === currentColumnId)?.stage;
+  const isTerminalStage = currentColumnStage === "done" || currentColumnStage === "archived";
+
   const availableTools = isBacklogPlanning
     ? [
         `- **update_task**: Update structured task fields such as scope, acceptanceCriteria, verificationCommands, and testCases. Use taskId: "${task.id}" when the next move is blocked on story readiness.`,
@@ -158,12 +162,14 @@ export function buildTaskPrompt(
         "- **update_card is not a story-readiness tool**: Description or comment text does not satisfy move gates for scope, acceptance criteria, verification commands, or test cases. Use `update_task` for those fields.",
         "- **request_previous_lane_handoff**: Ask the immediately previous lane to prepare environment, rerun a command, or clarify setup for this card",
         "- **submit_lane_handoff**: Finish a lane handoff request after you complete the requested support work",
-        ...(canAdvanceToNextColumn
+        ...(canAdvanceToNextColumn && !isTerminalStage
           ? [`- **move_card**: Move this card to the next column when your work is complete. Use cardId: "${task.id}", targetColumnId: "${nextColumnId ?? "done"}"`]
           : []),
       ];
   const moveInstruction = !canAdvanceToNextColumn
     ? `Do not call \`move_card\` to leave ${currentColumnId} yet. Finish this step, then end your turn; the workflow will start ${laneAutomationState.nextStep?.specialistName ?? laneAutomationState.nextStep?.specialistId ?? laneAutomationState.nextStep?.role ?? "the next lane step"} automatically in the same column.`
+    : isTerminalStage
+    ? `This card is in a terminal column (${currentColumnId}). Do not call \`move_card\`. Update the card with your completion summary instead.`
     : nextColumnId
     ? `When your work for this column is complete, call \`move_card\` with cardId: "${task.id}" and targetColumnId: "${nextColumnId}" to advance the card. The next column's specialist will pick it up automatically.`
     : "This card is in the final column. Update the card with your completion summary.";
@@ -361,6 +367,22 @@ export function buildTaskPrompt(
       ]
     : [];
 
+  const blockedLaneVerdictSection = currentColumnStage === "blocked"
+    ? [
+        "## Blocked Lane — Verdict Status",
+        "",
+        task.verificationVerdict
+          ? `**Verification verdict on this card: ${task.verificationVerdict}**`
+          : "No verification verdict recorded.",
+        ...(task.verificationVerdict === "APPROVED"
+          ? ["This card was APPROVED during review. It should be routed back to `done` — the blocker is likely an automation artifact, not a business issue."]
+          : task.verificationVerdict === "NOT_APPROVED"
+          ? ["This card was NOT APPROVED during review. Investigate whether the blocked state is related to the review rejection."]
+          : []),
+        "",
+      ]
+    : [];
+
   return [
     `You are assigned to Kanban task: ${task.title}`,
     "",
@@ -401,6 +423,7 @@ export function buildTaskPrompt(
     ...contractGateSection,
     ...deliveryGateSection,
     ...evidenceBundleSection,
+    ...blockedLaneVerdictSection,
     ...laneRunHistorySection,
     ...laneHandoffSection,
     ...devVerificationSection,

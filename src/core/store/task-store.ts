@@ -17,6 +17,16 @@ export interface TaskStore {
   delete(taskId: string): Promise<void>;
   deleteByWorkspace(workspaceId: string): Promise<number>;
   findByPullRequestUrl?(url: string): Promise<Task | undefined>;
+  /**
+   * Atomically update a task using optimistic locking.
+   * Returns true if the row was updated (version matched), false if version conflict.
+   * Implementations that don't support locking should fall back to unconditional save.
+   */
+  atomicUpdate?(
+    taskId: string,
+    expectedVersion: number,
+    updates: Partial<Pick<Task, "status" | "columnId" | "triggerSessionId" | "completionSummary" | "verificationVerdict" | "verificationReport" | "assignedTo" | "lastSyncError">>,
+  ): Promise<boolean>;
 }
 
 export class InMemoryTaskStore implements TaskStore {
@@ -93,6 +103,19 @@ export class InMemoryTaskStore implements TaskStore {
       }
     }
     return undefined;
+  }
+
+  async atomicUpdate(
+    taskId: string,
+    expectedVersion: number,
+    updates: Partial<Pick<Task, "status" | "columnId" | "triggerSessionId" | "completionSummary" | "verificationVerdict" | "verificationReport" | "assignedTo" | "lastSyncError">>,
+  ): Promise<boolean> {
+    const task = this.tasks.get(taskId);
+    if (!task || (task.version ?? 1) !== expectedVersion) return false;
+    Object.assign(task, updates);
+    task.version = (task.version ?? 1) + 1;
+    task.updatedAt = new Date();
+    return true;
   }
 
   private hydrateTask(task: Task): Task {

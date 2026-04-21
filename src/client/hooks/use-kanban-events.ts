@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { getDesktopApiBaseUrl } from "../utils/diagnostics";
 import { resolveApiPath } from "../config/backend";
 
-const UNIFIED_INVALIDATE_THROTTLE_MS = 5_000;
+const UNIFIED_INVALIDATE_THROTTLE_MS = 2_000;
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 30_000;
 const RECONNECT_JITTER_MS = 500;
@@ -54,34 +54,29 @@ export function useKanbanEvents({ workspaceId, onInvalidate }: UseKanbanEventsOp
           // Reset reconnect backoff on successful connection
           reconnectAttemptRef.current = 0;
           if (hasConnectedOnceRef.current) {
-            // Reconnected after a disconnect — do a full sync
+            // Reconnected after a disconnect — reset throttle and do a full sync
+            lastInvalidateAtRef.current = 0;
             onInvalidateRef.current();
           } else {
             hasConnectedOnceRef.current = true;
           }
           return;
         }
-        if (data.type === "kanban:archived") {
-          // Lightweight event for archived/restored cards.
-          // The card is no longer visible on the main board, so we silently
-          // ignore it rather than triggering a full board refetch.
+        // All other event types (kanban:changed, kanban:archived, fitness:changed, etc.)
+        // trigger a throttled board refresh.
+        const now = Date.now();
+        const elapsed = now - lastInvalidateAtRef.current;
+        if (elapsed >= UNIFIED_INVALIDATE_THROTTLE_MS) {
+          lastInvalidateAtRef.current = now;
+          onInvalidateRef.current();
           return;
         }
-        if (data.type === "kanban:changed" || data.type === "fitness:changed") {
-          const now = Date.now();
-          const elapsed = now - lastInvalidateAtRef.current;
-          if (elapsed >= UNIFIED_INVALIDATE_THROTTLE_MS) {
-            lastInvalidateAtRef.current = now;
+        if (!invalidateTimerRef.current) {
+          invalidateTimerRef.current = setTimeout(() => {
+            invalidateTimerRef.current = null;
+            lastInvalidateAtRef.current = Date.now();
             onInvalidateRef.current();
-            return;
-          }
-          if (!invalidateTimerRef.current) {
-            invalidateTimerRef.current = setTimeout(() => {
-              invalidateTimerRef.current = null;
-              lastInvalidateAtRef.current = Date.now();
-              onInvalidateRef.current();
-            }, UNIFIED_INVALIDATE_THROTTLE_MS - elapsed);
-          }
+          }, UNIFIED_INVALIDATE_THROTTLE_MS - elapsed);
         }
       } catch {
         // Ignore malformed payloads.

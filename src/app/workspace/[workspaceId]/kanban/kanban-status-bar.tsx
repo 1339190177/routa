@@ -154,7 +154,10 @@ export const KanbanStatusBar = React.memo(function KanbanStatusBar({
       const params = new URLSearchParams();
       if (workspaceId) params.set("workspaceId", workspaceId);
       if (boardId) params.set("boardId", boardId);
-      await desktopAwareFetch(`/api/kanban/recover-running?${params}`, { method: "POST" });
+      await Promise.allSettled([
+        desktopAwareFetch(`/api/kanban/recover-running?${params}`, { method: "POST" }),
+        desktopAwareFetch(`/api/kanban/repair?workspaceId=${encodeURIComponent(workspaceId ?? "")}`, { method: "POST" }),
+      ]);
       onRecovered?.();
     } finally {
       setRecovering(false);
@@ -376,12 +379,12 @@ export const KanbanStatusBar = React.memo(function KanbanStatusBar({
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
               {t.kanban.queuedLabel} {boardQueue?.queuedCount ?? 0}
             </span>
-            {(boardQueue?.runningCount ?? 0) > 0 && workspaceId && (
+            {workspaceId && (
               <button
                 onClick={handleRecover}
                 disabled={recovering}
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] hover:bg-desktop-bg-active transition-colors disabled:opacity-50"
-                title="清除所有僵尸运行状态"
+                title="清除僵尸状态并修复任务同步问题"
               >
                 <RotateCcw className={`w-3 h-3 ${recovering ? "animate-spin" : ""}`} />
                 {recovering ? "恢复中..." : "恢复"}

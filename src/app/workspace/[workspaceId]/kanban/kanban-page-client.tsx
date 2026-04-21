@@ -65,9 +65,10 @@ export function KanbanPageClient() {
     error: null,
   });
   const refreshBurstCleanupRef = useRef<(() => void) | null>(null);
-  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sseRefreshRafRef = useRef<number | null>(null);
   const warmedupProvidersRef = useRef<Set<string>>(new Set());
   const autoSyncedWorkspaceRef = useRef<string | null>(null);
+  const syncInProgressRef = useRef(false);
   const codebasesRef = useRef<CodebaseData[]>(codebases);
   codebasesRef.current = codebases;
 
@@ -79,7 +80,7 @@ export function KanbanPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acp.connected, acp.loading]);
 
-  // Fetch boards, tasks, sessions in a single batch
+  // Fetch boards, tasks, sessions, codebases in a single batch
   useEffect(() => {
     const controller = new AbortController();
     (async () => {
@@ -107,13 +108,21 @@ export function KanbanPageClient() {
         ]);
         if (controller.signal.aborted) return;
 
-        // React 18 auto-batches these setState calls
-        setBoards(Array.isArray(boardsData?.boards) ? boardsData.boards : []);
-        setTasks(Array.isArray(tasksData?.tasks) ? tasksData.tasks : []);
-        setSessions(Array.isArray(sessionsData?.sessions) ? sessionsData.sessions : []);
+        // React 18 auto-batches these setState calls.
+        // Only update when data actually changed to avoid unnecessary re-renders.
+        const newBoards = Array.isArray(boardsData?.boards) ? boardsData.boards : [];
+        const newTasks = Array.isArray(tasksData?.tasks) ? tasksData.tasks : [];
+        const newSessions = Array.isArray(sessionsData?.sessions) ? sessionsData.sessions : [];
+        setBoards((prev) => prev.length === newBoards.length && prev === newBoards ? prev : newBoards);
+        setTasks((prev) => prev.length === newTasks.length && prev === newTasks ? prev : newTasks);
+        setSessions((prev) => prev.length === newSessions.length && prev === newSessions ? prev : newSessions);
+
+        // Fetch codebases as part of the same refresh cycle to avoid a cascading re-render.
+        void fetchCodebases();
       } catch { /* ignore */ }
     })();
     return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, refreshKey]);
 
   // Warm up registry providers configured in column automations when the board is opened.
@@ -230,7 +239,7 @@ export function KanbanPageClient() {
     })();
 
     return () => controller.abort();
-  }, [workspaceId, codebases, refreshKey]);
+  }, [workspaceId, codebases]);
 
   const localizedSpecialists = useMemo(
     () => localizeSpecialists(specialists),
@@ -238,15 +247,8 @@ export function KanbanPageClient() {
   );
 
   const handleRefresh = useCallback(() => {
-    if (refreshDebounceRef.current) {
-      clearTimeout(refreshDebounceRef.current);
-    }
-    refreshDebounceRef.current = setTimeout(() => {
-      refreshDebounceRef.current = null;
-      setRefreshKey((k) => k + 1);
-      void fetchCodebases();
-    }, 300);
-  }, [fetchCodebases]);
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   const syncCodebaseToLatest = useCallback(async (codebase: CodebaseData): Promise<void> => {
     // Check if this is a bare repository - skip sync for bare repos
@@ -309,6 +311,8 @@ export function KanbanPageClient() {
 
   const syncWorkspaceRepos = useCallback(async (nextCodebases: CodebaseData[]) => {
     if (nextCodebases.length === 0) return;
+    if (syncInProgressRef.current) return;
+    syncInProgressRef.current = true;
 
     setRepoSync({
       status: "syncing",
@@ -321,59 +325,67 @@ export function KanbanPageClient() {
 
     const failures: string[] = [];
 
-    for (const [index, codebase] of nextCodebases.entries()) {
-      const repoLabel = codebase.label ?? codebase.sourceUrl ?? codebase.repoPath;
-      setRepoSync({
-        status: "syncing",
-        total: nextCodebases.length,
-        completed: index,
-        currentRepoLabel: repoLabel,
-        message: `Syncing ${repoLabel}...`,
-        error: null,
-      });
+    try {
+      for (const [index, codebase] of nextCodebases.entries()) {
+        const repoLabel = codebase.label ?? codebase.sourceUrl ?? codebase.repoPath;
+        setRepoSync({
+          status: "syncing",
+          total: nextCodebases.length,
+          completed: index,
+          currentRepoLabel: repoLabel,
+          message: `Syncing ${repoLabel}...`,
+          error: null,
+        });
 
-      try {
-        await syncCodebaseToLatest(codebase);
-      } catch (error) {
-        failures.push(`${repoLabel}: ${error instanceof Error ? error.message : String(error)}`);
+        try {
+          await syncCodebaseToLatest(codebase);
+        } catch (error) {
+          failures.push(`${repoLabel}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        setRepoSync({
+          status: "syncing",
+          total: nextCodebases.length,
+          completed: index + 1,
+          currentRepoLabel: repoLabel,
+          message: `Synced ${index + 1}/${nextCodebases.length} repositories`,
+          error: null,
+        });
+      }
+
+      void fetchCodebases();
+
+      if (failures.length > 0) {
+        setRepoSync({
+          status: "error",
+          total: nextCodebases.length,
+          completed: nextCodebases.length,
+          currentRepoLabel: null,
+          message: `Repository sync finished with ${failures.length} error${failures.length > 1 ? "s" : ""}.`,
+          error: failures.join(" | "),
+        });
+        return;
       }
 
       setRepoSync({
-        status: "syncing",
-        total: nextCodebases.length,
-        completed: index + 1,
-        currentRepoLabel: repoLabel,
-        message: `Synced ${index + 1}/${nextCodebases.length} repositories`,
-        error: null,
-      });
-    }
-
-    void fetchCodebases();
-
-    if (failures.length > 0) {
-      setRepoSync({
-        status: "error",
+        status: "done",
         total: nextCodebases.length,
         completed: nextCodebases.length,
         currentRepoLabel: null,
-        message: `Repository sync finished with ${failures.length} error${failures.length > 1 ? "s" : ""}.`,
-        error: failures.join(" | "),
+        message: `Repository sync complete. ${nextCodebases.length} repo${nextCodebases.length > 1 ? "s" : ""} updated.`,
+        error: null,
       });
-      return;
+    } finally {
+      syncInProgressRef.current = false;
     }
-
-    setRepoSync({
-      status: "done",
-      total: nextCodebases.length,
-      completed: nextCodebases.length,
-      currentRepoLabel: null,
-      message: `Repository sync complete. ${nextCodebases.length} repo${nextCodebases.length > 1 ? "s" : ""} updated.`,
-      error: null,
-    });
   }, [fetchCodebases, syncCodebaseToLatest]);
 
   const handleKanbanInvalidate = useCallback(() => {
-    handleRefresh();
+    if (sseRefreshRafRef.current != null) return;
+    sseRefreshRafRef.current = requestAnimationFrame(() => {
+      sseRefreshRafRef.current = null;
+      handleRefresh();
+    });
   }, [handleRefresh]);
 
   useKanbanEvents({
@@ -406,9 +418,9 @@ export function KanbanPageClient() {
     return () => {
       refreshBurstCleanupRef.current?.();
       refreshBurstCleanupRef.current = null;
-      if (refreshDebounceRef.current) {
-        clearTimeout(refreshDebounceRef.current);
-        refreshDebounceRef.current = null;
+      if (sseRefreshRafRef.current != null) {
+        cancelAnimationFrame(sseRefreshRafRef.current);
+        sseRefreshRafRef.current = null;
       }
     };
   }, []);

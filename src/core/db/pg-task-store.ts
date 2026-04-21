@@ -199,7 +199,7 @@ export class PgTaskStore implements TaskStore {
   async atomicUpdate(
     taskId: string,
     expectedVersion: number,
-    updates: Partial<Pick<Task, "status" | "completionSummary" | "verificationVerdict" | "verificationReport" | "assignedTo">>
+    updates: Partial<Pick<Task, "status" | "columnId" | "triggerSessionId" | "completionSummary" | "verificationVerdict" | "verificationReport" | "assignedTo" | "lastSyncError">>
   ): Promise<boolean> {
     const result = await this.db
       .update(tasks)
@@ -274,6 +274,7 @@ export class PgTaskStore implements TaskStore {
       completionSummary: row.completionSummary ?? undefined,
       verificationVerdict: row.verificationVerdict as import("../models/task").VerificationVerdict | undefined,
       verificationReport: row.verificationReport ?? undefined,
+      version: row.version ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
