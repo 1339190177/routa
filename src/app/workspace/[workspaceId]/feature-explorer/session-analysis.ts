@@ -8,6 +8,7 @@ const MAX_KEY_RELATED_FILES = 8;
 const MAX_REPEATED_READ_ITEMS = 4;
 const MAX_REPEATED_COMMAND_ITEMS = 4;
 const MAX_FAILED_TOOL_ITEMS = 4;
+const MAX_TRANSCRIPT_HINT_SESSIONS = 4;
 const COMPACT_SESSION_THRESHOLD = 4;
 const NOISE_TOOL_NAMES = new Set(["update_plan", "write_stdin"]);
 
@@ -88,6 +89,43 @@ function sanitizeDiagnosticFiles(entries: string[]): string[] {
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function promptLooksLikeMetaAnalysisOrPromptTuning(value: string): boolean {
+  const normalized = normalizeWhitespace(value).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  const hasTranscriptMarker = normalized.includes("jsonl") || normalized.includes("transcript");
+  const hasPromptTuningMarker = [
+    "prompt",
+    "提示词",
+    "summary",
+    "specialist",
+    "file-session-analyst",
+    "session id",
+    "会话 id",
+    "session-analysis",
+    "会话分析",
+  ].some((marker) => normalized.includes(marker));
+
+  return normalized.includes("you analyze historical coding sessions for one or more specific files")
+    || normalized.includes("run a read-only retrospective on these file-linked coding sessions")
+    || normalized.includes("请对这些与文件相关的历史编码会话做一次只读复盘")
+    || normalized.includes("你是一个只读的文件会话分析师")
+    || normalized.includes("这个生成的 prompt 有问题")
+    || normalized.includes("specialist 的 prompt 有没有问题")
+    || normalized.includes("让 ai 去分析")
+    || normalized.includes("读取那些 jsonl")
+    || normalized.includes("session id:")
+    || (hasTranscriptMarker && hasPromptTuningMarker);
+}
+
+function sessionLooksLikeMetaAnalysisOrPromptTuning(session: AggregatedSelectionSession): boolean {
+  return [session.promptSnippet, ...session.promptHistory]
+    .filter(Boolean)
+    .some((prompt) => promptLooksLikeMetaAnalysisOrPromptTuning(prompt));
 }
 
 function sanitizeRepeatedCommands(entries: string[]): string[] {
@@ -229,6 +267,20 @@ function buildSessionFileEvidence(
     MAX_KEY_RELATED_FILES,
   );
 
+  if (sessionLooksLikeMetaAnalysisOrPromptTuning(session)) {
+    return {
+      relevanceScore: 0,
+      relevanceLabel: locale === "zh"
+        ? "这是当前复盘 / prompt / JSONL 调试元会话；即便触及了文件，也优先按弱证据或噪音处理"
+        : "This is a retrospective/prompt/JSONL tuning meta-session; treat it as weak or noisy evidence even if it touched the file(s)",
+      matchedReadFiles,
+      matchedWrittenFiles,
+      matchedChangedFiles,
+      relatedFiles,
+      repeatedSelectedReads,
+    };
+  }
+
   if (matchedWrittenFiles.length > 0 || matchedChangedFiles.length > 0) {
     return {
       relevanceScore: 2,
@@ -310,6 +362,30 @@ function buildRelevanceOverview(
   ].join("\n");
 }
 
+function buildPreferredTranscriptHintSessions(
+  selectedFiles: string[],
+  sessions: AggregatedSelectionSession[],
+): AggregatedSelectionSession[] {
+  const rankedSessions = sessions
+    .filter((session) => !sessionLooksLikeMetaAnalysisOrPromptTuning(session))
+    .map((session) => ({
+      session,
+      relevanceScore: buildSessionFileEvidence("en", selectedFiles, session).relevanceScore,
+    }))
+    .sort((left, right) => {
+      if (right.relevanceScore !== left.relevanceScore) {
+        return right.relevanceScore - left.relevanceScore;
+      }
+      return right.session.updatedAt.localeCompare(left.session.updatedAt);
+    });
+
+  const strongerSessions = rankedSessions.filter((entry) => entry.relevanceScore > 0);
+  const source = strongerSessions.length > 0 ? strongerSessions : rankedSessions;
+  return source
+    .slice(0, MAX_TRANSCRIPT_HINT_SESSIONS)
+    .map((entry) => entry.session);
+}
+
 function buildSessionBlocks(
   locale: Locale,
   selectedFiles: string[],
@@ -331,23 +407,38 @@ function buildSessionBlocks(
       }
       return right.session.updatedAt.localeCompare(left.session.updatedAt);
     });
+  const skippedMetaSessions = uniqueSorted(
+    rankedSessions
+      .filter(({ session }) => sessionLooksLikeMetaAnalysisOrPromptTuning(session))
+      .map(({ session }) => session.sessionId),
+  );
   const compactMode = rankedSessions.length >= COMPACT_SESSION_THRESHOLD;
   if (compactMode) {
     return locale === "zh"
       ? [
         `- 当前共有 ${rankedSessions.length} 个已选 session。为避免 prompt 过长，这里不再内联逐条 session 证据块。`,
         "- 请直接使用上面的 Transcript Hints 读取对应 JSONL，并以你自己的分析为主。",
+        skippedMetaSessions.length > 0
+          ? `- 已从 Transcript Hints 中省略明显是在调当前复盘 / prompt / JSONL 流程本身的元会话: ${skippedMetaSessions.join(", ")}`
+          : "",
         "- 如有必要，请编写小脚本或使用工具批量提取 opening prompt、prompt history、selected-file read/write/change、failed tools、scope drift 等结构化信号，再基于结果分层判断。",
+        "- 读取 JSONL 时，只提取真实用户 turns（例如 user_message、role=user 的 message），以及与选中文件或 feature 直接相关的 exec_command / apply_patch / failed command 信号。忽略 developer/system/base instructions、token_count 和无关长输出。",
+        "- 不要用 rg/grep 按关键字扫描整行 JSONL 再回显整段对象；先按 row type 过滤，再抽需要字段。",
         "- 不要把任务改写成整个仓库的架构评审、静态 codebase review 或 ADR/ARCHITECTURE 对账；如果没有先读这些 session 的 JSONL，就不要下仓库级结论。",
         "- 如果这些 JSONL 读不到，就在输出中明确写出限制并停止，不要退化成基于 git 历史、仓库文档或全仓代码扫描的替代分析。",
-      ].join("\n")
+      ].filter(Boolean).join("\n")
       : [
         `- There are ${rankedSessions.length} selected sessions. To keep the prompt compact, detailed per-session evidence blocks are omitted.`,
         "- Read the matching JSONL files from Transcript Hints directly and prioritize your own analysis over the pre-baked summary.",
+        skippedMetaSessions.length > 0
+          ? `- Transcript Hints already omit clear prompt/JSONL retrospective meta-sessions: ${skippedMetaSessions.join(", ")}`
+          : "",
         "- If needed, write a small script or use tools to batch-extract opening prompts, prompt history, selected-file reads/writes/changes, failed tools, scope drift, and other structured signals before drawing conclusions.",
+        "- When reading JSONL, only extract real user turns (for example user_message or role=user messages) plus exec_command/apply_patch/failed-command evidence that directly touches the selected file or feature. Ignore developer/system/base instructions, token_count, and unrelated long outputs.",
+        "- Do not grep whole JSONL rows by generic keywords and print entire objects. Filter by row type first, then extract only the fields you need.",
         "- Do not turn this into a repo-wide architecture review, static codebase audit, or ADR/ARCHITECTURE consistency check. If you have not read the linked session JSONL files first, do not make repo-level conclusions.",
         "- If those JSONL files are inaccessible, state that limitation and stop. Do not fall back to git history, repository documents, or full-codebase scanning as a substitute analysis path.",
-      ].join("\n");
+      ].filter(Boolean).join("\n");
   }
 
   return rankedSessions.map(({ session, evidence }, index) => {
@@ -425,7 +516,7 @@ export function buildSessionAnalysisPrompt({
   const featureName = featureDetail?.name ?? (locale === "zh" ? "未命名 Feature" : "Unnamed feature");
   const featureSummary = featureDetail?.summary?.trim()
     || (locale === "zh" ? "无摘要" : "No summary");
-  const transcriptHint = sessions
+  const transcriptHint = buildPreferredTranscriptHintSessions(files, sessions)
     .map((session) => `~/.codex/sessions/**/${session.sessionId}*.jsonl`)
     .join("\n");
 
@@ -447,6 +538,9 @@ export function buildSessionAnalysisPrompt({
       "11. 只有在下面的摘要证据仍不足以支撑判断，或者你需要恢复真实用户开场、确认范围漂移时，才去读少量 transcript JSONL。优先读取高相关 session；如果权限被拒或读取受阻，就基于现有证据继续，并把这个限制写出来。",
       "12. 不要把任务扩写成整个仓库的架构评审、工程治理盘点或 ADR/ARCHITECTURE 对账。除非这些结论直接来自目标 session 的 transcript 证据，否则不要输出仓库级判断。",
       "13. 对于多 session 模式，如果目标 JSONL 无法访问，就只输出限制、缺失证据和下一步需要的访问条件；不要用 git 历史、仓库文档或全仓扫描来替代 session 分析。",
+      "14. 如果某个 session 明显是在调当前 retrospective / prompt / JSONL 工作流本身，即便它触及了目标文件，也优先视为弱证据或噪音，不要把它混进历史样本主结论。",
+      "15. 读取 transcript 时，只抽取真实用户消息，以及与目标文件或 feature 直接相关的 function_call / exec_command_end / apply_patch / failed-command 信号。忽略 developer/system/base instructions、token_count、无关长命令输出和大段工具回显。",
+      "16. 不要按关键字扫描整行 JSONL 并回显整段 JSON；先按 row type 过滤，再提取你要的字段。",
       "",
       "输出格式：",
       "## 会话相关性分层",
@@ -501,6 +595,9 @@ export function buildSessionAnalysisPrompt({
     "11. Only inspect a small number of matching transcript JSONL files if the summarized evidence is still insufficient or if you need to recover the user's true opening request or confirm scope drift. If permissions are blocked, continue with the available evidence and state that limitation explicitly.",
     "12. Do not expand this into a repo-wide architecture review, engineering-governance audit, or ADR/ARCHITECTURE consistency check. Unless those conclusions come directly from the target session transcripts, do not make repo-level claims.",
     "13. In multi-session mode, if the target JSONL files are inaccessible, only report the limitation, the missing evidence, and the access you need next. Do not substitute git history, repository documents, or full-codebase scanning for session analysis.",
+    "14. If a session is clearly about tuning the current retrospective, prompt, or JSONL workflow itself, treat it as weak or noisy evidence even if it touched the target file. Do not let it contaminate the historical sample.",
+    "15. When reading transcripts, only extract real user messages plus function_call / exec_command_end / apply_patch / failed-command evidence that directly touches the target file or feature. Ignore developer/system/base instructions, token_count, unrelated long command output, and bulk tool echoes.",
+    "16. Do not grep whole JSONL rows by generic keywords and print entire JSON objects. Filter by row type first, then extract the specific fields you need.",
     "",
     "Output format:",
     "## Session Relevance",

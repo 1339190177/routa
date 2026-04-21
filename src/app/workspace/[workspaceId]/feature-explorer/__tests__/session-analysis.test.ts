@@ -109,8 +109,12 @@ describe("session-analysis", () => {
       provider: "codex" as const,
       sessionId: `session-${index + 1}`,
       updatedAt: `2026-04-1${index + 1}T08:00:00.000Z`,
-      promptSnippet: `Analyze session ${index + 1}`,
-      promptHistory: [`Analyze session ${index + 1}`],
+      promptSnippet: index === 3
+        ? "这个生成的 prompt 有问题，读取 jsonl 再改 specialist prompt"
+        : `Analyze session ${index + 1}`,
+      promptHistory: [index === 3
+        ? "这个生成的 prompt 有问题，读取 jsonl 再改 specialist prompt"
+        : `Analyze session ${index + 1}`],
       toolNames: ["exec_command"],
       changedFiles: index === 0
         ? ["src/app/workspace/[workspaceId]/feature-explorer/page.tsx"]
@@ -163,11 +167,15 @@ describe("session-analysis", () => {
     expect(prompt).toContain("如果 session 数量较多，优先直接读 Transcript Hints 里的 JSONL");
     expect(prompt).toContain("为避免 prompt 过长，这里不再内联逐条 session 证据块");
     expect(prompt).toContain("编写小脚本或使用工具批量提取证据");
+    expect(prompt).toContain("已从 Transcript Hints 中省略明显是在调当前复盘 / prompt / JSONL 流程本身的元会话");
+    expect(prompt).toContain("只提取真实用户 turns");
+    expect(prompt).toContain("不要用 rg/grep 按关键字扫描整行 JSONL 再回显整段对象");
     expect(prompt).toContain("不要把任务扩写成整个仓库的架构评审");
     expect(prompt).toContain("如果没有先读这些 session 的 JSONL，就不要下仓库级结论");
     expect(prompt).toContain("如果这些 JSONL 读不到，就在输出中明确写出限制并停止");
     expect(prompt).toContain("不要用 git 历史、仓库文档或全仓扫描来替代 session 分析");
-    expect(prompt).toContain("~/.codex/sessions/**/session-4*.jsonl");
+    expect(prompt).not.toContain("~/.codex/sessions/**/session-4*.jsonl");
+    expect(prompt).not.toContain("~/.codex/sessions/**/session-2*.jsonl");
     expect(prompt).not.toContain("## Session 1");
     expect(prompt).not.toContain("### Prompt History");
   });

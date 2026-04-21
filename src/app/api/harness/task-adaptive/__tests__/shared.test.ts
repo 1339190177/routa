@@ -1173,6 +1173,59 @@ describe("assembleTaskAdaptiveHarness", () => {
       ],
     );
 
+    writeTranscript(
+      path.join(tempRoot, ".codex", "sessions", "session-prompt-tuning.jsonl"),
+      repoRoot,
+      "session-prompt-tuning",
+      [
+        {
+          timestamp: "2026-04-21T09:30:00.000Z",
+          type: "event_msg",
+          payload: {
+            type: "user_message",
+            message: "读取这个 http://localhost:3001/workspace/default/feature-explorer?feature=workspace-overview&file=src%2Fapp%2Fworkspace%2F%5BworkspaceId%5D%2Ffeature-explorer%2F__tests__%2Ffeature-explorer-page-client.test.tsx",
+          },
+        },
+        {
+          timestamp: "2026-04-21T09:31:00.000Z",
+          type: "event_msg",
+          payload: {
+            type: "user_message",
+            message: "这个生成的 prompt 有问题，读取 jsonl 再改 specialist prompt，然后看看 summary 对不对",
+          },
+        },
+        {
+          timestamp: "2026-04-21T09:31:20.000Z",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            name: "exec_command",
+            arguments: JSON.stringify({ cmd: `sed -n '1,200p' '${focusFile}'` }),
+          },
+        },
+        {
+          timestamp: "2026-04-21T09:31:24.000Z",
+          type: "event_msg",
+          payload: {
+            type: "exec_command_end",
+            command: ["/bin/zsh", "-lc", `sed -n '1,200p' '${focusFile}'`],
+            aggregated_output: "export const testFile = true;\n",
+            exit_code: 0,
+          },
+        },
+        {
+          timestamp: "2026-04-21T09:32:00.000Z",
+          type: "event_msg",
+          payload: {
+            type: "exec_command_end",
+            command: ["/bin/zsh", "-lc", "git status --short"],
+            aggregated_output: ` M ${focusFile}\n`,
+            exit_code: 0,
+          },
+        },
+      ],
+    );
+
     const summary = await summarizeFileSessionContext(repoRoot, {
       filePaths: [focusFile],
       featureId: "feature-explorer",
@@ -1184,12 +1237,18 @@ describe("assembleTaskAdaptiveHarness", () => {
     expect(summary.directSessions.map((session) => session.sessionId)).toContain("session-focused");
     expect(summary.directSessions.map((session) => session.sessionId)).not.toContain("session-kanban-adjacent");
     expect(summary.directSessions.map((session) => session.sessionId)).not.toContain("session-meta-analyst");
+    expect(summary.directSessions.map((session) => session.sessionId)).not.toContain("session-prompt-tuning");
     expect(summary.adjacentSessions.map((session) => session.sessionId)).toContain("session-kanban-adjacent");
     expect(summary.weakSessions.map((session) => session.sessionId)).toContain("session-meta-analyst");
+    expect(summary.weakSessions.map((session) => session.sessionId)).toContain("session-prompt-tuning");
     expect(summary.matchedSessionIds).toEqual(expect.arrayContaining([
       "session-focused",
       "session-kanban-adjacent",
       "session-meta-analyst",
+      "session-prompt-tuning",
     ]));
+    expect(summary.transcriptHints).toContain("~/.codex/sessions/**/session-focused*.jsonl");
+    expect(summary.transcriptHints).not.toContain("~/.codex/sessions/**/session-meta-analyst*.jsonl");
+    expect(summary.transcriptHints).not.toContain("~/.codex/sessions/**/session-prompt-tuning*.jsonl");
   });
 });

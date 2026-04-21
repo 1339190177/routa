@@ -2028,10 +2028,29 @@ function promptLooksLikeMetaFileAnalysis(value: string): boolean {
     return false;
   }
 
+  const hasTranscriptMarker = normalized.includes("jsonl") || normalized.includes("transcript");
+  const hasPromptTuningMarker = [
+    "prompt",
+    "提示词",
+    "summary",
+    "specialist",
+    "file-session-analyst",
+    "session id",
+    "会话 id",
+    "session-analysis",
+    "会话分析",
+  ].some((marker) => normalized.includes(marker));
+
   return normalized.includes("you analyze historical coding sessions for one or more specific files")
     || normalized.includes("run a read-only retrospective on these file-linked coding sessions")
     || normalized.includes("请对这些与文件相关的历史编码会话做一次只读复盘")
-    || normalized.includes("你是一个只读的文件会话分析师");
+    || normalized.includes("你是一个只读的文件会话分析师")
+    || normalized.includes("这个生成的 prompt 有问题")
+    || normalized.includes("specialist 的 prompt 有没有问题")
+    || normalized.includes("让 ai 去分析")
+    || normalized.includes("读取那些 jsonl")
+    || normalized.includes("session id:")
+    || (hasTranscriptMarker && hasPromptTuningMarker);
 }
 
 function classifyEnvironmentFailureCategory(failure: FileSessionToolFailure): string {
@@ -3120,8 +3139,6 @@ function scoreFileSessionContextSession(
   const selectedMutations = [...session.matchedChangedFiles, ...session.matchedWrittenFiles]
     .filter((filePath) => selectedSet.has(filePath)).length;
   const promptAligned = sessionPromptMentionsFocusContext(session, focusFiles, featureId);
-  const openingPrompt = session.promptHistory[0] ?? session.promptSnippet;
-
   let score = (focusChanges * 12)
     + (focusWrites * 12)
     + (focusReads * 5)
@@ -3143,7 +3160,7 @@ function scoreFileSessionContextSession(
     score -= 3;
   }
 
-  if (openingPrompt && promptLooksLikeMetaFileAnalysis(openingPrompt)) {
+  if (sessionLooksLikeMetaFileAnalysis(session)) {
     score -= 20;
   }
 
@@ -3163,10 +3180,9 @@ function classifyFileSessionContextBuckets(
   const weakSessions: FileSessionContextSessionSummary[] = [];
 
   for (const session of sessions) {
-    const openingPrompt = session.promptHistory[0] ?? session.promptSnippet;
     const relevanceScore = scoreFileSessionContextSession(session, focusFiles, selectedFiles, featureId);
 
-    if (openingPrompt && promptLooksLikeMetaFileAnalysis(openingPrompt)) {
+    if (sessionLooksLikeMetaFileAnalysis(session)) {
       weakSessions.push(session);
       continue;
     }
@@ -3251,6 +3267,14 @@ function buildRankedFileSessionContextSummaries(params: {
     );
 
   return trimTo(sessions, params.maxSessions);
+}
+
+function sessionLooksLikeMetaFileAnalysis(
+  session: FileSessionContextSessionSummary,
+): boolean {
+  return [session.promptSnippet, ...session.promptHistory]
+    .filter(Boolean)
+    .some((prompt) => promptLooksLikeMetaFileAnalysis(prompt));
 }
 
 function buildFileSessionContextPromptSignals(
@@ -3510,6 +3534,8 @@ export async function summarizeFileSessionContext(
   const inputFrictions = buildFileSessionContextInputFrictions(sessionSummaries, pack.featureId);
   const environmentFrictions = buildFileSessionContextEnvironmentFrictions(sessionSummaries);
   const hotspots = buildFileSessionContextHotspots(sessionSummaries);
+  const transcriptHintSessions = sessionSummaries.filter((session) => !sessionLooksLikeMetaFileAnalysis(session));
+  const transcriptHintSource = transcriptHintSessions.length > 0 ? transcriptHintSessions : sessionSummaries;
 
   return {
     featureId: pack.featureId,
@@ -3530,7 +3556,7 @@ export async function summarizeFileSessionContext(
     repeatedFileHotspots: hotspots.repeatedFileHotspots,
     repeatedCommandHotspots: hotspots.repeatedCommandHotspots,
     transcriptHints: uniqueSorted(
-      pack.sessions.map((session) => `~/.codex/sessions/**/${session.sessionId}*.jsonl`),
+      transcriptHintSource.map((session) => `~/.codex/sessions/**/${session.sessionId}*.jsonl`),
     ),
     warnings: [...pack.warnings],
   };

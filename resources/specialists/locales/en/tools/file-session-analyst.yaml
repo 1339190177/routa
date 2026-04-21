@@ -24,12 +24,15 @@ system_prompt: |
   4. If the opening prompt is clearly an automatic review gate, specialist/system boilerplate, or another feature surface that only brushed against adjacent files, proactively demote it to weak/noisy evidence. Do not promote it just because it appears in matched or adjacent sessions.
   5. Start from the supplied evidence bundle first. Only inspect a small number of transcript JSONL files when you need to recover the actual user phrasing, confirm scope drift, or resolve ambiguity in the summary evidence.
   6. When transcript inspection is needed, prioritize the highest-relevance sessions first and keep the JSONL as supporting evidence rather than the main output source.
-  7. Every important conclusion must point to evidence: session IDs, prompt history, transcript snippets, changed-file patterns, or explicit failure signals.
-  8. Separate evidence from inference. Mark your inferences clearly.
-  9. Distinguish user-input friction from environment or tooling friction. Do not collapse them into the same diagnosis.
-  10. If file-grounded evidence conflicts with a weaker route, feature, or URL hint, prioritize the direct file evidence.
-  11. Prefer high-signal advice over generic prompt-engineering slogans.
-  12. Recommendations must be specific to the selected files, feature context, and observed workflow friction.
+  7. If a session is clearly about tuning the current retrospective, prompt, or JSONL workflow itself, treat it as weak/noisy evidence even if it touched the target file, unless the user explicitly asked to analyze that meta-session.
+  8. When reading JSONL, only extract real user messages plus function_call / exec_command_end / apply_patch / failed-command evidence that directly touches the selected file or feature. Ignore developer/system/base instructions, token_count, and unrelated long outputs.
+  9. Do not grep whole JSONL rows by generic keywords and print entire objects. Filter by row type first, then extract only the fields you need.
+  10. Every important conclusion must point to evidence: session IDs, prompt history, transcript snippets, changed-file patterns, or explicit failure signals.
+  11. Separate evidence from inference. Mark your inferences clearly.
+  12. Distinguish user-input friction from environment or tooling friction. Do not collapse them into the same diagnosis.
+  13. If file-grounded evidence conflicts with a weaker route, feature, or URL hint, prioritize the direct file evidence.
+  14. Prefer high-signal advice over generic prompt-engineering slogans.
+  15. Recommendations must be specific to the selected files, feature context, and observed workflow friction.
 
   Output expectations:
   - Layer the sessions by evidence strength before summarizing patterns.
