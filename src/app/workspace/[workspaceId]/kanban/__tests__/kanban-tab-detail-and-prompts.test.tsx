@@ -501,6 +501,11 @@ describe("KanbanCardDetail repository health", () => {
       throw new Error(`Unexpected desktopAwareFetch: ${url}`);
     });
 
+    const targetWindow = {
+      close: vi.fn(),
+      location: { href: "about:blank" },
+    } as unknown as Window;
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(targetWindow);
     const onOpenHistoryAnalysis = vi.fn(async () => {});
 
     render(
@@ -553,15 +558,20 @@ describe("KanbanCardDetail repository health", () => {
     await waitFor(() => {
       expect(onOpenHistoryAnalysis).toHaveBeenCalledWith(
         expect.stringContaining("summarize_task_history_context"),
+        targetWindow,
       );
     });
     expect(onOpenHistoryAnalysis).toHaveBeenCalledWith(
       expect.stringContaining("\"repoPath\": \"/tmp/repo-a\""),
+      targetWindow,
     );
     expect(onOpenHistoryAnalysis).toHaveBeenCalledWith(
       expect.stringContaining("Current History Summary: Started from 3 linked history sessions"),
+      targetWindow,
     );
-    expect(screen.getByText("History analysis opened in the session pane.")).toBeTruthy();
+    expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(screen.getByText("History analysis opened in a new page.")).toBeTruthy();
+    openSpy.mockRestore();
   });
 
   it("loads JIT Context from search hints even when no history sessions are linked", async () => {

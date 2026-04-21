@@ -166,8 +166,11 @@ function buildKanbanHistoryAnalysisCreationError(
   return payload?.error?.message || fallbackMessage;
 }
 
+function buildKanbanHistoryAnalysisSessionUrl(workspaceId: string, sessionId: string): string {
+  return `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}`;
+}
+
 async function startKanbanHistoryAnalysisSession(params: {
-  acp: UseAcpState & UseAcpActions;
   workspaceId: string;
   task: TaskInfo;
   repoPath?: string;
@@ -176,9 +179,13 @@ async function startKanbanHistoryAnalysisSession(params: {
   specialistLanguage: KanbanSpecialistLanguage;
   taskAdaptiveHarness: AcpTaskAdaptiveHarnessOptions;
   prompt: string;
-  onSessionCreated: (sessionId: string) => Promise<void>;
+  targetWindow: Window | null;
   fallbackErrorMessage: string;
 }): Promise<string> {
+  if (!params.targetWindow) {
+    throw new Error(params.fallbackErrorMessage);
+  }
+
   const response = await desktopAwareFetch("/api/acp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -220,9 +227,32 @@ async function startKanbanHistoryAnalysisSession(params: {
     throw new Error(params.fallbackErrorMessage);
   }
 
-  params.acp.selectSession(sessionId);
-  await params.onSessionCreated(sessionId);
-  await params.acp.promptSession(sessionId, params.prompt);
+  params.targetWindow.location.href = buildKanbanHistoryAnalysisSessionUrl(params.workspaceId, sessionId);
+
+  const promptResponse = await desktopAwareFetch("/api/acp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: `kanban-history-analysis-prompt:${Date.now()}`,
+      method: "session/prompt",
+      params: {
+        sessionId,
+        prompt: [{ type: "text", text: params.prompt }],
+      },
+    }),
+  });
+
+  const promptPayload = await promptResponse.json().catch(() => null) as {
+    error?: { message?: string };
+  } | null;
+  if (!promptResponse.ok) {
+    throw new Error(buildKanbanHistoryAnalysisCreationError(promptPayload, params.fallbackErrorMessage));
+  }
+  if (promptPayload?.error?.message) {
+    throw new Error(promptPayload.error.message);
+  }
+
   return sessionId;
 }
 
@@ -961,7 +991,7 @@ export function KanbanTaskDetailOverlay({
                     }
                     : undefined}
                   onOpenJitContextHistoryAnalysis={acp
-                    ? async (prompt) => {
+                    ? async (prompt, targetWindow) => {
                       const taskCodebaseIds = task.codebaseIds && task.codebaseIds.length > 0
                         ? task.codebaseIds
                         : allCodebaseIds;
@@ -976,8 +1006,7 @@ export function KanbanTaskDetailOverlay({
                         task,
                       });
 
-                      const sessionId = await startKanbanHistoryAnalysisSession({
-                        acp,
+                      await startKanbanHistoryAnalysisSession({
                         workspaceId,
                         task,
                         repoPath: taskRepoPath ?? undefined,
@@ -986,23 +1015,9 @@ export function KanbanTaskDetailOverlay({
                         specialistLanguage,
                         taskAdaptiveHarness,
                         prompt,
+                        targetWindow,
                         fallbackErrorMessage: t.kanbanDetail.jitContextHistoryAnalysisFailed,
-                        onSessionCreated: async (nextSessionId) => {
-                          const nextSessionIds = [
-                            ...(task.sessionIds ?? []),
-                            nextSessionId,
-                          ].filter((sessionIdValue, index, values) => (
-                            Boolean(sessionIdValue) && values.indexOf(sessionIdValue) === index
-                          ));
-                          await patchTask(task.id, { sessionIds: nextSessionIds });
-                          setHiddenSessionPaneTaskId(null);
-                          setActiveSessionId(nextSessionId);
-                          onRefresh();
-                        },
                       });
-
-                      setHiddenSessionPaneTaskId(null);
-                      setActiveSessionId(sessionId);
                     }
                     : undefined}
                   isFullscreen={isTaskDetailFullscreen}

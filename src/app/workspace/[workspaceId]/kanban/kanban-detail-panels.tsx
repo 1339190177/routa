@@ -682,7 +682,7 @@ export function JitContextPanel({
   specialistLanguage: KanbanSpecialistLanguage;
   activeSessionId?: string | null;
   onLoadIntoSession?: (sessionId: string, prompt: string) => Promise<void>;
-  onOpenHistoryAnalysis?: (prompt: string) => Promise<void>;
+  onOpenHistoryAnalysis?: (prompt: string, targetWindow: Window | null) => Promise<void>;
   compact?: boolean;
   showTitle?: boolean;
 }) {
@@ -820,6 +820,13 @@ export function JitContextPanel({
       return;
     }
 
+    const targetWindow = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
+    if (!targetWindow) {
+      setAnalysisError(t.kanbanDetail.jitContextHistoryAnalysisPopupBlocked);
+      setAnalysisSuccess(false);
+      return;
+    }
+
     setOpeningAnalysis(true);
     setAnalysisError(null);
     setAnalysisSuccess(false);
@@ -835,9 +842,15 @@ export function JitContextPanel({
           repoPath,
           harnessOptions,
         ),
+        targetWindow,
       );
       setAnalysisSuccess(true);
     } catch (sessionError) {
+      try {
+        targetWindow.close();
+      } catch {
+        // Ignore cleanup failures for browsers that already navigated/closed.
+      }
       setAnalysisError(toErrorMessage(sessionError));
     } finally {
       setOpeningAnalysis(false);

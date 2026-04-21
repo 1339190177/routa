@@ -778,6 +778,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     openingJitContextHistoryAnalysis: string;
     jitContextHistoryAnalysisOpened: string;
     jitContextHistoryAnalysisFailed: string;
+    jitContextHistoryAnalysisPopupBlocked: string;
     loadingJitContext: string;
     matchConfidence: string;
     matchReasons: string;

@@ -65,7 +65,7 @@ export interface KanbanCardDetailProps {
   onSelectSession?: (sessionId: string) => void;
   jitContextSessionId?: string | null;
   onLoadJitContextIntoSession?: (sessionId: string, prompt: string) => Promise<void>;
-  onOpenJitContextHistoryAnalysis?: (prompt: string) => Promise<void>;
+  onOpenJitContextHistoryAnalysis?: (prompt: string, targetWindow: Window | null) => Promise<void>;
   isFullscreen?: boolean;
   onToggleFullscreen?: (next: boolean) => void;
   onClose?: () => void;

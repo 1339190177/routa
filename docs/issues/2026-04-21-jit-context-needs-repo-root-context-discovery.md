@@ -112,6 +112,7 @@ That gives `Task-Adaptive Harness` a just-in-time seed even before the first imp
 - 2026-04-21: added `historySummary` to `Task-Adaptive Harness` so linked history session seeds are compressed into an overview plus top seed sessions, instead of only exposing final recovered sessions
 - 2026-04-21: added MCP tool `summarize_task_history_context` and new read-only specialist `history-summary-analyst` so future analysis can start from compressed seed evidence rather than rereading all linked transcripts
 - 2026-04-21: `JIT Context` now exposes `Open History Analysis`, which starts a dedicated `history-summary-analyst` session from the card detail instead of forcing users to inject raw linked sessions into the current implementation session
+- 2026-04-21: `Open History Analysis` was adjusted again to launch a separate session page instead of hijacking the current Kanban session pane, so history analysis no longer interferes with the active execution chat
 
 ## Relevant Files
 
