@@ -530,6 +530,72 @@ describe("KanbanCardDetail repository health", () => {
     });
   });
 
+  it("surfaces JIT Context warnings even when no sessions or files are recovered", async () => {
+    desktopAwareFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : String(input);
+      if (url === "/api/harness/task-adaptive") {
+        return new Response(JSON.stringify({
+          summary: "No files recovered.",
+          warnings: ["Feature not found: missing-feature", "No task-adaptive files could be resolved from the current request."],
+          selectedFiles: [],
+          matchedFileDetails: [],
+          matchedSessionIds: [],
+          failures: [],
+          repeatedReadFiles: [],
+          sessions: [],
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      throw new Error(`Unexpected desktopAwareFetch: ${url}`);
+    });
+
+    render(
+      <KanbanCardDetail
+        task={{
+          ...createTask("task-jit-warnings", "Broken JIT context"),
+          assignedRole: "CRAFTER",
+          codebaseIds: ["repo-a"],
+          contextSearchSpec: {
+            featureCandidates: ["missing-feature"],
+          },
+        }}
+        boardColumns={board.columns}
+        availableProviders={[]}
+        specialists={[]}
+        specialistLanguage="en"
+        codebases={[{
+          id: "repo-a",
+          workspaceId: "workspace-1",
+          repoPath: "/tmp/repo-a",
+          label: "Repo A",
+          isDefault: true,
+          sourceType: "local",
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        }]}
+        allCodebaseIds={["repo-a"]}
+        worktreeCache={{}}
+        sessions={[]}
+        fullWidth
+        onPatchTask={vi.fn(async () => createTask("task-jit-warnings", "Broken JIT context"))}
+        onRetryTrigger={vi.fn()}
+        onDelete={vi.fn()}
+        onRefresh={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "JIT Context" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show JIT Context" }));
+
+    expect(await screen.findByText("Warnings")).toBeTruthy();
+    expect(screen.getByText("Feature not found: missing-feature")).toBeTruthy();
+    expect(screen.getByText("No task-adaptive files could be resolved from the current request.")).toBeTruthy();
+    expect(screen.queryByText("No historical issues were recovered from the linked sessions.")).toBeNull();
+  });
+
   it("prefers the current override provider over a stale selected session when a rerun fails before session creation", () => {
     render(
       <KanbanCardDetail

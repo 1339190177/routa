@@ -838,6 +838,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     overall: "总体",
     pass: "通过",
     warning: "警告",
+    warnings: "警告",
     fail: "失败",
     validYaml: "有效 YAML",
     invalidYaml: "无效 YAML",

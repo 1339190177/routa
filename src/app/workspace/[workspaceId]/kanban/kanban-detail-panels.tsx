@@ -566,12 +566,25 @@ export function JitContextPanel({
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.jitContextNoHistorySessions}
             </div>
-          ) : !pack || (pack.failures.length === 0 && pack.repeatedReadFiles.length === 0 && pack.sessions.length === 0 && matchedFileDetails.length === 0) ? (
+          ) : !pack || (pack.failures.length === 0 && pack.repeatedReadFiles.length === 0 && pack.sessions.length === 0 && matchedFileDetails.length === 0 && pack.warnings.length === 0) ? (
             <div className="border-b border-slate-200/70 px-1 pb-2 text-sm text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
               {t.kanbanDetail.noJitContext}
             </div>
           ) : (
             <>
+              {pack.warnings.length > 0 ? (
+                <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-900/10">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">
+                    {t.kanbanDetail.warnings}
+                  </div>
+                  <div className="mt-2 space-y-1 text-sm text-amber-800 dark:text-amber-100">
+                    {pack.warnings.map((warning) => (
+                      <div key={warning}>{warning}</div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="space-y-2">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
                   {t.kanbanDetail.historicalIssues}

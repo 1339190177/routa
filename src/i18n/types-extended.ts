@@ -843,6 +843,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     overall: string;
     pass: string;
     warning: string;
+    warnings: string;
     fail: string;
     validYaml: string;
     invalidYaml: string;

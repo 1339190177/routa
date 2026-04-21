@@ -838,6 +838,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     overall: "Overall",
     pass: "PASS",
     warning: "WARNING",
+    warnings: "Warnings",
     fail: "FAIL",
     validYaml: "Valid YAML",
     invalidYaml: "Invalid YAML",
