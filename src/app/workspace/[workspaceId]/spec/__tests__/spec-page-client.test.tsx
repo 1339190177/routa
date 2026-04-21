@@ -233,6 +233,39 @@ describe("SpecPageClient", () => {
     expect(screen.getAllByText("Feature map unavailable").length).toBeGreaterThan(0);
   });
 
+  it("filters visible issues by kind and severity from the toolbar", async () => {
+    mockSpecResponses();
+
+    render(<SpecPageClient />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Spec board/i })).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), {
+      target: { value: "issue" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Linked issue" })).toBeTruthy();
+    });
+
+    expect(screen.queryAllByRole("button", { name: /Spec board/i })).toHaveLength(0);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Severity" }), {
+      target: { value: "high" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "Spec board" })).toBeTruthy();
+    });
+
+    expect(screen.queryAllByRole("button", { name: /Linked issue/i })).toHaveLength(0);
+  });
+
   it("surfaces issue API errors instead of rendering an empty board", async () => {
     desktopAwareFetch.mockImplementation(async (path: string) => {
       if (path.includes("/api/spec/issues?workspaceId=default")) {

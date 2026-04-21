@@ -47,6 +47,14 @@ const SEVERITY_STYLES: Record<string, string> = {
   info: "border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-500/30 dark:bg-slate-500/15 dark:text-slate-200",
 };
 
+const SEVERITY_ORDER: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
+
 const STATUS_THEMES: Record<
   SpecStatus,
   {
@@ -223,6 +231,15 @@ function SpecToolbar({
     () => [...new Set(issues.map((issue) => normalizeSpecStatus(issue.status)))],
     [issues],
   );
+  const kinds = useMemo(
+    () => [...new Set(issues.map((issue) => issue.kind).filter(Boolean))].sort(),
+    [issues],
+  );
+  const severities = useMemo(
+    () => [...new Set(issues.map((issue) => issue.severity).filter(Boolean))]
+      .sort((a, b) => (SEVERITY_ORDER[a] ?? 99) - (SEVERITY_ORDER[b] ?? 99) || a.localeCompare(b)),
+    [issues],
+  );
   const areas = useMemo(
     () => [...new Set(issues.map((issue) => issue.area).filter(Boolean))].sort(),
     [issues],
@@ -247,6 +264,30 @@ function SpecToolbar({
         <option value="">{`${t.specBoard.status}: ${t.common.all}`}</option>
         {statuses.map((status) => (
           <option key={status} value={status}>{statusLabels[status]}</option>
+        ))}
+      </select>
+
+      <select
+        aria-label={t.specBoard.kind}
+        value={filters.kind}
+        onChange={(event) => onFiltersChange({ ...filters, kind: event.target.value })}
+        className={selectClassName}
+      >
+        <option value="">{`${t.specBoard.kind}: ${t.common.all}`}</option>
+        {kinds.map((kind) => (
+          <option key={kind} value={kind}>{kind}</option>
+        ))}
+      </select>
+
+      <select
+        aria-label={t.specBoard.severity}
+        value={filters.severity}
+        onChange={(event) => onFiltersChange({ ...filters, severity: event.target.value })}
+        className={selectClassName}
+      >
+        <option value="">{`${t.specBoard.severity}: ${t.common.all}`}</option>
+        {severities.map((severity) => (
+          <option key={severity} value={severity}>{severity}</option>
         ))}
       </select>
 
@@ -1009,6 +1050,37 @@ export function SpecBoardPanel({ workspaceId }: { workspaceId: string }) {
       .filter((family) => family.issues.length > 0);
   }, [boardModel.families, boardModel.relationsByFilename, filteredIssueSet]);
 
+  const selectedIssueRelations = useMemo(() => {
+    if (!selectedIssue) {
+      return {
+        outgoing: [],
+        incoming: [],
+        localOutgoing: [],
+        familyId: "",
+        familyIssues: [],
+      };
+    }
+
+    const relations = boardModel.relationsByFilename.get(selectedIssue.filename);
+    if (!relations) {
+      return {
+        outgoing: [],
+        incoming: [],
+        localOutgoing: [],
+        familyId: selectedIssue.filename,
+        familyIssues: [],
+      };
+    }
+
+    return {
+      ...relations,
+      outgoing: relations.outgoing.filter((relation) => !relation.targetFilename || filteredIssueSet.has(relation.targetFilename)),
+      incoming: relations.incoming.filter((issue) => filteredIssueSet.has(issue.filename)),
+      localOutgoing: relations.localOutgoing.filter((issue) => filteredIssueSet.has(issue.filename)),
+      familyIssues: relations.familyIssues.filter((issue) => filteredIssueSet.has(issue.filename)),
+    };
+  }, [boardModel.relationsByFilename, filteredIssueSet, selectedIssue]);
+
   useEffect(() => {
     setSelectedIssue((current) => {
       if (filteredIssues.length === 0) {
@@ -1064,21 +1136,7 @@ export function SpecBoardPanel({ workspaceId }: { workspaceId: string }) {
 
           <SpecDetailPane
             issue={selectedIssue}
-            relations={selectedIssue
-              ? boardModel.relationsByFilename.get(selectedIssue.filename) ?? {
-                outgoing: [],
-                incoming: [],
-                localOutgoing: [],
-                familyId: selectedIssue.filename,
-                familyIssues: [],
-              }
-              : {
-                outgoing: [],
-                incoming: [],
-                localOutgoing: [],
-                familyId: "",
-                familyIssues: [],
-              }}
+            relations={selectedIssueRelations}
             surfaceHits={selectedIssue ? boardModel.surfaceHitsByFilename.get(selectedIssue.filename) ?? [] : []}
             surfaceWarnings={surfaceIndex.warnings}
             onSelectLinkedIssue={handleSelectLinkedIssue}
