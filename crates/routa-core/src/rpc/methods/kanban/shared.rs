@@ -193,6 +193,11 @@ pub(super) fn normalize_columns(columns: Vec<KanbanColumn>) -> Result<Vec<Kanban
                 column.id
             )));
         }
+        if column.stage == "blocked" {
+            if let Some(automation) = column.automation.as_mut() {
+                automation.enabled = false;
+            }
+        }
         column.position = index as i64;
         normalized.push(column);
     }

@@ -183,6 +183,8 @@ struct ReleaseTriggerArgs {
     #[arg(long)]
     fail_on_trigger: bool,
     #[arg(long)]
+    fail_on_block: bool,
+    #[arg(long)]
     json: bool,
 }
 
@@ -947,13 +949,11 @@ fn cmd_release_trigger(args: ReleaseTriggerArgs) -> i32 {
         print_release_trigger_report(&report);
     }
 
-    if args.fail_on_trigger {
-        if report.blocked {
-            return 4;
-        }
-        if report.human_review_required {
-            return 3;
-        }
+    if report.blocked && (args.fail_on_trigger || args.fail_on_block) {
+        return 4;
+    }
+    if !report.triggers.is_empty() && args.fail_on_trigger {
+        return 3;
     }
     0
 }

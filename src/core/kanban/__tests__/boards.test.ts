@@ -16,6 +16,7 @@ describe("applyRecommendedAutomationToColumns", () => {
       "kanban-qa-frontend",
       "kanban-pr-publisher",
       "kanban-blocked-resolver",
+      "kanban-done-reporter",
       undefined,
     ]);
     expect(columns.map((column) => column.automation?.steps?.[0]?.role)).toEqual([
@@ -25,10 +26,12 @@ describe("applyRecommendedAutomationToColumns", () => {
       "GATE",
       "DEVELOPER",
       "CRAFTER",
+      "GATE",
       undefined,
     ]);
     expect(columns[0].automation?.autoAdvanceOnSuccess).toBe(true);
-    expect(columns.slice(1).every((column) => column.automation?.autoAdvanceOnSuccess === false)).toBe(true);
+    expect(columns.slice(1, 5).every((column) => column.automation?.autoAdvanceOnSuccess === false)).toBe(true);
+    expect(columns[5].automation).toBeUndefined();
     expect(columns[1]?.automation?.contractRules).toEqual({
       requireCanonicalStory: true,
       loopBreakerThreshold: 2,
@@ -54,6 +57,29 @@ describe("applyRecommendedAutomationToColumns", () => {
       "kanban-qa-frontend",
       "kanban-review-guard",
     ]);
+  });
+
+  it("keeps blocked as a manual-only lane even when legacy automation is present", () => {
+    const columns = applyRecommendedAutomationToColumns([
+      {
+        ...DEFAULT_KANBAN_COLUMNS.find((column) => column.id === "blocked")!,
+        automation: {
+          enabled: true,
+          steps: [{
+            id: "blocked-resolver",
+            role: "CRAFTER",
+            specialistId: "kanban-blocked-resolver",
+            specialistName: "Blocked Resolver",
+          }],
+          transitionType: "entry",
+        },
+      },
+    ]);
+
+    expect(columns[0].automation).toEqual(expect.objectContaining({
+      enabled: false,
+      steps: [expect.objectContaining({ specialistId: "kanban-blocked-resolver" })],
+    }));
   });
 
   it("normalizes the default board layout to keep blocked after done and archived last", () => {

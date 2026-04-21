@@ -711,6 +711,8 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     selectedStageHint: string;
     showAllFiles: string;
     showLess: string;
+    doneAutoOpenPrSession: string;
+    doneAutoOpenPrSessionHint: string;
     skillId: string;
     skillIdPlaceholder: string;
     singleStepAdvancedHint: string;
@@ -935,6 +937,12 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     dependencyAlreadyAdded: string;
     dependencySelfReference: string;
     dependencyUpdateFailed: string;
+    fallbackAgentChain: string;
+    fallbackAgentChainHint: string;
+    fallbackAgentsConfigured: string;
+    addFallbackAgent: string;
+    enableAutomaticFallback: string;
+    fallbackProviderDefault: string;
   };
 
   // Kanban modal dialogs
@@ -1010,6 +1018,8 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     moveBlockedHint: string;
     moveBlockedStoryReadinessHint: string;
     moveBlockedToolHint: string;
+    moveBlockedDelegate: string;
+    moveBlockedDelegating: string;
     more: string;
   };
 

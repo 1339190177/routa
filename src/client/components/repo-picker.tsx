@@ -14,7 +14,7 @@ import { desktopAwareFetch } from "../utils/diagnostics";
 import { createPortal } from "react-dom";
 import { BranchSelector } from "./branch-selector";
 import { useTranslation } from "@/i18n";
-import { Check, Copy, Download, PieChart, Search, X, GitBranch, Book, Folder, RefreshCcw } from "lucide-react";
+import { Check, ChevronDown, Copy, Download, PieChart, Search, X, GitBranch, Book, Folder, RefreshCcw } from "lucide-react";
 
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -454,27 +454,39 @@ export function RepoPicker({
 
   // Merge cloned repos with additional repos (workspace codebases)
   const allRepos = useMemo(() => {
-    const merged: ClonedRepo[] = sourceMode === "additional-only" ? [] : [...repos];
-    const existingPaths = new Set(merged.map((r) => r.path));
+    const merged: ClonedRepo[] = [];
+    const existingPaths = new Set<string>();
+
+    const pushRepo = (repo: ClonedRepo) => {
+      if (existingPaths.has(repo.path)) {
+        return;
+      }
+      merged.push(repo);
+      existingPaths.add(repo.path);
+    };
+
+    if (sourceMode !== "additional-only") {
+      for (const repo of repos) {
+        pushRepo(repo);
+      }
+    }
 
     // Add additional repos that aren't already in the cloned repos list
     if (additionalRepos) {
       for (const ar of additionalRepos) {
-        if (!existingPaths.has(ar.path)) {
-          merged.push({
-            name: ar.name,
-            path: ar.path,
-            dirName: ar.path.split("/").pop() || ar.name,
-            branch: ar.branch || "",
-            branches: ar.branch ? [ar.branch] : [],
-            status: { clean: true, ahead: 0, behind: 0, modified: 0, untracked: 0 },
-          });
-        }
+        pushRepo({
+          name: ar.name,
+          path: ar.path,
+          dirName: ar.path.split("/").pop() || ar.name,
+          branch: ar.branch || "",
+          branches: ar.branch ? [ar.branch] : [],
+          status: { clean: true, ahead: 0, behind: 0, modified: 0, untracked: 0 },
+        });
       }
     }
 
-    if (value && !existingPaths.has(value.path)) {
-      merged.push({
+    if (value) {
+      pushRepo({
         name: value.name,
         path: value.path,
         dirName: value.path.split("/").pop() || value.name,
@@ -842,6 +854,16 @@ function SelectedRepoPill({
           title={repoTitle}
         >
           {shortName}
+        </button>
+
+        <button
+          type="button"
+          onClick={onClickName}
+          className="shrink-0 rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          title={t.repoPicker.changeRepository}
+          aria-label={t.repoPicker.changeRepository}
+        >
+          <ChevronDown className="h-3 w-3" />
         </button>
 
         <div className="shrink-0">

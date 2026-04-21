@@ -270,6 +270,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     workViewLabel: string;
     sectionView: string;
     browserUrlView: string;
+    apiView: string;
     pathView: string;
     repositoryStatus: string;
     repositoryReady: string;
@@ -286,6 +287,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     featureStructureHeading: string;
     featureStructureEmpty: string;
     featureStructureUnavailable: string;
+    apiSourceLabel: string;
     frontendRoutesLabel: string;
     apiSurfacesLabel: string;
     implementationLabel: string;
@@ -337,14 +339,6 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     noPagesDeclared: string;
     noApisDeclared: string;
     repository: string;
-    learnedPromptContext: string;
-    learnedPromptContextDescription: string;
-    promptPatternsLabel: string;
-    toolPatternsLabel: string;
-    fileOperationPatternsLabel: string;
-    noLearnedPrompts: string;
-    noLearnedTools: string;
-    noLearnedFileOperations: string;
     sessionAnalysisTitle: string;
     sessionAnalysisDescription: string;
     sessionAnalysisEmpty: string;
@@ -353,20 +347,45 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     sessionAnalysisStarting: string;
     sessionAnalysisFailed: string;
     generateFeatureTree: string;
+    refreshingFeatureTree: string;
     generateDrawerTitle: string;
     generateDrawerDescription: string;
+    generateModeLabel: string;
+    generateModeAgent: string;
+    generateModeQuickScan: string;
+    generateModeAgentDescription: string;
+    generateModeQuickScanDescription: string;
+    generateWithAgentAction: string;
     dryRunLabel: string;
     dryRunDescription: string;
     generateAction: string;
     generating: string;
+    applyingAgentResult: string;
     generateSuccess: string;
     generateFailed: string;
     pagesDetected: string;
     apisDetected: string;
     filesWritten: string;
     frameworkDetected: string;
+    preflightLabel: string;
+    preflightPending: string;
+    scanRootLabel: string;
+    adaptersLabel: string;
+    candidateRootsLabel: string;
+    agentLogsTitle: string;
+    agentLogsDescription: string;
+    agentLogsEmpty: string;
+    quickScanIdleTitle: string;
+    quickScanIdleDescription: string;
     previewMode: string;
     writeMode: string;
+    inspectorEmptyTitle: string;
+    inspectorEmptyDescription: string;
+    filesSelectedLabel: string;
+    capabilitiesTooltip: string;
+    surfacesTooltip: string;
+    apisTooltip: string;
+    pathsTooltip: string;
   };
 
   // Settings panel
@@ -596,6 +615,7 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
 
   repoPicker: {
     clearSelection: string;
+    changeRepository: string;
     selectCloneOrLoad: string;
     repositories: string;
     cloneFromGitHub: string;

@@ -18,7 +18,8 @@ Ensure these GitHub secrets are configured:
 
 - `CRATE_TOKEN` - Get from [crates.io/me](https://crates.io/me) → API Tokens (Note: The workflow uses `CRATE_TOKEN`, not `CARGO_REGISTRY_TOKEN`)
 - `NPM_TOKEN` - Get from [npmjs.com](https://www.npmjs.com/) → Access Tokens → Generate New Token → Automation
-- `GITHUB_TOKEN` - Automatically provided by GitHub Actions
+- `ROUTA_GITHUB_TOKEN` - Preferred token for release baseline fetches against the GitHub Actions API
+- `GITHUB_TOKEN` - Automatically provided by GitHub Actions and used as fallback when `ROUTA_GITHUB_TOKEN` is not configured
 
 ### Local Setup
 
@@ -54,6 +55,27 @@ The script will:
 3. Show you the changes
 4. Create commit and tag
 5. Push to trigger GitHub Actions
+
+### Method 1.5: Prepare Release Artifacts And Blog Draft
+
+Use the preparation helper when you want the release notes/blog files written into `docs/releases/` before deciding whether to publish:
+
+```bash
+# Prepare release notes, changelog, and docs/releases blog draft
+npm run release:prepare -- 0.2.5
+
+# Use a specific range and AI summary generation
+npm run release:prepare -- 0.2.5 --from v0.2.4 --ai --ai-provider claude
+```
+
+This helper:
+1. Syncs version fields across the repo
+2. Generates preview files under `dist/release/`
+3. Copies the generated release notes to `docs/releases/v<version>-release-notes.md`
+4. Copies the technical changelog to `docs/releases/v<version>-changelog.md`
+5. Leaves commit, tag, and push decisions to a later explicit step
+
+If you are using the repo skill system, the same workflow is exposed through `.agents/skills/release/`.
 
 ### Generate Release Notes
 

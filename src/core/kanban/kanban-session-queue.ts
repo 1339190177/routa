@@ -318,7 +318,7 @@ export class KanbanSessionQueue {
    * Topological sort of queued entries based on their dependencies.
    * Entries with all dependencies resolved (running or absent) come first.
    */
-  private topologicalSort(entries: QueueEntry[], resolvedIds: Set<string>): QueueEntry[] {
+  private topologicalSort(entries: QueueEntry[], _resolvedIds: Set<string>): QueueEntry[] {
     const entryMap = new Map(entries.map((e) => [e.cardId, e]));
     const inDegree = new Map<string, number>();
     const adjacency = new Map<string, Set<string>>();

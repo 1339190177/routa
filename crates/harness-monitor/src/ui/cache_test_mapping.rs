@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::Command;
+use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(in crate::ui::tui) enum TestMappingAnalysisMode {
@@ -115,17 +116,28 @@ pub(super) fn test_mapping_full_cache_key(state: &RuntimeState) -> Option<String
     ))
 }
 
+/// Maximum duration (ms) for Full analysis before recommending degradation to Fast.
+/// If the median of recent Full analysis times exceeds this, subsequent runs will
+/// automatically use Fast mode until conditions change.
+pub(super) const TEST_MAPPING_FULL_DEGRADE_THRESHOLD_MS: u64 = 15_000;
+
+/// Number of recent Full analysis durations to track for degradation decisions.
+pub(super) const TEST_MAPPING_FULL_TIMING_WINDOW: usize = 4;
+
 pub(super) fn load_test_mapping_snapshot(
     repo_root: &str,
     files: &[String],
     cache_key: String,
     analysis_mode: TestMappingAnalysisMode,
-) -> Result<TestMappingSnapshot, String> {
+) -> Result<(TestMappingSnapshot, u64), String> {
     let mut command = entrix_command(Path::new(repo_root));
     command.current_dir(repo_root);
     command.args(test_mapping_cli_args(files, analysis_mode));
 
+    let start = Instant::now();
     let output = command.output().map_err(|error| error.to_string())?;
+    let duration_ms = start.elapsed().as_millis() as u64;
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -141,17 +153,32 @@ pub(super) fn load_test_mapping_snapshot(
 
     let payload: TestMappingCliPayload =
         serde_json::from_slice(&output.stdout).map_err(|error| error.to_string())?;
-    Ok(TestMappingSnapshot {
-        cache_key,
-        analysis_mode,
-        by_file: payload
-            .mappings
-            .into_iter()
-            .map(|entry| (entry.source_file.clone(), entry))
-            .collect(),
-        skipped_test_files: payload.skipped_test_files.into_iter().collect(),
-        status_counts: payload.status_counts,
-    })
+    Ok((
+        TestMappingSnapshot {
+            cache_key,
+            analysis_mode,
+            by_file: payload
+                .mappings
+                .into_iter()
+                .map(|entry| (entry.source_file.clone(), entry))
+                .collect(),
+            skipped_test_files: payload.skipped_test_files.into_iter().collect(),
+            status_counts: payload.status_counts,
+        },
+        duration_ms,
+    ))
+}
+
+/// Check if Full analysis should be degraded based on recent timing history.
+/// Returns true if the median of recent Full timings exceeds the threshold.
+pub(super) fn should_degrade_to_fast(full_timing_history: &[u64]) -> bool {
+    if full_timing_history.is_empty() {
+        return false;
+    }
+    let mut sorted = full_timing_history.to_vec();
+    sorted.sort_unstable();
+    let median = sorted[sorted.len() / 2];
+    median > TEST_MAPPING_FULL_DEGRADE_THRESHOLD_MS
 }
 
 fn entrix_command(repo_root: &Path) -> Command {
@@ -195,7 +222,10 @@ pub(super) fn is_test_like_path(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{test_mapping_cli_args, TestMappingAnalysisMode};
+    use super::{
+        should_degrade_to_fast, test_mapping_cli_args, TestMappingAnalysisMode,
+        TEST_MAPPING_FULL_DEGRADE_THRESHOLD_MS,
+    };
 
     #[test]
     fn fast_mode_uses_no_graph_flag() {
@@ -222,5 +252,33 @@ mod tests {
         let args = test_mapping_cli_args(&[], TestMappingAnalysisMode::Full);
 
         assert_eq!(args, vec!["graph", "test-mapping", "--json"]);
+    }
+
+    #[test]
+    fn degrade_returns_false_for_empty_history() {
+        assert!(!should_degrade_to_fast(&[]));
+    }
+
+    #[test]
+    fn degrade_returns_false_when_below_threshold() {
+        let history = vec![5_000, 8_000, 10_000, 12_000];
+        assert!(!should_degrade_to_fast(&history));
+    }
+
+    #[test]
+    fn degrade_returns_true_when_above_threshold() {
+        let history = vec![
+            TEST_MAPPING_FULL_DEGRADE_THRESHOLD_MS + 1_000,
+            TEST_MAPPING_FULL_DEGRADE_THRESHOLD_MS + 2_000,
+            TEST_MAPPING_FULL_DEGRADE_THRESHOLD_MS + 500,
+        ];
+        assert!(should_degrade_to_fast(&history));
+    }
+
+    #[test]
+    fn degrade_uses_median_not_mean() {
+        // Median is the third element (sorted) = 14000, which is below 15000 threshold
+        let history = vec![1_000, 14_000, 50_000];
+        assert!(!should_degrade_to_fast(&history));
     }
 }

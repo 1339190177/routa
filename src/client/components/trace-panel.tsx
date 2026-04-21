@@ -21,7 +21,7 @@ import type { LaneHandoffInfo, LaneSessionInfo, SessionKanbanContext } from "@/c
 import { MarkdownViewer } from "./markdown/markdown-viewer";
 import { ToolInputTable, ToolOutputView } from "./tool-call-content";
 import { useTranslation } from "@/i18n";
-import { Check, ChevronRight, Copy, FileText, Download } from "lucide-react";
+import { Check, ChevronRight, Copy, FileText } from "lucide-react";
 import type { ChatMessage } from "@/core/chat-message";
 
 

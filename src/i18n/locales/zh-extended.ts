@@ -709,6 +709,8 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     screenshotHint: "继续前需要 UI 证据。",
     testResults: "测试结果",
     testResultsHint: "确保附加验证工件。",
+    doneAutoOpenPrSession: "Done 时自动启动 PR 会话",
+    doneAutoOpenPrSessionHint: "默认保持关闭。只有在卡片进入 Done 后需要先自动排队 PR Publisher、再执行 Done Reporter 时再打开。",
     codeDiff: "代码差异",
     codeDiffHint: "收集实现差异用于审查流程。",
     up: "上移",
@@ -931,6 +933,12 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     dependencyAlreadyAdded: "已添加",
     dependencySelfReference: "不能依赖自身",
     dependencyUpdateFailed: "更新依赖失败",
+    fallbackAgentChain: "备选 Agent 链",
+    fallbackAgentChainHint: "配置主 Agent 失败时自动尝试的备选 Agent",
+    fallbackAgentsConfigured: "个备选",
+    addFallbackAgent: "添加备选 Agent",
+    enableAutomaticFallback: "失败时自动尝试下一个备选 Agent",
+    fallbackProviderDefault: "默认提供商",
   },
 
   kanbanModals: {
@@ -1005,6 +1013,8 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     moveBlockedHint: "这次手动移动被当前 lane 的工作流阻止了。请先完成或重新运行剩余步骤，再尝试移动卡片。",
     moveBlockedStoryReadinessHint: "这次移动被目标泳道的故事就绪门禁阻止了。",
     moveBlockedToolHint: "请用 `update_task` 补结构化字段，例如 scope、acceptance criteria、verification commands 或 test cases。`update_card` 只会改卡片文本，不能满足这个 gate。",
+    moveBlockedDelegate: "交给 Kanban Agent 修复",
+    moveBlockedDelegating: "委派中...",
     more: "更多",
   },
 

@@ -5,7 +5,7 @@
  */
 
 import type { ArtifactType } from "./artifact";
-import type { KanbanRequiredTaskField } from "./kanban";
+import type { KanbanRequiredTaskField } from "./task-requirements";
 import type { TaskCreationSource } from "../kanban/task-creation-policy";
 
 export enum TaskStatus {
@@ -202,6 +202,13 @@ export interface TaskDeliverySnapshot {
   source: "review_transition" | "done_transition" | "pr_run" | "manual";
 }
 
+export interface FallbackAgent {
+  providerId?: string;
+  role?: string;
+  specialistId?: string;
+  specialistName?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -224,6 +231,12 @@ export interface Task {
   assignedRole?: string;
   assignedSpecialistId?: string;
   assignedSpecialistName?: string;
+  /** Ordered fallback agents to try when the primary agent fails */
+  fallbackAgentChain?: FallbackAgent[];
+  /** Whether to automatically try the next fallback agent on failure */
+  enableAutomaticFallback?: boolean;
+  /** Maximum number of fallback attempts before giving up */
+  maxFallbackAttempts?: number;
   triggerSessionId?: string;
   /** All session IDs that have been associated with this task (history) */
   sessionIds: string[];
@@ -307,6 +320,9 @@ export function createTask(params: {
   assignedRole?: string;
   assignedSpecialistId?: string;
   assignedSpecialistName?: string;
+  fallbackAgentChain?: FallbackAgent[];
+  enableAutomaticFallback?: boolean;
+  maxFallbackAttempts?: number;
   githubId?: string;
   githubNumber?: number;
   githubUrl?: string;
@@ -343,6 +359,9 @@ export function createTask(params: {
     assignedRole: params.assignedRole,
     assignedSpecialistId: params.assignedSpecialistId,
     assignedSpecialistName: params.assignedSpecialistName,
+    fallbackAgentChain: params.fallbackAgentChain,
+    enableAutomaticFallback: params.enableAutomaticFallback,
+    maxFallbackAttempts: params.maxFallbackAttempts,
     sessionIds: [],
     laneSessions: [],
     laneHandoffs: [],

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use entrix::evidence::load_dimensions;
 use entrix::governance::{filter_dimensions, GovernancePolicy};
-use entrix::model::{Dimension, ExecutionScope, Metric, MetricResult, Tier};
+use entrix::model::{Dimension, ExecutionScope, Gate, Metric, MetricResult, ResultState, Tier};
 use entrix::runner::ShellRunner;
 use entrix::scoring::{score_dimension, score_report};
 use serde::{Deserialize, Serialize};
@@ -9,8 +9,14 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
+
+/// Minimum per-metric timeout (seconds) applied when `HARNESS_FAST_TIMEOUT_MS` is set.
+/// Prevents very short timeouts from causing spurious metric failures.
+const MIN_FAST_TIMEOUT_SECS: u64 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -125,6 +131,8 @@ pub fn run_fitness(repo_root: &str, mode: FitnessRunMode) -> Result<FitnessSnaps
     let start = Instant::now();
     let root = Path::new(repo_root);
     let base_ref = upstream_or_main_ref(repo_root).ok();
+    // Compute changed files once and reuse in rewrite_fast_metrics_for_watch to avoid
+    // a redundant git diff call in fast mode.
     let changed_files = local_changed_files(repo_root).unwrap_or_default();
     let dimensions = load_dimensions(&root.join("docs/fitness"));
     if dimensions.is_empty() {
@@ -132,6 +140,18 @@ pub fn run_fitness(repo_root: &str, mode: FitnessRunMode) -> Result<FitnessSnaps
             "no fitness dimensions found under docs/fitness (expected fast local metrics)"
         ));
     }
+
+    // Read env-var overrides for adaptive performance tuning.
+    // HARNESS_PARALLEL_DIMENSIONS: max parallel dimension threads (default: unlimited).
+    let parallel_limit: Option<usize> = std::env::var("HARNESS_PARALLEL_DIMENSIONS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n > 0);
+    // HARNESS_FAST_TIMEOUT_MS: per-metric shell command timeout in fast mode (ms).
+    let fast_timeout_ms: Option<u64> = std::env::var("HARNESS_FAST_TIMEOUT_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|&n| n > 0);
 
     let policy = GovernancePolicy {
         tier_filter: match mode {
@@ -147,70 +167,140 @@ pub fn run_fitness(repo_root: &str, mode: FitnessRunMode) -> Result<FitnessSnaps
         dimension_filters: Vec::new(),
         metric_filters: Vec::new(),
     };
+    // Reuse already-computed changed_files to avoid a second git diff.
     let dimensions = match mode {
-        FitnessRunMode::Fast => {
-            rewrite_fast_metrics_for_watch(repo_root, filter_dimensions(&dimensions, &policy))
-        }
+        FitnessRunMode::Fast => rewrite_fast_metrics_with_changed_files(
+            repo_root,
+            filter_dimensions(&dimensions, &policy),
+            &changed_files,
+        ),
         FitnessRunMode::Full => filter_dimensions(&dimensions, &policy),
     };
-    let runner = ShellRunner::new(root);
+    // Apply HARNESS_FAST_TIMEOUT_MS as a per-metric timeout (in seconds, capped at minimum MIN_FAST_TIMEOUT_SECS).
+    // The env var is expressed in milliseconds for consistency with frontend metrics.
+    let runner = if let Some(timeout_ms) =
+        fast_timeout_ms.filter(|_| matches!(mode, FitnessRunMode::Fast))
+    {
+        let timeout_secs = (timeout_ms / 1000).max(MIN_FAST_TIMEOUT_SECS);
+        ShellRunner::new(root).with_timeout(timeout_secs)
+    } else {
+        ShellRunner::new(root)
+    };
     let mut dim_summaries = Vec::new();
     let mut all_results = Vec::new();
     let mut coverage_metric_available = false;
 
-    thread::scope(|scope| {
-        let mut handles = Vec::new();
-        for dim in dimensions {
-            let name = dim.name.clone();
-            let runner = &runner;
-            handles.push(scope.spawn(move || {
-                let metric_results: Vec<MetricResult> = if dim.metrics.is_empty() {
-                    Vec::new()
-                } else {
-                    runner.run_batch(&dim.metrics, true, false, None)
-                };
-                let dimension_score = score_dimension(&metric_results, &dim.name, dim.weight);
-                let has_coverage_metric = metric_results.iter().any(|metric| {
-                    metric.metric_name.to_lowercase().contains("coverage")
-                        || metric.metric_name.to_lowercase().contains("cover")
-                });
-                let metrics: Vec<FitnessMetricSummary> = metric_results
-                    .iter()
-                    .map(|result| FitnessMetricSummary {
-                        name: result.metric_name.clone(),
-                        passed: result.passed,
-                        state: result.state.as_str().to_string(),
-                        hard_gate: result.hard_gate,
-                        duration_ms: result.duration_ms,
-                        output_excerpt: summarize_metric_output(&result.output),
-                    })
-                    .collect();
-                (
-                    name,
-                    dim.weight,
-                    dimension_score,
-                    has_coverage_metric,
-                    metrics,
-                )
-            }));
-        }
+    // Shared signal: set to true when any hard-gate metric fails.
+    // Other dimension threads check this before starting their metrics
+    // so they can abort early instead of running doomed work.
+    let hard_gate_aborted = Arc::new(AtomicBool::new(false));
 
-        for handle in handles {
-            let (name, weight, dimension_score, has_coverage_metric, metrics) =
-                handle.join().expect("dimension fitness worker panicked");
-            coverage_metric_available |= has_coverage_metric;
-            let passed = dimension_score.passed;
-            let total = dimension_score.total;
-            all_results.push(dimension_score.clone());
-            dim_summaries.push(FitnessDimensionSummary {
-                name,
-                weight,
-                score: dimension_score.score,
-                passed,
-                total,
-                hard_gate_failures: dimension_score.hard_gate_failures,
-                metrics,
-            });
+    thread::scope(|scope| {
+        // When HARNESS_PARALLEL_DIMENSIONS is set to N, process dimensions in batches of N
+        // so that at most N dimension threads are active at any time.  When unset, all
+        // dimensions are placed in one batch and run fully in parallel (original behavior).
+        let chunk_size = parallel_limit.unwrap_or(dimensions.len()).max(1);
+        for batch in dimensions.chunks(chunk_size) {
+            let mut handles = Vec::new();
+            for dim in batch {
+                let name = dim.name.clone();
+                let dim = dim.clone();
+                let runner = &runner;
+                let abort_flag = Arc::clone(&hard_gate_aborted);
+                handles.push(scope.spawn(move || {
+                    // If a hard-gate failure has already been detected, skip this dimension
+                    // to avoid wasting time on metrics whose results are irrelevant.
+                    if abort_flag.load(AtomicOrdering::Relaxed) {
+                        let metrics: Vec<FitnessMetricSummary> = dim
+                            .metrics
+                            .iter()
+                            .map(|m| FitnessMetricSummary {
+                                name: m.name.clone(),
+                                passed: false,
+                                state: "skipped".to_string(),
+                                hard_gate: m.gate == Gate::Hard,
+                                duration_ms: 0.0,
+                                output_excerpt: Some(
+                                    "Skipped: hard-gate failure in another dimension".to_string(),
+                                ),
+                            })
+                            .collect();
+                        let metric_results: Vec<MetricResult> = dim
+                            .metrics
+                            .iter()
+                            .map(|m| {
+                                MetricResult::new(
+                                    m.name.clone(),
+                                    false,
+                                    "Skipped: hard-gate failure in another dimension",
+                                    m.tier,
+                                )
+                                .with_hard_gate(m.gate == Gate::Hard)
+                                .with_state(ResultState::Fail)
+                            })
+                            .collect();
+                        let dimension_score =
+                            score_dimension(&metric_results, &dim.name, dim.weight);
+                        return (name, dim.weight, dimension_score, false, metrics);
+                    }
+
+                    let metric_results: Vec<MetricResult> = if dim.metrics.is_empty() {
+                        Vec::new()
+                    } else {
+                        runner.run_batch(&dim.metrics, true, false, None)
+                    };
+
+                    // Check if any hard-gate metric in this dimension failed.
+                    // If so, signal other dimensions to abort.
+                    let has_hard_gate_failure =
+                        metric_results.iter().any(|r| r.hard_gate && !r.passed);
+                    if has_hard_gate_failure {
+                        abort_flag.store(true, AtomicOrdering::Relaxed);
+                    }
+
+                    let dimension_score = score_dimension(&metric_results, &dim.name, dim.weight);
+                    let has_coverage_metric = metric_results.iter().any(|metric| {
+                        metric.metric_name.to_lowercase().contains("coverage")
+                            || metric.metric_name.to_lowercase().contains("cover")
+                    });
+                    let metrics: Vec<FitnessMetricSummary> = metric_results
+                        .iter()
+                        .map(|result| FitnessMetricSummary {
+                            name: result.metric_name.clone(),
+                            passed: result.passed,
+                            state: result.state.as_str().to_string(),
+                            hard_gate: result.hard_gate,
+                            duration_ms: result.duration_ms,
+                            output_excerpt: summarize_metric_output(&result.output),
+                        })
+                        .collect();
+                    (
+                        name,
+                        dim.weight,
+                        dimension_score,
+                        has_coverage_metric,
+                        metrics,
+                    )
+                }));
+            }
+
+            for handle in handles {
+                let (name, weight, dimension_score, has_coverage_metric, metrics) =
+                    handle.join().expect("dimension fitness worker panicked");
+                coverage_metric_available |= has_coverage_metric;
+                let passed = dimension_score.passed;
+                let total = dimension_score.total;
+                all_results.push(dimension_score.clone());
+                dim_summaries.push(FitnessDimensionSummary {
+                    name,
+                    weight,
+                    score: dimension_score.score,
+                    passed,
+                    total,
+                    hard_gate_failures: dimension_score.hard_gate_failures,
+                    metrics,
+                });
+            }
         }
     });
 
@@ -312,8 +402,11 @@ struct CoverageSummarySources {
     rust: CoverageSourceSummary,
 }
 
-fn rewrite_fast_metrics_for_watch(repo_root: &str, dimensions: Vec<Dimension>) -> Vec<Dimension> {
-    let changed_files = local_changed_files(repo_root).unwrap_or_default();
+fn rewrite_fast_metrics_with_changed_files(
+    repo_root: &str,
+    dimensions: Vec<Dimension>,
+    changed_files: &[String],
+) -> Vec<Dimension> {
     if changed_files.is_empty() {
         return dimensions;
     }
@@ -324,7 +417,7 @@ fn rewrite_fast_metrics_for_watch(repo_root: &str, dimensions: Vec<Dimension>) -
             dimension.metrics = dimension
                 .metrics
                 .into_iter()
-                .map(|metric| rewrite_metric_for_changed_files(repo_root, metric, &changed_files))
+                .map(|metric| rewrite_metric_for_changed_files(repo_root, metric, changed_files))
                 .collect();
             dimension
         })

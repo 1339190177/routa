@@ -114,7 +114,10 @@ impl KanbanColumnAutomation {
 
 #[cfg(test)]
 mod tests {
-    use super::{KanbanAutomationStep, KanbanColumnAutomation, KanbanTransport};
+    use super::{
+        apply_recommended_automation_to_columns, default_kanban_columns, KanbanAutomationStep,
+        KanbanColumnAutomation, KanbanTransport,
+    };
 
     #[test]
     fn primary_step_keeps_a2a_only_steps() {
@@ -146,6 +149,20 @@ mod tests {
         assert_eq!(step.skill_id.as_deref(), Some("skill-1"));
         assert_eq!(step.auth_config_id.as_deref(), Some("auth-1"));
     }
+
+    #[test]
+    fn blocked_lane_stays_manual_only_when_defaults_are_applied() {
+        let columns = apply_recommended_automation_to_columns(default_kanban_columns());
+        let blocked = columns
+            .iter()
+            .find(|column| column.stage == "blocked")
+            .expect("blocked column should exist");
+
+        assert!(
+            blocked.automation.is_none(),
+            "blocked lane should not receive default automation"
+        );
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -175,6 +192,8 @@ pub struct KanbanBoard {
     pub workspace_id: String,
     pub name: String,
     pub is_default: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub github_token: Option<String>,
     pub columns: Vec<KanbanColumn>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -386,14 +405,6 @@ fn recommended_automation_for_stage(stage: &str) -> Option<KanbanColumnAutomatio
                 Some(vec!["screenshot".to_string(), "test_results".to_string()]);
             automation
         }),
-        "blocked" => Some(build_recommended_automation(
-            vec![recommended_step(
-                "blocked-resolver",
-                "CRAFTER",
-                "Blocked Resolver",
-            )],
-            false,
-        )),
         "done" => Some(build_recommended_automation(
             vec![
                 recommended_step("pr-publisher", "DEVELOPER", "PR Publisher"),
@@ -402,6 +413,16 @@ fn recommended_automation_for_stage(stage: &str) -> Option<KanbanColumnAutomatio
             false,
         )),
         _ => None,
+    }
+}
+
+fn enforce_manual_only_stage_rules(column: &mut KanbanColumn) {
+    if column.stage != "blocked" {
+        return;
+    }
+
+    if let Some(automation) = column.automation.as_mut() {
+        automation.enabled = false;
     }
 }
 
@@ -575,6 +596,8 @@ pub fn apply_recommended_automation_to_columns(columns: Vec<KanbanColumn>) -> Ve
                 column.automation = Some(with_default);
             }
 
+            enforce_manual_only_stage_rules(&mut column);
+
             column
         })
         .collect();
@@ -612,6 +635,7 @@ pub fn default_kanban_board(workspace_id: String) -> KanbanBoard {
         workspace_id,
         name: "Board".to_string(),
         is_default: true,
+        github_token: None,
         columns: default_kanban_columns(),
         created_at: now,
         updated_at: now,

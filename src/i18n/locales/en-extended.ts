@@ -709,6 +709,8 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     screenshotHint: "Require UI evidence before continuing.",
     testResults: "Test results",
     testResultsHint: "Ensure verification artifacts are attached.",
+    doneAutoOpenPrSession: "Auto-open PR session in Done",
+    doneAutoOpenPrSessionHint: "Keep this off by default. Turn it on only when entering Done should automatically queue PR Publisher before Done Reporter.",
     codeDiff: "Code diff",
     codeDiffHint: "Collect implementation diff for review flows.",
     up: "Up",
@@ -931,6 +933,12 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     dependencyAlreadyAdded: "Already added",
     dependencySelfReference: "Cannot depend on itself",
     dependencyUpdateFailed: "Failed to update dependencies",
+    fallbackAgentChain: "Fallback agent chain",
+    fallbackAgentChainHint: "Configure backup agents to try when the primary agent fails",
+    fallbackAgentsConfigured: "fallback(s)",
+    addFallbackAgent: "Add fallback agent",
+    enableAutomaticFallback: "Automatically try next fallback agent on failure",
+    fallbackProviderDefault: "Default provider",
   },
 
   kanbanModals: {
@@ -1005,6 +1013,8 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     moveBlockedHint: "This manual move is blocked by the current lane workflow. Finish or rerun the remaining step before moving the card again.",
     moveBlockedStoryReadinessHint: "This move is blocked by the story-readiness gate for the target lane.",
     moveBlockedToolHint: "Use `update_task` to fill structured fields such as scope, acceptance criteria, verification commands, or test cases. `update_card` only changes card text and does not satisfy this gate.",
+    moveBlockedDelegate: "Ask Kanban Agent to Fix",
+    moveBlockedDelegating: "Delegating...",
     more: "more",
   },
 

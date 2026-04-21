@@ -262,6 +262,7 @@ fn release_trigger_defaults() {
             assert!(args.baseline_manifest.is_none());
             assert!(args.config.is_none());
             assert!(!args.fail_on_trigger);
+            assert!(!args.fail_on_block);
             assert!(!args.json);
         }
         _ => panic!("expected release-trigger command"),
@@ -281,6 +282,7 @@ fn release_trigger_flags() {
         "main",
         "--config",
         "docs/fitness/release-triggers.yaml",
+        "--fail-on-block",
         "--fail-on-trigger",
         "--json",
         "scripts/release/stage-routa-cli-npm.mjs",
@@ -298,6 +300,7 @@ fn release_trigger_flags() {
                 Some("docs/fitness/release-triggers.yaml")
             );
             assert!(args.fail_on_trigger);
+            assert!(args.fail_on_block);
             assert!(args.json);
             assert_eq!(args.files, vec!["scripts/release/stage-routa-cli-npm.mjs"]);
         }

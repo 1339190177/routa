@@ -25,6 +25,7 @@ import {
   type KanbanSpecialistLanguage,
 } from "./kanban-specialist-language";
 import {
+  buildKanbanMoveBlockedRemediationPrompt,
   buildKanbanTaskAgentPrompt,
   getKanbanTaskAgentCopy,
 } from "./i18n/kanban-task-agent";
@@ -283,6 +284,7 @@ export function KanbanTab({
   const [isDeleting, setIsDeleting] = useState(false);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [moveBlockedState, setMoveBlockedState] = useState<MoveBlockedState | null>(null);
+  const [moveBlockedDelegatingTaskId, setMoveBlockedDelegatingTaskId] = useState<string | null>(null);
   const detailSplitContainerRef = useRef<HTMLDivElement | null>(null);
   const [isTaskDetailFullscreen, setIsTaskDetailFullscreen] = useState(false);
   const [fileChangesOpen, setFileChangesOpen] = useState(false);
@@ -555,6 +557,17 @@ export function KanbanTab({
     missingWorktreeIds: _missingWorktreeIds,
     removeFromCache: _removeFromCache,
   } = useKanbanWorktree({ localTasks, patchTask, setLocalTasks });
+
+  const fetchTaskById = useCallback(async (taskId: string) => {
+    const response = await desktopAwareFetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+      cache: "no-store",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(typeof data?.error === "string" ? data.error : "Failed to load task");
+    }
+    return data.task as TaskInfo;
+  }, []);
 
   useEffect(() => {
     setLocalTasks(tasks);
@@ -1731,7 +1744,7 @@ export function KanbanTab({
     setIsDeleting(false);
   }
 
-  async function moveTask(taskId: string, targetColumnId: string) {
+  const moveTask = useCallback(async (taskId: string, targetColumnId: string) => {
     const movingTask = localTasks.find((task) => task.id === taskId);
     if (!movingTask) return;
     await ensureBoardAutoProviderPersisted();
@@ -1797,7 +1810,99 @@ export function KanbanTab({
       }
       setLocalTasks(tasks);
     }
-  }
+  }, [
+    boardTasks,
+    ensureBoardAutoProviderPersisted,
+    localTasks,
+    onRefresh,
+    openSession,
+    patchTask,
+    tasks,
+    _removeFromCache,
+  ]);
+
+  const delegateMoveBlockedFix = useCallback(async (blocked: MoveBlockedState) => {
+    if (!onAgentPrompt || moveBlockedDelegatingTaskId) return;
+
+    const task = localTasks.find((item) => item.id === blocked.taskId)
+      ?? tasks.find((item) => item.id === blocked.taskId)
+      ?? null;
+    if (!task) return;
+
+    setMoveBlockedDelegatingTaskId(blocked.taskId);
+    setMoveError(null);
+
+    try {
+      await ensureBoardAutoProviderPersisted();
+      const missingFields = blocked.storyReadiness?.missing?.length
+        ? blocked.storyReadiness.missing
+        : blocked.missingTaskFields ?? [];
+      const remediationPrompt = buildKanbanMoveBlockedRemediationPrompt({
+        workspaceId,
+        boardId: selectedBoardId ?? defaultBoardId ?? "default",
+        cardId: blocked.taskId,
+        cardTitle: task.title,
+        targetColumnId: blocked.targetColumnId,
+        repoPath: defaultCodebase?.repoPath,
+        missingFields,
+        language: specialistLanguage,
+      });
+      const sessionId = await onAgentPrompt(remediationPrompt, {
+        provider: boardAutoProviderId,
+        role: "CRAFTER",
+        toolMode: "full",
+        allowedNativeTools: [],
+        mcpProfile: "kanban-planning",
+        systemPrompt: remediationPrompt,
+      });
+      if (!sessionId) {
+        return;
+      }
+
+      openAgentPanel(sessionId);
+      setMoveBlockedState(null);
+      scheduleKanbanRefreshBurst(onRefresh);
+
+      const startedAt = Date.now();
+      const pollUntilMs = 30_000;
+      const pollIntervalMs = 2_000;
+
+      while (Date.now() - startedAt < pollUntilMs) {
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, pollIntervalMs);
+        });
+        const refreshedTask = await fetchTaskById(blocked.taskId).catch(() => null);
+        if (!refreshedTask) {
+          continue;
+        }
+        setLocalTasks((current) => current.map((entry) => entry.id === refreshedTask.id ? refreshedTask : entry));
+        if (refreshedTask.storyReadiness?.ready) {
+          await moveTask(blocked.taskId, blocked.targetColumnId);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("[kanban] Failed to delegate story-readiness remediation:", error);
+    } finally {
+      setMoveBlockedDelegatingTaskId((current) => current === blocked.taskId ? null : current);
+    }
+  }, [
+    boardAutoProviderId,
+    defaultBoardId,
+    defaultCodebase?.repoPath,
+    ensureBoardAutoProviderPersisted,
+    fetchTaskById,
+    localTasks,
+    moveBlockedDelegatingTaskId,
+    moveTask,
+    onAgentPrompt,
+    onRefresh,
+    openAgentPanel,
+    selectedBoardId,
+    specialistLanguage,
+    tasks,
+    workspaceId,
+  ]);
 
   async function _createBoard() {
     const name = window.prompt(t.kanban.boardName);
@@ -2108,6 +2213,12 @@ export function KanbanTab({
   const moveBlockedModalProps = {
     blocked: moveBlockedState,
     onClose: () => setMoveBlockedState(null),
+    onDelegateFix: moveBlockedState && onAgentPrompt
+      ? () => {
+        void delegateMoveBlockedFix(moveBlockedState);
+      }
+      : undefined,
+    isDelegating: moveBlockedState?.taskId === moveBlockedDelegatingTaskId,
     onOpenCard: blockedTask ? () => {
       void openTaskDetail(blockedTask);
       setMoveBlockedState(null);

@@ -152,6 +152,8 @@ enum BackgroundResult {
         analysis_mode: TestMappingAnalysisMode,
         full_cache_key: Option<String>,
         result: Result<TestMappingSnapshot, String>,
+        /// Execution duration of the test-mapping command in milliseconds.
+        duration_ms: u64,
     },
     Scc {
         result: Result<SccSummary, String>,
@@ -210,10 +212,16 @@ pub(super) struct AppCache {
     fitness_is_running: bool,
     fitness_cache_key: Option<String>,
     fitness_repo_root: String,
+    /// Timestamp (ms since epoch) of the last fitness trigger dispatch, used for
+    /// debounce: rapid consecutive force-refresh requests within the debounce window
+    /// are coalesced into a single queued run instead of launching immediately.
+    fitness_last_triggered_ms: Option<i64>,
     feature_trace_catalogs: Option<FeatureTraceCatalogs>,
     feature_trace_load_attempted: bool,
     test_mapping_snapshot: Option<TestMappingSnapshot>,
     test_mapping_full_history: BTreeMap<String, TestMappingHistoryEntry>,
+    /// Recent Full analysis durations (ms) for degradation decisions.
+    test_mapping_full_timing_history: Vec<u64>,
     scc_summary: Option<SccSummary>,
     review_triggers: ReviewTriggerCache,
     preview_worker_tx: Sender<PreviewCommand>,
@@ -320,10 +328,12 @@ impl AppCache {
             fitness_is_running: false,
             fitness_cache_key: None,
             fitness_repo_root: repo_root.to_string(),
+            fitness_last_triggered_ms: None,
             feature_trace_catalogs: None,
             feature_trace_load_attempted: false,
             test_mapping_snapshot: None,
             test_mapping_full_history: BTreeMap::new(),
+            test_mapping_full_timing_history: Vec::new(),
             scc_summary: None,
             review_triggers: ReviewTriggerCache::load(repo_root),
             preview_worker_tx,
@@ -530,6 +540,7 @@ impl AppCache {
                     analysis_mode,
                     full_cache_key,
                     result,
+                    duration_ms,
                 } => match result {
                     Ok(snapshot) => {
                         match analysis_mode {
@@ -539,6 +550,13 @@ impl AppCache {
                             TestMappingAnalysisMode::Full => {
                                 self.pending_test_mapping_full_key = None;
                                 self.test_mapping_full_refresh_note = None;
+                                // Track Full analysis duration for degradation decisions.
+                                self.test_mapping_full_timing_history.push(duration_ms);
+                                if self.test_mapping_full_timing_history.len()
+                                    > test_mapping::TEST_MAPPING_FULL_TIMING_WINDOW
+                                {
+                                    self.test_mapping_full_timing_history.remove(0);
+                                }
                             }
                         }
                         self.test_mapping_not_before_ms = None;
@@ -771,6 +789,15 @@ impl AppCache {
                 ));
                 return;
             }
+            // Dynamic degradation: skip Full if recent Full analyses are too slow.
+            if test_mapping::should_degrade_to_fast(&self.test_mapping_full_timing_history) {
+                self.pending_test_mapping_full_key = None;
+                self.test_mapping_full_refresh_note = Some(
+                    "graph refresh skipped: recent Full analysis times exceed threshold"
+                        .to_string(),
+                );
+                return;
+            }
             let _ = self.eval_worker_tx.send(EvalCommand::TestMapping {
                 repo_root: state.repo_root.clone(),
                 files,
@@ -843,6 +870,18 @@ impl AppCache {
             self.queued_fitness_refresh = Some((repo_root, cache_key, force, mode));
             return;
         }
+        // Debounce: suppress identical force-refresh requests that arrive shortly
+        // after the previous dispatch. Queueing while idle would strand the refresh
+        // because there is no active run left to drain queued_fitness_refresh.
+        const FITNESS_DEBOUNCE_MS: i64 = 500;
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        if let Some(last_triggered_ms) = self.fitness_last_triggered_ms {
+            let same_cache_key = self.fitness_cache_key.as_deref() == Some(cache_key.as_str());
+            if same_cache_key && now_ms - last_triggered_ms < FITNESS_DEBOUNCE_MS {
+                return;
+            }
+        }
+        self.fitness_last_triggered_ms = Some(now_ms);
         self.fitness_cache_key = Some(cache_key.clone());
         self.active_fitness_history_mut().cache_key = Some(cache_key.clone());
         let _ = self.eval_worker_tx.send(EvalCommand::Fitness {
@@ -1642,6 +1681,10 @@ fn eval_worker(
                 cache_key,
                 TestMappingAnalysisMode::Fast,
             );
+            let (result, duration_ms) = match result {
+                Ok((snapshot, dur)) => (Ok(snapshot), dur),
+                Err(e) => (Err(e), 0),
+            };
             send_background_result(
                 &tx,
                 &result_signal_tx,
@@ -1649,6 +1692,7 @@ fn eval_worker(
                     analysis_mode: TestMappingAnalysisMode::Fast,
                     full_cache_key,
                     result,
+                    duration_ms,
                 },
             );
         }
@@ -1661,6 +1705,10 @@ fn eval_worker(
                 cache_key,
                 TestMappingAnalysisMode::Full,
             );
+            let (result, duration_ms) = match result {
+                Ok((snapshot, dur)) => (Ok(snapshot), dur),
+                Err(e) => (Err(e), 0),
+            };
             send_background_result(
                 &tx,
                 &result_signal_tx,
@@ -1668,6 +1716,7 @@ fn eval_worker(
                     analysis_mode: TestMappingAnalysisMode::Full,
                     full_cache_key,
                     result,
+                    duration_ms,
                 },
             );
         }

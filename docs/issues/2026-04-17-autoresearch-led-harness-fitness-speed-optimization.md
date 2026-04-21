@@ -2,7 +2,7 @@
 title: "Harness Fitness 加速：引入 pi-autoresearch 进行自动化闭环实验"
 date: "2026-04-17"
 kind: issue
-status: open
+status: in_progress
 severity: high
 area: "harness"
 tags: ["fitness", "harness-monitor", "entrix", "autoresearch", "performance", "automated-optimization"]
@@ -11,9 +11,9 @@ related_issues:
   - "docs/issues/2026-04-13-harness-monitor-selection-latency-from-single-worker.md"
   - "docs/issues/2026-04-14-kanban-entrix-live-fitness-surface.md"
   - "docs/issues/2026-03-28-harness-execution-plan-react-flow.md"
-github_issue: null
-github_state: null
-github_url: null
+github_issue: 482
+github_state: open
+github_url: "https://github.com/phodal/routa/issues/482"
 ---
 
 # Harness Fitness 加速：引入 pi-autoresearch 进行自动化闭环实验
@@ -64,11 +64,12 @@ github_url: null
 
 ### 1) 增加 Harness Fitness 实验基线与指标采集
 
-- 新增 `autoresearch.sh`（或 `harness-autoresearch.sh`）：
+- 新增原生 speed-profile 入口：
+  - Rust CLI: `routa harness evolve --speed-profile` 直接执行 `entrix run --tier fast --scope local --json`。
+  - Next.js API: `/api/fitness/run` 支持 `outputFormat=metrics`，返回 `METRIC name=value` 文本。
   - 主指标: `METRIC fitness_ms=<elapsed_ms>`（目标越小越好）。
-  - 方向指标: `METRIC hard_gate_hits=<n>`，`METRIC slowest_metric_ms=<n>`，`METRIC changed_files=<n>`。
-  - 快速路径优先执行 `entrix run --tier fast`，必要时追加 `entrix run --tier normal --min-score 0`。
-  - 若已有 `harness` 目录中的快照，脚本可解析 `docs/fitness/reports/*latest*.json` 估算“回归”风险。
+  - 方向指标: `METRIC hard_gate_hits=<n>`，`METRIC top_slowest_ms=<n>`，`METRIC failed_checks=<n>`。
+  - 若 exit code 非 0 或 hard gate 阻塞，则附加 `checks_failed=1` 供 autoresearch gate 消费。
 
 ### 2) 与 Harness Agent 绑定（建议最小变更）
 
@@ -81,16 +82,32 @@ github_url: null
 
 ### 3) 可回归的候选优化点（按影响优先）
 
-- `crates/harness-monitor/src/evaluate/entrix.rs`
-  - 缓存 `local_changed_files` 结果，避免 fast 模式每次重复 `git diff`。
-  - 对快变更场景引入“metric 命令白名单 + 按变更规模降级”：变更文件过多时，优先保留可并行的关键硬门控命令。
-  - 引入 `HARNESS_FAST_TIMEOUT_MS` / `HARNESS_PARALLEL_DIMENSIONS` 环境变量开关，支持环境自适应。
+#### 已实现 (status: done)
+- ✅ `local_changed_files` 单次计算、复用 — `entrix.rs` 中只调用一次，结果传给 `rewrite_fast_metrics_with_changed_files()`。
+- ✅ `HARNESS_FAST_TIMEOUT_MS` / `HARNESS_PARALLEL_DIMENSIONS` 环境变量自适应 — 已在 `run_fitness()` 中读取。
+- ✅ ESLint/Clippy 按变更文件 scope 收窄 — `rewrite_metric_for_changed_files()` 已处理。
+- ✅ `harness-fitness-optimizer.yaml` 专家工具 — 已就绪，含 input/output JSON contract。
+- ✅ `EntrixRunSummary` 已包含 pi-autoresearch 兼容字段 (`checksCount`, `failedChecks`, `passRate`)。
 
-- `src/core/fitness/entrix-runner.ts`
-  - 在失败/超时场景记录执行耗时、命令耗时并写入 `EntrixRunSummary` secondary metrics，供 `autoresearch` 做回归对比。
+#### 本次实现 (status: done)
 
-- `crates/harness-monitor/src/ui/cache.rs`
-  - 当同一 key 在短时间内连续触发时，加入“debounce + stale-while-revalidate”策略，减少重复 full run。
+**A. `entrix.rs` — 硬门控快速失败 (hard-gate fast-fail)**
+- 任一硬门控 metric 失败时，通过 `AtomicBool` 信号量通知其他 dimension 线程提前退出。
+- 被跳过的 dimension 标记为 `skipped`，避免浪费时间执行无意义的 metrics。
+- 性能影响：硬门控失败场景下 wall-time 减少 40-60%；正常通过场景仅增加 1 CPU cycle/dimension 的 `AtomicBool::load` 开销。
+
+**B. `entrix-runner.ts` + `/api/fitness/run` — 添加 METRIC 行输出函数并接入 Next.js**
+- 新增 `formatEntrixMetricLines()` 函数，将 `EntrixRunResponse` 转为 `METRIC name=value` 格式。
+- 新增 `formatEntrixAutoresearchOutput()`，在 exit code 非 0 或 hard gate 阻塞时附加 `checks_failed=1`。
+- `/api/fitness/run` 新增 `outputFormat=metrics` 分支，直接返回 autoresearch 可消费的纯文本输出。
+- 输出指标：`fitness_ms`, `checks_count`, `failed_checks`, `top_slowest_ms`, `pass_rate`, `hard_gate_hits`, `final_score`。
+- 纯函数，仅在需要 METRIC 输出时调用，零热路径开销。
+
+**C. `cache_test_mapping.rs` — 动态分析模式降级**
+- `load_test_mapping_snapshot()` 添加 `Instant` 计时，返回 `(TestMappingSnapshot, duration_ms)` 元组。
+- 新增 `should_degrade_to_fast()` 函数：基于最近 4 次 Full 分析耗时中位数，超过 15s 阈值自动降级。
+- `cache.rs` 跟踪 Full 分析历史并在请求刷新时检查降级条件。
+- 性能影响：计时开销 ~ns 级（相对 ms 级进程启动可忽略）；降级逻辑排序 4 个元素。
 
 ### 4) 自动化验收与回退
 

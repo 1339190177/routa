@@ -83,7 +83,12 @@ function tryGit(args) {
 function normalizeTag(value) {
   if (!value) return value;
   // Don't normalize special git refs like HEAD, main, etc.
-  if (value === "HEAD" || !value.match(/^\d/)) return value;
+  if (
+    value === "HEAD"
+    || !value.match(/^v?[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$/)
+  ) {
+    return value;
+  }
   return value.startsWith("v") ? value : `v${value}`;
 }
 
@@ -195,6 +200,10 @@ function classifyCommit(commit) {
   return section;
 }
 
+function shouldIncludeCommit(commit) {
+  return !/^chore:\s+release\s+v/i.test(commit.subject);
+}
+
 function readCommits(range) {
   const format = "%H%x1f%h%x1f%s%x1f%an%x1e";
   const output = runGit(["log", "--no-merges", `--format=${format}`, range.logRange]);
@@ -213,7 +222,8 @@ function readCommits(range) {
         ...header,
         section: classifyCommit(header),
       };
-    });
+    })
+    .filter(shouldIncludeCommit);
 }
 
 function readChangedFiles(range) {
@@ -518,4 +528,5 @@ export {
   renderReleaseNotes,
   renderStandaloneChangelog,
   renderTechnicalChangelog,
+  shouldIncludeCommit,
 };

@@ -28,7 +28,7 @@ export type ExplorerSection = {
   metrics?: ExplorerSurfaceMetric[];
 };
 
-export type SurfaceNavigationView = "sections" | "browser-url" | "nextjs-api" | "rust-api" | "path";
+export type SurfaceNavigationView = "capabilities" | "surfaces" | "apis" | "paths";
 
 export type SurfaceTreeNode = {
   id: string;
@@ -261,21 +261,6 @@ export function buildGroupedApiItems({
     .sort((left, right) => left.label.localeCompare(right.label));
 }
 
-export function surfaceKindBadge(kind: ExplorerSurfaceKind): string {
-  switch (kind) {
-    case "feature":
-      return "FT";
-    case "page":
-      return "PG";
-    case "contract-api":
-      return "API";
-    case "nextjs-api":
-      return "NX";
-    case "rust-api":
-      return "RS";
-  }
-}
-
 export function getHttpMethodBadgeClass(method: string, density: "default" | "compact" = "default"): string {
   const sizeClass = density === "compact"
     ? "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[9px] font-semibold"
@@ -429,12 +414,22 @@ export function SurfaceTreeRow({
           <button
             type="button"
             onClick={() => onSelectSurface(node.item!)}
-            className={`min-w-0 flex-1 truncate text-left font-medium ${
+            aria-label={node.item?.label ?? node.label}
+            className={`min-w-0 flex-1 text-left ${
               isActive ? "text-desktop-text-primary" : "text-current"
             }`}
             title={node.item?.label ?? node.label}
           >
-            {node.label}
+            <div className="flex min-w-0 items-start gap-1.5">
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{node.label}</div>
+                {node.item?.secondary ? (
+                  <div className="truncate text-[10px] font-normal text-current/70">
+                    {node.item.secondary}
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </button>
         ) : (
           <span className="min-w-0 flex-1 truncate font-medium" title={node.label}>

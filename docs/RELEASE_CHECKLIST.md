@@ -10,6 +10,7 @@ Quick checklist for releasing Routa.
 - [ ] GitHub secrets configured:
   - `CRATE_TOKEN` (from crates.io - note: NOT `CARGO_REGISTRY_TOKEN`)
   - `NPM_TOKEN` (from npmjs.com)
+  - `ROUTA_GITHUB_TOKEN` (preferred for release baseline fetches)
 
 ## Release Steps
 

@@ -1,6 +1,6 @@
 {
   "name": "routa-js",
-  "version": "0.16.0",
+  "version": "0.17.2",
   "private": true,
   "workspaces": [
     "apps/desktop"
@@ -41,6 +41,7 @@
     "build:docker": "cross-env NODE_OPTIONS='--max-old-space-size=8192' ROUTA_DESKTOP_STANDALONE=1 next build && node scripts/build/build-docker.mjs",
     "start": "next start",
     "release:sync-version": "node scripts/release/sync-release-version.mjs",
+    "release:prepare": "node scripts/release/prepare-release-artifacts.mjs",
     "release:changelog": "node scripts/release/generate-changelog.mjs",
     "release:publish": "bash scripts/release/publish.sh",
     "storybook": "storybook dev -p 6006",

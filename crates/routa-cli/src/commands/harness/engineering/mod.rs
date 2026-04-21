@@ -8,6 +8,7 @@ mod bootstrap;
 mod history;
 mod learning;
 mod ratchet;
+mod speed_profile;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -15,6 +16,7 @@ mod tests_learning;
 mod types;
 
 use self::ratchet::{run_ratchet_loop, ApplyOutcome};
+use self::speed_profile::run_speed_profile_experiment;
 use apply::{apply_patches, emit_apply_progress};
 #[cfg(test)]
 use apply::{create_snapshot, rollback_snapshot, run_verification_plan};
@@ -55,6 +57,11 @@ pub async fn evaluate_harness_engineering(
     // Learn mode: Generate playbooks from evolution history
     if options.learn {
         return generate_playbooks_from_history(repo_root, options);
+    }
+
+    // Speed profile mode: run a native entrix dry-run experiment
+    if options.speed_profile {
+        return run_speed_profile_experiment(repo_root, options);
     }
 
     // Bootstrap mode: detect weak repo and synthesize initial harness

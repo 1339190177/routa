@@ -30,7 +30,7 @@ import {
 } from "./specialist-prompts";
 import type { RoutaSystem } from "../routa-system";
 import type { AcpProcessManager } from "../acp/acp-process-manager";
-import type { NotificationHandler } from "../acp/processer";
+import type { NotificationHandler } from "../acp/protocol-types";
 import {
   checkDelegationDepth,
   calculateChildDepth,
@@ -39,8 +39,12 @@ import {
 import { getProviderAdapter } from "../acp/provider-adapter";
 import { AgentEventBridge, makeStartedEvent } from "../acp/agent-event-bridge";
 import type { WorkspaceAgentEvent } from "../acp/agent-event-bridge";
+import { getHttpSessionStore } from "../acp/http-session-store";
 import { LifecycleNotifier } from "../acp/lifecycle-notifier";
 import { createWorkspaceSessionSandbox } from "../sandbox/permissions";
+import { AgentMemoryWriter, type CompletionSnapshotSource } from "../storage/agent-memory-writer";
+import { TraceReader } from "../trace/reader";
+import { buildTraceRunDigest, formatDigestForRole } from "../trace/trace-run-digest";
 
 export interface DelegateWithSpawnParams {
   /** Task ID to delegate */
@@ -91,6 +95,9 @@ interface ChildAgentRecord {
   taskId: string;
   role: AgentRole;
   provider: string;
+  cwd: string;
+  completionMemoryRecorded?: boolean;
+  completionHandled?: boolean;
   /** Tool call ID from the parent session's delegate_task_to_agent call (if available) */
   delegationToolCallId?: string;
 }
@@ -237,6 +244,10 @@ export class RoutaOrchestrator {
   private childAgentBridges = new Map<string, AgentEventBridge>();
   /** Map: agentId → set of WorkspaceAgentEvent subscribers */
   private childAgentEventSubscribers = new Map<string, Set<(event: WorkspaceAgentEvent) => void>>();
+  /** Map: cwd → AgentMemoryWriter for durable, file-backed agent memory */
+  private memoryWriters = new Map<string, AgentMemoryWriter>();
+  /** Map: agentId → in-flight completion finalizer to dedupe concurrent wake-ups */
+  private childCompletionPromises = new Map<string, Promise<void>>();
 
   constructor(
     system: RoutaSystem,
@@ -274,6 +285,62 @@ export class RoutaOrchestrator {
         });
       }
     });
+  }
+
+  private getMemoryWriter(cwd: string): AgentMemoryWriter {
+    let writer = this.memoryWriters.get(cwd);
+    if (!writer) {
+      writer = new AgentMemoryWriter(cwd);
+      this.memoryWriters.set(cwd, writer);
+    }
+    return writer;
+  }
+
+  private resolveSessionCwd(sessionId: string, fallbackCwd: string): string {
+    return getHttpSessionStore().getSession(sessionId)?.cwd ?? fallbackCwd;
+  }
+
+  private hasKnownSessionId(sessionId: string): boolean {
+    return sessionId.trim().length > 0 && sessionId !== "unknown";
+  }
+
+  private async finalizeChildCompletion(
+    childAgentId: string,
+    record: ChildAgentRecord,
+    source: CompletionSnapshotSource,
+  ): Promise<void> {
+    if (record.completionHandled) {
+      return;
+    }
+
+    const inFlight = this.childCompletionPromises.get(childAgentId);
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+
+    const completionPromise = this.handleChildCompletion(childAgentId, record, source)
+      .then(() => {
+        record.completionHandled = true;
+      })
+      .finally(() => {
+        this.childCompletionPromises.delete(childAgentId);
+      });
+
+    this.childCompletionPromises.set(childAgentId, completionPromise);
+    await completionPromise;
+  }
+
+  private async scheduleSessionEndCompletion(
+    childAgentId: string,
+    record: ChildAgentRecord,
+  ): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (record.completionHandled) {
+      return;
+    }
+
+    await this.finalizeChildCompletion(childAgentId, record, "session_end");
   }
 
   /**
@@ -365,7 +432,14 @@ export class RoutaOrchestrator {
     }
 
     // 2. Get the task
-    const task = await this.system.taskStore.get(taskId);
+    let task: Task | undefined;
+    try {
+      task = await this.system.taskStore.get(taskId);
+    } catch (err) {
+      return errorResult(
+        `Failed to load task ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     if (!task) {
       // Check if the taskId looks like a name instead of a UUID
       const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId);
@@ -425,6 +499,30 @@ export class RoutaOrchestrator {
 
     const agentId = (agentResult.data as { agentId: string }).agentId;
 
+    // 4.5. Build trace digest from parent session for specialist context
+    let enrichedAdditionalContext = additionalInstructions;
+    try {
+      const traceReader = new TraceReader(cwd);
+      const parentTraces = await traceReader.query({ sessionId: callerSessionId, limit: 500 });
+      if (parentTraces.length > 0) {
+        const digest = buildTraceRunDigest(callerSessionId, parentTraces);
+        const formatted = formatDigestForRole(digest, specialistConfig.role as AgentRole);
+        if (formatted) {
+          enrichedAdditionalContext = enrichedAdditionalContext
+            ? `${enrichedAdditionalContext}\n\n${formatted}`
+            : formatted;
+          console.log(
+            `[Orchestrator] Trace digest injected for ${specialistConfig.role} delegation (session=${callerSessionId}): ` +
+            `${digest.totalEvents} events, ${digest.filesTouched.length} files, ` +
+            `${digest.errorCount} errors, ${digest.verificationSignals.length} verifications, ` +
+            `${digest.churnMarkers.length} churn markers, ${digest.confidenceFlags.length} confidence flags`,
+          );
+        }
+      }
+    } catch {
+      // Trace digest is best-effort; don't block delegation on failure
+    }
+
     // 5. Build the delegation prompt
     const delegationPrompt = buildDelegationPrompt({
       specialist: specialistConfig,
@@ -444,7 +542,7 @@ export class RoutaOrchestrator {
           ? `\n## Verification\n${task.verificationCommands.map((c) => `- \`${c}\``).join("\n")}\n`
           : ""),
       parentAgentId: callerAgentId,
-      additionalContext: additionalInstructions,
+      additionalContext: enrichedAdditionalContext,
     });
 
     // 6. Assign task to agent
@@ -488,6 +586,7 @@ export class RoutaOrchestrator {
       taskId,
       role: specialistConfig.role,
       provider,
+      cwd,
     };
     this.childAgents.set(agentId, record);
     this.agentSessionMap.set(agentId, childSessionId);
@@ -546,6 +645,46 @@ export class RoutaOrchestrator {
       waitMode === "after_all"
         ? "You will be notified when ALL delegated agents in this group complete."
         : "You will be notified when this agent completes.";
+
+    try {
+      const childMemoryWriter = this.getMemoryWriter(cwd);
+      const memoryWrites = [
+        childMemoryWriter.recordChildSessionStart({
+          sessionId: childSessionId,
+          role: specialistConfig.role,
+          agentId,
+          taskId,
+          taskTitle: task.title,
+          parentAgentId: callerAgentId,
+          provider,
+          initialPrompt: delegationPrompt,
+        }),
+      ];
+
+      if (this.hasKnownSessionId(callerSessionId)) {
+        const parentMemoryWriter = this.getMemoryWriter(this.resolveSessionCwd(callerSessionId, cwd));
+        memoryWrites.push(
+          parentMemoryWriter.recordDelegation({
+            sessionId: callerSessionId,
+            parentAgentId: callerAgentId,
+            childAgentId: agentId,
+            childRole: specialistConfig.role,
+            taskId,
+            taskTitle: task.title,
+            provider,
+            waitMode,
+          }),
+        );
+      } else {
+        console.warn(
+          `[Orchestrator] Skipping parent delegation memory for ${agentId} because caller session is unknown`,
+        );
+      }
+
+      await Promise.all(memoryWrites);
+    } catch (err) {
+      console.warn("[Orchestrator] Failed to persist agent memory:", err);
+    }
 
     console.log(
       `[Orchestrator] Delegated task "${task.title}" to ${specialistConfig.name} agent ${agentId} (provider: ${provider})`
@@ -809,6 +948,9 @@ export class RoutaOrchestrator {
     // Wait a short time to allow report_to_parent to be processed first
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
+    const record = this.childAgents.get(childAgentId);
+    if (!record || record.completionHandled) return;
+
     const agent = await this.system.agentStore.get(childAgentId);
     if (!agent) return;
 
@@ -819,9 +961,6 @@ export class RoutaOrchestrator {
       );
       return;
     }
-
-    const record = this.childAgents.get(childAgentId);
-    if (!record) return;
 
     console.log(
       `[Orchestrator] Agent ${childAgentId} finished without calling report_to_parent, auto-reporting`
@@ -839,7 +978,7 @@ export class RoutaOrchestrator {
     });
 
     // Trigger completion handling
-    await this.handleChildCompletion(childAgentId, record);
+    await this.finalizeChildCompletion(childAgentId, record, "auto");
   }
 
   /**
@@ -982,7 +1121,7 @@ export class RoutaOrchestrator {
       // Treat as a successful completion with no formal report
       const record = this.childAgents.get(agentId);
       if (record) {
-        this.handleChildCompletion(agentId, record).catch((err) => {
+        this.scheduleSessionEndCompletion(agentId, record).catch((err) => {
           console.error("[Orchestrator] Error handling completion:", err);
         });
       }
@@ -1005,7 +1144,7 @@ export class RoutaOrchestrator {
       return;
     }
 
-    await this.handleChildCompletion(childAgentId, record);
+    await this.finalizeChildCompletion(childAgentId, record, "reported");
   }
 
   /**
@@ -1013,8 +1152,36 @@ export class RoutaOrchestrator {
    */
   private async handleChildCompletion(
     childAgentId: string,
-    record: ChildAgentRecord
+    record: ChildAgentRecord,
+    source: CompletionSnapshotSource,
   ): Promise<void> {
+    if (!record.completionMemoryRecorded) {
+      try {
+        let task: Task | undefined;
+        try {
+          task = await this.system.taskStore.get(record.taskId);
+        } catch (err) {
+          console.warn("[Orchestrator] Failed to load task for completion memory:", err);
+        }
+
+        await this.getMemoryWriter(record.cwd).recordChildCompletion({
+          sessionId: record.sessionId,
+          role: record.role,
+          agentId: childAgentId,
+          taskId: record.taskId,
+          taskTitle: task?.title ?? record.taskId,
+          status: task?.status ?? "unknown",
+          summary: task?.completionSummary,
+          verificationVerdict: task?.verificationVerdict ?? null,
+          verificationReport: task?.verificationReport ?? null,
+          snapshotSource: source,
+        });
+        record.completionMemoryRecorded = true;
+      } catch (err) {
+        console.warn("[Orchestrator] Failed to write completion memory:", err);
+      }
+    }
+
     // Clean up the report file watcher
     this.cleanupReportWatcher(childAgentId);
 
@@ -1244,7 +1411,7 @@ export class RoutaOrchestrator {
     });
 
     // Wake parent with error report
-    await this.handleChildCompletion(agentId, record);
+    await this.finalizeChildCompletion(agentId, record, "error");
   }
 
   /**

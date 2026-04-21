@@ -47,6 +47,16 @@ describe("generate-changelog", () => {
     expect(markdown).toContain("https://github.com/phodal/routa/commit/abc1230000000000000000000000000000000000");
   });
 
+  it("filters release self-bump commits from generated changelogs", () => {
+    expect(changelog.shouldIncludeCommit({
+      subject: "chore: release v0.16.0",
+    })).toBe(false);
+
+    expect(changelog.shouldIncludeCommit({
+      subject: "fix(release): publish generated release notes",
+    })).toBe(true);
+  });
+
   it("includes an AI summary when provided to the release renderer", () => {
     const output = changelog.renderReleaseNotes({
       aiSummary: "## Summary\n\nA curated desktop release summary.",

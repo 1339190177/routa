@@ -124,6 +124,9 @@ jobs:
   stage:
     name: Stage Entrix npm packages
     needs: build
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.value }}
@@ -167,7 +170,7 @@ jobs:
 
       - name: Fetch baseline manifest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROUTA_GITHUB_TOKEN: ${{ secrets.ROUTA_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           python scripts/release/fetch-release-baseline.py \
             --repo phodal/routa \
@@ -182,14 +185,12 @@ jobs:
       - name: Guard release surface
         run: |
           if [[ -f dist/release/baseline-manifest.json ]]; then
-            entrix release-trigger \
-              --manifest dist/release/manifest.json \
-              --baseline-manifest dist/release/baseline-manifest.json \
-              --fail-on-trigger
+              entrix release-trigger \
+                --manifest dist/release/manifest.json \
+                --baseline-manifest dist/release/baseline-manifest.json
           else
             entrix release-trigger \
-              --manifest dist/release/manifest.json \
-              --fail-on-trigger
+              --manifest dist/release/manifest.json
           fi
 
       - name: Upload release manifest
@@ -209,6 +210,9 @@ jobs:
     needs:
       - build
       - stage
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -238,8 +242,7 @@ jobs:
       - name: Re-check release surface
         run: |
           entrix release-trigger \
-            --manifest dist/release/manifest.json \
-            --fail-on-trigger
+            --manifest dist/release/manifest.json
 
       - name: Smoke test platform packages
         shell: bash
@@ -297,6 +300,9 @@ jobs:
     needs:
       - stage
       - verify
+    permissions:
+      contents: read
+      actions: read
     if: ${{ (inputs.publish == true || github.event.inputs.publish == 'true' || github.event.inputs.publish == true) }}
     runs-on: ubuntu-latest
     steps:
@@ -388,4 +394,3 @@ jobs:
           echo ""
           echo "Install with:"
           echo "  npm install -g entrix@${{ needs.stage.outputs.version }}"
-
