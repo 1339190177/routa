@@ -69,6 +69,41 @@ export interface VCSFileChange {
   patch?: string;           // Diff patch
 }
 
+export interface VCSIssue {
+  id: string;
+  number: number;
+  title: string;
+  body?: string;
+  url: string;
+  state: "open" | "closed";
+  labels: string[];
+  assignees: string[];
+  updatedAt?: string;
+}
+
+export interface VCSIssueListItem extends VCSIssue {}
+
+export interface VCSPullRequestListItem {
+  id: string;
+  number: number;
+  title: string;
+  body?: string;
+  url: string;
+  state: "open" | "closed";
+  labels: string[];
+  assignees: string[];
+  updatedAt?: string;
+  draft: boolean;
+  mergedAt?: string;
+  headRef: string;
+  baseRef: string;
+}
+
+export interface VCSAccessStatus {
+  available: boolean;
+  source: "board" | "env" | "cli" | "none";
+}
+
 export interface VCSWebhookPayload {
   action?: string;          // Event action (e.g., "opened", "closed")
   pull_request?: VCSPullRequest;
@@ -142,6 +177,32 @@ export interface IVCSProvider {
     token?: string;
     commitId?: string;
   }): Promise<VCSComment>;
+
+  /** List pull/merge requests */
+  listPRs(opts: {
+    repo: string;
+    state?: "open" | "closed" | "all";
+    perPage?: number;
+    token?: string;
+  }): Promise<VCSPullRequestListItem[]>;
+
+  /** List issues */
+  listIssues(opts: {
+    repo: string;
+    state?: "open" | "closed" | "all";
+    perPage?: number;
+    token?: string;
+  }): Promise<VCSIssueListItem[]>;
+
+  /** Get access status for the current platform */
+  getAccessStatus(opts?: { boardToken?: string }): VCSAccessStatus;
+
+  /** Download repository archive as a zip buffer */
+  downloadArchive(opts: {
+    repo: string;
+    ref?: string;
+    token?: string;
+  }): Promise<Buffer>;
 
   /** Register a webhook for the repository */
   registerWebhook(opts: {

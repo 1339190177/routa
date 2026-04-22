@@ -6,10 +6,14 @@ export type {
   VCSPlatform,
   VCSRepository,
   VCSPullRequest,
+  VCSPullRequestListItem,
   VCSBranch,
   VCSComment,
   VCSFileChange,
   VCSWebhookPayload,
+  VCSIssue,
+  VCSIssueListItem,
+  VCSAccessStatus,
   IVCSProvider,
 } from "./vcs-provider";
 
@@ -28,3 +32,21 @@ export {
   isGitLab,
   isGitHub,
 } from "./vcs-provider";
+
+export {
+  importVCSRepo,
+  getCachedWorkspace,
+  cleanupExpired,
+  listActiveWorkspaces,
+  workspaceKey,
+  VCSWorkspaceError,
+  startVCSWorkspaceCleanup,
+  stopVCSWorkspaceCleanup,
+} from "./vcs-workspace";
+
+export type {
+  VCSImportOptions,
+  VCSWorkspace,
+  VirtualFileEntry,
+  VCSWorkspaceErrorCode,
+} from "./vcs-workspace";

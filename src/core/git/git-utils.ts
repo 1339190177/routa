@@ -69,6 +69,52 @@ export function parseGitHubUrl(url: string): ParsedGitHubUrl | null {
   return null;
 }
 
+// ─── GitLab URL Parsing ──────────────────────────────────────────────────
+
+const GITLAB_URL_PATTERNS = [
+  /^https?:\/\/(?:[^/@]+@)?gitlab\.com\/([^/]+)\/([^/\s#?.]+)/i,
+  /^git@gitlab\.com:([^/]+)\/([^/\s#?.]+)/i,
+  /^gitlab\.com\/([^/]+)\/([^/\s#?.]+)/i,
+];
+
+/**
+ * Parse a VCS URL (GitHub or GitLab) into owner and repo.
+ * Falls back to simple owner/repo format.
+ */
+export function parseVCSUrl(url: string): ParsedGitHubUrl | null {
+  const trimmed = url.trim();
+
+  // Try GitHub patterns
+  for (const pattern of GITHUB_URL_PATTERNS) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
+    }
+  }
+
+  // Try GitLab patterns
+  for (const pattern of GITLAB_URL_PATTERNS) {
+    const match = trimmed.match(pattern);
+    if (match) {
+      return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
+    }
+  }
+
+  // Try custom GitLab instance URL (any domain with /owner/repo pattern)
+  const genericMatch = trimmed.match(/^https?:\/\/[^/]+\/([^/]+)\/([^/\s#?.]+)/);
+  if (genericMatch) {
+    return { owner: genericMatch[1], repo: genericMatch[2].replace(/\.git$/, "") };
+  }
+
+  // Simple owner/repo format
+  const simpleMatch = trimmed.match(SIMPLE_OWNER_REPO);
+  if (simpleMatch && !trimmed.includes("\\") && !trimmed.includes(":")) {
+    return { owner: simpleMatch[1], repo: simpleMatch[2] };
+  }
+
+  return null;
+}
+
 // ─── Bridge Helper ──────────────────────────────────────────────────────
 
 /**
