@@ -13,7 +13,7 @@ describe("applyRecommendedAutomationToColumns", () => {
       "kanban-backlog-refiner",
       "kanban-todo-orchestrator",
       "kanban-dev-executor",
-      "kanban-qa-frontend",
+      "kanban-review-guard",
       "kanban-done-reporter",
       undefined,
       undefined,
@@ -50,7 +50,6 @@ describe("applyRecommendedAutomationToColumns", () => {
       "kanban-done-reporter",
     ]);
     expect(columns[3]?.automation?.steps?.map((step) => step.specialistId)).toEqual([
-      "kanban-qa-frontend",
       "kanban-review-guard",
     ]);
   });
@@ -191,7 +190,7 @@ describe("applyRecommendedAutomationToColumns", () => {
     expect(columns[0].automation?.requiredArtifacts).toEqual(["screenshot", "test_results"]);
   });
 
-  it("preserves a customized review lane that uses review guard directly", () => {
+  it("refreshes a review lane that matches the recommended review-guard-only step", () => {
     const columns = applyRecommendedAutomationToColumns([
       {
         ...DEFAULT_KANBAN_COLUMNS[3],
@@ -214,7 +213,8 @@ describe("applyRecommendedAutomationToColumns", () => {
     expect(columns[0].automation?.steps?.map((step) => step.specialistId)).toEqual([
       "kanban-review-guard",
     ]);
-    expect(columns[0].automation?.requiredArtifacts).toEqual(["screenshot"]);
+    // Artifact policy is refreshed to the recommended value when steps match
+    expect(columns[0].automation?.requiredArtifacts).toEqual(["screenshot", "test_results"]);
   });
 
   it("preserves a review lane whose first step was changed from qa to review guard", () => {
