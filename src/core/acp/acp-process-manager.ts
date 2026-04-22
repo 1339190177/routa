@@ -516,6 +516,7 @@ export class AcpProcessManager {
                 cwd,
                 onNotification,
                 {
+                    role,
                     allowedNativeTools,
                     mcpServers: parseMcpServersFromConfigs(mcpConfigs),
                 },

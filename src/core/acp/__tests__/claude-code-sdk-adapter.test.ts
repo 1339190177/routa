@@ -85,6 +85,10 @@ describe("getClaudeCodeSdkConfig", () => {
     delete process.env.ANTHROPIC_BASE_URL;
     delete process.env.ANTHROPIC_MODEL;
     delete process.env.API_TIMEOUT_MS;
+    delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
+    delete process.env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+    delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+    delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
   });
 
   afterEach(() => {
@@ -93,6 +97,10 @@ describe("getClaudeCodeSdkConfig", () => {
     delete process.env.ANTHROPIC_BASE_URL;
     delete process.env.ANTHROPIC_MODEL;
     delete process.env.API_TIMEOUT_MS;
+    delete process.env.ANTHROPIC_SMALL_FAST_MODEL;
+    delete process.env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+    delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+    delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
   });
 
   it("uses default model when ANTHROPIC_MODEL is not set", () => {

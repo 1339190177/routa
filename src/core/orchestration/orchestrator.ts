@@ -564,6 +564,7 @@ export class RoutaOrchestrator {
         delegationPrompt,
         callerSessionId,
         workspaceId,
+        specialistConfig,
       );
       childSandboxId = spawnResult.sandboxId;
     } catch (err) {
@@ -713,6 +714,7 @@ export class RoutaOrchestrator {
     initialPrompt: string,
     parentSessionId: string,
     workspaceId?: string,
+    specialistConfig?: SpecialistConfig,
   ): Promise<{ sandboxId?: string }> {
     const isClaudeCode = provider === "claude";
     const isClaudeCodeSdk = provider === "claude-code-sdk";
@@ -882,7 +884,12 @@ export class RoutaOrchestrator {
         sessionId,
         cwd,
         notificationHandler,
-        { provider: "claude-code-sdk", mcpServers: sdkMcpServers },
+        {
+          provider: "claude-code-sdk",
+          mcpServers: sdkMcpServers,
+          role: specialistConfig?.role,
+          specialistId: specialistConfig?.id,
+        },
         lifecycleNotifier,
       );
 
