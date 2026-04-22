@@ -381,55 +381,80 @@ export function KanbanCardDetail({
   ];
 
   return (
-    <div className="h-full w-full overflow-y-auto">
-      <div className={`mx-auto flex min-h-full max-w-6xl flex-col ${compactMode ? "gap-2 p-3" : "gap-3 p-4"}`}>
-        <section className={`border-b border-slate-200/80 pb-2 dark:border-[#232736] ${compactMode ? "pt-0" : "pt-0.5"}`}>
-          <div className={`flex items-center justify-between gap-3 ${compactMode ? "mb-1" : "mb-1.5"}`}>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-              {t.kanbanDetail.cardDetail}
-            </div>
-            <div className="flex items-center gap-1.5">
-              {onClose ? (
+    <div className="h-full w-full flex flex-col">
+      {/* Fixed header: Tab navigation + action buttons */}
+      <div className={`mx-auto w-full max-w-6xl shrink-0 border-b border-slate-200/80 dark:border-[#232736] ${compactMode ? "px-3 pt-0 pb-0" : "px-4 pt-0 pb-0"}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 gap-1 overflow-x-auto">
+            {detailTabs.map((tab) => {
+              const active = tab.id === activeTab;
+              return (
                 <button
+                  key={tab.id}
                   type="button"
-                  onClick={onClose}
-                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:border-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-200"
-                  aria-label={t.kanbanDetail.closeCardDetail}
-                  title={t.kanbanDetail.closeCardDetail}
+                  onClick={() => {
+                    setTabSelections((current) => ({ ...current, [tabStateKey]: tab.id }));
+                  }}
+                  className={`shrink-0 border-b-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+                    active
+                      ? "border-b-amber-600 text-slate-900 dark:border-b-amber-400 dark:text-slate-100"
+                      : "border-b-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                  }`}
+                  aria-pressed={active}
                 >
-                  <X className="h-3 w-3" />
-                  <span>{t.kanbanDetail.closeCardDetail}</span>
+                  {tab.label}
                 </button>
-              ) : null}
-              {canShowSessionPane && !isSessionPaneVisible && onShowSessionPane ? (
-                <button
-                  type="button"
-                  onClick={onShowSessionPane}
-                  className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:border-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-200"
-                >
-                  {sessionCopy.showSessionPane}
-                </button>
-              ) : null}
-              {onToggleFullscreen ? (
-                <button
-                  type="button"
-                  onClick={() => onToggleFullscreen(!isFullscreen)}
-                  className="inline-flex h-6 w-6 items-center justify-center border border-slate-300/80 text-slate-500 transition-colors hover:border-amber-400 hover:text-amber-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-amber-700 dark:hover:text-amber-200"
-                  aria-label={isFullscreen ? t.kanbanDetail.exitFullscreen : t.kanbanDetail.enterFullscreen}
-                  title={isFullscreen ? t.kanbanDetail.exitFullscreen : t.kanbanDetail.enterFullscreen}
-                >
-                  {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                </button>
-              ) : null}
+              );
+            })}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {onClose ? (
               <button
                 type="button"
-                onClick={onRefresh}
+                onClick={onClose}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:border-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-200"
+                aria-label={t.kanbanDetail.closeCardDetail}
+                title={t.kanbanDetail.closeCardDetail}
+              >
+                <X className="h-3 w-3" />
+                <span>{t.kanbanDetail.closeCardDetail}</span>
+              </button>
+            ) : null}
+            {canShowSessionPane && !isSessionPaneVisible && onShowSessionPane ? (
+              <button
+                type="button"
+                onClick={onShowSessionPane}
                 className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:border-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-200"
               >
-                {t.common.refresh}
+                {sessionCopy.showSessionPane}
               </button>
-            </div>
+            ) : null}
+            {onToggleFullscreen ? (
+              <button
+                type="button"
+                onClick={() => onToggleFullscreen(!isFullscreen)}
+                className="inline-flex h-6 w-6 items-center justify-center border border-slate-300/80 text-slate-500 transition-colors hover:border-amber-400 hover:text-amber-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-amber-700 dark:hover:text-amber-200"
+                aria-label={isFullscreen ? t.kanbanDetail.exitFullscreen : t.kanbanDetail.enterFullscreen}
+                title={isFullscreen ? t.kanbanDetail.exitFullscreen : t.kanbanDetail.enterFullscreen}
+              >
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 dark:border-slate-700 dark:bg-[#0d1018] dark:text-slate-300 dark:hover:border-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-200"
+            >
+              {t.common.refresh}
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* Scrollable content area */}
+      <div className="min-h-0 flex-1 overflow-y-auto" key={activeTab}>
+        <div className={`mx-auto flex max-w-6xl flex-col ${compactMode ? "gap-2 p-3" : "gap-3 p-4"}`}>
+        <section className={`border-b border-slate-200/80 pb-2 dark:border-[#232736] ${compactMode ? "pt-0" : "pt-0.5"}`}>
           <textarea
             ref={titleInputRef}
             value={displayedTitle}
@@ -537,31 +562,6 @@ export function KanbanCardDetail({
             ))}
           </div>
         </section>
-
-        <div className="border-b border-slate-200/80 dark:border-[#232736]">
-          <div className="flex min-w-0 gap-1 overflow-x-auto">
-            {detailTabs.map((tab) => {
-              const active = tab.id === activeTab;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setTabSelections((current) => ({ ...current, [tabStateKey]: tab.id }));
-                  }}
-                  className={`shrink-0 border-b-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
-                    active
-                      ? "border-b-amber-600 text-slate-900 dark:border-b-amber-400 dark:text-slate-100"
-                      : "border-b-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                  }`}
-                  aria-pressed={active}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
         <div className={compactMode ? "space-y-2" : "space-y-3"}>
           {activeTab === "overview" && (
@@ -839,6 +839,7 @@ export function KanbanCardDetail({
           >
             {t.kanbanModals.deleteTaskTitle}
           </button>
+        </div>
         </div>
       </div>
     </div>
