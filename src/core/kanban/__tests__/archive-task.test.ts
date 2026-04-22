@@ -8,7 +8,7 @@ import { archiveTask, archiveDoneTasks } from "../archive-task";
 describe("archiveTask", () => {
   let eventBus: EventBus;
   let taskStore: InMemoryTaskStore;
-  let workspaceStore: { get: ReturnType<typeof vi.fn> };
+  let workspaceStore: { get: (id: string) => Promise<{ metadata?: Record<string, string> } | undefined> };
 
   const board = createKanbanBoard({
     id: "board-1",
@@ -205,7 +205,7 @@ describe("archiveTask", () => {
 describe("archiveDoneTasks", () => {
   let eventBus: EventBus;
   let taskStore: InMemoryTaskStore;
-  let workspaceStore: { get: ReturnType<typeof vi.fn> };
+  let workspaceStore: { get: (id: string) => Promise<{ metadata?: Record<string, string> } | undefined> };
 
   const board = createKanbanBoard({
     id: "board-1",

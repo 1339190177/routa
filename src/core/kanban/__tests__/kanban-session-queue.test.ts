@@ -392,7 +392,7 @@ describe("KanbanSessionQueue", () => {
     // task-1 has a running lane session but is not tracked by the queue (orphaned).
     // This simulates the race condition where a recovery session started during
     // an async window and the queue's in-memory map doesn't know about it.
-    await taskStore.save(createTask({
+    const orphanedTask = createTask({
       id: "task-1",
       title: "Orphaned running task",
       objective: "Orphaned running task",
@@ -401,8 +401,9 @@ describe("KanbanSessionQueue", () => {
       columnId: "dev",
       status: TaskStatus.IN_PROGRESS,
       triggerSessionId: "session-orphaned",
-      laneSessions: [{ sessionId: "session-orphaned", columnId: "dev", columnName: "Dev", stepId: "dev-executor", stepIndex: 0, stepName: "Dev Executor", status: "running", startedAt: new Date().toISOString() }],
-    }));
+    });
+    orphanedTask.laneSessions = [{ sessionId: "session-orphaned", columnId: "dev", columnName: "Dev", stepId: "dev-executor", stepIndex: 0, stepName: "Dev Executor", status: "running", startedAt: new Date().toISOString() }];
+    await taskStore.save(orphanedTask);
     await taskStore.save(createTask({
       id: "task-2",
       title: "New task",
