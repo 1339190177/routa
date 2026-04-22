@@ -15,11 +15,18 @@ import {
   inspectTranscriptTurns,
   type TranscriptTurnInspectionResult,
 } from "@/core/harness/transcript-sessions";
+import {
+  loadMatchingFeatureRetrospectiveMemories,
+  saveFeatureRetrospectiveMemory,
+  type FeatureRetrospectiveMemoryScope,
+} from "@/core/harness/retrospective-memory";
 
 export const TASK_ADAPTIVE_HARNESS_TOOL_NAME = "assemble_task_adaptive_harness";
 export const TASK_HISTORY_SUMMARY_TOOL_NAME = "summarize_task_history_context";
 export const FILE_SESSION_CONTEXT_TOOL_NAME = "summarize_file_session_context";
 export const TRANSCRIPT_TURN_INSPECTION_TOOL_NAME = "inspect_transcript_turns";
+export const LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME = "load_feature_retrospective_memory";
+export const SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME = "save_feature_retrospective_memory";
 
 function normalizeStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
@@ -41,6 +48,10 @@ function normalizePositiveInteger(value: unknown): number | undefined {
 
   const normalized = Math.trunc(value);
   return normalized > 0 ? normalized : undefined;
+}
+
+function normalizeRetrospectiveScope(value: unknown): FeatureRetrospectiveMemoryScope | undefined {
+  return value === "file" || value === "feature" ? value : undefined;
 }
 
 export async function assembleTaskAdaptiveHarnessFromToolArgs(
@@ -121,5 +132,56 @@ export async function inspectTranscriptTurnsFromToolArgs(
     featureId: options.featureId,
     maxUserPrompts: normalizePositiveInteger(args.maxUserPrompts),
     maxSignals: normalizePositiveInteger(args.maxSignals),
+  });
+}
+
+export async function loadFeatureRetrospectiveMemoryFromToolArgs(
+  args: Record<string, unknown>,
+  fallbackWorkspaceId?: string,
+): Promise<ReturnType<typeof loadMatchingFeatureRetrospectiveMemories>> {
+  const context: HarnessContext = {
+    workspaceId: normalizeContextValue(args.workspaceId) ?? fallbackWorkspaceId,
+    codebaseId: normalizeContextValue(args.codebaseId),
+    repoPath: normalizeContextValue(args.repoPath),
+  };
+  const repoRoot = await resolveRepoRoot(context);
+  const options = parseTaskAdaptiveHarnessOptions(args) ?? {};
+  const filePaths = normalizeStringArray(args.filePaths) ?? options.filePaths ?? [];
+  const featureId = normalizeContextValue(args.featureId) ?? options.featureId ?? options.featureIds?.[0];
+
+  return loadMatchingFeatureRetrospectiveMemories(repoRoot, {
+    filePaths,
+    featureId,
+  });
+}
+
+export async function saveFeatureRetrospectiveMemoryFromToolArgs(
+  args: Record<string, unknown>,
+  fallbackWorkspaceId?: string,
+): Promise<ReturnType<typeof saveFeatureRetrospectiveMemory>> {
+  const context: HarnessContext = {
+    workspaceId: normalizeContextValue(args.workspaceId) ?? fallbackWorkspaceId,
+    codebaseId: normalizeContextValue(args.codebaseId),
+    repoPath: normalizeContextValue(args.repoPath),
+  };
+  const repoRoot = await resolveRepoRoot(context);
+  const options = parseTaskAdaptiveHarnessOptions(args) ?? {};
+  const scope = normalizeRetrospectiveScope(args.scope);
+  if (!scope) {
+    throw new Error("save_feature_retrospective_memory requires scope=file|feature.");
+  }
+
+  const summary = normalizeContextValue(args.summary);
+  if (!summary) {
+    throw new Error("save_feature_retrospective_memory requires summary.");
+  }
+
+  return saveFeatureRetrospectiveMemory(repoRoot, {
+    scope,
+    targetId: normalizeContextValue(args.targetId),
+    filePath: normalizeContextValue(args.filePath) ?? (scope === "file" && options.filePaths?.length === 1 ? options.filePaths[0] : undefined),
+    featureId: normalizeContextValue(args.featureId) ?? options.featureId ?? options.featureIds?.[0],
+    featureName: normalizeContextValue(args.featureName),
+    summary,
   });
 }

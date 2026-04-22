@@ -16,6 +16,10 @@ import {
   assembleTaskAdaptiveHarnessFromToolArgs,
   FILE_SESSION_CONTEXT_TOOL_NAME,
   inspectTranscriptTurnsFromToolArgs,
+  LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME,
+  loadFeatureRetrospectiveMemoryFromToolArgs,
+  SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME,
+  saveFeatureRetrospectiveMemoryFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
   TASK_ADAPTIVE_HARNESS_TOOL_NAME,
@@ -45,28 +49,14 @@ const taskContextSearchSpecSchema = z.object({
 const taskJitContextAnalysisSchema = z.object({
   updatedAt: z.string().optional().describe("ISO timestamp for when this structured history analysis was produced."),
   summary: z.string().describe("Compressed explanation of what the matched history means for this task."),
-  sessionLayers: z.object({
-    seedSessions: z.array(z.string()).optional().describe("Seed sessions that helped localization."),
-    matchedSessions: z.array(z.string()).optional().describe("Final matched transcript sessions worth reading first."),
-    explanation: z.string().optional().describe("Brief explanation of how seed sessions differ from matched sessions."),
-  }).optional(),
-  issues: z.object({
-    input: z.array(z.string()).optional().describe("Task-input or context-quality issues found in history."),
-    location: z.array(z.string()).optional().describe("Code-location or entry-point issues found in history."),
-    tooling: z.array(z.string()).optional().describe("Tooling, path, or read-failure issues found in history."),
-  }).optional(),
   topFiles: z.array(z.string()).optional().describe("Highest-priority files to inspect first."),
   topSessions: z.array(z.object({
     sessionId: z.string().describe("Matched Codex/Claude session ID."),
     provider: z.string().optional().describe("Provider label for the matched session."),
     reason: z.string().describe("Why this session is worth following up."),
   })).optional().describe("Highest-priority sessions to inspect first."),
-  topLeads: z.array(z.string()).optional().describe("Top 3-5 next leads to follow up."),
-  contextToInject: z.array(z.string()).optional().describe("Specific context slices to inject into the next session."),
   reusablePrompts: z.array(z.string()).optional().describe("2-4 reusable follow-up prompts."),
   recommendedContextSearchSpec: taskContextSearchSpecSchema.optional().describe("Structured retrieval hints to reuse in future JIT Context loads."),
-  evidence: z.array(z.string()).optional().describe("Evidence-backed statements from the history summary or matched sessions."),
-  inference: z.array(z.string()).optional().describe("Inferences or recommended interpretations beyond the raw evidence."),
 });
 
 type DelegationOrchestrator = {
@@ -202,6 +192,8 @@ export class RoutaMcpToolManager {
       register(TASK_HISTORY_SUMMARY_TOOL_NAME, () => this.registerSummarizeTaskHistoryContext(server));
       register(FILE_SESSION_CONTEXT_TOOL_NAME, () => this.registerSummarizeFileSessionContext(server));
       register(TRANSCRIPT_TURN_INSPECTION_TOOL_NAME, () => this.registerInspectTranscriptTurns(server));
+      register(LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME, () => this.registerLoadRetrospectiveMemory(server));
+      register(SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME, () => this.registerSaveRetrospectiveMemory(server));
       return;
     }
 
@@ -211,6 +203,7 @@ export class RoutaMcpToolManager {
     register("list_tasks", () => this.registerListTasks(server));
     register("update_task_status", () => this.registerUpdateTaskStatus(server));
     register("update_task", () => this.registerUpdateTask(server));
+    register("save_history_memory_context", () => this.registerSaveJitContext(server));
     // Agent tools
     register("list_agents", () => this.registerListAgents(server));
     register("read_agent_conversation", () => this.registerReadAgentConversation(server));
@@ -272,6 +265,8 @@ export class RoutaMcpToolManager {
     register(TASK_HISTORY_SUMMARY_TOOL_NAME, () => this.registerSummarizeTaskHistoryContext(server));
     register(FILE_SESSION_CONTEXT_TOOL_NAME, () => this.registerSummarizeFileSessionContext(server));
     register(TRANSCRIPT_TURN_INSPECTION_TOOL_NAME, () => this.registerInspectTranscriptTurns(server));
+    register(LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME, () => this.registerLoadRetrospectiveMemory(server));
+    register(SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME, () => this.registerSaveRetrospectiveMemory(server));
   }
 
   private shouldRegisterTool(toolName: string): boolean {
@@ -370,6 +365,42 @@ export class RoutaMcpToolManager {
             jitContextAnalysis: params.jitContextAnalysis as import("../models/task").TaskJitContextAnalysis | null | undefined,
           },
           agentId: agentId ?? "system",
+        });
+        return this.toMcpResult(result);
+      }
+    );
+  }
+
+  private registerSaveJitContext(server: McpServer) {
+    server.tool(
+      "save_history_memory_context",
+      "Persist the minimal reusable history memory result for a task so later sessions can load it directly.",
+      {
+        taskId: z.string().describe("ID of the task to update"),
+        agentId: z.string().optional().describe("ID of the agent performing the save (optional in Kanban sessions)"),
+        updatedAt: z.string().optional().describe("ISO timestamp for when the result was produced."),
+        summary: z.string().describe("Compressed reusable history-analysis conclusion for the task."),
+        topFiles: z.array(z.string()).optional().describe("Highest-priority files to inspect first next time."),
+        topSessions: z.array(z.object({
+          sessionId: z.string().describe("Matched Codex/Claude session ID."),
+          provider: z.string().optional().describe("Provider label for the matched session."),
+          reason: z.string().describe("Why this session is worth following up."),
+        })).optional().describe("Highest-priority sessions to inspect first."),
+        reusablePrompts: z.array(z.string()).optional().describe("2-4 reusable follow-up prompts."),
+        recommendedContextSearchSpec: taskContextSearchSpecSchema.optional().describe("Structured retrieval hints to reuse next time."),
+      },
+      async (params) => {
+        const result = await this.tools.saveJitContext({
+          taskId: params.taskId,
+          result: {
+            updatedAt: params.updatedAt,
+            summary: params.summary,
+            topFiles: params.topFiles ?? [],
+            topSessions: params.topSessions ?? [],
+            reusablePrompts: params.reusablePrompts ?? [],
+            recommendedContextSearchSpec: params.recommendedContextSearchSpec,
+          },
+          agentId: params.agentId ?? "system",
         });
         return this.toMcpResult(result);
       }
@@ -1652,6 +1683,66 @@ Can be in response to a request or proactively provided.`,
       async (params) => {
         try {
           const result = await inspectTranscriptTurnsFromToolArgs(params, this.workspaceId);
+          return this.toMcpResult({
+            success: true,
+            data: result,
+          });
+        } catch (error) {
+          return this.toMcpResult({
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    );
+  }
+
+  private registerLoadRetrospectiveMemory(server: McpServer) {
+    server.tool(
+      LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME,
+      "Load previously saved prompt-ready retrospective memory for selected files or a feature before transcript rereads.",
+      {
+        workspaceId: z.string().optional().describe("Workspace ID override. Uses the current MCP session workspace when omitted."),
+        codebaseId: z.string().optional().describe("Optional codebase ID override."),
+        repoPath: z.string().optional().describe("Optional repository path override."),
+        featureId: z.string().optional().describe("Optional Feature Explorer feature ID."),
+        filePaths: z.array(z.string()).optional().describe("Optional repository-relative files to load file-level memory for."),
+      },
+      async (params) => {
+        try {
+          const result = await loadFeatureRetrospectiveMemoryFromToolArgs(params, this.workspaceId);
+          return this.toMcpResult({
+            success: true,
+            data: result,
+          });
+        } catch (error) {
+          return this.toMcpResult({
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    );
+  }
+
+  private registerSaveRetrospectiveMemory(server: McpServer) {
+    server.tool(
+      SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME,
+      "Persist a short prompt-ready retrospective summary for a file or feature so future specialist runs can reuse it as durable memory.",
+      {
+        workspaceId: z.string().optional().describe("Workspace ID override. Uses the current MCP session workspace when omitted."),
+        codebaseId: z.string().optional().describe("Optional codebase ID override."),
+        repoPath: z.string().optional().describe("Optional repository path override."),
+        scope: z.enum(["file", "feature"]).describe("Whether to save file-level or feature-level retrospective memory."),
+        targetId: z.string().optional().describe("Optional explicit target key. Prefer filePath or featureId when available."),
+        filePath: z.string().optional().describe("Repository-relative file path when scope=file."),
+        featureId: z.string().optional().describe("Feature Tree ID when scope=feature or to keep file memory attached to a feature."),
+        featureName: z.string().optional().describe("Optional human-readable feature name."),
+        summary: z.string().describe("Short prompt-ready summary to reuse in the next analysis session."),
+      },
+      async (params) => {
+        try {
+          const result = await saveFeatureRetrospectiveMemoryFromToolArgs(params, this.workspaceId);
           return this.toMcpResult({
             success: true,
             data: result,

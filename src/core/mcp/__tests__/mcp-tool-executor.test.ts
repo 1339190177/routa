@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 const {
   assembleTaskAdaptiveHarnessFromToolArgs,
   inspectTranscriptTurnsFromToolArgs,
+  loadFeatureRetrospectiveMemoryFromToolArgs,
+  saveFeatureRetrospectiveMemoryFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
 } = vi.hoisted(() => ({
@@ -70,6 +72,28 @@ const {
     missingSessionIds: [],
     warnings: [],
   })),
+  loadFeatureRetrospectiveMemoryFromToolArgs: vi.fn(async () => ({
+    storageRoot: "/tmp/.routa/projects/routa-js/feature-explorer/retrospectives",
+    matchedMemories: [{
+      scope: "file",
+      targetId: "src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx",
+      updatedAt: "2026-04-22T09:00:00.000Z",
+      summary: "Open with the exact file path and ask for a read-only retrospective first.",
+      featureId: "kanban-workflow",
+      featureName: "Kanban Workflow",
+    }],
+  })),
+  saveFeatureRetrospectiveMemoryFromToolArgs: vi.fn(async () => ({
+    storagePath: "/tmp/.routa/projects/routa-js/feature-explorer/retrospectives/files/src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx.json",
+    saved: {
+      scope: "file",
+      targetId: "src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx",
+      updatedAt: "2026-04-22T09:30:00.000Z",
+      summary: "State the API entry point and whether transcript JSONL reads are allowed.",
+      featureId: "kanban-workflow",
+      featureName: "Kanban Workflow",
+    },
+  })),
 }));
 
 vi.mock("@/core/harness/task-adaptive-tool", () => ({
@@ -77,8 +101,12 @@ vi.mock("@/core/harness/task-adaptive-tool", () => ({
   TASK_HISTORY_SUMMARY_TOOL_NAME: "summarize_task_history_context",
   FILE_SESSION_CONTEXT_TOOL_NAME: "summarize_file_session_context",
   TRANSCRIPT_TURN_INSPECTION_TOOL_NAME: "inspect_transcript_turns",
+  LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME: "load_feature_retrospective_memory",
+  SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME: "save_feature_retrospective_memory",
   assembleTaskAdaptiveHarnessFromToolArgs,
   inspectTranscriptTurnsFromToolArgs,
+  loadFeatureRetrospectiveMemoryFromToolArgs,
+  saveFeatureRetrospectiveMemoryFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
 }));
@@ -147,6 +175,12 @@ describe("executeMcpTool", () => {
     ).toBe(true);
     expect(
       getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "inspect_transcript_turns"),
+    ).toBe(true);
+    expect(
+      getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "load_feature_retrospective_memory"),
+    ).toBe(true);
+    expect(
+      getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "save_feature_retrospective_memory"),
     ).toBe(true);
   });
 
@@ -222,6 +256,52 @@ describe("executeMcpTool", () => {
     });
     expect((result as { content: Array<{ text: string }> }).content[0]?.text).toContain(
       '"transcriptPath": "/tmp/session-123.jsonl"',
+    );
+  });
+
+  it("loads saved retrospective memory from MCP args", async () => {
+    const result = await executeMcpTool(
+      {} as never,
+      "load_feature_retrospective_memory",
+      {
+        workspaceId: "workspace-1",
+        featureId: "kanban-workflow",
+        filePaths: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+      },
+    );
+
+    expect(loadFeatureRetrospectiveMemoryFromToolArgs).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      featureId: "kanban-workflow",
+      filePaths: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+    }, "workspace-1");
+    expect((result as { content: Array<{ text: string }> }).content[0]?.text).toContain(
+      '"matchedMemories": [',
+    );
+  });
+
+  it("saves retrospective memory through MCP args", async () => {
+    const result = await executeMcpTool(
+      {} as never,
+      "save_feature_retrospective_memory",
+      {
+        workspaceId: "workspace-1",
+        scope: "file",
+        filePath: "src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx",
+        featureId: "kanban-workflow",
+        summary: "State the API entry point and whether transcript JSONL reads are allowed.",
+      },
+    );
+
+    expect(saveFeatureRetrospectiveMemoryFromToolArgs).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      scope: "file",
+      filePath: "src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx",
+      featureId: "kanban-workflow",
+      summary: "State the API entry point and whether transcript JSONL reads are allowed.",
+    }, "workspace-1");
+    expect((result as { content: Array<{ text: string }> }).content[0]?.text).toContain(
+      '"storagePath":',
     );
   });
 });

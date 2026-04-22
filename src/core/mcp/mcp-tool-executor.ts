@@ -14,6 +14,10 @@ import {
   assembleTaskAdaptiveHarnessFromToolArgs,
   FILE_SESSION_CONTEXT_TOOL_NAME,
   inspectTranscriptTurnsFromToolArgs,
+  LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME,
+  loadFeatureRetrospectiveMemoryFromToolArgs,
+  SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME,
+  saveFeatureRetrospectiveMemoryFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
   summarizeTaskHistoryContextFromToolArgs,
   TASK_ADAPTIVE_HARNESS_TOOL_NAME,
@@ -93,45 +97,6 @@ const TASK_JIT_CONTEXT_ANALYSIS_SCHEMA = {
       type: "string",
       description: "Compressed explanation of what the matched history actually means for this task.",
     },
-    sessionLayers: {
-      type: "object",
-      properties: {
-        seedSessions: {
-          type: "array",
-          items: { type: "string" },
-          description: "Upstream seed sessions that helped localization but are weaker evidence than final matched sessions.",
-        },
-        matchedSessions: {
-          type: "array",
-          items: { type: "string" },
-          description: "Final matched Codex/Claude transcript sessions worth reading first.",
-        },
-        explanation: {
-          type: "string",
-          description: "Short explanation of how seed sessions differ from matched sessions in this analysis.",
-        },
-      },
-    },
-    issues: {
-      type: "object",
-      properties: {
-        input: {
-          type: "array",
-          items: { type: "string" },
-          description: "Task-input or context-quality issues found in history.",
-        },
-        location: {
-          type: "array",
-          items: { type: "string" },
-          description: "Code-location or entry-point issues found in history.",
-        },
-        tooling: {
-          type: "array",
-          items: { type: "string" },
-          description: "Tooling, path, or read-failure issues found in history.",
-        },
-      },
-    },
     topFiles: {
       type: "array",
       items: { type: "string" },
@@ -150,16 +115,6 @@ const TASK_JIT_CONTEXT_ANALYSIS_SCHEMA = {
       },
       description: "Highest-priority matched sessions to inspect first next time.",
     },
-    topLeads: {
-      type: "array",
-      items: { type: "string" },
-      description: "Top 3-5 next leads to follow up.",
-    },
-    contextToInject: {
-      type: "array",
-      items: { type: "string" },
-      description: "Specific context slices that should be injected into the next planning or implementation session.",
-    },
     reusablePrompts: {
       type: "array",
       items: { type: "string" },
@@ -168,16 +123,6 @@ const TASK_JIT_CONTEXT_ANALYSIS_SCHEMA = {
     recommendedContextSearchSpec: {
       ...TASK_CONTEXT_SEARCH_SPEC_SCHEMA,
       description: "Structured retrieval hints that should be reused by future JIT Context loads.",
-    },
-    evidence: {
-      type: "array",
-      items: { type: "string" },
-      description: "Evidence-backed statements from the history summary, matched files, or matched sessions.",
-    },
-    inference: {
-      type: "array",
-      items: { type: "string" },
-      description: "Inferences or recommended interpretations that go beyond direct evidence.",
     },
   },
   required: ["summary"],
@@ -214,6 +159,8 @@ const ESSENTIAL_TOOL_NAMES = new Set([
   TASK_HISTORY_SUMMARY_TOOL_NAME,
   FILE_SESSION_CONTEXT_TOOL_NAME,
   TRANSCRIPT_TURN_INSPECTION_TOOL_NAME,
+  LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME,
+  SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME,
 ]);
 
 export async function executeMcpTool(
@@ -358,6 +305,26 @@ export async function executeMcpTool(
           },
         })
       );
+    case "save_history_memory_context":
+      return formatResult(
+        await tools.saveJitContext({
+          taskId: args.taskId as string,
+          result: parseTaskJitContextAnalysis({
+            updatedAt: args.updatedAt,
+            summary: args.summary,
+            topFiles: args.topFiles,
+            topSessions: args.topSessions,
+            reusablePrompts: args.reusablePrompts,
+            recommendedContextSearchSpec: args.recommendedContextSearchSpec,
+          }) ?? {
+            summary: String(args.summary ?? ""),
+            topFiles: [],
+            topSessions: [],
+            reusablePrompts: [],
+          },
+          agentId: (args.agentId as string | undefined) ?? "system",
+        })
+      );
 
     // ── Enhanced delegation with process spawning ─────────────────────
     case "delegate_task_to_agent": {
@@ -453,6 +420,16 @@ export async function executeMcpTool(
       return formatResult({
         success: true,
         data: await inspectTranscriptTurnsFromToolArgs(args, workspace),
+      });
+    case LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME:
+      return formatResult({
+        success: true,
+        data: await loadFeatureRetrospectiveMemoryFromToolArgs(args, workspace),
+      });
+    case SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME:
+      return formatResult({
+        success: true,
+        data: await saveFeatureRetrospectiveMemoryFromToolArgs(args, workspace),
       });
     case "send_message_to_task_agent":
       return formatResult(await tools.sendMessageToTaskAgent(args as never));
@@ -1363,6 +1340,35 @@ export function getMcpToolDefinitions(
         required: ["taskId"],
       },
     },
+    {
+      name: "save_history_memory_context",
+      description: "Persist the minimal reusable history memory result for a task so later sessions can load it directly.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskId: { type: "string", description: "Task ID" },
+          agentId: { type: "string", description: "Agent performing the save (optional in Kanban sessions)" },
+          updatedAt: { type: "string", description: "Optional ISO timestamp for when the saved result was produced." },
+          summary: { type: "string", description: "Compressed reusable history-analysis summary." },
+          topFiles: { type: "array", items: { type: "string" } },
+          topSessions: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                sessionId: { type: "string" },
+                provider: { type: "string" },
+                reason: { type: "string" },
+              },
+              required: ["sessionId", "reason"],
+            },
+          },
+          reusablePrompts: { type: "array", items: { type: "string" } },
+          recommendedContextSearchSpec: TASK_CONTEXT_SEARCH_SPEC_SCHEMA,
+        },
+        required: ["taskId", "summary"],
+      },
+    },
     // ── Workspace tools ─────────────────────────────────────────────
     {
       name: "git_status",
@@ -1736,6 +1742,47 @@ export function getMcpToolDefinitions(
           summary: { type: "string", description: "Concise summary of what was prepared or why it is blocked" },
         },
         required: ["taskId", "handoffId", "status", "summary"],
+      },
+    },
+    {
+      name: LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME,
+      description: "Load previously saved prompt-ready retrospective memory for specific files or a feature so analysts can reuse prior conclusions before rereading transcripts.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspaceId: { type: "string", description: "Workspace ID. Uses the current MCP session workspace when omitted." },
+          codebaseId: { type: "string", description: "Optional codebase ID override for repository resolution." },
+          repoPath: { type: "string", description: "Optional repository path override for repository resolution." },
+          featureId: { type: "string", description: "Optional Feature Explorer feature ID to load feature-level memory." },
+          filePaths: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional repository-relative files to load file-level memory for.",
+          },
+        },
+      },
+    },
+    {
+      name: SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME,
+      description: "Persist a short prompt-ready retrospective summary for a file or feature so future specialist sessions can reuse it as durable memory.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workspaceId: { type: "string", description: "Workspace ID. Uses the current MCP session workspace when omitted." },
+          codebaseId: { type: "string", description: "Optional codebase ID override for repository resolution." },
+          repoPath: { type: "string", description: "Optional repository path override for repository resolution." },
+          scope: {
+            type: "string",
+            enum: ["file", "feature"],
+            description: "Whether to save file-level or feature-level retrospective memory.",
+          },
+          targetId: { type: "string", description: "Optional explicit target key. Use filePath or featureId when possible." },
+          filePath: { type: "string", description: "Repository-relative target file when scope=file." },
+          featureId: { type: "string", description: "Feature Tree ID when scope=feature or when file memory should keep feature context." },
+          featureName: { type: "string", description: "Optional human-readable feature name for the saved memory." },
+          summary: { type: "string", description: "Short prompt-ready summary to reuse next time." },
+        },
+        required: ["scope", "summary"],
       },
     },
   ];
