@@ -1,5 +1,5 @@
 import { getServerBridge } from "@/core/platform";
-import { parseGitHubUrl } from "../git/git-utils";
+import { parseVCSUrl } from "../git/git-utils";
 
 export interface GitHubIssuePayload {
   title: string;
@@ -141,7 +141,7 @@ async function fetchGitHub(url: string, init: RequestInit): Promise<Response> {
 
 export function parseGitHubRepo(sourceUrl?: string): string | undefined {
   if (!sourceUrl) return undefined;
-  const parsed = parseGitHubUrl(sourceUrl);
+  const parsed = parseVCSUrl(sourceUrl);
   return parsed ? `${parsed.owner}/${parsed.repo}` : undefined;
 }
 
@@ -153,7 +153,7 @@ function resolveGitHubRepoFromRemote(repoPath?: string): string | undefined {
       .process
       .execSync("git config --get remote.origin.url", { cwd: repoPath })
       .trim();
-    const parsed = parseGitHubUrl(remote);
+    const parsed = parseVCSUrl(remote);
     return parsed ? `${parsed.owner}/${parsed.repo}` : undefined;
   } catch {
     return undefined;
