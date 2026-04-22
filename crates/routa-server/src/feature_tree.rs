@@ -86,7 +86,11 @@ fn feature_tree_command_args(script: &Path, args: &[String]) -> Vec<String> {
     command_args
 }
 
-fn feature_tree_execution_dir(_script: &Path, requested_dir: &Path) -> PathBuf {
+fn feature_tree_execution_dir(script: &Path, requested_dir: &Path) -> PathBuf {
+    if script.extension().and_then(|ext| ext.to_str()) == Some("ts") {
+        return workspace_root();
+    }
+
     requested_dir.to_path_buf()
 }
 
@@ -252,13 +256,16 @@ mod tests {
     }
 
     #[test]
-    fn feature_tree_generators_run_from_requested_directory() {
+    fn feature_tree_typescript_generators_run_from_workspace_root() {
         let execution_dir = feature_tree_execution_dir(
             Path::new("/tmp/workspace/scripts/docs/feature-tree-generator.ts"),
             Path::new("/tmp/target-repo"),
         );
-        assert_eq!(execution_dir, Path::new("/tmp/target-repo"));
+        assert_eq!(execution_dir, workspace_root());
+    }
 
+    #[test]
+    fn feature_tree_bundled_generators_run_from_requested_directory() {
         let bundled_execution_dir = feature_tree_execution_dir(
             Path::new("/tmp/resources/bundled/feature-tree/feature-tree-generator.mjs"),
             Path::new("/tmp/target-repo"),

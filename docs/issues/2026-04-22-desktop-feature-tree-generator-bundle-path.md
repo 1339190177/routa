@@ -34,5 +34,5 @@ Those paths do not exist on end-user machines, so feature-tree generation failed
 - Bundle a release-safe `feature-tree-generator.mjs` into Tauri resources during `scripts/prepare-frontend.mjs`.
 - Expose the Tauri resource directory to the Rust backend through `ROUTA_FEATURE_TREE_RESOURCE_DIR`.
 - Make Rust feature-tree execution prefer runtime-provided generator paths and execute JavaScript bundles without `tsx`.
-- Run the generator with the target `repo_root` as `current_dir` so release builds no longer depend on a compile-time workspace path existing locally.
+- Run bundled release-safe `.mjs` generators with the target `repo_root` as `current_dir`, while source-checkout `.ts` generators continue to execute from the Routa workspace root and receive the target repository through `--repo-root`. This keeps desktop release builds repo-local without breaking `tsx` resolution in source checkouts and tests.
 - Keep a checked-in placeholder under `apps/desktop/src-tauri/bundled/feature-tree/` so local source checkouts still satisfy the Tauri resource glob during `cargo clippy` / pre-push validation before `prepare-frontend` has emitted the real bundle.
