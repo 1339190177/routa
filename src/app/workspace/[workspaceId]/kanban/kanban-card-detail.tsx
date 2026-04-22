@@ -77,6 +77,8 @@ export interface KanbanCardDetailProps {
 const ROLE_OPTIONS = ["CRAFTER", "ROUTA", "GATE", "DEVELOPER"];
 type KanbanDetailTabId = "overview" | "readiness" | "execution" | "jitContext" | "changes" | "evidence" | "runs";
 
+const persistedKanbanDetailTabs = new Map<string, KanbanDetailTabId>();
+
 function getProviderName(providerId: string | undefined, availableProviders: AcpProviderInfo[]): string {
   if (!providerId) return "Workspace default";
   return availableProviders.find((provider) => provider.id === providerId)?.name ?? providerId;
@@ -269,7 +271,6 @@ export function KanbanCardDetail({
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [isDescriptionEditing, setIsDescriptionEditing] = useState(false);
   const [isTestCasesEditing, setIsTestCasesEditing] = useState(false);
-  const [tabSelections, setTabSelections] = useState<Partial<Record<string, KanbanDetailTabId>>>({});
   const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
   const testCasesInputRef = useRef<HTMLTextAreaElement | null>(null);
   const displayedTitle = isTitleEditing ? editTitle : task.title;
@@ -315,8 +316,13 @@ export function KanbanCardDetail({
   const splitMode = !fullWidth;
   const compactMode = splitMode;
   const tabStateKey = `${task.id}:${splitMode ? "split" : "full"}`;
-  const storedTab = tabSelections[tabStateKey];
-  const activeTab = storedTab ?? "overview";
+  const [tabSelection, setTabSelection] = useState<{
+    key: string;
+    tab: KanbanDetailTabId;
+  } | null>(null);
+  const activeTab = tabSelection?.key === tabStateKey
+    ? tabSelection.tab
+    : persistedKanbanDetailTabs.get(tabStateKey) ?? "overview";
   const tabListId = `kanban-detail-tabs-${task.id}`;
   const storyReadinessValue = task.storyReadiness
     ? (task.storyReadiness.ready ? t.kanbanDetail.readyForDev : t.kanbanDetail.blockedForDev)
@@ -505,7 +511,8 @@ export function KanbanCardDetail({
                   key={tab.id}
                   type="button"
                   onClick={() => {
-                    setTabSelections((current) => ({ ...current, [tabStateKey]: tab.id }));
+                    persistedKanbanDetailTabs.set(tabStateKey, tab.id);
+                    setTabSelection({ key: tabStateKey, tab: tab.id });
                   }}
                   id={tabId}
                   role="tab"

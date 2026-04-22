@@ -755,6 +755,66 @@ describe("KanbanCardDetail repository health", () => {
     expect(screen.getByRole("button", { name: "Hide History Memory" })).toBeTruthy();
   });
 
+  it("keeps the selected history memory tab after the detail pane remounts", () => {
+    const task = {
+      ...createTask("task-jit-tab-persist", "Recover persisted history memory"),
+      jitContextSnapshot: {
+        generatedAt: "2026-04-22T08:00:00.000Z",
+        summary: "Recovered history context for Kanban workflow.",
+        matchConfidence: "high" as const,
+        matchReasons: ["Matched the saved Kanban workflow memory."],
+        warnings: [],
+        matchedFileDetails: [],
+        matchedSessionIds: [],
+        failures: [],
+        repeatedReadFiles: [],
+        sessions: [],
+        analysis: {
+          updatedAt: "2026-04-22T09:00:00.000Z",
+          summary: "Resume from the saved memory instead of re-reading the full backlog transcript.",
+          topFiles: ["src/app/api/kanban/boards/route.ts"],
+          topSessions: [{
+            sessionId: "session-jit-tab-persist",
+            provider: "codex",
+            reason: "This session already narrowed the feature and file scope.",
+          }],
+          reusablePrompts: ["Start from the previously matched Kanban route before searching wider."],
+        },
+      },
+    };
+
+    const props = {
+      task,
+      boardColumns: board.columns,
+      availableProviders: [],
+      specialists: [],
+      specialistLanguage: "en" as const,
+      codebases: [],
+      allCodebaseIds: [],
+      worktreeCache: {},
+      sessions: [],
+      fullWidth: true,
+      onPatchTask: vi.fn(async () => task),
+      onRetryTrigger: vi.fn(),
+      onDelete: vi.fn(),
+      onRefresh: vi.fn(),
+    };
+
+    const firstRender = render(<KanbanCardDetail {...props} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "History Memory" }));
+    expect(screen.getByRole("tab", { name: "History Memory" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Saved History Memory")).toBeTruthy();
+
+    firstRender.unmount();
+
+    render(<KanbanCardDetail {...props} />);
+
+    expect(screen.getByRole("tab", { name: "History Memory" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Saved History Memory")).toBeTruthy();
+    expect(screen.queryByText("Review Feedback")).toBeNull();
+  });
+
   it("does not load or show speculative history memory for a fresh backlog card before refinement confirms context", async () => {
     const onPatchTask = vi.fn(async () => createTask("task-backlog-unconfirmed", "Investigate feature memory"));
 
