@@ -54,7 +54,7 @@ import {
   proxyRequestToRunner,
   runnerUnavailableResponse,
 } from "@/core/acp/runner-routing";
-import { handleSessionNew } from "./acp-session-create";
+import { handleSessionNew, parseRequestedAcpMcpServers } from "./acp-session-create";
 import { getSessionWriteBuffer } from "./acp-session-history";
 import { handleSessionPrompt } from "./acp-session-prompt";
 
@@ -539,6 +539,14 @@ export async function POST(request: NextRequest) {
       const workspaceId = recoveredSession.workspaceId;
       const role = recoveredSession.role ?? "CRAFTER";
       const providerSessionId = recoveredSession.routaAgentId ?? sessionId;
+      const requestedAcpMcpServers = parseRequestedAcpMcpServers(p.mcpServers);
+
+      if (requestedAcpMcpServers.error) {
+        return jsonrpcResponse(id ?? null, null, {
+          code: -32602,
+          message: requestedAcpMcpServers.error,
+        });
+      }
 
       if (existingSession) {
         store.upsertSession({
@@ -607,6 +615,7 @@ export async function POST(request: NextRequest) {
               role,
             },
             providerSessionId,
+            requestedAcpMcpServers.servers,
           );
           resumeMode = "native";
         } else {
@@ -635,6 +644,7 @@ export async function POST(request: NextRequest) {
             provider,
             role,
           },
+          requestedAcpMcpServers.servers,
         );
       }
 

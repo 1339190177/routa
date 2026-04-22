@@ -119,6 +119,53 @@ function deriveAllowedNativeTools(
   return undefined;
 }
 
+export function parseRequestedAcpMcpServers(
+  value: unknown,
+): { servers?: Array<Record<string, unknown>>; error?: string } {
+  if (value === undefined) {
+    return {};
+  }
+
+  if (!Array.isArray(value)) {
+    return {
+      error: "mcpServers must be an array of objects with a non-empty name",
+    };
+  }
+
+  const servers = value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return [];
+    }
+
+    const name = typeof (entry as { name?: unknown }).name === "string"
+      ? (entry as { name: string }).name.trim()
+      : "";
+    if (!name) {
+      return [];
+    }
+
+    const nextEntry = {
+      ...(entry as Record<string, unknown>),
+      name,
+    };
+    if (nextEntry.type === "http" && !("headers" in nextEntry)) {
+      nextEntry.headers = [];
+    }
+
+    return [nextEntry];
+  });
+
+  if (servers.length !== value.length) {
+    return {
+      error: "mcpServers must be an array of objects with a non-empty name",
+    };
+  }
+
+  return {
+    servers,
+  };
+}
+
 type JsonRpcResponseFactory = (
   id: string | number | null,
   result: unknown,
@@ -209,6 +256,7 @@ export async function handleSessionNew({
   const authJson = (p.authJson as string | undefined);
   const autoApprovePermissions = p.autoApprovePermissions === true;
   const taskAdaptiveHarnessOptions = parseTaskAdaptiveHarnessOptions(p.taskAdaptiveHarness);
+  const requestedAcpMcpServers = parseRequestedAcpMcpServers(p.mcpServers);
 
   if (customCommand !== undefined && (typeof customCommand !== "string" || !customCommand.trim())) {
     return jsonrpcResponse(id ?? null, null, {
@@ -220,6 +268,12 @@ export async function handleSessionNew({
     return jsonrpcResponse(id ?? null, null, {
       code: -32602,
       message: "customArgs must be an array of strings",
+    });
+  }
+  if (requestedAcpMcpServers.error) {
+    return jsonrpcResponse(id ?? null, null, {
+      code: -32602,
+      message: requestedAcpMcpServers.error,
     });
   }
   if (!workspaceId) {
@@ -544,6 +598,7 @@ export async function handleSessionNew({
             role,
             autoApprovePermissions,
           },
+          requestedAcpMcpServers.servers,
         );
       }
 

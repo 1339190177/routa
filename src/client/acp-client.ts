@@ -223,7 +223,15 @@ export class BrowserAcpClient {
     parentSessionId?: string;
     crafterProvider?: string;
     gateProvider?: string;
-    mcpServers?: Array<{ name: string; url?: string }>;
+    mcpServers?: Array<{
+      name: string;
+      type?: "http" | "stdio";
+      url?: string;
+      command?: string;
+      args?: string[];
+      headers?: Array<{ name: string; value: string }>;
+      env?: Record<string, string>;
+    }>;
     workspaceId?: string;
     toolMode?: "essential" | "full";
     /** Optional allowlist for provider-native tools such as Bash/Read/Edit. */
