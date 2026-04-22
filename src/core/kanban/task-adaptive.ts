@@ -2,6 +2,7 @@ import type { TaskAdaptiveHarnessTaskType } from "@/core/harness/task-adaptive";
 import { normalizeTaskContextSearchSpec, type TaskContextSearchSpec, type TaskJitContextSnapshot } from "@/core/models/task";
 
 type TaskAdaptiveSource = {
+  id?: string;
   title: string;
   columnId?: string;
   assignedRole?: string;
@@ -13,6 +14,7 @@ type TaskAdaptiveSource = {
 };
 
 export interface KanbanTaskAdaptiveHarnessOptions {
+  taskId?: string;
   taskLabel?: string;
   locale?: string;
   query?: string;
@@ -179,6 +181,7 @@ export function buildKanbanTaskAdaptiveHarnessOptions(
   },
 ): KanbanTaskAdaptiveHarnessOptions {
   return {
+    taskId: options.task?.id,
     taskLabel: options.task?.title ?? promptLabel.trim(),
     query: resolveContextSearchQuery(options.task),
     featureIds: collectContextSearchFeatureIds(options.task),

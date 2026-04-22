@@ -32,6 +32,15 @@ import {
   assembleTaskAdaptiveHarness,
   parseTaskAdaptiveHarnessOptions,
 } from "@/app/api/harness/task-adaptive/shared";
+import { resolveRepoRoot } from "@/core/harness/context-resolution";
+import {
+  buildFeatureTreeRetrievalHints,
+  buildRelevantFeatureTreePromptSection,
+  buildRelevantHistoryMemoryPromptSection,
+  buildHistoryMemoryRetrievalHints,
+  loadRelevantFeatureTreeContext,
+  loadRelevantTaskHistoryMemories,
+} from "@/core/kanban/context-preload";
 
 export interface IdempotencyEntry {
   sessionId: string;
@@ -373,6 +382,8 @@ export async function handleSessionNew({
   }
 
   let taskAdaptiveHarnessSummary: string | undefined;
+  let relevantHistoryMemorySection: string | undefined;
+  let relevantFeatureTreeContextSection: string | undefined;
   if (taskAdaptiveHarnessOptions) {
     try {
       const taskAdaptiveHarness = await assembleTaskAdaptiveHarness(cwd, {
@@ -384,6 +395,54 @@ export async function handleSessionNew({
       resolvedToolMode = resolvedToolMode ?? taskAdaptiveHarness.recommendedToolMode;
       resolvedMcpProfile = resolvedMcpProfile ?? taskAdaptiveHarness.recommendedMcpProfile;
       resolvedAllowedNativeTools = resolvedAllowedNativeTools ?? taskAdaptiveHarness.recommendedAllowedNativeTools;
+
+      const repoRootForPreload = await resolveRepoRoot({ workspaceId }).catch(() => cwd);
+      const mergedFeatureIds = [
+        ...(taskAdaptiveHarnessOptions.featureIds ?? []),
+        ...(taskAdaptiveHarness.featureId ? [taskAdaptiveHarness.featureId] : []),
+      ];
+      const mergedFilePaths = [
+        ...(taskAdaptiveHarnessOptions.filePaths ?? []),
+        ...taskAdaptiveHarness.selectedFiles,
+      ];
+
+      const relevantHistoryMemories = await loadRelevantTaskHistoryMemories({
+        workspaceId,
+        repoPath: repoRootForPreload,
+        hints: buildHistoryMemoryRetrievalHints({
+          taskId: taskAdaptiveHarnessOptions.taskId,
+          taskLabel: taskAdaptiveHarnessOptions.taskLabel,
+          query: taskAdaptiveHarnessOptions.query ?? taskAdaptiveHarnessOptions.taskLabel,
+          featureIds: mergedFeatureIds,
+          filePaths: mergedFilePaths,
+          routeCandidates: taskAdaptiveHarnessOptions.routeCandidates,
+          apiCandidates: taskAdaptiveHarnessOptions.apiCandidates,
+          moduleHints: taskAdaptiveHarnessOptions.moduleHints,
+          symptomHints: taskAdaptiveHarnessOptions.symptomHints,
+        }),
+      });
+      relevantHistoryMemorySection = buildRelevantHistoryMemoryPromptSection(
+        relevantHistoryMemories,
+        taskAdaptiveHarnessOptions.locale ?? specialistLocale,
+      );
+
+      const relevantFeatureTreeContext = await loadRelevantFeatureTreeContext({
+        repoPath: repoRootForPreload,
+        hints: buildFeatureTreeRetrievalHints({
+          featureIds: mergedFeatureIds,
+          query: taskAdaptiveHarnessOptions.query ?? taskAdaptiveHarnessOptions.taskLabel,
+          filePaths: mergedFilePaths,
+          routeCandidates: taskAdaptiveHarnessOptions.routeCandidates,
+          apiCandidates: taskAdaptiveHarnessOptions.apiCandidates,
+          moduleHints: taskAdaptiveHarnessOptions.moduleHints,
+          symptomHints: taskAdaptiveHarnessOptions.symptomHints,
+        }),
+      });
+      relevantFeatureTreeContextSection = buildRelevantFeatureTreePromptSection(
+        relevantFeatureTreeContext.features,
+        taskAdaptiveHarnessOptions.locale ?? specialistLocale,
+        relevantFeatureTreeContext.warnings,
+      );
     } catch (error) {
       console.warn("[ACP Route] Task-Adaptive Harness assembly failed:", error);
     }
@@ -392,6 +451,8 @@ export async function handleSessionNew({
   const specialistPromptSections = [
     customSystemPrompt,
     buildSpecialistSystemPrompt(specialist),
+    relevantHistoryMemorySection,
+    relevantFeatureTreeContextSection,
     taskAdaptiveHarnessSummary,
   ].filter((section): section is string => typeof section === "string" && section.trim().length > 0);
   const specialistSystemPrompt = specialistPromptSections.length > 0

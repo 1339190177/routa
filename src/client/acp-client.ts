@@ -36,6 +36,7 @@ export interface AcpNewSessionResult {
 }
 
 export interface AcpTaskAdaptiveHarnessOptions {
+  taskId?: string;
   taskLabel?: string;
   locale?: string;
   query?: string;
