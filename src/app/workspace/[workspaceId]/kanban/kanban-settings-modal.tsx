@@ -7,6 +7,9 @@ import { getSpecialistCategory, type SpecialistCategory } from "@/client/utils/s
 import { resolveSpecialistSelection, type KanbanSpecialistLanguage } from "./kanban-specialist-language";
 import type { KanbanBoardInfo, KanbanDevSessionSupervisionInfo } from "../types";
 import { useTranslation } from "@/i18n";
+import type { UseWorkspacesReturn } from "@/client/hooks/use-workspaces";
+import type { CodebaseData } from "@/client/hooks/use-workspaces";
+import { WorkspaceSettingsTab } from "../workspace-settings-tab";
 import {
   ColumnAutomationWorkspace,
   DEFAULT_DEV_SESSION_SUPERVISION,
@@ -30,6 +33,7 @@ import {
 export type { ColumnAutomationConfig } from "./kanban-settings-modal-parts";
 
 const BOARD_VIEW_ID = "__kanban_board__";
+const WORKSPACE_VIEW_ID = "__workspace_settings__";
 
 export interface KanbanSettingsModalProps {
   board: KanbanBoardInfo;
@@ -49,6 +53,14 @@ export interface KanbanSettingsModalProps {
     githubTokenUpdate?: { token?: string; clear?: boolean },
     branchRules?: KanbanBoardInfo["branchRules"],
   ) => Promise<void>;
+  /** Workspace settings panel props (optional — when provided, a "Workspace" tab appears) */
+  workspacePanelProps?: {
+    workspaceId: string;
+    workspaceTitle: string;
+    codebases: CodebaseData[];
+    fetchCodebases: () => Promise<void>;
+    useWorkspacesHook: UseWorkspacesReturn;
+  };
 }
 
 export function KanbanSettingsModal({
@@ -62,6 +74,7 @@ export function KanbanSettingsModal({
   onClose,
   onClearAll,
   onSave,
+  workspacePanelProps,
 }: KanbanSettingsModalProps) {
   const { t } = useTranslation();
   const stageTypeOptions = useMemo(() => getStageTypeOptions(t), [t]);
@@ -526,6 +539,19 @@ export function KanbanSettingsModal({
                 >
                   {t.kanban.boardOverview}
                 </button>
+                {workspacePanelProps && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedViewId(WORKSPACE_VIEW_ID)}
+                    className={`w-full min-w-0 rounded-[10px] border px-2.5 py-2 text-left text-[13px] font-semibold transition ${
+                      selectedViewId === WORKSPACE_VIEW_ID
+                        ? "border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10 dark:border-amber-400/40 dark:bg-slate-900"
+                        : "border-slate-200 bg-white text-slate-900 hover:border-slate-300 dark:border-slate-800 dark:bg-[#111722] dark:text-slate-100 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    {t.workspace.workspaceLabel ?? "Workspace"}
+                  </button>
+                )}
                 <div className="space-y-1">
                   {sortedColumns.map((column) => {
                       const automation = columnAutomation[column.id] ?? { enabled: false };
@@ -575,7 +601,23 @@ export function KanbanSettingsModal({
             </aside>
 
             <main className="min-h-0 overflow-y-auto bg-white p-2 dark:bg-[#0d1118] sm:p-2.5 xl:p-3">
-              {selectedViewId === BOARD_VIEW_ID ? (
+              {selectedViewId === WORKSPACE_VIEW_ID && workspacePanelProps ? (
+                <div className="mx-auto max-w-2xl p-2">
+                  <WorkspaceSettingsTab
+                    workspaceId={workspacePanelProps.workspaceId}
+                    workspaceTitle={workspacePanelProps.workspaceTitle}
+                    codebases={workspacePanelProps.codebases}
+                    fetchCodebases={workspacePanelProps.fetchCodebases}
+                    worktreeRootDraft=""
+                    setWorktreeRootDraft={() => {}}
+                    worktreeRootState={{ saving: false, message: null, error: null }}
+                    displayedWorktreeRoot=""
+                    defaultWorktreeRootHint=""
+                    onSaveWorktreeRoot={async () => {}}
+                    useWorkspacesHook={workspacePanelProps.useWorkspacesHook}
+                  />
+                </div>
+              ) : selectedViewId === BOARD_VIEW_ID ? (
                 <div className="mx-auto max-w-4xl space-y-3">
                   <SectionCard eyebrow={t.kanban.runtime} title={t.kanban.runtimeSettings} description={t.kanban.runtimeSettingsHint}>
                     <div className="space-y-3">

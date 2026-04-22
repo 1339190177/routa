@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import { EMPTY_DRAFT, type TaskDraft } from "../kanban-create-modal";
 import { type ColumnAutomationConfig, type KanbanSettingsModalProps } from "./kanban-settings-modal";
+import type { UseWorkspacesReturn } from "@/client/hooks/use-workspaces";
 import { scheduleKanbanRefreshBurst } from "./kanban-agent-input";
 import {
   type KanbanSpecialistLanguage,
@@ -76,6 +77,11 @@ interface KanbanTabProps {
   repoChangesLoading?: boolean;
   acp?: UseAcpState & UseAcpActions;
   onAgentPrompt?: KanbanAgentPromptHandler;
+  workspacePanelProps?: {
+    workspaceTitle: string;
+    useWorkspacesHook: UseWorkspacesReturn;
+    fetchCodebases: () => Promise<void>;
+  };
 }
 
 function isLikelyGitHubCodebase(codebase: CodebaseData | null | undefined): boolean {
@@ -174,6 +180,7 @@ export function KanbanTab({
   repoChangesLoading = false,
   acp,
   onAgentPrompt,
+  workspacePanelProps,
 }: KanbanTabProps) {
   const { t } = useTranslation();
   const kanbanTaskAgentCopy = getKanbanTaskAgentCopy(specialistLanguage);
@@ -1958,6 +1965,13 @@ export function KanbanTab({
     specialistLanguage,
     githubImportAvailable: hasGitHubCodebase && githubAccessAvailable,
     githubAccessSource,
+    workspacePanelProps: workspacePanelProps ? {
+      workspaceId,
+      workspaceTitle: workspacePanelProps.workspaceTitle,
+      codebases,
+      fetchCodebases: workspacePanelProps.fetchCodebases,
+      useWorkspacesHook: workspacePanelProps.useWorkspacesHook,
+    } : undefined,
     onClose: () => setShowSettings(false),
     onClearAll: async () => {
       const response = await desktopAwareFetch(`/api/tasks?workspaceId=${encodeURIComponent(workspaceId)}`, {
