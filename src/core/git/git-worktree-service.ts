@@ -121,7 +121,9 @@ export class GitWorktreeService {
     const branch =
       options.branch ??
       `wt/${options.label ? branchToSafeDirName(options.label) : shortId}`;
-    const directoryName = branchToSafeDirName(options.label?.trim() || branch);
+    // Use branch (guaranteed unique) as directory name source, not label.
+    // Label is for display only and may collide across tasks with similar titles.
+    const directoryName = branchToSafeDirName(branch);
 
     return this.withRepoLock(repoPath, async () => {
       // Fail fast if no process bridge (serverless environments)
