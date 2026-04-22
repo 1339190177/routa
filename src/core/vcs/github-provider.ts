@@ -10,9 +10,12 @@ import type {
   VCSPlatform,
   VCSRepository,
   VCSPullRequest,
+  VCSPullRequestListItem,
   VCSBranch,
   VCSComment,
   VCSFileChange,
+  VCSIssueListItem,
+  VCSAccessStatus,
 } from "./vcs-provider";
 
 export class GitHubProvider implements IVCSProvider {
@@ -313,5 +316,132 @@ export class GitHubProvider implements IVCSProvider {
     token?: string;
   }): Promise<Array<{ id: number; events: string[]; active: boolean; config: { url: string } }>> {
     return this.githubApi(`/repos/${opts.repo}/hooks`, { token: opts.token });
+  }
+
+  async listPRs(opts: {
+    repo: string;
+    state?: "open" | "closed" | "all";
+    perPage?: number;
+    token?: string;
+  }): Promise<VCSPullRequestListItem[]> {
+    const state = opts.state ?? "open";
+    const perPage = Math.max(1, Math.min(opts.perPage ?? 50, 100));
+    const params = new URLSearchParams({
+      state,
+      sort: "updated",
+      direction: "desc",
+      per_page: String(perPage),
+    });
+
+    const data = await this.githubApi<Array<{
+      id: number;
+      number: number;
+      title: string;
+      body?: string | null;
+      html_url: string;
+      state: string;
+      updated_at?: string;
+      merged_at?: string | null;
+      draft?: boolean;
+      labels?: Array<{ name?: string | null }>;
+      assignees?: Array<{ login?: string | null }>;
+      head?: { ref?: string };
+      base?: { ref?: string };
+    }>>(`/repos/${opts.repo}/pulls?${params.toString()}`, { token: opts.token });
+
+    return data.map((item) => ({
+      id: String(item.id),
+      number: item.number,
+      title: item.title,
+      body: item.body ?? undefined,
+      url: item.html_url,
+      state: item.state as "open" | "closed",
+      labels: (item.labels ?? []).map((l) => l.name?.trim()).filter((s): s is string => Boolean(s)),
+      assignees: (item.assignees ?? []).map((a) => a.login?.trim()).filter((s): s is string => Boolean(s)),
+      updatedAt: item.updated_at,
+      draft: item.draft ?? false,
+      mergedAt: item.merged_at ?? undefined,
+      headRef: item.head?.ref ?? "",
+      baseRef: item.base?.ref ?? "",
+    }));
+  }
+
+  async listIssues(opts: {
+    repo: string;
+    state?: "open" | "closed" | "all";
+    perPage?: number;
+    token?: string;
+  }): Promise<VCSIssueListItem[]> {
+    const state = opts.state ?? "open";
+    const perPage = Math.max(1, Math.min(opts.perPage ?? 50, 100));
+    const params = new URLSearchParams({
+      state,
+      sort: "updated",
+      direction: "desc",
+      per_page: String(perPage),
+    });
+
+    const data = await this.githubApi<Array<{
+      id: number;
+      number: number;
+      title: string;
+      body?: string | null;
+      html_url: string;
+      state: string;
+      updated_at?: string;
+      labels?: Array<{ name?: string | null }>;
+      assignees?: Array<{ login?: string | null }>;
+      pull_request?: unknown;
+    }>>(`/repos/${opts.repo}/issues?${params.toString()}`, { token: opts.token });
+
+    return data
+      .filter((item) => !item.pull_request)
+      .map((item) => ({
+        id: String(item.id),
+        number: item.number,
+        title: item.title,
+        body: item.body ?? undefined,
+        url: item.html_url,
+        state: item.state as "open" | "closed",
+        labels: (item.labels ?? []).map((l) => l.name?.trim()).filter((s): s is string => Boolean(s)),
+        assignees: (item.assignees ?? []).map((a) => a.login?.trim()).filter((s): s is string => Boolean(s)),
+        updatedAt: item.updated_at,
+      }));
+  }
+
+  getAccessStatus(opts?: { boardToken?: string }): VCSAccessStatus {
+    const boardToken = opts?.boardToken?.trim();
+    if (boardToken) {
+      return { available: true, source: "board" };
+    }
+    const envToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (envToken) {
+      return { available: true, source: "env" };
+    }
+    return { available: false, source: "none" };
+  }
+
+  async downloadArchive(opts: {
+    repo: string;
+    ref?: string;
+    token?: string;
+  }): Promise<Buffer> {
+    const ref = opts.ref ?? "HEAD";
+    const url = `https://codeload.github.com/${opts.repo}/zip/${ref}`;
+
+    const headers: Record<string, string> = {
+      "User-Agent": "routa-github-provider",
+    };
+    const token = opts.token ?? process.env.GITHUB_TOKEN;
+    if (token) {
+      headers["Authorization"] = `token ${token}`;
+    }
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`GitHub archive download failed: HTTP ${response.status}`);
+    }
+
+    return Buffer.from(await response.arrayBuffer());
   }
 }

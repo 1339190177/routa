@@ -10,9 +10,12 @@ import type {
   VCSPlatform,
   VCSRepository,
   VCSPullRequest,
+  VCSPullRequestListItem,
   VCSBranch,
   VCSComment,
   VCSFileChange,
+  VCSIssueListItem,
+  VCSAccessStatus,
 } from "./vcs-provider";
 
 export class GitLabProvider implements IVCSProvider {
@@ -449,5 +452,141 @@ export class GitLabProvider implements IVCSProvider {
     if (hook.confidential_note_events) events.push("confidential_note_events");
 
     return events;
+  }
+
+  async listPRs(opts: {
+    repo: string;
+    state?: "open" | "closed" | "all";
+    perPage?: number;
+    token?: string;
+  }): Promise<VCSPullRequestListItem[]> {
+    const encodedPath = this.encodeProjectPath(opts.repo);
+    const state = opts.state ?? "open";
+    const perPage = Math.max(1, Math.min(opts.perPage ?? 50, 100));
+
+    // Map GitHub state to GitLab state
+    const gitlabState = state === "all" ? undefined
+      : state === "closed" ? "closed" : "opened";
+
+    const params = new URLSearchParams({
+      sort: "updated_at",
+      order_by: "desc",
+      per_page: String(perPage),
+    });
+    if (gitlabState) params.set("state", gitlabState);
+
+    const data = await this.gitlabApi<Array<{
+      id: number;
+      iid: number;
+      title: string;
+      description?: string | null;
+      web_url: string;
+      state: string;
+      updated_at?: string;
+      merged_at?: string | null;
+      draft: boolean;
+      labels?: string | string[];
+      assignees?: Array<{ username?: string }>;
+      source_branch: string;
+      target_branch: string;
+    }>>(`/projects/${encodedPath}/merge_requests?${params.toString()}`, { token: opts.token });
+
+    return data.map((item) => ({
+      id: String(item.id),
+      number: item.iid,
+      title: item.title,
+      body: item.description ?? undefined,
+      url: item.web_url,
+      state: (item.merged_at ? "closed" : item.state === "opened" ? "open" : "closed") as "open" | "closed",
+      labels: Array.isArray(item.labels)
+        ? item.labels
+        : typeof item.labels === "string" ? item.labels.split(",").map((l) => l.trim()) : [],
+      assignees: (item.assignees ?? []).map((a) => a.username ?? "").filter(Boolean),
+      updatedAt: item.updated_at,
+      draft: item.draft,
+      mergedAt: item.merged_at ?? undefined,
+      headRef: item.source_branch,
+      baseRef: item.target_branch,
+    }));
+  }
+
+  async listIssues(opts: {
+    repo: string;
+    state?: "open" | "closed" | "all";
+    perPage?: number;
+    token?: string;
+  }): Promise<VCSIssueListItem[]> {
+    const encodedPath = this.encodeProjectPath(opts.repo);
+    const state = opts.state ?? "open";
+    const perPage = Math.max(1, Math.min(opts.perPage ?? 50, 100));
+
+    const gitlabState = state === "all" ? undefined
+      : state === "closed" ? "closed" : "opened";
+
+    const params = new URLSearchParams({
+      sort: "updated_at",
+      order_by: "desc",
+      per_page: String(perPage),
+    });
+    if (gitlabState) params.set("state", gitlabState);
+
+    const data = await this.gitlabApi<Array<{
+      id: number;
+      iid: number;
+      title: string;
+      description?: string | null;
+      web_url: string;
+      state: string;
+      updated_at?: string;
+      labels?: string | string[];
+      assignees?: Array<{ username?: string }>;
+    }>>(`/projects/${encodedPath}/issues?${params.toString()}`, { token: opts.token });
+
+    return data.map((item) => ({
+      id: String(item.id),
+      number: item.iid,
+      title: item.title,
+      body: item.description ?? undefined,
+      url: item.web_url,
+      state: (item.state === "opened" ? "open" : "closed") as "open" | "closed",
+      labels: Array.isArray(item.labels)
+        ? item.labels
+        : typeof item.labels === "string" ? item.labels.split(",").map((l) => l.trim()) : [],
+      assignees: (item.assignees ?? []).map((a) => a.username ?? "").filter(Boolean),
+      updatedAt: item.updated_at,
+    }));
+  }
+
+  getAccessStatus(opts?: { boardToken?: string }): VCSAccessStatus {
+    const boardToken = opts?.boardToken?.trim();
+    if (boardToken) {
+      return { available: true, source: "board" };
+    }
+    const envToken = process.env.GITLAB_TOKEN;
+    if (envToken) {
+      return { available: true, source: "env" };
+    }
+    return { available: false, source: "none" };
+  }
+
+  async downloadArchive(opts: {
+    repo: string;
+    ref?: string;
+    token?: string;
+  }): Promise<Buffer> {
+    const encodedPath = this.encodeProjectPath(opts.repo);
+    const ref = opts.ref ?? "HEAD";
+    const url = `${this.getApiBaseUrl()}/projects/${encodedPath}/repository/archive.zip?sha=${ref}`;
+
+    const headers: Record<string, string> = {
+      Authorization: this.getAuthHeader(opts.token),
+    };
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`GitLab archive download failed: HTTP ${response.status}`);
+    }
+
+    return Buffer.from(await response.arrayBuffer());
   }
 }
