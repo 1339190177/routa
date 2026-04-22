@@ -1,0 +1,95 @@
+---
+title: "History Analysis should save a minimal task-adaptive history memory result instead of relying on generic update_task"
+date: "2026-04-22"
+kind: issue
+status: open
+severity: medium
+area: "kanban"
+tags: ["jit-context", "history-analysis", "mcp", "kanban"]
+reported_by: "codex"
+related_issues:
+  - "docs/issues/2026-04-21-jit-context-needs-repo-root-context-discovery.md"
+github_issue: 519
+github_state: open
+github_url: "https://github.com/phodal/routa/issues/519"
+---
+
+# History Analysis should save a minimal task-adaptive history memory result instead of relying on generic update_task
+
+## What Happened
+
+`Open History Analysis` can launch a dedicated analyst session, but the resulting structured analysis often never appears back on the card detail.
+
+Current behavior shows:
+
+- card detail continues to render retrieval/process data from `JIT Context`
+- saved analysis UI is only populated if `task.jitContextSnapshot.analysis` exists
+- the current history analyst prompt asks the model to call the generic `update_task` tool with a large `jitContextAnalysis` payload
+- in practice, launched analysis sessions can remain in planning mode or never persist the final result
+
+As a consequence, users can see the analysis session page, but reopening the card does not reliably show a saved structured result.
+
+## Expected Behavior
+
+History Analysis should have a dedicated save path:
+
+- analyst reads existing retrieval/process context from the card
+- analyst produces only the reusable result fields
+- analyst calls a focused `save_history_memory_context` MCP tool
+- reopening the card shows the saved result immediately
+
+The saved payload should stay intentionally small and optimized for reuse in later planning/implementation sessions.
+
+## Reproduction Context
+
+- Environment: web
+- Trigger: open a Kanban card, open `JIT Context`, launch `Open History Analysis`, then reopen the card detail
+
+Observed local state during validation:
+
+- `jitContextSnapshot` was present for multiple demo cards
+- `jitContextSnapshot.analysis` remained empty
+- launched history-analysis sessions did not reliably write the final result back to the task
+
+## Why This Might Happen
+
+- `update_task` is too generic and does not strongly signal that saving the final JIT result is mandatory
+- the current analysis schema is too large and mixes reusable result fields with process-oriented reasoning details already shown in the UI
+- specialist prompt complexity may increase the chance that the model keeps reasoning without calling the save path
+
+## Refined Direction
+
+Introduce a dedicated MCP tool `save_history_memory_context` that only persists the minimal reusable result for a specific task.
+
+Suggested saved shape:
+
+- `summary`
+- `topFiles`
+- `topSessions`
+- `recommendedContextSearchSpec`
+- `reusablePrompts`
+- optional `updatedAt`
+
+Process-oriented data such as matched files, warnings, failures, and history summaries should continue to come from the existing `JIT Context` retrieval UI and should not be duplicated in saved analysis.
+
+## Relevant Files
+
+- `src/core/models/task.ts`
+- `src/core/tools/agent-tools.ts`
+- `src/core/mcp/mcp-tool-executor.ts`
+- `src/core/mcp/routa-mcp-tool-manager.ts`
+- `src/core/mcp/mcp-server-profiles.ts`
+- `src/app/workspace/[workspaceId]/kanban/kanban-detail-panels.tsx`
+- `resources/specialists/tools/history-summary-analyst.yaml`
+- `resources/specialists/locales/en/tools/history-summary-analyst.yaml`
+- `resources/specialists/locales/zh-CN/tools/history-summary-analyst.yaml`
+
+## Observations
+
+- The UI already has enough process data to explain how context was recovered.
+- The missing piece is a reliable result-only save path that survives card reopen and can be reused by later sessions.
+- Existing saved-analysis rendering can be simplified once only the minimal reusable fields remain.
+
+## References
+
+- `docs/issues/2026-04-21-jit-context-needs-repo-root-context-discovery.md`

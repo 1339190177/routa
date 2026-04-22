@@ -562,49 +562,32 @@ function buildJitHistoryAnalysisPrompt(
       "1. 先区分“种子会话”和“最终命中会话”，不要把所有历史 session 当成同等证据。",
       "2. 先基于下面已经预加载的摘要证据做综合分析，再决定是否需要回读少量 transcript JSONL。",
       "3. 优先解释这些命中会话和候选文件，到底为当前 story 提供了什么上下文，而不是复述 transcript。",
-      "4. 把问题拆开：一类是需求/上下文输入问题，一类是代码定位问题，一类是工具/路径/读取失败问题。",
-      "5. 明确区分“证据支持”的判断和“你的推断”；尽量引用具体 session ID 或文件。",
-      "6. 调用 `update_task`，把分析结果保存到当前任务的 `jitContextAnalysis` 字段里。",
-      "7. 保存成功后，只用简短回复确认你保存了哪些高价值结论；不要再输出一整段 JSON。",
+      "4. 只产出下次还要复用的结果，不要把过程性拆分、推理链和 UI 已经展示的数据再保存一遍。",
+      "5. 调用 `save_history_memory_context`，把下次还要复用的 task-adaptive history memory 结果保存到当前任务。",
+      "6. 保存成功后，只用简短回复确认你保存了哪些高价值结论；不要再输出一整段 JSON。",
       "",
       "必须保存的 JSON 结构：",
       "```json",
       JSON.stringify({
         taskId: task.id,
-        jitContextAnalysis: {
-          summary: "一句压缩后的总判断",
-          sessionLayers: {
-            seedSessions: ["019d..."],
-            matchedSessions: ["019d..."],
-            explanation: "一句话说明为什么这些 seed 会话比最终命中会话更弱",
+        summary: "一句压缩后的总判断",
+        topFiles: ["repo-relative/path.ts"],
+        topSessions: [
+          {
+            sessionId: "019d...",
+            provider: "codex",
+            reason: "为什么这条会话值得优先看",
           },
-          issues: {
-            input: ["输入/上下文问题"],
-            location: ["代码定位问题"],
-            tooling: ["工具/路径/读取失败问题"],
-          },
-          topFiles: ["repo-relative/path.ts"],
-          topSessions: [
-            {
-              sessionId: "019d...",
-              provider: "codex",
-              reason: "为什么这条会话值得优先看",
-            },
-          ],
-          topLeads: ["最值得继续深挖的线索"],
-          contextToInject: ["下一次实现/规划会话应该注入的上下文"],
-          reusablePrompts: ["可直接复用的后续提示词"],
-          recommendedContextSearchSpec: {
-            query: "可复用的检索 query",
-            featureCandidates: ["feature-id"],
-            relatedFiles: ["repo-relative/path.ts"],
-            routeCandidates: ["/workspace/..."],
-            apiCandidates: ["/api/..."],
-            moduleHints: ["module hint"],
-            symptomHints: ["symptom hint"],
-          },
-          evidence: ["证据支持的判断"],
-          inference: ["推断或建议"],
+        ],
+        reusablePrompts: ["可直接复用的后续提示词"],
+        recommendedContextSearchSpec: {
+          query: "可复用的检索 query",
+          featureCandidates: ["feature-id"],
+          relatedFiles: ["repo-relative/path.ts"],
+          routeCandidates: ["/workspace/..."],
+          apiCandidates: ["/api/..."],
+          moduleHints: ["module hint"],
+          symptomHints: ["symptom hint"],
         },
       }, null, 2),
       "```",
@@ -612,7 +595,7 @@ function buildJitHistoryAnalysisPrompt(
       "补充规则：",
       "- `topSessions` 优先放最终命中的 Codex/Claude 会话，而不是泛泛的 ACP 会话。",
       "- `recommendedContextSearchSpec` 只保留下一次 JIT 检索真正需要复用的高信号 hints。",
-      "- 如果某个字段没有内容，用空数组；不要省略整个结构。",
+      "- 如果某个字段没有内容，用空数组；不要保存过程性问题分类、证据列表或推理链。",
       "",
       "上下文：",
       `- Task ID: ${task.id}`,
@@ -664,49 +647,32 @@ function buildJitHistoryAnalysisPrompt(
     "1. Distinguish retrieval seed sessions from the final matched sessions. Do not treat every historical session as equally trustworthy.",
     "2. Start from the preloaded summary evidence below before deciding whether any transcript rereads are necessary.",
     "3. Explain what the matched sessions and files contribute to the current story instead of replaying transcripts.",
-    "4. Split the findings into request/context-input issues, code-location issues, and tooling/path/read failures.",
-    "5. Separate evidence-backed conclusions from your own inference and cite concrete session IDs or files when possible.",
-    "6. Call `update_task` and persist the result into the task's `jitContextAnalysis` field.",
-    "7. After the save succeeds, reply with a short confirmation of the highest-value items you saved. Do not dump the full JSON again.",
+    "4. Save only the reusable result, not the process breakdown or reasoning chain already visible in the UI.",
+    "5. Call `save_history_memory_context` and persist the reusable task-adaptive history memory result to the current task.",
+    "6. After the save succeeds, reply with a short confirmation of the highest-value items you saved. Do not dump the full JSON again.",
     "",
     "Required JSON payload:",
     "```json",
     JSON.stringify({
       taskId: task.id,
-      jitContextAnalysis: {
-        summary: "One compressed conclusion",
-        sessionLayers: {
-          seedSessions: ["019d..."],
-          matchedSessions: ["019d..."],
-          explanation: "One sentence explaining why the seed sessions are weaker than the final matched sessions",
+      summary: "One compressed conclusion",
+      topFiles: ["repo-relative/path.ts"],
+      topSessions: [
+        {
+          sessionId: "019d...",
+          provider: "codex",
+          reason: "Why this matched session is worth inspecting first",
         },
-        issues: {
-          input: ["Context-input issue"],
-          location: ["Code-location issue"],
-          tooling: ["Tool/path/read-failure issue"],
-        },
-        topFiles: ["repo-relative/path.ts"],
-        topSessions: [
-          {
-            sessionId: "019d...",
-            provider: "codex",
-            reason: "Why this matched session is worth inspecting first",
-          },
-        ],
-        topLeads: ["Top follow-up lead"],
-        contextToInject: ["Context to inject into the next planning or implementation session"],
-        reusablePrompts: ["Reusable follow-up prompt"],
-        recommendedContextSearchSpec: {
-          query: "Reusable retrieval query",
-          featureCandidates: ["feature-id"],
-          relatedFiles: ["repo-relative/path.ts"],
-          routeCandidates: ["/workspace/..."],
-          apiCandidates: ["/api/..."],
-          moduleHints: ["module hint"],
-          symptomHints: ["symptom hint"],
-        },
-        evidence: ["Evidence-backed statement"],
-        inference: ["Inference or recommendation"],
+      ],
+      reusablePrompts: ["Reusable follow-up prompt"],
+      recommendedContextSearchSpec: {
+        query: "Reusable retrieval query",
+        featureCandidates: ["feature-id"],
+        relatedFiles: ["repo-relative/path.ts"],
+        routeCandidates: ["/workspace/..."],
+        apiCandidates: ["/api/..."],
+        moduleHints: ["module hint"],
+        symptomHints: ["symptom hint"],
       },
     }, null, 2),
     "```",
@@ -715,6 +681,7 @@ function buildJitHistoryAnalysisPrompt(
     "- Prefer final matched Codex/Claude sessions in `topSessions` instead of generic ACP sessions.",
     "- Keep `recommendedContextSearchSpec` focused on the small set of hints that should survive into the next JIT retrieval.",
     "- If a field has no content, send an empty array instead of removing the field entirely.",
+    "- Do not save process-only categories, evidence lists, or reasoning traces.",
     "",
     "Context:",
     `- Task ID: ${task.id}`,
@@ -1462,36 +1429,6 @@ export function JitContextPanel({
                     {savedAnalysis.summary}
                   </div>
 
-                  {savedAnalysis.sessionLayers ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {t.kanbanDetail.analysisSessionLayers}
-                      </div>
-                      {savedAnalysis.sessionLayers.explanation ? (
-                        <div className="text-sm text-slate-700 dark:text-slate-200">
-                          {savedAnalysis.sessionLayers.explanation}
-                        </div>
-                      ) : null}
-                      <div className="flex flex-wrap gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                        <span>{t.kanbanDetail.historySeedSessions}: {savedAnalysis.sessionLayers.seedSessions.length}</span>
-                        <span>{t.kanbanDetail.relatedSessions}: {savedAnalysis.sessionLayers.matchedSessions.length}</span>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {savedAnalysis.topLeads.length > 0 ? (
-                    <div className="mt-3 space-y-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {t.kanbanDetail.analysisTopLeads}
-                      </div>
-                      {savedAnalysis.topLeads.map((lead, index) => (
-                        <div key={`analysis-lead:${index}:${lead}`} className="text-sm text-slate-700 dark:text-slate-200">
-                          {lead}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
                   {savedAnalysis.topFiles.length > 0 ? (
                     <div className="mt-3 space-y-2">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
@@ -1538,60 +1475,6 @@ export function JitContextPanel({
                     </div>
                   ) : null}
 
-                  {(savedAnalysis.issues.input.length > 0 || savedAnalysis.issues.location.length > 0 || savedAnalysis.issues.tooling.length > 0) ? (
-                    <div className="mt-3 grid gap-3 md:grid-cols-3">
-                      {savedAnalysis.issues.input.length > 0 ? (
-                        <div className="space-y-1">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                            {t.kanbanDetail.analysisInputIssues}
-                          </div>
-                          {savedAnalysis.issues.input.map((issue, index) => (
-                            <div key={`analysis-input:${index}:${issue}`} className="text-sm text-slate-700 dark:text-slate-200">
-                              {issue}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                      {savedAnalysis.issues.location.length > 0 ? (
-                        <div className="space-y-1">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                            {t.kanbanDetail.analysisLocationIssues}
-                          </div>
-                          {savedAnalysis.issues.location.map((issue, index) => (
-                            <div key={`analysis-location:${index}:${issue}`} className="text-sm text-slate-700 dark:text-slate-200">
-                              {issue}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                      {savedAnalysis.issues.tooling.length > 0 ? (
-                        <div className="space-y-1">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                            {t.kanbanDetail.analysisToolingIssues}
-                          </div>
-                          {savedAnalysis.issues.tooling.map((issue, index) => (
-                            <div key={`analysis-tooling:${index}:${issue}`} className="text-sm text-slate-700 dark:text-slate-200">
-                              {issue}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {savedAnalysis.contextToInject.length > 0 ? (
-                    <div className="mt-3 space-y-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {t.kanbanDetail.analysisContextToInject}
-                      </div>
-                      {savedAnalysis.contextToInject.map((item, index) => (
-                        <div key={`analysis-context:${index}:${item}`} className="text-sm text-slate-700 dark:text-slate-200">
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
                   {savedAnalysis.reusablePrompts.length > 0 ? (
                     <div className="mt-3 space-y-2">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
@@ -1607,32 +1490,6 @@ export function JitContextPanel({
                           </div>
                         ))}
                       </div>
-                    </div>
-                  ) : null}
-
-                  {savedAnalysis.evidence.length > 0 ? (
-                    <div className="mt-3 space-y-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {t.kanbanDetail.analysisEvidence}
-                      </div>
-                      {savedAnalysis.evidence.map((item, index) => (
-                        <div key={`analysis-evidence:${index}:${item}`} className="text-sm text-slate-700 dark:text-slate-200">
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  {savedAnalysis.inference.length > 0 ? (
-                    <div className="mt-3 space-y-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {t.kanbanDetail.analysisInference}
-                      </div>
-                      {savedAnalysis.inference.map((item, index) => (
-                        <div key={`analysis-inference:${index}:${item}`} className="text-sm text-slate-700 dark:text-slate-200">
-                          {item}
-                        </div>
-                      ))}
                     </div>
                   ) : null}
                 </div>

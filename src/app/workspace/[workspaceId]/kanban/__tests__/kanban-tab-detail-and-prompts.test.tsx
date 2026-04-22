@@ -664,8 +664,8 @@ describe("KanbanCardDetail repository health", () => {
     expect(historyAnalysisPrompt).toContain("~/.codex/sessions/**/session-codex*.jsonl");
     expect(historyAnalysisPrompt).toContain("### Final Matched Codex Or Claude Sessions");
     expect(historyAnalysisPrompt).toContain("Inspect the Kanban API route before touching the UI shell.");
-    expect(historyAnalysisPrompt).toContain("Call `update_task` and persist the result into the task's `jitContextAnalysis` field.");
-    expect(historyAnalysisPrompt).toContain("\"jitContextAnalysis\"");
+    expect(historyAnalysisPrompt).toContain("Call `save_history_memory_context`");
+    expect(historyAnalysisPrompt).not.toContain("\"jitContextAnalysis\"");
     expect(historyAnalysisPrompt).not.toContain("Preloaded tool result:");
     expect(historyAnalysisPrompt).not.toContain("The system already executed `summarize_task_history_context` before this session started.");
     expect(openSpy).toHaveBeenCalledWith("about:blank", "_blank");
@@ -699,32 +699,18 @@ describe("KanbanCardDetail repository health", () => {
             analysis: {
               updatedAt: "2026-04-21T09:00:00.000Z",
               summary: "Start from the Kanban API and blocked interval reconstruction before touching the dashboard.",
-              sessionLayers: {
-                seedSessions: ["session-seed"],
-                matchedSessions: ["session-codex"],
-                explanation: "The matched Codex session is file-grounded; the seed session only helped localization.",
-              },
-              issues: {
-                input: ["The first prompt was too broad."],
-                location: ["The API entry point is crates/routa-server/src/api/kanban.rs."],
-                tooling: ["An outdated tasks.rs path caused read failures."],
-              },
               topFiles: ["crates/routa-server/src/api/kanban.rs"],
               topSessions: [{
                 sessionId: "session-codex",
                 provider: "codex",
                 reason: "This session covered the durable flow-event implementation.",
               }],
-              topLeads: ["Verify blocked/unblocked pairing before extending read models."],
-              contextToInject: ["Inject the flow-event model plus blocked interval read-model context."],
               reusablePrompts: ["Check Rust and TS flow-event parity first."],
               recommendedContextSearchSpec: {
                 query: "kanban flow event persistence",
                 featureCandidates: ["kanban-workflow"],
                 relatedFiles: ["crates/routa-server/src/api/kanban.rs"],
               },
-              evidence: ["Matched the kanban-workflow feature and recovered the Kanban API file."],
-              inference: ["The next implementation session should start from the API layer."],
             },
           },
         }}
@@ -749,10 +735,8 @@ describe("KanbanCardDetail repository health", () => {
 
     expect(screen.getByText("Saved History Analysis")).toBeTruthy();
     expect(screen.getByText("Start from the Kanban API and blocked interval reconstruction before touching the dashboard.")).toBeTruthy();
-    expect(screen.getByText("Session layers")).toBeTruthy();
-    expect(screen.getByText("Top follow-up leads")).toBeTruthy();
-    expect(screen.getByText("Verify blocked/unblocked pairing before extending read models.")).toBeTruthy();
-    expect(screen.getByText("Context to inject next time")).toBeTruthy();
+    expect(screen.getByText("Top files")).toBeTruthy();
+    expect(screen.getByText("Top sessions")).toBeTruthy();
     expect(screen.getByText("Reusable prompts")).toBeTruthy();
   });
 
