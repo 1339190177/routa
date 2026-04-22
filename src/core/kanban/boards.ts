@@ -81,18 +81,6 @@ const RECOMMENDED_AUTOMATION_BY_STAGE: Partial<Record<KanbanColumnStage, KanbanC
     enabled: true,
     steps: [
       {
-        id: "pr-publisher",
-        role: "DEVELOPER",
-        specialistId: "kanban-pr-publisher",
-        specialistName: "PR Publisher",
-      },
-      {
-        id: "auto-merger",
-        role: "DEVELOPER",
-        specialistId: "kanban-auto-merger",
-        specialistName: "Auto Merger",
-      },
-      {
         id: "done-reporter",
         role: "GATE",
         specialistId: "kanban-done-reporter",

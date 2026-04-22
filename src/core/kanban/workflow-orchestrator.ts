@@ -188,9 +188,6 @@ export interface ActiveAutomation {
   stage: KanbanColumnStage;
   automation: KanbanColumnAutomation;
   steps: KanbanAutomationStep[];
-  /** Original unfiltered automation steps from config (before autoCreatePullRequest filtering).
-   *  Used to map filtered step indices back to config indices for correct laneSession recording. */
-  configSteps: KanbanAutomationStep[];
   currentStepIndex: number;
   sessionId?: string;
   startedAt: Date;
@@ -370,20 +367,14 @@ export class KanbanWorkflowOrchestrator {
     const laneObjective = task?.objective?.trim() || data.cardTitle;
     const targetColumn = resolved.column;
     const automation = resolved.automation;
-    let steps = getKanbanAutomationSteps(automation);
-    // Preserve original config indices so that stepIndex stored in laneSessions
-    // matches the unfiltered automation config (used by lane scanner resume).
-    const configSteps = steps;
+    const steps = getKanbanAutomationSteps(automation);
 
-    // When autoCreatePullRequest is enabled, skip the pr-publisher specialist
-    // step and create the PR synchronously BEFORE downstream steps run.
-    // This ensures auto-merger and done-reporter see the pullRequestUrl.
+    // Done-lane pre-automation: synchronous PR creation and optional Auto Merger injection.
     if (targetColumn.stage === "done" && this.resolveBranchRules) {
       const branchRules = await this.resolveBranchRules({ workspaceId: data.workspaceId, boardId: data.boardId });
-      if (branchRules?.lifecycle.autoCreatePullRequest) {
-        steps = steps.filter(s => s.specialistId !== "kanban-pr-publisher");
 
-        // Synchronous pre-automation PR creation — runs before any done-lane steps
+      // Synchronous pre-automation PR creation — runs before any done-lane steps.
+      if (branchRules?.lifecycle.autoCreatePullRequest) {
         if (task && !task.pullRequestUrl && task.worktreeId && this.executeAutoPrCreation) {
           console.log(
             `[WorkflowOrchestrator] Pre-automation PR creation for task ${data.cardId}.`,
@@ -403,6 +394,24 @@ export class KanbanWorkflowOrchestrator {
             // Continue automation — PR creation failure is not fatal.
             // The done-reporter will correctly note the missing PR link.
           }
+        }
+      }
+
+      // When autoMergeAfterPR is enabled, dynamically inject the Auto Merger step
+      // before done-reporter so it runs after PR creation.
+      const deliveryRules = automation.deliveryRules;
+      if (deliveryRules?.autoMergeAfterPR) {
+        const reporterIndex = steps.findIndex(s => s.specialistId === "kanban-done-reporter");
+        const autoMergerStep: KanbanAutomationStep = {
+          id: "auto-merger",
+          role: "DEVELOPER",
+          specialistId: "kanban-auto-merger",
+          specialistName: "Auto Merger",
+        };
+        if (reporterIndex >= 0) {
+          steps.splice(reporterIndex, 0, autoMergerStep);
+        } else {
+          steps.unshift(autoMergerStep);
         }
       }
     }
@@ -534,7 +543,6 @@ export class KanbanWorkflowOrchestrator {
       stage: targetColumn.stage,
       automation,
       steps,
-      configSteps,
       currentStepIndex: startStepIndex,
       startedAt: new Date(),
       status: "queued",
@@ -550,13 +558,7 @@ export class KanbanWorkflowOrchestrator {
     // Trigger agent session if callback is available
     if (this.createSession) {
       try {
-        // Map filtered step index back to original config index so laneSessions
-        // record the correct stepIndex (matching the unfiltered automation config
-        // used by the lane scanner).
         const effectiveStep = steps[startStepIndex];
-        const originalStepIndex = effectiveStep
-          ? configSteps.findIndex(s => s.id === effectiveStep.id || (s.specialistId && s.specialistId === effectiveStep.specialistId))
-          : startStepIndex;
         const sessionId = await this.createSession({
           workspaceId: data.workspaceId,
           cardId: data.cardId,
@@ -565,7 +567,7 @@ export class KanbanWorkflowOrchestrator {
           columnName: targetColumn.name,
           automation,
           step: effectiveStep,
-          stepIndex: originalStepIndex >= 0 ? originalStepIndex : startStepIndex,
+          stepIndex: startStepIndex,
           supervision: this.buildSupervisionContext(automationEntry, laneObjective),
         });
         if (sessionId) {
@@ -1184,9 +1186,6 @@ export class KanbanWorkflowOrchestrator {
     automation.signaledSessionIds.clear();
 
     try {
-      const originalIdx = automation.configSteps.findIndex(
-        s => s.id === nextStep.id || (s.specialistId && s.specialistId === nextStep.specialistId),
-      );
       const sessionId = await this.createSession({
         workspaceId: automation.workspaceId,
         cardId,
@@ -1195,7 +1194,7 @@ export class KanbanWorkflowOrchestrator {
         columnName: automation.columnName,
         automation: automation.automation,
         step: nextStep,
-        stepIndex: originalIdx >= 0 ? originalIdx : nextStepIndex,
+        stepIndex: nextStepIndex,
         supervision: this.buildSupervisionContext(automation, task.objective || automation.cardTitle),
       });
 
@@ -1251,11 +1250,6 @@ export class KanbanWorkflowOrchestrator {
 
     try {
       const currentStep = automation.steps[automation.currentStepIndex];
-      const originalIdx = currentStep
-        ? automation.configSteps.findIndex(
-            s => s.id === currentStep.id || (s.specialistId && s.specialistId === currentStep.specialistId),
-          )
-        : -1;
       const sessionId = await this.createSession({
         workspaceId: automation.workspaceId,
         cardId,
@@ -1264,7 +1258,7 @@ export class KanbanWorkflowOrchestrator {
         columnName: automation.columnName,
         automation: automation.automation,
         step: currentStep,
-        stepIndex: originalIdx >= 0 ? originalIdx : automation.currentStepIndex,
+        stepIndex: automation.currentStepIndex,
         supervision: this.buildSupervisionContext(automation, task.objective || automation.cardTitle, {
           recoveredFromSessionId: previousSessionId,
           recoveryReason: reason,
