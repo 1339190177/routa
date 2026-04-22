@@ -7,6 +7,7 @@ describe("buildKanbanTaskAdaptiveHarnessOptions", () => {
       locale: "en",
       role: "CRAFTER",
       task: {
+        id: "task-1",
         title: "Investigate JIT Context",
         columnId: "backlog",
         triggerSessionId: "session-1",
@@ -26,6 +27,7 @@ describe("buildKanbanTaskAdaptiveHarnessOptions", () => {
     });
 
     expect(options).toMatchObject({
+      taskId: "task-1",
       taskLabel: "Investigate JIT Context",
       query: "kanban jit context card detail",
       taskType: "planning",
@@ -47,6 +49,7 @@ describe("buildKanbanTaskAdaptiveHarnessOptions", () => {
   it("falls back to the task title when no explicit context query exists", () => {
     const options = buildKanbanTaskAdaptiveHarnessOptions("Fallback prompt", {
       task: {
+        id: "task-2",
         title: "Fix Kanban card detail JIT context",
         columnId: "todo",
       },

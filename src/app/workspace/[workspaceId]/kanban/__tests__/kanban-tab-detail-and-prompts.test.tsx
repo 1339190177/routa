@@ -484,14 +484,15 @@ describe("KanbanCardDetail repository health", () => {
     );
 
     const requestBody = JSON.parse(String(desktopAwareFetch.mock.calls[0]?.[1]?.body));
-    expect(requestBody.taskAdaptiveHarness).toEqual({
+    expect(requestBody.taskAdaptiveHarness).toEqual(expect.objectContaining({
+      taskId: "task-jit",
       taskLabel: "Recover JIT context",
       query: "Recover JIT context",
       historySessionIds: ["session-trigger", "session-history", "session-lane"],
       taskType: "planning",
       locale: "en",
       role: "CRAFTER",
-    });
+    }));
     await waitFor(() => {
       expect(onPatchTask).toHaveBeenCalledWith(
         "task-jit",
@@ -848,7 +849,8 @@ describe("KanbanCardDetail repository health", () => {
     });
 
     const requestBody = JSON.parse(String(desktopAwareFetch.mock.calls[0]?.[1]?.body));
-    expect(requestBody.taskAdaptiveHarness).toEqual({
+    expect(requestBody.taskAdaptiveHarness).toEqual(expect.objectContaining({
+      taskId: "task-jit-hints",
       taskLabel: "Recover JIT context",
       query: "kanban card detail jit context",
       routeCandidates: ["/workspace/:workspaceId/kanban"],
@@ -857,7 +859,7 @@ describe("KanbanCardDetail repository health", () => {
       taskType: "planning",
       locale: "en",
       role: "CRAFTER",
-    });
+    }));
   });
 
   it("surfaces JIT Context warnings even when no sessions or files are recovered", async () => {
@@ -1828,7 +1830,7 @@ describe("KanbanTab agent prompt flow", () => {
         provider: "claude",
         role: "CRAFTER",
         toolMode: "full",
-        allowedNativeTools: [],
+        allowedNativeTools: ["Read", "Grep", "Glob"],
         mcpProfile: "kanban-planning",
         systemPrompt: expect.stringContaining("You are the KanbanTask Agent"),
         taskAdaptiveHarness: {
@@ -1884,7 +1886,7 @@ describe("KanbanTab agent prompt flow", () => {
         provider: "claude",
         role: "CRAFTER",
         toolMode: "full",
-        allowedNativeTools: [],
+        allowedNativeTools: ["Read", "Grep", "Glob"],
         mcpProfile: "kanban-planning",
         systemPrompt: expect.stringContaining("你是当前工作区的看板任务代理"),
         taskAdaptiveHarness: {

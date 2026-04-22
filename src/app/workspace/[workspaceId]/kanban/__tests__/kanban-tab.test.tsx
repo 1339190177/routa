@@ -516,7 +516,7 @@ describe("KanbanTab drag and drop", () => {
     expect(onAgentPrompt.mock.calls[0]?.[1]).toMatchObject({
       mcpProfile: "kanban-planning",
       toolMode: "full",
-      allowedNativeTools: [],
+      allowedNativeTools: ["Read", "Grep", "Glob"],
       taskAdaptiveHarness: expect.objectContaining({
         taskLabel: "Story One",
         taskType: "planning",

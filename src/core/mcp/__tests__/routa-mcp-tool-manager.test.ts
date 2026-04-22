@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const {
   assembleTaskAdaptiveHarnessFromToolArgs,
   inspectTranscriptTurnsFromToolArgs,
+  loadFeatureTreeContextFromToolArgs,
   loadFeatureRetrospectiveMemoryFromToolArgs,
   saveFeatureRetrospectiveMemoryFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
@@ -94,6 +95,20 @@ const {
       featureName: "Feature Explorer",
     },
   })),
+  loadFeatureTreeContextFromToolArgs: vi.fn(async () => ({
+    warnings: [],
+    features: [{
+      id: "feature-explorer",
+      name: "Feature Explorer",
+      summary: "Feature explorer pages, APIs, and session analysis surfaces.",
+      pages: ["/workspace/:workspaceId/feature-explorer"],
+      apis: ["GET /api/feature-explorer"],
+      sourceFiles: ["src/core/mcp/routa-mcp-tool-manager.ts"],
+      relatedFeatures: ["spec"],
+      matchReasons: ["Explicit feature candidate: feature-explorer"],
+      score: 40,
+    }],
+  })),
 }));
 
 vi.mock("@/core/harness/task-adaptive-tool", () => ({
@@ -103,8 +118,10 @@ vi.mock("@/core/harness/task-adaptive-tool", () => ({
   TRANSCRIPT_TURN_INSPECTION_TOOL_NAME: "inspect_transcript_turns",
   LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME: "load_feature_retrospective_memory",
   SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME: "save_feature_retrospective_memory",
+  LOAD_FEATURE_TREE_CONTEXT_TOOL_NAME: "load_feature_tree_context",
   assembleTaskAdaptiveHarnessFromToolArgs,
   inspectTranscriptTurnsFromToolArgs,
+  loadFeatureTreeContextFromToolArgs,
   loadFeatureRetrospectiveMemoryFromToolArgs,
   saveFeatureRetrospectiveMemoryFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
@@ -225,6 +242,7 @@ describe("RoutaMcpToolManager", () => {
     expect(registrations.some((entry) => entry.name === "inspect_transcript_turns")).toBe(true);
     expect(registrations.some((entry) => entry.name === "save_history_memory_context")).toBe(true);
     expect(registrations.some((entry) => entry.name === "load_feature_retrospective_memory")).toBe(true);
+    expect(registrations.some((entry) => entry.name === "load_feature_tree_context")).toBe(true);
     expect(registrations.some((entry) => entry.name === "save_feature_retrospective_memory")).toBe(true);
 
     const createTaskTool = registrations.find((entry) => entry.name === "create_task");
@@ -238,6 +256,7 @@ describe("RoutaMcpToolManager", () => {
     const transcriptTurnInspectionTool = registrations.find((entry) => entry.name === "inspect_transcript_turns");
     const saveHistoryMemoryTool = registrations.find((entry) => entry.name === "save_history_memory_context");
     const loadRetrospectiveMemoryTool = registrations.find((entry) => entry.name === "load_feature_retrospective_memory");
+    const loadFeatureTreeContextTool = registrations.find((entry) => entry.name === "load_feature_tree_context");
     const saveRetrospectiveMemoryTool = registrations.find((entry) => entry.name === "save_feature_retrospective_memory");
     expect(createTaskTool).toBeDefined();
     expect(noteTool).toBeDefined();
@@ -250,6 +269,7 @@ describe("RoutaMcpToolManager", () => {
     expect(transcriptTurnInspectionTool).toBeDefined();
     expect(saveHistoryMemoryTool).toBeDefined();
     expect(loadRetrospectiveMemoryTool).toBeDefined();
+    expect(loadFeatureTreeContextTool).toBeDefined();
     expect(saveRetrospectiveMemoryTool).toBeDefined();
 
     await createTaskTool!.handler({

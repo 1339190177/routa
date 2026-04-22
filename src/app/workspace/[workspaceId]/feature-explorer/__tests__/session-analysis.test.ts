@@ -101,6 +101,10 @@ describe("session-analysis", () => {
     expect(prompt).toContain("load_feature_retrospective_memory");
     expect(prompt).toContain("save_feature_retrospective_memory");
     expect(prompt).toContain("feature 级保存时，必须传上下文里的精确 `featureId`");
+    expect(prompt).toContain("把 `taskType` 固定成 `analysis`");
+    expect(prompt).toContain("把 Next.js 路由目录里的 `[workspaceId]`、`[featureId]` 当成字面路径片段");
+    expect(prompt).toContain("不要直接推断文件已经移动或删除");
+    expect(prompt).toContain("## 本次分析过程中的问题");
     expect(prompt).toContain("Scope: file:<path> | feature:<id>");
     expect(prompt).toContain("Next ask: <one sentence>");
     expect(prompt).toContain("Must include: <4-6 comma-separated fields>");
@@ -184,6 +188,10 @@ describe("session-analysis", () => {
     expect(prompt).toContain("Feature ID: feature-explorer");
     expect(prompt).toContain("Feature Name: Feature Explorer");
     expect(prompt).toContain("feature 级保存时，必须传上下文里的精确 `featureId`");
+    expect(prompt).toContain("把 `taskType` 固定成 `analysis`");
+    expect(prompt).toContain("把 Next.js 路由目录里的 `[workspaceId]`、`[featureId]` 当成字面路径片段");
+    expect(prompt).toContain("不要直接推断文件已经移动或删除");
+    expect(prompt).toContain("## 本次分析过程中的问题");
     expect(prompt).toContain("Scope: file:<path> | feature:<id>");
     expect(prompt).toContain("Next ask: <one sentence>");
     expect(prompt).toContain("Must include: <4-6 comma-separated fields>");

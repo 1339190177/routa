@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const {
   assembleTaskAdaptiveHarnessFromToolArgs,
   inspectTranscriptTurnsFromToolArgs,
+  loadFeatureTreeContextFromToolArgs,
   loadFeatureRetrospectiveMemoryFromToolArgs,
   saveFeatureRetrospectiveMemoryFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
@@ -94,6 +95,20 @@ const {
       featureName: "Kanban Workflow",
     },
   })),
+  loadFeatureTreeContextFromToolArgs: vi.fn(async () => ({
+    warnings: [],
+    features: [{
+      id: "kanban-workflow",
+      name: "Kanban Workflow",
+      summary: "Board flow, automation, and event persistence surfaces.",
+      pages: ["/workspace/:workspaceId/kanban"],
+      apis: ["POST /api/kanban/events"],
+      sourceFiles: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+      relatedFeatures: ["tasks"],
+      matchReasons: ["Explicit feature candidate: kanban-workflow"],
+      score: 42,
+    }],
+  })),
 }));
 
 vi.mock("@/core/harness/task-adaptive-tool", () => ({
@@ -103,8 +118,10 @@ vi.mock("@/core/harness/task-adaptive-tool", () => ({
   TRANSCRIPT_TURN_INSPECTION_TOOL_NAME: "inspect_transcript_turns",
   LOAD_RETROSPECTIVE_MEMORY_TOOL_NAME: "load_feature_retrospective_memory",
   SAVE_RETROSPECTIVE_MEMORY_TOOL_NAME: "save_feature_retrospective_memory",
+  LOAD_FEATURE_TREE_CONTEXT_TOOL_NAME: "load_feature_tree_context",
   assembleTaskAdaptiveHarnessFromToolArgs,
   inspectTranscriptTurnsFromToolArgs,
+  loadFeatureTreeContextFromToolArgs,
   loadFeatureRetrospectiveMemoryFromToolArgs,
   saveFeatureRetrospectiveMemoryFromToolArgs,
   summarizeFileSessionContextFromToolArgs,
@@ -183,8 +200,36 @@ describe("executeMcpTool", () => {
       getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "save_feature_retrospective_memory"),
     ).toBe(true);
     expect(
+      getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "load_feature_tree_context"),
+    ).toBe(true);
+    expect(
       getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "save_history_memory_context"),
     ).toBe(true);
+  });
+
+  it("loads prompt-ready feature tree context from MCP args", async () => {
+    const result = await executeMcpTool(
+      {} as never,
+      "load_feature_tree_context",
+      {
+        workspaceId: "workspace-1",
+        featureIds: ["kanban-workflow"],
+        filePaths: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+      },
+    );
+
+    expect(loadFeatureTreeContextFromToolArgs).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      featureIds: ["kanban-workflow"],
+      filePaths: ["src/app/workspace/[workspaceId]/kanban/kanban-tab.tsx"],
+    }, "workspace-1");
+    expect(result).toMatchObject({
+      content: [{ type: "text" }],
+      isError: false,
+    });
+    expect((result as { content: Array<{ text: string }> }).content[0]?.text).toContain(
+      '"kanban-workflow"',
+    );
   });
 
   it("builds compressed history summaries from MCP args", async () => {

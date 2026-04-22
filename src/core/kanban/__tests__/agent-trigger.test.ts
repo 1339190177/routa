@@ -43,7 +43,9 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("Treat backlog as planning and refinement, not implementation");
     expect(prompt).toContain("move_card");
     expect(prompt).toContain("Do NOT create or sync GitHub issues during backlog planning.");
-    expect(prompt).toContain("Do not use native tools such as Bash, Read, Write, Edit, Glob, or Grep in backlog planning");
+    expect(prompt).toContain("You may use read-only native tools such as Read, Grep, and Glob for limited repo inspection");
+    expect(prompt).toContain("If Relevant History Memory or Relevant Feature Tree Context is provided");
+    expect(prompt).toContain("write those hints back through contextSearchSpec");
     expect(prompt).toContain("decompose_tasks");
     expect(prompt).not.toContain("Complete the work assigned to this column stage");
   });
@@ -231,6 +233,52 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("Overall: WARNING");
     expect(prompt).toContain("## Evidence Bundle");
     expect(prompt).toContain("Missing required artifacts: test_results");
+  });
+
+  it("injects saved history memory into the task prompt when available", () => {
+    const task = createTask({
+      id: "task-history-memory",
+      title: "Reuse Kanban history memory",
+      objective: "Use prior memory before implementation",
+      workspaceId: "default",
+      boardId: "board-1",
+      columnId: "todo",
+      jitContextSnapshot: {
+        generatedAt: "2026-04-22T12:00:00.000Z",
+        summary: "retrieval summary",
+        matchConfidence: "high",
+        matchReasons: ["shared feature"],
+        warnings: [],
+        matchedFileDetails: [],
+        matchedSessionIds: [],
+        failures: [],
+        repeatedReadFiles: [],
+        sessions: [],
+        analysis: {
+          updatedAt: "2026-04-22T12:05:00.000Z",
+          summary: "Start from kanban.rs and the events route before broader MCP scanning.",
+          topFiles: ["crates/routa-server/src/api/kanban.rs"],
+          topSessions: [{
+            sessionId: "019daf46-1a5b-7001-8a17-df4a7053ace0",
+            provider: "codex",
+            reason: "Covers the flow-event write path directly.",
+          }],
+          reusablePrompts: ["Check the persisted flow event path before touching dashboard code."],
+          recommendedContextSearchSpec: {
+            featureCandidates: ["kanban-workflow"],
+            relatedFiles: ["crates/routa-server/src/api/kanban.rs"],
+          },
+        },
+      },
+    });
+
+    const prompt = buildTaskPrompt(task);
+
+    expect(prompt).toContain("## Saved History Memory");
+    expect(prompt).toContain("Start from kanban.rs and the events route before broader MCP scanning.");
+    expect(prompt).toContain("Top files: crates/routa-server/src/api/kanban.rs");
+    expect(prompt).toContain("019daf46-1a5b-7001-8a17-df4a7053ace0 (codex): Covers the flow-event write path directly.");
+    expect(prompt).toContain("Recommended context search spec:");
   });
 
   it("adds previous-lane handoff guidance for review sessions", () => {
@@ -719,6 +767,7 @@ describe("triggerAssignedTaskAgent ACP prompt lifecycle", () => {
     );
     const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(requestBody.params.taskAdaptiveHarness).toEqual({
+      taskId: "task-acp-success",
       taskLabel: "Run ACP task",
       query: "Run ACP task",
       historySessionIds: ["session-trigger", "session-history", "session-lane"],

@@ -87,6 +87,13 @@ Specifically:
 - 2026-04-21 follow-up validation against `http://localhost:3001` no longer reproduces the `JIT CONTEXT` tab-switching bug when driven through Playwright against real DOM roles/selectors
 - 2026-04-21 end-to-end test now exists for this surface: create a Kanban card against the local `/Users/phodal/ai/routa-js` repo, open card detail, switch to `JIT Context`, and verify the matched feature/files render
 - 2026-04-21 the remaining gap is no longer the card-detail UI shell; it is retrieval quality for weak or repo-root-only requests, which is tracked separately in issue `#517`
+- 2026-04-22 backlog sessions no longer have to start from a blank planning prompt:
+  - `session/new` now preloads `Relevant History Memory` from saved task memories in the same workspace/repo
+  - `session/new` also preloads `Relevant Feature Tree Context` from the repo's feature surface index
+  - backlog Kanban sessions now allow limited native read-only inspection via `Read`, `Grep`, and `Glob`
+  - backlog/task prompts now explicitly instruct agents to consume history memory first, then write confirmed `featureCandidates` / `relatedFiles` back through `contextSearchSpec`
+- 2026-04-22 task execution prompts now include `Saved History Memory` from the current card, so Todo/Dev/Review sessions can reuse prior summaries, top files, top sessions, and reusable prompts without opening card detail first
+- 2026-04-22 MCP now also exposes `load_feature_tree_context`, so backlog/task specialists can drill into feature tree context on demand instead of relying only on preloaded prompt sections
 
 ## References
 
