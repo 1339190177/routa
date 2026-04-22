@@ -55,20 +55,12 @@ const RECOMMENDED_AUTOMATION_BY_STAGE: Partial<Record<KanbanColumnStage, KanbanC
   },
   review: {
     enabled: true,
-    steps: [
-      {
-        id: "qa-frontend",
-        role: "GATE",
-        specialistId: "kanban-qa-frontend",
-        specialistName: "QA Frontend",
-      },
-      {
-        id: "review-guard",
-        role: "GATE",
-        specialistId: "kanban-review-guard",
-        specialistName: "Review Guard",
-      },
-    ],
+    steps: [{
+      id: "review-guard",
+      role: "GATE",
+      specialistId: "kanban-review-guard",
+      specialistName: "Review Guard",
+    }],
     transitionType: "entry",
     requiredArtifacts: ["screenshot", "test_results"],
     deliveryRules: {
@@ -121,7 +113,7 @@ const LEGACY_SPECIALIST_IDS_BY_STAGE: Partial<Record<KanbanColumnStage, string[]
   backlog: ["issue-enricher", "kanban-workflow", "kanban-agent"],
   todo: ["routa", "developer", "kanban-workflow"],
   dev: ["pr-reviewer", "developer", "claude-code", "kanban-workflow"],
-  review: ["desk-check", "gate", "pr-reviewer", "kanban-workflow", "kanban-review-guard"],
+  review: ["desk-check", "gate", "pr-reviewer", "kanban-workflow", "kanban-qa-frontend", "kanban-review-guard"],
   blocked: ["claude-code", "developer", "routa", "kanban-workflow"],
   done: ["gate", "verifier", "claude-code", "kanban-workflow", "kanban-done-reporter", "kanban-auto-merger"],
 };

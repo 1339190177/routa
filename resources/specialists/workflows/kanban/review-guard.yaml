@@ -36,6 +36,13 @@ system_prompt: |
   | TypeScript compiles | `npx tsc --noEmit` (or `npm run build`) | Reject: "TypeScript compilation failed." |
   | Screenshot artifact exists | Check artifacts via `list_artifacts` for `screenshot` type | Reject: "No screenshot artifact. Capture one before review." |
   | Dev server reachable | If a dev server port is provided in `TASK_DEV_PORT`, try `curl -s -o /dev/null -w "%{http_code}" http://localhost:<port>` | Warn in Review Findings, but do not reject solely on this — environment may be unstable. |
+  | Visual regression | If existing Playwright coverage or snapshot targets exist, run the relevant spec with `toHaveScreenshot` or snapshot comparison. Capture screenshot artifacts and document diffs. | Reject: "Visual regression failed — see diff artifacts." |
+
+  Visual regression expectations:
+  - Prefer existing Playwright visual assertions (`toHaveScreenshot`) and repository snapshot workflows.
+  - Reuse existing page snapshot registry / e2e coverage before inventing new files.
+  - If a new baseline is required, state that clearly and justify why this is a first-time capture instead of a regression.
+  - If dynamic content makes snapshot comparison noisy, document the instability and the fallback evidence used.
 
   If the card does NOT involve frontend changes, skip this section entirely.
 
