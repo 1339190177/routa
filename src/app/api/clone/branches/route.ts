@@ -205,16 +205,6 @@ export async function DELETE(request: NextRequest) {
       { status: 400 }
     );
   }
-  if (isBareGitRepository(repoPath)) {
-    return NextResponse.json(
-      {
-        error: "This repository is a bare git repository (no working directory)",
-        suggestion: "Bare repos can't be used for branch operations. Use a worktree or regular working copy instead."
-      },
-      { status: 400 }
-    );
-  }
-
   const result = deleteBranch(repoPath, branch);
   if (!result.success) {
     const status = result.error?.includes("current branch")

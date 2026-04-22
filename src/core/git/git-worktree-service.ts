@@ -248,13 +248,31 @@ export class GitWorktreeService {
     await this.withRepoLock(repoPath, async () => {
       await this.worktreeStore.updateStatus(worktreeId, "removing");
 
-      try {
-        await execGit(
-          ["worktree", "remove", "--force", worktree.worktreePath],
-          repoPath
-        );
-      } catch {
-        // Path may already be gone
+      // Remove worktree directory if it still exists on disk.
+      // Only proceed to DB cleanup when git confirms removal (or path is already gone).
+      let pathExists = false;
+      try { await fs.access(worktree.worktreePath); pathExists = true; } catch { /* already gone */ }
+
+      if (pathExists) {
+        try {
+          await execGit(
+            ["worktree", "remove", "--force", worktree.worktreePath],
+            repoPath,
+          );
+        } catch (removeErr) {
+          // Verify whether the path is actually gone despite the error
+          let stillExists = false;
+          try { await fs.access(worktree.worktreePath); stillExists = true; } catch { /* gone */ }
+
+          if (stillExists) {
+            await this.worktreeStore.updateStatus(
+              worktreeId,
+              "error",
+              removeErr instanceof Error ? removeErr.message : "Failed to remove worktree directory",
+            );
+            return; // Keep DB record — worktree is still on disk
+          }
+        }
       }
 
       // Prune stale references
@@ -269,8 +287,6 @@ export class GitWorktreeService {
         }
 
         // Also delete the remote branch if it was pushed.
-        // Best-effort: the branch may not have been pushed, or the
-        // remote may reject the delete (e.g. branch protection).
         try {
           await execGit(
             ["push", "origin", "--delete", worktree.branch],
@@ -281,6 +297,7 @@ export class GitWorktreeService {
         }
       }
 
+      // DB record is only removed after worktree directory is confirmed gone
       await this.worktreeStore.remove(worktreeId);
     });
   }

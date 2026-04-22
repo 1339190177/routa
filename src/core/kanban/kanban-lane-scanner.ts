@@ -117,9 +117,24 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
         const steps = getKanbanAutomationSteps(currentColumn?.automation);
         const lastCompletedStepIndex = findLastCompletedStepIndex(laneSessions, task.columnId!);
 
-        // All steps completed → nothing left to run
-        if (steps.length > 0 && lastCompletedStepIndex >= steps.length - 1) {
-          continue;
+        // All steps completed → check for stale error state before skipping
+        const allStepsCompleted = steps.length > 0 && lastCompletedStepIndex >= steps.length - 1;
+        if (allStepsCompleted) {
+          if (!task.lastSyncError) {
+            continue;
+          }
+          // Stale-state recovery: lastSyncError set + all current-column steps
+          // "transitioned"/"completed" means the card was returned to this column
+          // after a downstream failure (e.g. worktree creation failed). Re-trigger
+          // from step 0 with bounded retries.
+          const recoveryAttempts = countStepAttempts(laneSessions, task.columnId!, 0);
+          if (recoveryAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
+            continue;
+          }
+          task.lastSyncError = undefined;
+          task.updatedAt = new Date();
+          await system.taskStore.save(task);
+          // Fall through — resumeStepIndex stays undefined → step 0
         }
 
         // For multi-step resume: check per-step attempt limit to prevent

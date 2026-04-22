@@ -353,7 +353,29 @@ export function checkoutBranch(repoPath: string, branch: string): boolean {
 }
 
 /**
- * Delete a local branch. Refuses to delete the currently checked out branch.
+ * Find the worktree directory path for a given branch.
+ * Returns null if the branch is not checked out by any worktree.
+ */
+function findWorktreePathForBranch(repoPath: string, branch: string): string | null {
+  try {
+    const output = gitExecSync(["worktree", "list", "--porcelain"], repoPath);
+    let currentPath = "";
+    for (const line of output.split("\n")) {
+      if (line.startsWith("worktree ")) {
+        currentPath = line.substring("worktree ".length);
+      } else if (line === `branch refs/heads/${branch}`) {
+        return currentPath;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Delete a local branch. Handles bare repos and worktree-occupied branches.
+ * Refuses to delete the currently checked out branch.
  */
 export function deleteBranch(repoPath: string, branch: string): { success: boolean; error?: string } {
   const currentBranch = getCurrentBranch(repoPath);
@@ -370,9 +392,31 @@ export function deleteBranch(repoPath: string, branch: string): { success: boole
     gitExecSync(["branch", "-D", branch], repoPath);
     return { success: true };
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+
+    // Branch is checked out by a worktree — detach it first, then retry
+    if (msg.includes("worktree")) {
+      const wtPath = findWorktreePathForBranch(repoPath, branch);
+      if (wtPath) {
+        try {
+          gitExecSync(["worktree", "remove", "--force", wtPath], repoPath);
+          gitExecSync(["worktree", "prune"], repoPath);
+          gitExecSync(["branch", "-D", branch], repoPath);
+          return { success: true };
+        } catch (retryErr) {
+          return {
+            success: false,
+            error: retryErr instanceof Error
+              ? retryErr.message
+              : `Failed to delete branch '${branch}' after worktree removal`,
+          };
+        }
+      }
+    }
+
     return {
       success: false,
-      error: err instanceof Error ? err.message : `Failed to delete branch '${branch}'`,
+      error: msg || `Failed to delete branch '${branch}'`,
     };
   }
 }
