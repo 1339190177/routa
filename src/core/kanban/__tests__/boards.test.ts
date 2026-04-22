@@ -217,7 +217,7 @@ describe("applyRecommendedAutomationToColumns", () => {
     expect(columns[0].automation?.requiredArtifacts).toEqual(["screenshot", "test_results"]);
   });
 
-  it("preserves a review lane whose first step was changed from qa to review guard", () => {
+  it("migrates a legacy dual review-guard lane to the recommended single step", () => {
     const columns = applyRecommendedAutomationToColumns([
       {
         ...DEFAULT_KANBAN_COLUMNS[3],
@@ -246,7 +246,6 @@ describe("applyRecommendedAutomationToColumns", () => {
     ]);
 
     expect(columns[0].automation?.steps?.map((step) => step.specialistId)).toEqual([
-      "kanban-review-guard",
       "kanban-review-guard",
     ]);
   });

@@ -166,6 +166,13 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
       }
       return false;
     });
+    const allStepsAreLegacyOrRecommended = currentSteps.every((step) => {
+      if (step.specialistId) {
+        return legacySpecialists.includes(step.specialistId)
+          || recommendedStepSpecialistIds.includes(step.specialistId);
+      }
+      return true;
+    });
     const matchesRecommendedStepSequence = currentSteps.length === recommendedSteps.length
       && currentSteps.every((step, index) => getStepIdentity(step) === getStepIdentity(recommendedSteps[index]!));
     const shouldMigrateLegacySpecialist = Boolean(
@@ -185,7 +192,7 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
 
     if (
       hasCustomSteps
-      || ((column.automation.steps?.length ?? 0) > 0 && !matchesRecommendedStepSequence)
+      || ((column.automation.steps?.length ?? 0) > 0 && !matchesRecommendedStepSequence && !allStepsAreLegacyOrRecommended)
       || (
         (currentAutomation.specialistId || currentAutomation.specialistName)
         && !shouldMigrateLegacySpecialist
