@@ -2,7 +2,8 @@
 title: "Backlog refiner should confirm feature-tree context before persisting retrieval hints"
 date: "2026-04-23"
 kind: issue
-status: open
+status: resolved
+resolved_at: "2026-04-23"
 severity: medium
 area: kanban
 tags:
@@ -15,7 +16,7 @@ related_issues:
   - "2026-04-22-history-memory-search-pattern-evidence.md"
   - "2026-04-22-backlog-history-memory-should-not-persist-before-refinement.md"
 github_issue: 526
-github_state: open
+github_state: closed
 github_url: "https://github.com/phodal/routa/issues/526"
 ---
 
@@ -75,6 +76,7 @@ Backlog refinement should have a dedicated feature-tree confirmation path:
   - optional `feature_tree` YAML block for canonical backlog stories
 - Backlog prompts now explicitly tell the refiner to prefer feature-tree confirmation before broader `Grep`/`Glob` scanning, and only persist `contextSearchSpec` after confirmation or concrete repo inspection.
 - Existing backlog confirmation gating now treats `confirm_feature_tree_story_context` as a confirmation step, so fresh backlog cards still avoid speculative context persistence.
+- PR #529 merged on 2026-04-23 and closed GitHub issue #526.
 
 ## Verification Notes
 
