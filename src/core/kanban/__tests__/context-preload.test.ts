@@ -24,6 +24,7 @@ import {
   buildRelevantHistoryMemoryPromptSection,
   buildSavedHistoryMemoryPromptSection,
   buildHistoryMemoryRetrievalHints,
+  confirmFeatureTreeStoryContext,
   loadRelevantFeatureTreeContext,
   loadRelevantTaskHistoryMemories,
 } from "../context-preload";
@@ -191,6 +192,51 @@ describe("context-preload", () => {
       name: "Kanban Workflow",
     });
     expect(result.features[0]?.matchReasons.join(" ")).toContain("Explicit feature candidate");
+  });
+
+  it("normalizes confirmed feature routes and returns a story-indented YAML block", async () => {
+    readFeatureSurfaceIndexMock.mockResolvedValue({
+      repoRoot: "/repo",
+      warnings: [],
+      generatedAt: "2026-04-22T10:00:00.000Z",
+      pages: [],
+      apis: [],
+      contractApis: [],
+      nextjsApis: [],
+      rustApis: [],
+      implementationApis: [],
+      metadata: {
+        schemaVersion: 1,
+        capabilityGroups: [],
+        features: [{
+          id: "kanban-workflow",
+          name: "Kanban Workflow",
+          summary: "Board flow, automation, and event persistence surfaces.",
+          pages: ["/workspace/:workspaceId/kanban/"],
+          apis: ["POST   /API/KANBAN/EVENTS"],
+          sourceFiles: ["crates/routa-server/src/api/kanban.rs"],
+          relatedFeatures: ["tasks"],
+        }],
+      },
+    });
+
+    const result = await confirmFeatureTreeStoryContext({
+      repoPath: "/repo",
+      hints: buildFeatureTreeRetrievalHints({
+        featureIds: ["kanban-workflow"],
+        query: "kanban flow event persistence",
+      }),
+    });
+
+    expect(result.confirmedContextSearchSpec).toMatchObject({
+      featureCandidates: ["kanban-workflow"],
+      relatedFiles: ["crates/routa-server/src/api/kanban.rs"],
+      routeCandidates: ["/workspace/:workspaceId/kanban"],
+      apiCandidates: ["post /api/kanban/events"],
+    });
+    expect(result.featureTreeYamlBlock).toContain("  feature_tree:");
+    expect(result.featureTreeYamlBlock).toContain("    pages:");
+    expect(result.featureTreeYamlBlock).toContain("      - \"/workspace/:workspaceId/kanban\"");
   });
 
   it("renders saved history memory for task prompts", () => {
