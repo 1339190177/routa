@@ -237,7 +237,7 @@ export function applyRecommendedAutomationToColumns(columns: KanbanColumn[]): Ka
           : (currentAutomation.requiredArtifacts ?? recommended.requiredArtifacts),
         contractRules: currentAutomation.contractRules ?? recommended.contractRules,
         deliveryRules: currentAutomation.deliveryRules ?? recommended.deliveryRules,
-        autoAdvanceOnSuccess: recommended.autoAdvanceOnSuccess,
+        autoAdvanceOnSuccess: currentAutomation.autoAdvanceOnSuccess ?? recommended.autoAdvanceOnSuccess,
       }),
     });
   });
