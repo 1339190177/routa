@@ -52,6 +52,49 @@ function sweepExpired(cache: Map<string, CacheEntry>, now: number): void {
   }
 }
 
+/** Extract an entity ID from write-method arguments for selective invalidation. */
+function extractEntityId(args: unknown[]): string | undefined {
+  if (args.length === 0) return undefined;
+  const first = args[0];
+  if (typeof first === "string") return first;
+  if (first && typeof first === "object" && "id" in first && typeof (first as { id: unknown }).id === "string") {
+    return (first as { id: string }).id;
+  }
+  return undefined;
+}
+
+/**
+ * Selectively invalidate cache entries after a write.
+ *
+ * - If an entity ID is extractable, only removes `get(id)` entries and all
+ *   `list`/`find`/`count` entries (which may contain the changed entity).
+ * - Individual `get(otherId)` entries survive, reducing thundering-herd
+ *   when multiple cards save concurrently.
+ * - Falls back to full clear when no ID is available.
+ */
+function selectiveInvalidate(cache: Map<string, CacheEntry>, args: unknown[]): void {
+  const entityId = extractEntityId(args);
+  if (!entityId) {
+    cache.clear();
+    return;
+  }
+
+  const idStr = JSON.stringify(entityId);
+  for (const [key] of cache) {
+    // Invalidate specific-entity lookups: get("id"), getDefault(...)
+    if (key.includes(idStr)) {
+      cache.delete(key);
+      continue;
+    }
+    // Invalidate all list/find/count queries (they may include the changed entity)
+    if (
+      key.startsWith("list") || key.startsWith("find") || key.startsWith("count")
+    ) {
+      cache.delete(key);
+    }
+  }
+}
+
 export function decorateStoreWithDedup<T extends object>(
   store: T,
   storeName: string,
@@ -67,9 +110,9 @@ export function decorateStoreWithDedup<T extends object>(
       const method = String(prop);
 
       return function (this: unknown, ...args: unknown[]) {
-        // Write: clear cache, call through
+        // Write: selective cache invalidation, then call through
         if (isWriteMethod(method)) {
-          cache.clear();
+          selectiveInvalidate(cache, args);
           return original.apply(target, args);
         }
 

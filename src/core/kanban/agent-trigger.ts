@@ -506,6 +506,44 @@ function isAcpPromptTimeoutError(error: unknown): boolean {
   return message.includes("Timeout waiting for session/prompt");
 }
 
+function isRateLimitError(error: unknown): boolean {
+  const message = getA2AFailureMessage(error).toLowerCase();
+  return message.includes("429") || message.includes("rate limit") || message.includes("速率限制");
+}
+
+function getRateLimitRetryDelays(): number[] {
+  const env = process.env.ROUTA_RATE_LIMIT_RETRY_DELAYS;
+  if (env) {
+    const parsed = env.split(",").map((s) => Number(s.trim())).filter((n) => n > 0);
+    if (parsed.length > 0) return parsed;
+  }
+  return [30_000, 60_000, 120_000];
+}
+
+async function dispatchWithRateLimitRetry(
+  params: Parameters<typeof dispatchSessionPrompt>[0],
+): Promise<void> {
+  const delays = getRateLimitRetryDelays();
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      await dispatchSessionPrompt(params);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isRateLimitError(error) || attempt >= delays.length) {
+        throw error;
+      }
+      const delayMs = delays[attempt];
+      console.warn(
+        `[kanban] Rate-limited on attempt ${attempt + 1}, retrying in ${delayMs / 1000}s...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 async function triggerAcpTaskAgent(params: {
   origin: string;
   workspaceId: string;
@@ -559,7 +597,7 @@ async function triggerAcpTaskAgent(params: {
   }
 
   void (async () => {
-    await dispatchSessionPrompt({
+    await dispatchWithRateLimitRetry({
       sessionId,
       workspaceId: params.workspaceId,
       provider,

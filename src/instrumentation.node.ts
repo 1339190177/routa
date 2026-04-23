@@ -232,6 +232,13 @@ function registerSignalHandlers(): void {
 // ---------------------------------------------------------------------------
 
 export async function register() {
+  // Accommodate exit listeners from dependencies (better-sqlite3, node-cron, etc.)
+  // Default is 10; the kanban orchestrator with 7+ concurrent agent sessions
+  // and multiple stores can exceed that, producing MaxListenersExceededWarning.
+  // Override via ROUTA_MAX_LISTENERS env var if needed.
+  const maxListeners = Number(process.env.ROUTA_MAX_LISTENERS) || 20;
+  process.setMaxListeners(maxListeners);
+
   // Install HTTP server-level observer for full API route coverage
   await installHttpServerObserver();
 

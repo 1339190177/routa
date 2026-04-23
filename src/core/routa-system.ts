@@ -354,6 +354,13 @@ export function getRoutaSystem(): RoutaSystem {
         break;
     }
 
+    // Apply store decorations ONCE during initialization.
+    // Order: timing → dedup (timing measures real DB latency; dedup coalesces redundant calls).
+    // Previously these ran outside the init block, causing proxy re-wrapping on every
+    // getRoutaSystem() call and eventual stack overflow (Issue #11).
+    g[GLOBAL_KEY] = decorateSystemWithTiming(g[GLOBAL_KEY] as RoutaSystem);
+    g[GLOBAL_KEY] = decorateSystemWithDedup(g[GLOBAL_KEY] as RoutaSystem);
+
     // Start the workflow orchestrator to listen for column transitions
     const system = g[GLOBAL_KEY] as RoutaSystem;
     startWorkflowOrchestrator(system);
@@ -364,14 +371,6 @@ export function getRoutaSystem(): RoutaSystem {
     // Set up EventBus → KanbanEventBroadcaster bridge for file changes
     setupFileChangeBridge(system);
   }
-
-  // Always apply timing decoration (idempotent: returns original if ROUTA_STORE_TIMING!=1)
-  g[GLOBAL_KEY] = decorateSystemWithTiming(g[GLOBAL_KEY] as RoutaSystem);
-
-  // Apply dedup decoration AFTER timing so timing still measures real DB latency.
-  // Coalesces concurrent identical reads within a 2-3s TTL window.
-  // Disable with ROUTA_STORE_DEDUP=0.
-  g[GLOBAL_KEY] = decorateSystemWithDedup(g[GLOBAL_KEY] as RoutaSystem);
 
   return g[GLOBAL_KEY] as RoutaSystem;
 }
