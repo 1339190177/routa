@@ -135,5 +135,6 @@ tools/ppt-template/node_modules/
 .trae/
 /.claude/scheduled_tasks.lock
 .tmp-jest/
+.jest-cache/
 vcs-sm.jpg
 vcs-tiny.jpg
