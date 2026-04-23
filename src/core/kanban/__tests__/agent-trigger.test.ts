@@ -47,6 +47,7 @@ describe("buildTaskPrompt", () => {
     expect(prompt).toContain("You may use read-only native tools such as Read, Grep, and Glob for limited repo inspection only after feature-tree evidence is still weak or ambiguous");
     expect(prompt).toContain("If Relevant History Memory or Relevant Feature Tree Context is provided");
     expect(prompt).toContain("confirm_feature_tree_story_context");
+    expect(prompt).toContain('taskId: "task-1"');
     expect(prompt).toContain("Only write contextSearchSpec after feature-tree confirmation or repo inspection confirms the feature/files");
     expect(prompt).toContain("include an optional `feature_tree` block");
     expect(prompt).toContain("decompose_tasks");

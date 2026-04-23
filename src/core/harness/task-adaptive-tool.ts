@@ -229,6 +229,15 @@ export async function confirmFeatureTreeStoryContextFromToolArgs(
     throw new Error(`Task not found: ${taskId}`);
   }
 
+  const requestedWorkspaceId = context.workspaceId;
+  if (!requestedWorkspaceId) {
+    throw new Error("workspaceId is required when taskId is provided.");
+  }
+
+  if (task.workspaceId !== requestedWorkspaceId) {
+    throw new Error(`Task ${taskId} does not belong to workspace ${requestedWorkspaceId}.`);
+  }
+
   task.contextSearchSpec = normalizeTaskContextSearchSpec({
     query: result.confirmedContextSearchSpec.query ?? task.contextSearchSpec?.query,
     featureCandidates: [

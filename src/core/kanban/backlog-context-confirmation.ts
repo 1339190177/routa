@@ -90,8 +90,8 @@ export async function hasConfirmedBacklogContextInspection(sessionId: string | u
     return false;
   }
 
-  const { getHttpSessionStore } = await import("@/core/acp/http-session-store");
-  const history = getHttpSessionStore().getHistory(sessionId);
+  const { loadSessionHistory } = await import("@/core/session-history");
+  const history = await loadSessionHistory(sessionId);
   return history.some(notificationConfirmsBacklogContext);
 }
 

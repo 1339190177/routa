@@ -475,30 +475,33 @@ function yamlQuote(value: string): string {
 }
 
 function buildFeatureTreeYamlBlock(entry: RelevantFeatureTreeContextEntry): string {
+  const pages = normalizeStringArray(entry.pages).map(normalizeRoute);
+  const apis = normalizeStringArray(entry.apis).map(normalizeApi);
+  const sourceFiles = normalizeStringArray(entry.sourceFiles);
   const lines = [
-    "feature_tree:",
-    `  feature_id: ${yamlQuote(entry.id)}`,
-    `  feature_name: ${yamlQuote(entry.name)}`,
+    "  feature_tree:",
+    `    feature_id: ${yamlQuote(entry.id)}`,
+    `    feature_name: ${yamlQuote(entry.name)}`,
   ];
 
-  if (entry.pages.length > 0) {
-    lines.push("  pages:");
-    entry.pages.slice(0, 6).forEach((page) => {
-      lines.push(`    - ${yamlQuote(page)}`);
+  if (pages.length > 0) {
+    lines.push("    pages:");
+    pages.slice(0, 6).forEach((page) => {
+      lines.push(`      - ${yamlQuote(page)}`);
     });
   }
 
-  if (entry.apis.length > 0) {
-    lines.push("  apis:");
-    entry.apis.slice(0, 6).forEach((api) => {
-      lines.push(`    - ${yamlQuote(api)}`);
+  if (apis.length > 0) {
+    lines.push("    apis:");
+    apis.slice(0, 6).forEach((api) => {
+      lines.push(`      - ${yamlQuote(api)}`);
     });
   }
 
-  if (entry.sourceFiles.length > 0) {
-    lines.push("  source_files:");
-    entry.sourceFiles.slice(0, 8).forEach((filePath) => {
-      lines.push(`    - ${yamlQuote(filePath)}`);
+  if (sourceFiles.length > 0) {
+    lines.push("    source_files:");
+    sourceFiles.slice(0, 8).forEach((filePath) => {
+      lines.push(`      - ${yamlQuote(filePath)}`);
     });
   }
 
@@ -520,8 +523,8 @@ export async function confirmFeatureTreeStoryContext(params: {
     query: params.hints.query,
     featureCandidates: [selectedFeature.id],
     relatedFiles: selectedFeature.sourceFiles,
-    routeCandidates: selectedFeature.pages,
-    apiCandidates: selectedFeature.apis,
+    routeCandidates: selectedFeature.pages.map(normalizeRoute),
+    apiCandidates: selectedFeature.apis.map(normalizeApi),
     moduleHints: params.hints.moduleHints,
     symptomHints: params.hints.symptomHints,
   });

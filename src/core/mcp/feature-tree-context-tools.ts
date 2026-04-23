@@ -51,7 +51,7 @@ export const LOAD_FEATURE_TREE_CONTEXT_INPUT_SCHEMA = {
       items: { type: "string" },
       description: "Optional symptom hints used to rank likely features.",
     },
-    maxFeatures: { type: "number", minimum: 1, description: "Maximum number of feature candidates to return." },
+    maxFeatures: { type: "integer", minimum: 1, description: "Maximum number of feature candidates to return." },
   },
 } as const;
 
@@ -93,7 +93,7 @@ export const CONFIRM_FEATURE_TREE_STORY_CONTEXT_INPUT_SCHEMA = {
       items: { type: "string" },
       description: "Optional symptom hints used to rank likely features.",
     },
-    maxFeatures: { type: "number", minimum: 1, description: "Maximum number of feature candidates to consider before picking the strongest one." },
+    maxFeatures: { type: "integer", minimum: 1, description: "Maximum number of feature candidates to consider before picking the strongest one." },
   },
 } as const;
 

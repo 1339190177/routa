@@ -233,6 +233,15 @@ describe("executeMcpTool", () => {
     expect(
       getMcpToolDefinitions("essential", "kanban-planning").some((tool) => tool.name === "save_history_memory_context"),
     ).toBe(true);
+
+    const loadFeatureTreeTool = getMcpToolDefinitions("essential", "kanban-planning")
+      .find((tool) => tool.name === "load_feature_tree_context");
+    const confirmFeatureTreeTool = getMcpToolDefinitions("essential", "kanban-planning")
+      .find((tool) => tool.name === "confirm_feature_tree_story_context");
+    expect((loadFeatureTreeTool?.inputSchema as { properties?: Record<string, { type?: string }> }).properties?.maxFeatures?.type)
+      .toBe("integer");
+    expect((confirmFeatureTreeTool?.inputSchema as { properties?: Record<string, { type?: string }> }).properties?.maxFeatures?.type)
+      .toBe("integer");
   });
 
   it("loads prompt-ready feature tree context from MCP args", async () => {
