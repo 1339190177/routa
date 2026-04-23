@@ -18,6 +18,7 @@ import { rebaseBranchSafe } from "../git/git-operations";
 import { fetchRemote, fetchAndFastForward } from "../git/git-utils";
 import type { RoutaSystem } from "../routa-system";
 import { getKanbanBranchRules, DEFAULT_BRANCH_RULES } from "./board-branch-rules";
+import { onChildTaskStatusChanged } from "./parent-child-lifecycle";
 
 const HANDLER_KEY = "kanban-pr-merge-listener";
 const CLEANUP_DELAY_MS = 30_000;
@@ -102,6 +103,22 @@ export function startPrMergeListener(system: RoutaSystem): void {
 
     // 5. Rebase all dev-lane worktrees in the same repo + unblock dependents (driven by rules)
     await handleDownstreamTasks(system, task, baseBranch, rules);
+
+    // 6. Parent-child lifecycle: if this is a child task, notify the parent
+    if (task.parentTaskId) {
+      try {
+        await onChildTaskStatusChanged(task, {
+          taskStore: system.taskStore,
+          kanbanBoardStore: system.kanbanBoardStore,
+          eventBus: system.eventBus,
+        });
+      } catch (lifecycleErr) {
+        console.error(
+          "[PrMergeListener] Parent-child lifecycle error:",
+          lifecycleErr,
+        );
+      }
+    }
   });
 }
 

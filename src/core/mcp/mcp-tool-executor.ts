@@ -564,11 +564,35 @@ export async function executeMcpTool(
             acceptanceCriteria: task.acceptanceCriteria as string[] | undefined,
             verificationCommands: task.verificationCommands as string[] | undefined,
             testCases: task.testCases as string[] | undefined,
+            ref: task.ref as string | undefined,
+            dependsOn: task.dependsOn as string[] | undefined,
+            estimatedFilePaths: task.estimatedFilePaths as string[] | undefined,
           })),
           columnId: (args.columnId as string | undefined) ?? (args.column as string | undefined),
+          parentTaskId: args.parentTaskId as string | undefined,
         })
       );
       }
+    case "split_task":
+      if (!kanbanTools) return formatResult({ success: false, error: "Kanban tools not available." });
+      return formatResult(
+        await kanbanTools.splitTask({
+          parentTaskId: args.parentTaskId as string,
+          subTasks: ((args.subTasks as Array<Record<string, unknown>> | undefined) ?? []).map((s) => ({
+            ref: s.ref as string,
+            title: s.title as string,
+            description: s.description as string | undefined,
+            scope: s.scope as string | undefined,
+            acceptanceCriteria: s.acceptanceCriteria as string[] | undefined,
+            verificationCommands: s.verificationCommands as string[] | undefined,
+            testCases: s.testCases as string[] | undefined,
+            dependsOn: s.dependsOn as string[] | undefined,
+            estimatedFilePaths: s.estimatedFilePaths as string[] | undefined,
+          })),
+          mergeStrategy: args.mergeStrategy as "cascade" | "fan_in" | "cascade_fan_in" | undefined,
+          boardId: args.boardId as string | undefined,
+        })
+      );
     case "request_previous_lane_handoff":
       if (!kanbanTools) return formatResult({ success: false, error: "Kanban tools not available." });
       if (!args.sessionId) return formatResult({ success: false, error: "Current ACP session is required for lane handoff." });
@@ -1301,7 +1325,7 @@ export function getMcpToolDefinitions(
     },
     {
       name: "decompose_tasks",
-      description: "Create multiple Kanban cards from a list of decomposed tasks.",
+      description: "Create multiple Kanban cards from a list of decomposed tasks. Supports parent-child linkage and sibling dependencies.",
       inputSchema: {
         type: "object",
         properties: {
@@ -1309,6 +1333,7 @@ export function getMcpToolDefinitions(
           boardId: { type: "string", description: "Optional board ID" },
           columnId: { type: "string", description: "Target column ID" },
           column: { type: "string", description: "Target column alias" },
+          parentTaskId: { type: "string", description: "Link all created cards to this parent task" },
           tasks: {
             type: "array",
             description: "Tasks to create as cards",
@@ -1323,12 +1348,47 @@ export function getMcpToolDefinitions(
                 acceptanceCriteria: { type: "array", items: { type: "string" }, description: "Acceptance criteria that must be met for this card to be considered complete" },
                 verificationCommands: { type: "array", items: { type: "string" }, description: "Commands to verify the implementation (e.g. test commands, build checks)" },
                 testCases: { type: "array", items: { type: "string" }, description: "Specific test cases to validate the implementation" },
+                ref: { type: "string", description: "Unique reference ID for sibling dependency linkage" },
+                dependsOn: { type: "array", items: { type: "string" }, description: "Refs of sibling tasks this one depends on" },
+                estimatedFilePaths: { type: "array", items: { type: "string" }, description: "File paths this task will likely modify" },
               },
               required: ["title"],
             },
           },
         },
         required: ["tasks"],
+      },
+    },
+    {
+      name: "split_task",
+      description: "Split an existing kanban task into multiple sub-tasks with dependency ordering. Creates child tasks linked to the parent.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          parentTaskId: { type: "string", description: "ID of the task to split" },
+          subTasks: {
+            type: "array",
+            description: "Sub-task definitions with dependency refs",
+            items: {
+              type: "object",
+              properties: {
+                ref: { type: "string", description: "Unique reference ID for dependency linkage" },
+                title: { type: "string", description: "Sub-task title" },
+                description: { type: "string", description: "Sub-task description" },
+                scope: { type: "string", description: "Scope of work" },
+                acceptanceCriteria: { type: "array", items: { type: "string" }, description: "Acceptance criteria" },
+                verificationCommands: { type: "array", items: { type: "string" }, description: "Verification commands" },
+                testCases: { type: "array", items: { type: "string" }, description: "Test cases" },
+                dependsOn: { type: "array", items: { type: "string" }, description: "Refs of sibling sub-tasks this one depends on" },
+                estimatedFilePaths: { type: "array", items: { type: "string" }, description: "File paths this task will likely modify" },
+              },
+              required: ["ref", "title"],
+            },
+          },
+          mergeStrategy: { type: "string", enum: ["cascade", "fan_in", "cascade_fan_in"], description: "Branch merge strategy" },
+          boardId: { type: "string", description: "Board ID (defaults to parent task's board)" },
+        },
+        required: ["parentTaskId", "subTasks"],
       },
     },
     {

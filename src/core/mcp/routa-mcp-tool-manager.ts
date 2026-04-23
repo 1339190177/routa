@@ -206,6 +206,7 @@ export class RoutaMcpToolManager {
     register("search_cards", () => this.registerSearchCards(server));
     register("list_cards_by_column", () => this.registerListCardsByColumn(server));
     register("decompose_tasks", () => this.registerDecomposeTasks(server));
+    register("split_task", () => this.registerSplitTask(server));
     register("request_previous_lane_handoff", () => this.registerRequestPreviousLaneHandoff(server));
     register("submit_lane_handoff", () => this.registerSubmitLaneHandoff(server));
     // Artifact tools
@@ -1260,9 +1261,13 @@ Note: taskId must be a UUID from create_task, not a task name.`,
           acceptanceCriteria: z.array(z.string()).optional().describe("Acceptance criteria that must be met for this card to be considered complete"),
           verificationCommands: z.array(z.string()).optional().describe("Commands to verify the implementation"),
           testCases: z.array(z.string()).optional().describe("Specific test cases to validate the implementation"),
+          ref: z.string().optional().describe("Unique reference ID for sibling dependency linkage"),
+          dependsOn: z.array(z.string()).optional().describe("Refs of sibling tasks this one depends on"),
+          estimatedFilePaths: z.array(z.string()).optional().describe("File paths this task will likely modify"),
         })).describe("Array of tasks to create"),
         columnId: z.string().optional().default("backlog").describe("Target column ID (default: backlog)"),
         column: z.string().optional().describe("Column ID alias"),
+        parentTaskId: z.string().optional().describe("Link all created cards to this parent task"),
       },
       async (params) => {
         if (!this.kanbanTools) {
@@ -1271,9 +1276,61 @@ Note: taskId must be a UUID from create_task, not a task name.`,
         const result = await this.kanbanTools.decomposeTasks({
           boardId: params.boardId,
           workspaceId: params.workspaceId ?? this.workspaceId,
-          tasks: params.tasks,
+          tasks: params.tasks.map((t) => ({
+            title: t.title,
+            description: t.description,
+            priority: t.priority,
+            labels: t.labels,
+            scope: t.scope,
+            acceptanceCriteria: t.acceptanceCriteria,
+            verificationCommands: t.verificationCommands,
+            testCases: t.testCases,
+            ref: t.ref,
+            dependsOn: t.dependsOn,
+            estimatedFilePaths: t.estimatedFilePaths,
+          })),
           columnId: params.columnId ?? params.column,
+          parentTaskId: params.parentTaskId,
         });
+        return this.toMcpResult(result);
+      }
+    );
+  }
+
+  private registerSplitTask(server: McpServer) {
+    server.tool(
+      "split_task",
+      "Split an existing kanban task into multiple sub-tasks with dependency ordering. " +
+      "Creates child tasks linked to the parent with proper dependency chains.",
+      {
+        parentTaskId: z.string().describe("ID of the task to split"),
+        subTasks: z.array(z.object({
+          ref: z.string().describe("Unique reference ID for dependency linkage (e.g. 'a', 'b', 'c')"),
+          title: z.string().describe("Sub-task title"),
+          description: z.string().optional().describe("Sub-task description/objective"),
+          scope: z.string().optional().describe("Scope of work for this sub-task"),
+          acceptanceCriteria: z.array(z.string()).optional().describe("Acceptance criteria"),
+          verificationCommands: z.array(z.string()).optional().describe("Verification commands"),
+          testCases: z.array(z.string()).optional().describe("Test cases"),
+          dependsOn: z.array(z.string()).optional().describe("Refs of sibling sub-tasks this one depends on"),
+          estimatedFilePaths: z.array(z.string()).optional().describe("File paths this task will likely modify"),
+        })).describe("Array of sub-task definitions"),
+        mergeStrategy: z.enum(["cascade", "fan_in", "cascade_fan_in"]).optional().default("cascade")
+          .describe("How to merge branches: cascade (serial chain), fan_in (parallel to main), cascade_fan_in (mixed)"),
+        boardId: z.string().optional().describe("Board ID (defaults to parent task's board)"),
+      },
+      async (params) => {
+        if (!this.kanbanTools) {
+          return this.toMcpResult({ success: false, error: "Kanban tools not available." });
+        }
+
+        const result = await this.kanbanTools.splitTask({
+          parentTaskId: params.parentTaskId,
+          subTasks: params.subTasks,
+          mergeStrategy: params.mergeStrategy,
+          boardId: params.boardId,
+        });
+
         return this.toMcpResult(result);
       }
     );

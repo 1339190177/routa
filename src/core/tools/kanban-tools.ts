@@ -72,7 +72,7 @@ import {
   resolveCurrentOrNextContractGate,
 } from "../kanban/task-contract-readiness";
 import { resolveTaskWorktreeTruth } from "../kanban/task-worktree-truth";
-import { checkCanMoveToNextColumn } from "../kanban/dependency-gate";
+import { checkCanMoveToNextColumn, updateDependencyRelations } from "../kanban/dependency-gate";
 
 const DESCRIPTION_FROZEN_STAGES = new Set<KanbanColumnStage>(["dev", "review", "blocked", "done", "archived"]);
 
@@ -829,6 +829,9 @@ export class KanbanTools {
   /**
    * Decompose a natural language input into multiple Kanban cards.
    * Returns the created tasks as card objects.
+   *
+   * Supports optional parentTaskId to link sub-tasks to a parent,
+   * and per-task `dependencies` (as sibling refs) for ordering.
    */
   async decomposeTasks(params: {
     boardId?: string;
@@ -843,8 +846,16 @@ export class KanbanTools {
       acceptanceCriteria?: string[];
       verificationCommands?: string[];
       testCases?: string[];
+      /** Sibling ref for cross-task dependency linkage */
+      ref?: string;
+      /** Refs of sibling tasks this one depends on */
+      dependsOn?: string[];
+      /** File paths this task is expected to touch (conflict pre-detection) */
+      estimatedFilePaths?: string[];
     }[];
     columnId?: string;
+    /** Link all created cards to this parent task */
+    parentTaskId?: string;
   }): Promise<ToolResult> {
     const board = await this.resolveBoard(params.workspaceId, params.boardId);
     if (!board) {
@@ -867,10 +878,30 @@ export class KanbanTools {
     );
     let position = columnTasks.length;
 
+    // Resolve parent task for codebaseIds inheritance
+    let parentTask: Task | undefined;
+    if (params.parentTaskId) {
+      parentTask = await this.taskStore.get(params.parentTaskId);
+      if (!parentTask) {
+        return errorResult(`Parent task not found: ${params.parentTaskId}`);
+      }
+    }
+
+    // Map ref → real taskId for cross-task dependency resolution
+    const refToId = new Map<string, string>();
+
     const createdCards = [];
     for (const item of params.tasks) {
+      const taskId = uuidv4();
+      if (item.ref) refToId.set(item.ref, taskId);
+
+      // Resolve dependsOn refs → actual task IDs
+      const depIds = (item.dependsOn ?? [])
+        .map((ref) => refToId.get(ref))
+        .filter((id): id is string => id !== undefined);
+
       const task = createTask({
-        id: uuidv4(),
+        id: taskId,
         title: item.title,
         objective: item.description ?? "",
         workspaceId: params.workspaceId,
@@ -885,14 +916,92 @@ export class KanbanTools {
         acceptanceCriteria: item.acceptanceCriteria,
         verificationCommands: item.verificationCommands,
         testCases: item.testCases,
+        parentTaskId: params.parentTaskId,
+        dependencies: depIds,
+        codebaseIds: parentTask?.codebaseIds,
       });
       await this.taskStore.save(task);
+
+      // Maintain bidirectional blocking relations for declared dependencies
+      if (depIds.length > 0) {
+        await updateDependencyRelations(taskId, depIds, this.taskStore);
+      }
+
       await this.triggerCreatedCardAutomation(board, column, task);
       createdCards.push(this.taskToCard(task));
     }
     this.notifyWorkspaceChanged(board.workspaceId, "task", "created");
 
     return successResult({ count: createdCards.length, cards: createdCards });
+  }
+
+  /**
+   * Split an existing task into multiple sub-tasks with dependency ordering.
+   * Delegates to executeSplit() for topological validation and creation.
+   */
+  async splitTask(params: {
+    parentTaskId: string;
+    subTasks: {
+      ref: string;
+      title: string;
+      description?: string;
+      scope?: string;
+      acceptanceCriteria?: string[];
+      verificationCommands?: string[];
+      testCases?: string[];
+      dependsOn?: string[];
+      estimatedFilePaths?: string[];
+    }[];
+    mergeStrategy?: "cascade" | "fan_in" | "cascade_fan_in";
+    boardId?: string;
+  }): Promise<ToolResult> {
+    const parentTask = await this.taskStore.get(params.parentTaskId);
+    if (!parentTask) {
+      return errorResult(`Parent task not found: ${params.parentTaskId}`);
+    }
+
+    // Build dependency edges from per-task dependsOn
+    const dependencyEdges: Array<[string, string]> = [];
+    for (const sub of params.subTasks) {
+      for (const depRef of sub.dependsOn ?? []) {
+        dependencyEdges.push([depRef, sub.ref]);
+      }
+    }
+
+    const { executeSplit } = await import("../kanban/task-split-orchestrator");
+    try {
+      const result = await executeSplit(
+        parentTask,
+        params.subTasks.map((s) => ({
+          ref: s.ref,
+          title: s.title,
+          objective: s.description ?? "",
+          scope: s.scope,
+          acceptanceCriteria: s.acceptanceCriteria,
+          verificationCommands: s.verificationCommands,
+          testCases: s.testCases,
+          estimatedFilePaths: s.estimatedFilePaths,
+        })),
+        dependencyEdges,
+        { taskStore: this.taskStore, kanbanBoardStore: this.kanbanBoardStore },
+        {
+          mergeStrategy: params.mergeStrategy,
+          boardId: params.boardId ?? parentTask.boardId,
+        },
+      );
+
+      this.notifyWorkspaceChanged(parentTask.workspaceId, "task", "created");
+
+      return successResult({
+        parentTaskId: result.parentTaskId,
+        childTaskIds: result.childTaskIds,
+        mergeStrategy: result.plan.mergeStrategy,
+        warnings: result.warnings,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return errorResult(message);
+    }
   }
 
   private notifyWorkspaceChanged(

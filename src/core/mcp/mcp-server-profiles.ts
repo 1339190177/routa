@@ -3,6 +3,7 @@ export type McpServerProfile = "coordination" | "kanban-planning" | "team-coordi
 const KANBAN_PLANNING_TOOL_NAMES = [
   "create_card",
   "decompose_tasks",
+  "split_task",
   "search_cards",
   "list_cards_by_column",
   "update_task",

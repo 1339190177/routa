@@ -28,6 +28,7 @@ import { markTaskLaneSessionStatus, upsertTaskLaneSession } from "./task-lane-hi
 import { checkDependencyGate } from "./dependency-gate";
 import { type KanbanBranchRules } from "./board-branch-rules";
 import { getTaskDevServerRegistry } from "./task-dev-server-registry";
+import { onChildTaskStatusChanged } from "./parent-child-lifecycle";
 
 const WATCHDOG_SCAN_INTERVAL_MS = 30_000;
 const COMPLETED_AUTOMATION_CLEANUP_DELAY_MS = 30_000;
@@ -801,6 +802,23 @@ export class KanbanWorkflowOrchestrator {
           this.activeAutomations.delete(cardId);
         }
       }, COMPLETED_AUTOMATION_CLEANUP_DELAY_MS));
+
+      // ── Parent-child lifecycle: notify parent when a child task completes/fails ──
+      if (task?.parentTaskId) {
+        try {
+          await onChildTaskStatusChanged(task, {
+            taskStore: this.taskStore,
+            kanbanBoardStore: this.kanbanBoardStore,
+            eventBus: this.eventBus,
+          });
+        } catch (lifecycleErr) {
+          console.error(
+            `[WorkflowOrchestrator] Parent-child lifecycle error for card ${cardId}:`,
+            lifecycleErr,
+          );
+        }
+      }
+
       return;
     }
   }
