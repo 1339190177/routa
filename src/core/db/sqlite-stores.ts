@@ -823,7 +823,6 @@ export class SqliteAcpSessionStore implements AcpSessionStore {
   async appendHistory(sessionId: string, notification: AcpSessionNotification): Promise<void> {
     const session = await this.get(sessionId);
     if (!session) return;
-    const history = [...session.messageHistory, notification];
 
     const nextIndexRows = await this.db
       .select({ messageIndex: sqliteSchema.sessionMessages.messageIndex })
@@ -849,10 +848,16 @@ export class SqliteAcpSessionStore implements AcpSessionStore {
         payload: notification as typeof sqliteSchema.sessionMessages.$inferInsert.payload,
       });
 
-    await this.db
-      .update(sqliteSchema.acpSessions)
-      .set({ messageHistory: history, updatedAt: new Date() })
-      .where(eq(sqliteSchema.acpSessions.id, sessionId));
+    // One-time full save when session_messages was empty (cold-start compat).
+    // After that, only touch updated_at — avoids O(history_size) JSON rewrite.
+    if (nextIndexRows.length === 0) {
+      await this.save({ ...session, messageHistory: [notification], updatedAt: new Date() });
+    } else {
+      await this.db
+        .update(sqliteSchema.acpSessions)
+        .set({ updatedAt: new Date() })
+        .where(eq(sqliteSchema.acpSessions.id, sessionId));
+    }
   }
 
   async getHistory(

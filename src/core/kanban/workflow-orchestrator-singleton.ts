@@ -8,6 +8,7 @@
 import {
   KanbanWorkflowOrchestrator,
   type AutomationSessionSupervisionContext,
+  CIRCUIT_BREAKER_MARKER,
 } from "./workflow-orchestrator";
 import type { RoutaSystem } from "../routa-system";
 import type {
@@ -51,8 +52,21 @@ import {
 
 // Use globalThis to survive HMR in Next.js dev mode
 const GLOBAL_KEY = "__routa_workflow_orchestrator__";
+const VERSION_KEY = "__routa_workflow_orchestrator_version__";
 const STARTED_KEY = "__routa_workflow_orchestrator_started__";
 const QUEUE_KEY = "__routa_kanban_session_queue__";
+
+// Increment when class methods change to force singleton recreation on HMR
+const ORCHESTRATOR_VERSION = 2;
+
+const FAILURES_KEY = "__routa_session_failure_counts__";
+const SESSION_RETRY_LIMIT = parseInt(process.env.ROUTA_SESSION_RETRY_LIMIT ?? "3", 10);
+
+function getSessionFailures(): Map<string, number> {
+  const g = globalThis as Record<string, unknown>;
+  if (!g[FAILURES_KEY]) g[FAILURES_KEY] = new Map<string, number>();
+  return g[FAILURES_KEY] as Map<string, number>;
+}
 
 function resolveKanbanSpecialist(
   specialistId: string,
@@ -82,6 +96,19 @@ async function createAutomationSession(
     supervision?: AutomationSessionSupervisionContext;
   },
 ): Promise<string | null> {
+  // Circuit breaker: skip cards that exceeded consecutive session creation failures.
+  // This runs inside the createSession callback which is refreshed on every HMR cycle,
+  // so it works even if the orchestrator singleton wasn't recreated.
+  const failures = getSessionFailures();
+  const failCount = failures.get(params.cardId) ?? 0;
+  if (failCount >= SESSION_RETRY_LIMIT) {
+    console.warn(
+      `[createAutomationSession] Circuit breaker: skipping card ${params.cardId} ` +
+      `(${failCount}/${SESSION_RETRY_LIMIT} consecutive failures).`,
+    );
+    return null;
+  }
+
   const task = await system.taskStore.get(params.cardId);
   if (!task?.boardId) return null;
   const result = await enqueueKanbanTaskSession(system, {
@@ -91,6 +118,25 @@ async function createAutomationSession(
     stepIndex: params.stepIndex,
     supervision: params.supervision,
   });
+
+  if (result.sessionId) {
+    failures.delete(params.cardId);
+    // Clear circuit breaker marker on success
+    if (task.lastSyncError?.startsWith(CIRCUIT_BREAKER_MARKER)) {
+      task.lastSyncError = undefined;
+      task.updatedAt = new Date();
+      await system.taskStore.save(task);
+    }
+  } else {
+    const newCount = failCount + 1;
+    failures.set(params.cardId, newCount);
+    // Write circuit breaker marker to task when limit exceeded
+    if (newCount >= SESSION_RETRY_LIMIT) {
+      task.lastSyncError = `${CIRCUIT_BREAKER_MARKER} Session creation failed ${newCount} times. Retry after cooldown.`;
+      task.updatedAt = new Date();
+      await system.taskStore.save(task);
+    }
+  }
   return result.sessionId ?? null;
 }
 
@@ -472,9 +518,13 @@ export function getWorkflowOrchestrator(system: RoutaSystem): KanbanWorkflowOrch
   let orchestrator = g[GLOBAL_KEY] as KanbanWorkflowOrchestrator | undefined;
 
   const isCompatible = orchestrator
-    && typeof (orchestrator as KanbanWorkflowOrchestrator & { processColumnTransition?: unknown }).processColumnTransition === "function";
+    && typeof (orchestrator as KanbanWorkflowOrchestrator & { processColumnTransition?: unknown }).processColumnTransition === "function"
+    && g[VERSION_KEY] === ORCHESTRATOR_VERSION;
 
   if (orchestrator && !isCompatible) {
+    console.log(
+      `[WorkflowOrchestrator] Recreating singleton (version changed: ${g[VERSION_KEY]} → ${ORCHESTRATOR_VERSION}).`,
+    );
     orchestrator.stop();
     delete g[GLOBAL_KEY];
     delete g[STARTED_KEY];
@@ -488,6 +538,7 @@ export function getWorkflowOrchestrator(system: RoutaSystem): KanbanWorkflowOrch
       system.taskStore,
     );
     g[GLOBAL_KEY] = orchestrator;
+    g[VERSION_KEY] = ORCHESTRATOR_VERSION;
   }
 
   return orchestrator;
@@ -556,4 +607,6 @@ export function resetWorkflowOrchestrator(): void {
   delete g[GLOBAL_KEY];
   delete g[QUEUE_KEY];
   delete g[STARTED_KEY];
+  delete g[VERSION_KEY];
+  delete g[FAILURES_KEY];
 }

@@ -34,6 +34,9 @@ const WATCHDOG_SCAN_INTERVAL_MS = 30_000;
 const COMPLETED_AUTOMATION_CLEANUP_DELAY_MS = 30_000;
 const STALE_QUEUED_THRESHOLD_MS = 60_000;
 const MAX_AUTOMATION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 hours
+const SESSION_RETRY_LIMIT = parseInt(process.env.ROUTA_SESSION_RETRY_LIMIT ?? "3", 10);
+const SESSION_RETRY_RESET_MS = parseInt(process.env.ROUTA_SESSION_RETRY_RESET_MS ?? `${5 * 60 * 1000}`, 10);
+export const CIRCUIT_BREAKER_MARKER = "[circuit-breaker]";
 
 interface RecoveryNotificationParams {
   workspaceId: string;
@@ -253,6 +256,8 @@ export class KanbanWorkflowOrchestrator {
   private executeAutoPrCreation?: ExecuteAutoPrCreation;
   private staleTriggerScanCycle = 0;
   private watchdogTimer?: ReturnType<typeof setInterval>;
+  private sessionFailureCounts = new Map<string, number>();
+  private circuitBreakerLastLogAt = new Map<string, number>();
 
   constructor(
     private eventBus: EventBus,
@@ -297,6 +302,8 @@ export class KanbanWorkflowOrchestrator {
     }
     this.eventBus.off(this.handlerKey);
     this.activeAutomations.clear();
+    this.sessionFailureCounts.clear();
+    this.circuitBreakerLastLogAt.clear();
     for (const t of this.pendingTimers) clearTimeout(t);
     this.pendingTimers = [];
     if (this.watchdogTimer) {
@@ -465,6 +472,42 @@ export class KanbanWorkflowOrchestrator {
       })) ?? getDefaultKanbanDevSessionSupervision()
       : getDisabledSupervisionConfig();
 
+    // Early circuit-breaker check: skip cards that exceeded session retry limit.
+    // This runs before creating any automation entry or allocating resources.
+    if (this.createSession) {
+      const failureCount = this.sessionFailureCounts.get(data.cardId) ?? 0;
+      // Only consider cooldown reset when circuitBreakerLastLogAt was actually set
+      // (i.e., the failure count previously reached SESSION_RETRY_LIMIT).
+      // Without this guard, a stale failureCount without a timestamp produces
+      // resetAt = 0 + SESSION_RETRY_RESET_MS ≈ epoch → immediate false reset.
+      const lastTriggeredAt = this.circuitBreakerLastLogAt.get(data.cardId);
+      const resetAt = lastTriggeredAt !== undefined
+        ? lastTriggeredAt + SESSION_RETRY_RESET_MS
+        : Infinity;
+      const isReset = Date.now() >= resetAt;
+
+      if (failureCount >= SESSION_RETRY_LIMIT && !isReset) {
+        // Throttle: log at most once every 5 minutes per card
+        if (lastTriggeredAt === undefined || Date.now() - lastTriggeredAt > SESSION_RETRY_RESET_MS) {
+          this.circuitBreakerLastLogAt.set(data.cardId, Date.now());
+          console.warn(
+            `[WorkflowOrchestrator] Circuit breaker active for card ${data.cardId}: ` +
+            `${failureCount} consecutive failures. Next retry after ${new Date(resetAt).toISOString()}.`,
+          );
+        }
+        return;
+      }
+
+      // Allow retry after cooldown period
+      if (isReset && lastTriggeredAt !== undefined) {
+        this.sessionFailureCounts.delete(data.cardId);
+        this.circuitBreakerLastLogAt.delete(data.cardId);
+        console.log(
+          `[WorkflowOrchestrator] Circuit breaker reset for card ${data.cardId} after cooldown.`,
+        );
+      }
+    }
+
     const existingAutomation = this.activeAutomations.get(data.cardId);
     if (existingAutomation
       && existingAutomation.boardId === data.boardId
@@ -559,15 +602,44 @@ export class KanbanWorkflowOrchestrator {
         if (sessionId) {
           automationEntry.status = "running";
           automationEntry.sessionId = sessionId;
+          this.sessionFailureCounts.delete(data.cardId);
+          // Clear circuit breaker marker on success
+          if (task?.lastSyncError?.startsWith(CIRCUIT_BREAKER_MARKER)) {
+            task.lastSyncError = undefined;
+            task.updatedAt = new Date();
+            await this.taskStore.save(task);
+          }
         } else {
           automationEntry.status = "failed";
+          const newCount = (this.sessionFailureCounts.get(data.cardId) ?? 0) + 1;
+          this.sessionFailureCounts.set(data.cardId, newCount);
           console.error(
-            `[WorkflowOrchestrator] createSession returned null for card ${data.cardId} in column ${targetColumn.id}.`,
+            `[WorkflowOrchestrator] createSession returned null for card ${data.cardId} in column ${targetColumn.id}. ` +
+            `Consecutive failures: ${newCount}/${SESSION_RETRY_LIMIT}.`,
           );
+          // Write circuit breaker marker to task when limit exceeded
+          if (newCount >= SESSION_RETRY_LIMIT) {
+            this.circuitBreakerLastLogAt.set(data.cardId, Date.now());
+            if (task) {
+              task.lastSyncError = `${CIRCUIT_BREAKER_MARKER} Session creation failed ${newCount} times. Retry after cooldown.`;
+              task.updatedAt = new Date();
+              await this.taskStore.save(task);
+            }
+          }
         }
       } catch (err) {
         automationEntry.status = "failed";
+        const newCount = (this.sessionFailureCounts.get(data.cardId) ?? 0) + 1;
+        this.sessionFailureCounts.set(data.cardId, newCount);
         console.error("[WorkflowOrchestrator] Failed to create session:", err);
+        if (newCount >= SESSION_RETRY_LIMIT) {
+          this.circuitBreakerLastLogAt.set(data.cardId, Date.now());
+          if (task) {
+            task.lastSyncError = `${CIRCUIT_BREAKER_MARKER} Session creation failed ${newCount} times. Retry after cooldown.`;
+            task.updatedAt = new Date();
+            await this.taskStore.save(task);
+          }
+        }
       }
     }
   }
@@ -982,6 +1054,19 @@ export class KanbanWorkflowOrchestrator {
       if (automation.status !== "queued") continue;
       const queuedMs = now - automation.startedAt.getTime();
       if (queuedMs < STALE_QUEUED_THRESHOLD_MS) continue;
+
+      // Circuit breaker: stop re-triggering cards that keep failing
+      const failureCount = this.sessionFailureCounts.get(cardId) ?? 0;
+      if (failureCount >= SESSION_RETRY_LIMIT) {
+        console.warn(
+          `[WorkflowOrchestrator] Stale queued automation for card ${cardId} ` +
+          `in column ${automation.columnId} skipped: circuit breaker (${failureCount}/${SESSION_RETRY_LIMIT}).`,
+        );
+        automation.status = "failed";
+        this.cleanupCardSession?.(cardId);
+        this.activeAutomations.delete(cardId);
+        continue;
+      }
 
       console.warn(
         `[WorkflowOrchestrator] Stale queued automation for card ${cardId} ` +

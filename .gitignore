@@ -133,3 +133,4 @@ tools/ppt-template/node_modules/
 .agents
 /people/
 .trae/
+/.claude/scheduled_tasks.lock

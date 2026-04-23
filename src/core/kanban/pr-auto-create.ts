@@ -22,6 +22,8 @@ import type { WorktreeStore } from "../db/pg-worktree-store";
 import { shellQuote } from "../git/git-utils";
 
 const HANDLER_KEY = "kanban-pr-auto-create";
+const PR_RETRY_LIMIT = parseInt(process.env.ROUTA_PR_RETRY_LIMIT ?? "3", 10);
+const PR_FAILURE_PREFIX = "Auto PR creation failed";
 
 async function execCommand(
   command: string,
@@ -54,6 +56,27 @@ export async function executeAutoPrCreation(
   },
 ): Promise<string | undefined> {
   const { cardId, cardTitle, boardId: _boardId, worktreeId } = params;
+
+  // Pre-flight: check if task already has a PR URL
+  const preCheck = await taskStore.get(cardId);
+  if (preCheck?.pullRequestUrl) {
+    console.log(
+      `[PrAutoCreate] Task ${cardId} already has PR: ${preCheck.pullRequestUrl}. Skipping.`,
+    );
+    return preCheck.pullRequestUrl;
+  }
+
+  // Pre-flight: check retry limit
+  if (preCheck?.lastSyncError?.startsWith(PR_FAILURE_PREFIX)) {
+    const match = preCheck.lastSyncError.match(/\(attempt (\d+)\/\d+\)/);
+    const attempts = match ? parseInt(match[1], 10) : 1;
+    if (attempts >= PR_RETRY_LIMIT) {
+      console.warn(
+        `[PrAutoCreate] Task ${cardId} exceeded ${PR_RETRY_LIMIT} PR creation attempts. Skipping.`,
+      );
+      return undefined;
+    }
+  }
 
   console.log(
     `[PrAutoCreate] Creating PR for task ${cardId}.`,
@@ -97,7 +120,11 @@ export async function executeAutoPrCreation(
       );
       const task = await taskStore.get(cardId);
       if (task) {
-        task.lastSyncError = `Auto PR creation failed: git push failed — ${msg}`;
+        const prevAttempts = task.lastSyncError?.startsWith(PR_FAILURE_PREFIX)
+          ? (task.lastSyncError.match(/\(attempt (\d+)\/\d+\)/)?.[1] ?? "0")
+          : "0";
+        const attempt = parseInt(prevAttempts, 10) + 1;
+        task.lastSyncError = `${PR_FAILURE_PREFIX}: git push failed — ${msg} (attempt ${attempt}/${PR_RETRY_LIMIT})`;
         task.updatedAt = new Date();
         await taskStore.save(task);
       }
@@ -155,7 +182,29 @@ export async function executeAutoPrCreation(
       ];
       const ghCommand = ["gh", ...ghArgs].join(" ");
 
-      const ghResult = await execCommand(ghCommand, cwd, 60_000);
+      let ghResult: { stdout: string; stderr: string };
+      try {
+        ghResult = await execCommand(ghCommand, cwd, 60_000);
+      } catch (ghErr: unknown) {
+        // Handle "already exists" — extract PR URL from error message
+        const errMsg = ghErr instanceof Error ? ghErr.message : String(ghErr);
+        const existingUrlMatch = errMsg.match(/already exists:\s*\n?(https:\/\/[^\s]+)/i);
+        if (existingUrlMatch) {
+          const existingUrl = existingUrlMatch[1].trim();
+          console.log(
+            `[PrAutoCreate] PR already exists for task ${cardId}: ${existingUrl}.`,
+          );
+          if (task) {
+            task.pullRequestUrl = existingUrl;
+            task.isPullRequest = true;
+            task.lastSyncError = undefined;
+            task.updatedAt = new Date();
+            await taskStore.save(task);
+          }
+          return existingUrl;
+        }
+        throw ghErr;
+      }
 
       // gh pr create outputs the PR URL on success
       const prUrl = ghResult.stdout.trim().split("\n").pop()?.trim();
@@ -168,7 +217,7 @@ export async function executeAutoPrCreation(
         );
 
         if (task) {
-          task.lastSyncError = `Auto PR creation failed: ${
+          task.lastSyncError = `${PR_FAILURE_PREFIX}: ${
             ghResult.stderr?.trim() || "unexpected output"
           }`;
           task.updatedAt = new Date();
@@ -203,9 +252,13 @@ export async function executeAutoPrCreation(
     try {
       const task = await taskStore.get(cardId);
       if (task) {
-        task.lastSyncError = `Auto PR creation failed: ${
+        const prevAttempts = task.lastSyncError?.startsWith(PR_FAILURE_PREFIX)
+          ? (task.lastSyncError.match(/\(attempt (\d+)\/\d+\)/)?.[1] ?? "0")
+          : "0";
+        const attempt = parseInt(prevAttempts, 10) + 1;
+        task.lastSyncError = `${PR_FAILURE_PREFIX}: ${
           err instanceof Error ? err.message : String(err)
-        }`;
+        } (attempt ${attempt}/${PR_RETRY_LIMIT})`;
         task.updatedAt = new Date();
         await taskStore.save(task);
       }

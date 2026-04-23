@@ -10,7 +10,7 @@
  */
 
 import type { RoutaSystem } from "../routa-system";
-import { hasExceededNonDevAutomationRepeatLimit } from "./workflow-orchestrator";
+import { hasExceededNonDevAutomationRepeatLimit, CIRCUIT_BREAKER_MARKER } from "./workflow-orchestrator";
 import { getHttpSessionStore } from "../acp/http-session-store";
 import { clearStaleTriggerSession } from "./task-trigger-session";
 import { getKanbanAutomationSteps, type KanbanColumnStage } from "../models/kanban";
@@ -111,6 +111,9 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
         }
         // Skip completed/blocked tasks
         if (task.status === "COMPLETED" || task.status === "BLOCKED") continue;
+        // Skip circuit-broken tasks (session creation failed too many times)
+        // The orchestrator will reset the marker after cooldown period
+        if (task.lastSyncError?.startsWith(CIRCUIT_BREAKER_MARKER)) continue;
         // Skip creation-source sessions (auto-generated from agent runs)
         if (task.creationSource === "session") continue;
         // Skip tasks whose lane automation already completed successfully —
