@@ -917,6 +917,8 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     childTasks: "子任务",
     childTasksProgress: "{completed}/{total} 已完成",
     childTaskCompleted: "已完成",
+    mergeStrategy: "合并策略",
+    fanInRetry: "重试聚合",
     childTaskStatusColumn: "{column}",
     noChildTasks: "暂无子任务。",
     viewParentTask: "查看父任务",

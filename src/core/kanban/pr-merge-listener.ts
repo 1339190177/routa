@@ -110,6 +110,7 @@ export function startPrMergeListener(system: RoutaSystem): void {
         await onChildTaskStatusChanged(task, {
           taskStore: system.taskStore,
           kanbanBoardStore: system.kanbanBoardStore,
+          worktreeStore: system.worktreeStore,
           eventBus: system.eventBus,
         });
       } catch (lifecycleErr) {

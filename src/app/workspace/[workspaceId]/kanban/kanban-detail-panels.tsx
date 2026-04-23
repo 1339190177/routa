@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { MarkdownViewer } from "@/client/components/markdown/markdown-viewer";
 import { useTranslation } from "@/i18n";
 
@@ -359,9 +360,12 @@ export function TaskHierarchyPanel({
   onViewTask?: (taskId: string) => void;
 }) {
   const { t } = useTranslation();
+  const [retrying, setRetrying] = useState(false);
   const hasParent = Boolean(task.parentTaskId);
   const childTasks = task.childTasks ?? [];
   const hasChildTasks = childTasks.length > 0;
+  const splitPlan = task.splitPlan;
+  const hasFanInConflict = task.lastSyncError?.startsWith("[Fan-In]");
 
   if (!hasParent && !hasChildTasks) {
     return null;
@@ -372,6 +376,33 @@ export function TaskHierarchyPanel({
   ).length;
   const totalCount = childTasks.length;
   const progressPercent = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
+  const handleFanInRetry = async () => {
+    setRetrying(true);
+    try {
+      const res = await fetch("/api/kanban/fan-in-retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parentTaskId: task.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error("[FanInRetry]", data.error ?? "Retry failed");
+      }
+    } catch {
+      console.error("[FanInRetry] Network error");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const strategyLabel = splitPlan
+    ? splitPlan.mergeStrategy === "cascade"
+      ? "Cascade"
+      : splitPlan.mergeStrategy === "fan_in"
+        ? "Fan-In"
+        : "Cascade + Fan-In"
+    : null;
 
   return (
     <div className={`space-y-2.5 ${compact ? "px-2 py-2" : "px-3 py-2.5"}`}>
@@ -396,6 +427,49 @@ export function TaskHierarchyPanel({
       {/* Child tasks list */}
       {hasChildTasks && (
         <div className="space-y-1.5">
+          {/* Split strategy badge */}
+          {strategyLabel && (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                {strategyLabel}
+              </span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                {t.kanbanDetail.mergeStrategy ?? "merge strategy"}
+              </span>
+            </div>
+          )}
+
+          {/* Fan-in conflict warning + retry button */}
+          {hasFanInConflict && (
+            <div className="flex items-start gap-2 rounded border border-rose-200 bg-rose-50 px-2.5 py-2 dark:border-rose-900/40 dark:bg-rose-900/10">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500 dark:text-rose-400" />
+              <div className="flex-1 space-y-1.5">
+                <div className="text-[11px] font-medium text-rose-700 dark:text-rose-300">
+                  {task.lastSyncError}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { void handleFanInRetry(); }}
+                  disabled={retrying}
+                  className="inline-flex items-center gap-1 rounded border border-rose-300 bg-white px-2 py-0.5 text-[10px] font-medium text-rose-700 transition-colors hover:border-rose-400 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-700 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:border-rose-600"
+                >
+                  <RefreshCw className={`h-3 w-3 ${retrying ? "animate-spin" : ""}`} />
+                  {retrying ? "Retrying..." : (t.kanbanDetail.fanInRetry ?? "Retry Merge")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* File conflict warnings */}
+          {splitPlan?.warnings && splitPlan.warnings.length > 0 && !hasFanInConflict && (
+            <div className="space-y-1">
+              {splitPlan.warnings.map((w, i) => (
+                <div key={i} className="text-[10px] text-amber-600 dark:text-amber-400">
+                  {w}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
             {t.kanbanDetail.childTasks}
           </div>

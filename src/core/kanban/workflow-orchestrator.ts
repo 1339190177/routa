@@ -18,7 +18,7 @@ import type {
   KanbanDevSessionSupervisionMode,
 } from "../models/kanban";
 import { getKanbanAutomationSteps, resolveTaskStatusForBoardColumn } from "../models/kanban";
-import type { Task, TaskLaneSessionRecoveryReason } from "../models/task";
+import { type Task, type TaskLaneSessionRecoveryReason, type TaskStatus } from "../models/task";
 import type { KanbanBoardStore } from "../store/kanban-board-store";
 import type { TaskStore } from "../store/task-store";
 import type { ColumnTransitionData } from "./column-transition";
@@ -29,6 +29,7 @@ import { checkDependencyGate } from "./dependency-gate";
 import { type KanbanBranchRules } from "./board-branch-rules";
 import { PR_FAILURE_PREFIX } from "./pr-auto-create";
 import { getTaskDevServerRegistry } from "./task-dev-server-registry";
+import type { WorktreeStore } from "../db/pg-worktree-store";
 import { onChildTaskStatusChanged } from "./parent-child-lifecycle";
 
 const WATCHDOG_SCAN_INTERVAL_MS = 30_000;
@@ -282,6 +283,7 @@ export class KanbanWorkflowOrchestrator {
   private watchdogTimer?: ReturnType<typeof setInterval>;
   private sessionFailureCounts = new Map<string, number>();
   private circuitBreakerLastLogAt = new Map<string, number>();
+  private worktreeStore?: WorktreeStore;
 
   constructor(
     private eventBus: EventBus,
@@ -372,6 +374,11 @@ export class KanbanWorkflowOrchestrator {
     this.executeAutoPrCreation = fn;
   }
 
+  /** Set the worktree store for fan-in merge support in parent-child lifecycle */
+  setWorktreeStore(store: WorktreeStore): void {
+    this.worktreeStore = store;
+  }
+
   /** Get all active automations */
   getActiveAutomations(): ActiveAutomation[] {
     return Array.from(this.activeAutomations.values());
@@ -429,24 +436,32 @@ export class KanbanWorkflowOrchestrator {
         }
       }
 
-      // Done-lane early exit: if the card already has a PR URL and all done-lane
-      // steps have been completed, skip session creation. This prevents the
-      // recurring createSession-null loop for cards that are genuinely done.
+      // Done-lane early exit: if the card already has a PR URL, it is genuinely done.
+      // Skip session creation entirely — requiring laneSessions was too strict and
+      // caused cards with existing PRs to re-enter automation every scan cycle.
       const freshTask = task ? await this.taskStore.get(data.cardId) : undefined;
       if (freshTask?.pullRequestUrl) {
-        const doneLaneSessions = (freshTask.laneSessions ?? []).filter(
-          (s) => s.columnId === targetColumn.id,
-        );
-        const hasCompletedSession = doneLaneSessions.some(
-          (s) => s.status === "completed" || s.status === "transitioned",
-        );
-        if (hasCompletedSession || doneLaneSessions.length >= 1) {
+        // Mark COMPLETED so LaneScanner skips this card on future ticks.
+        if (freshTask.status !== "COMPLETED") {
+          if (freshTask.version !== undefined && this.taskStore.atomicUpdate) {
+            await this.taskStore.atomicUpdate(data.cardId, freshTask.version, {
+              status: "COMPLETED" as TaskStatus,
+            });
+          } else {
+            freshTask.status = "COMPLETED" as TaskStatus;
+            freshTask.updatedAt = new Date();
+            await this.taskStore.save(freshTask);
+          }
           console.log(
-            `[WorkflowOrchestrator] Done-lane early exit for card ${data.cardId}: ` +
-            `PR exists (${freshTask.pullRequestUrl}) and ${doneLaneSessions.length} lane session(s) recorded. Skipping createSession.`,
+            `[WorkflowOrchestrator] Done-lane terminal guard: card ${data.cardId} ` +
+            `has PR (${freshTask.pullRequestUrl}). Marked COMPLETED.`,
           );
-          return;
         }
+        console.log(
+          `[WorkflowOrchestrator] Done-lane early exit for card ${data.cardId}: ` +
+          `PR exists (${freshTask.pullRequestUrl}). Skipping automation.`,
+        );
+        return;
       }
 
       // Auto-merger is no longer injected as a default done-lane step.
@@ -697,8 +712,16 @@ export class KanbanWorkflowOrchestrator {
       } catch (err) {
         automationEntry.status = "failed";
         const errMsg = err instanceof Error ? err.message : String(err);
+        // System-level errors (stack overflow, type errors) are infrastructure
+        // issues — they must not consume circuit-breaker quota, otherwise a
+        // transient runtime bug permanently disables automation for the card.
+        if (err instanceof RangeError || err instanceof TypeError) {
+          console.error(
+            `[WorkflowOrchestrator] System error for card ${data.cardId}: ${errMsg}. ` +
+            `Not counting towards circuit breaker.`,
+          );
         // Rate-limit errors are transient — don't consume circuit-breaker quota
-        if (isRateLimitErrorMessage(errMsg)) {
+        } else if (isRateLimitErrorMessage(errMsg)) {
           console.warn(
             `[WorkflowOrchestrator] Rate-limited for card ${data.cardId}, not counting towards circuit breaker.`,
           );
@@ -959,9 +982,13 @@ export class KanbanWorkflowOrchestrator {
       // ── Parent-child lifecycle: notify parent when a child task completes/fails ──
       if (task?.parentTaskId) {
         try {
+          if (!this.worktreeStore) {
+            console.warn("[WorkflowOrchestrator] worktreeStore not set — fan-in merge skipped");
+          }
           await onChildTaskStatusChanged(task, {
             taskStore: this.taskStore,
             kanbanBoardStore: this.kanbanBoardStore,
+            worktreeStore: this.worktreeStore!,
             eventBus: this.eventBus,
           });
         } catch (lifecycleErr) {

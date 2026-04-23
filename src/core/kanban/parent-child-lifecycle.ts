@@ -17,13 +17,16 @@
 import { TaskStatus, type Task } from "../models/task";
 import type { TaskStore } from "../store/task-store";
 import type { KanbanBoardStore } from "../store/kanban-board-store";
+import type { WorktreeStore } from "../db/pg-worktree-store";
 import { AgentEventType, type EventBus } from "../events/event-bus";
+import { executeFanInMerge, needsFanInMerge } from "./fan-in-merge";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
 export interface ParentLifecycleDeps {
   taskStore: TaskStore;
   kanbanBoardStore: KanbanBoardStore;
+  worktreeStore: WorktreeStore;
   eventBus: EventBus;
 }
 
@@ -60,6 +63,11 @@ export async function onChildTaskStatusChanged(
   const allChildren = await getChildTasks(parentTask, deps.taskStore);
   if (allChildren.length === 0) {
     return { parentUpdated: false, action: "none" };
+  }
+
+  // ── Cascade advancement: when a child completes, advance its downstream ──
+  if (childTask.status === TaskStatus.COMPLETED && parentTask.splitPlan) {
+    await advanceCascadeDownstream(childTask, parentTask, deps);
   }
 
   // ── Rule 1: All children completed → advance parent to review ──
@@ -103,12 +111,38 @@ export async function onChildTaskStatusChanged(
 
 /**
  * Advance a parent task to the review column after all children complete.
+ *
+ * If the parent has a splitPlan with fan_in or cascade_fan_in strategy,
+ * executes fan-in merge to aggregate child branches before advancing.
  * Emits a COLUMN_TRANSITION event so the workflow orchestrator picks it up.
  */
 async function advanceParentToReview(
   parentTask: Task,
   deps: ParentLifecycleDeps,
 ): Promise<ParentLifecycleResult> {
+  // ── Fan-in merge for split tasks with parallel children ──
+  const splitPlan = parentTask.splitPlan;
+  if (splitPlan && needsFanInMerge(splitPlan.mergeStrategy, splitPlan.childTaskIds.length)) {
+    const fanInResult = await executeFanInMerge(parentTask, {
+      taskStore: deps.taskStore,
+      worktreeStore: deps.worktreeStore,
+    });
+
+    if (!fanInResult.success) {
+      parentTask.lastSyncError =
+        `[Fan-In] ${fanInResult.conflicts.length} conflict(s): ${fanInResult.conflicts.join(", ")}. Resolve and retry.`;
+      if (splitPlan.warnings) {
+        splitPlan.warnings = [
+          ...splitPlan.warnings.filter((w) => !w.startsWith("CONFLICT:")),
+          ...fanInResult.conflicts.map((f) => `CONFLICT: ${f}`),
+        ];
+      }
+      parentTask.updatedAt = new Date();
+      await deps.taskStore.save(parentTask);
+      return { parentUpdated: true, action: "child_has_problem" };
+    }
+  }
+
   const board = parentTask.boardId
     ? await deps.kanbanBoardStore.get(parentTask.boardId)
     : undefined;
@@ -160,6 +194,64 @@ async function advanceParentToReview(
 // ─── Helpers ───────────────────────────────────────────────────────────
 
 /**
+ * In cascade / cascade_fan_in strategies, advance downstream child tasks
+ * from backlog to todo when their upstream dependency has completed.
+ */
+async function advanceCascadeDownstream(
+  completedChild: Task,
+  parentTask: Task,
+  deps: ParentLifecycleDeps,
+): Promise<void> {
+  const { mergeStrategy, dependencyEdges } = parentTask.splitPlan!;
+  if (mergeStrategy !== "cascade" && mergeStrategy !== "cascade_fan_in") return;
+
+  const downstreamIds = dependencyEdges
+    .filter(([from]) => from === completedChild.id)
+    .map(([, to]) => to);
+
+  if (downstreamIds.length === 0) return;
+
+  const board = parentTask.boardId
+    ? await deps.kanbanBoardStore.get(parentTask.boardId)
+    : undefined;
+  if (!board) return;
+
+  const todoCol = board.columns.find((c) => c.stage === "todo");
+  if (!todoCol) return;
+
+  for (const downId of downstreamIds) {
+    const downTask = await deps.taskStore.get(downId);
+    if (!downTask) continue;
+    // Only advance tasks still in backlog (PENDING status)
+    if (downTask.status !== TaskStatus.PENDING) continue;
+
+    const fromColumnId = downTask.columnId ?? "backlog";
+    const fromColumn = board.columns.find((c) => c.id === fromColumnId);
+
+    downTask.columnId = todoCol.id;
+    downTask.updatedAt = new Date();
+    await deps.taskStore.save(downTask);
+
+    deps.eventBus.emit({
+      type: AgentEventType.COLUMN_TRANSITION,
+      agentId: "cascade-advancer",
+      workspaceId: downTask.workspaceId,
+      data: {
+        cardId: downTask.id,
+        cardTitle: downTask.title,
+        boardId: board.id,
+        workspaceId: downTask.workspaceId,
+        fromColumnId,
+        toColumnId: todoCol.id,
+        fromColumnName: fromColumn?.name ?? fromColumnId,
+        toColumnName: todoCol.name,
+      },
+      timestamp: new Date(),
+    });
+  }
+}
+
+/**
  * Get all child tasks of a parent task in the same workspace.
  */
 export async function getChildTasks(
@@ -171,7 +263,8 @@ export async function getChildTasks(
 }
 
 /**
- * Compute parent progress summary (delegates to dependency-gate utility).
+ * Compute parent progress summary.
+ * Uses the persisted splitPlan child list when available for accurate ordering.
  */
 export async function computeChildProgress(
   parentTask: Task,
@@ -181,6 +274,25 @@ export async function computeChildProgress(
   total: number;
   label: string;
 } | undefined> {
+  // Prefer the ordered child list from splitPlan
+  const childIds = parentTask.splitPlan?.childTaskIds;
+
+  if (childIds && childIds.length > 0) {
+    const children = await Promise.all(
+      childIds.map((id) => taskStore.get(id)),
+    );
+    const valid = children.filter(Boolean) as Task[];
+    const completed = valid.filter(
+      (c) => c.status === TaskStatus.COMPLETED,
+    ).length;
+    return {
+      completed,
+      total: childIds.length,
+      label: `${completed}/${childIds.length} sub-tasks completed`,
+    };
+  }
+
+  // Fallback: discover children without splitPlan
   const children = await getChildTasks(parentTask, taskStore);
   if (children.length === 0) return undefined;
 

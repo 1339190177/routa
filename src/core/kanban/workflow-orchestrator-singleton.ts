@@ -654,6 +654,7 @@ export function startWorkflowOrchestrator(system: RoutaSystem): void {
     system.taskStore,
     params,
   ));
+  orchestrator.setWorktreeStore(system.worktreeStore);
   orchestrator.start();
   queue.start();
   startWorktreeCleanupListener(system);

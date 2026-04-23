@@ -77,10 +77,18 @@ export async function executeFanInMerge(
     };
   }
 
-  // 3. Sort children by creation order (proxy for topological order)
-  const sorted = [...completedChildren].sort(
-    (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
-  );
+  // 3. Sort children using persisted topological order from splitPlan
+  const topoOrder = parentTask.splitPlan?.childTaskIds ?? [];
+  const topoIndex = new Map(topoOrder.map((id, i) => [id, i]));
+  const sorted = [...completedChildren].sort((a, b) => {
+    const ai = topoIndex.get(a.id) ?? Infinity;
+    const bi = topoIndex.get(b.id) ?? Infinity;
+    // Fallback to createdAt when not in splitPlan
+    if (ai === bi && ai === Infinity) {
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    }
+    return ai - bi;
+  });
 
   // 4. Merge each child branch into the parent worktree
   for (const child of sorted) {

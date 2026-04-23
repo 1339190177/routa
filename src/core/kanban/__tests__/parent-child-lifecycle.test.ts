@@ -15,6 +15,11 @@ class InMemoryKanbanBoardStore {
   }
 }
 
+// Minimal WorktreeStore stub for testing (fan-in not exercised in these unit tests)
+const worktreeStoreStub = {
+  get: async () => undefined,
+} as any;
+
 describe("parent-child-lifecycle", () => {
   let taskStore: InMemoryTaskStore;
   let boardStore: InMemoryKanbanBoardStore;
@@ -46,7 +51,7 @@ describe("parent-child-lifecycle", () => {
     });
 
     const result = await onChildTaskStatusChanged(orphan, {
-      taskStore, kanbanBoardStore: boardStore as any, eventBus,
+      taskStore, kanbanBoardStore: boardStore as any, worktreeStore: worktreeStoreStub, eventBus,
     });
 
     expect(result.action).toBe("none");
@@ -67,7 +72,7 @@ describe("parent-child-lifecycle", () => {
     await taskStore.save(child);
 
     const result = await onChildTaskStatusChanged(child, {
-      taskStore, kanbanBoardStore: boardStore as any, eventBus,
+      taskStore, kanbanBoardStore: boardStore as any, worktreeStore: worktreeStoreStub, eventBus,
     });
 
     expect(result.action).toBe("child_has_problem");
@@ -92,7 +97,7 @@ describe("parent-child-lifecycle", () => {
     await taskStore.save(child);
 
     const result = await onChildTaskStatusChanged(child, {
-      taskStore, kanbanBoardStore: boardStore as any, eventBus,
+      taskStore, kanbanBoardStore: boardStore as any, worktreeStore: worktreeStoreStub, eventBus,
     });
 
     expect(result.action).toBe("problems_cleared");
@@ -125,7 +130,7 @@ describe("parent-child-lifecycle", () => {
     await taskStore.save(child2);
 
     const result = await onChildTaskStatusChanged(child2, {
-      taskStore, kanbanBoardStore: boardStore as any, eventBus,
+      taskStore, kanbanBoardStore: boardStore as any, worktreeStore: worktreeStoreStub, eventBus,
     });
 
     expect(result.action).toBe("all_children_completed");
@@ -149,7 +154,7 @@ describe("parent-child-lifecycle", () => {
     await taskStore.save(child2);
 
     const result = await onChildTaskStatusChanged(child1, {
-      taskStore, kanbanBoardStore: boardStore as any, eventBus,
+      taskStore, kanbanBoardStore: boardStore as any, worktreeStore: worktreeStoreStub, eventBus,
     });
 
     expect(result.action).toBe("none");

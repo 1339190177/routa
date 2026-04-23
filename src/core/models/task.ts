@@ -178,6 +178,19 @@ export interface TaskCommentEntry {
   sessionId?: string;
 }
 
+export interface TaskSplitPlan {
+  /** 合并策略 */
+  mergeStrategy: "cascade" | "fan_in" | "cascade_fan_in";
+  /** 子任务拓扑顺序（真实 ID 列表，按拓扑序排列） */
+  childTaskIds: string[];
+  /** 依赖边（真实 ID 对） */
+  dependencyEdges: [string, string][];
+  /** 分拆时的文件冲突警告 */
+  warnings: string[];
+  /** 分拆时间 */
+  splitAt: Date;
+}
+
 export interface TaskDeliverySnapshotCommit {
   sha: string;
   shortSha: string;
@@ -284,6 +297,8 @@ export interface Task {
    * branch instead of the codebase default. Cleared after use — never persisted to DB.
    */
   nextBaseBranchOverride?: string;
+  /** 分拆计划 — 仅存在于父任务上，分拆时写入 */
+  splitPlan?: TaskSplitPlan;
   /** Optimistic-locking version; sourced from DB row, undefined for in-memory tasks */
   version?: number;
   createdAt: Date;

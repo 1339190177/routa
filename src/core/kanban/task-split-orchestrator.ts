@@ -9,7 +9,7 @@
  * are maintained automatically.
  */
 
-import { createTask, type Task, type TaskPriority } from "../models/task";
+import { createTask, type Task, type TaskPriority, type TaskSplitPlan } from "../models/task";
 import type { TaskStore } from "../store/task-store";
 import type { KanbanBoardStore } from "../store/kanban-board-store";
 import { updateDependencyRelations } from "./dependency-gate";
@@ -55,6 +55,23 @@ function isSplittableStatus(status: string): boolean {
   return SPLITTABLE_STATUSES.has(status);
 }
 
+const MAX_SPLIT_DEPTH = 2;
+
+async function computeSplitDepth(
+  task: Task,
+  taskStore: TaskStore,
+  visited?: Set<string>,
+): Promise<number> {
+  const seen = visited ?? new Set<string>();
+  if (seen.has(task.id)) return 0; // circular guard
+  seen.add(task.id);
+
+  if (!task.parentTaskId) return 0;
+  const parent = await taskStore.get(task.parentTaskId);
+  if (!parent) return 0;
+  return 1 + await computeSplitDepth(parent, taskStore, seen);
+}
+
 // ─── Main entry point ──────────────────────────────────────────────────
 
 /**
@@ -84,6 +101,24 @@ export async function executeSplit(
     throw new Error(
       `[SplitOrchestrator] Task ${parentTask.id} is in status "${parentTask.status}" and cannot be split. ` +
       `Only PENDING or IN_PROGRESS tasks can be split.`,
+    );
+  }
+
+  // 1a. Idempotency: reject re-split of an already-split task
+  if (parentTask.splitPlan) {
+    throw new Error(
+      `[SplitOrchestrator] Task ${parentTask.id} has already been split into ` +
+      `${parentTask.splitPlan.childTaskIds.length} sub-tasks. ` +
+      `Use the existing child tasks instead of splitting again.`,
+    );
+  }
+
+  // 1b. Depth limit: prevent deeply nested splits (max depth 2)
+  const depth = await computeSplitDepth(parentTask, deps.taskStore);
+  if (depth >= 2) {
+    throw new Error(
+      `[SplitOrchestrator] Maximum split nesting depth (2) reached for task ${parentTask.id}. ` +
+      `Cannot split a sub-task that is already ${depth} levels deep.`,
     );
   }
 
@@ -122,7 +157,17 @@ export async function executeSplit(
     }
   }
 
-  // 7. Create sub-tasks in topological order
+  // 7. Identify parallel roots for parallelGroup assignment
+  const rootRefs = new Set(
+    sorted
+      .filter((s) => !dependencyEdges.some(([, to]) => to === s.ref))
+      .map((s) => s.ref),
+  );
+  const pgLabel = rootRefs.size > 1
+    ? `split-${parentTask.id.slice(0, 8)}`
+    : undefined;
+
+  // 8. Create sub-tasks in topological order
   const refToId = new Map<string, string>();
   const childTaskIds: string[] = [];
 
@@ -161,6 +206,7 @@ export async function executeSplit(
       codebaseIds: parentTask.codebaseIds,
       labels: parentTask.labels,
       priority: parentTask.priority as TaskPriority | undefined,
+      parallelGroup: pgLabel && rootRefs.has(subDef.ref) ? pgLabel : undefined,
     });
 
     await deps.taskStore.save(task);
@@ -182,6 +228,27 @@ export async function executeSplit(
 
     childTaskIds.push(taskId);
   }
+
+  // 9. Persist split plan to parent task for downstream fan-in / cascade
+  const resolvedEdges: [string, string][] = dependencyEdges
+    .map(([from, to]): [string, string] | undefined => {
+      const fromId = refToId.get(from);
+      const toId = refToId.get(to);
+      if (!fromId || !toId) return undefined;
+      return [fromId, toId];
+    })
+    .filter((e): e is [string, string] => e !== undefined);
+
+  const splitPlan: TaskSplitPlan = {
+    mergeStrategy,
+    childTaskIds,
+    dependencyEdges: resolvedEdges,
+    warnings,
+    splitAt: new Date(),
+  };
+  parentTask.splitPlan = splitPlan;
+  parentTask.updatedAt = new Date();
+  await deps.taskStore.save(parentTask);
 
   return {
     parentTaskId: parentTask.id,

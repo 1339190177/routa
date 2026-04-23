@@ -206,6 +206,14 @@ export interface TaskInfo {
     status: string;
     columnId?: string;
   }>;
+  /** Split plan — only present on parent tasks that have been split */
+  splitPlan?: {
+    mergeStrategy: "cascade" | "fan_in" | "cascade_fan_in";
+    childTaskIds: string[];
+    dependencyEdges: [string, string][];
+    warnings: string[];
+    splitAt: string;
+  };
   creationSource?: "manual" | "agent" | "api" | "session";
   /** Associated codebase IDs for this task */
   codebaseIds?: string[];

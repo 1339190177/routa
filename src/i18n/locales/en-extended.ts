@@ -917,6 +917,8 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     childTasks: "Child Tasks",
     childTasksProgress: "{completed}/{total} completed",
     childTaskCompleted: "Completed",
+    mergeStrategy: "merge strategy",
+    fanInRetry: "Retry Merge",
     childTaskStatusColumn: "{column}",
     noChildTasks: "No child tasks.",
     viewParentTask: "View parent task",

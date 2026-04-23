@@ -25,6 +25,7 @@ interface QueueEntry extends KanbanSessionQueueJob {
   enqueuedAt: Date;
   sessionId?: string;
   dependencies?: string[];
+  pullRequestUrl?: string;
 }
 
 export class KanbanSessionQueue {
@@ -103,6 +104,7 @@ export class KanbanSessionQueue {
       status: "queued",
       enqueuedAt: new Date(),
       dependencies: task?.dependencies ?? [],
+      pullRequestUrl: task?.pullRequestUrl,
     };
     this.jobsByCardId.set(job.cardId, entry);
 
@@ -283,6 +285,16 @@ export class KanbanSessionQueue {
   private pushQueuedEntry(entry: QueueEntry): void {
     const queue = this.queuedByBoard.get(entry.boardId) ?? [];
     queue.push(entry);
+    // Sort: cards without a PR URL take priority (they still need real work).
+    // Cards that already have a PR are likely done/review and retrying
+    // non-essential steps — deprioritise them to avoid starving dev cards.
+    queue.sort((a, b) => {
+      const aHasPr = a.pullRequestUrl ? 1 : 0;
+      const bHasPr = b.pullRequestUrl ? 1 : 0;
+      if (aHasPr !== bHasPr) return aHasPr - bHasPr;
+      // Tie-break: FIFO within same priority
+      return a.enqueuedAt.getTime() - b.enqueuedAt.getTime();
+    });
     this.queuedByBoard.set(entry.boardId, queue);
   }
 
