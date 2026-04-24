@@ -358,6 +358,7 @@ export interface RepoDeliveryStatus {
   hasUncommittedChanges: boolean;
   remoteUrl: string | null;
   isGitHubRepo: boolean;
+  isGitLabRepo: boolean;
   canCreatePullRequest: boolean;
 }
 
@@ -1120,8 +1121,12 @@ export function getRepoDeliveryStatus(
   const isGitHubRepo = options?.sourceType === "github"
     || Boolean(options?.sourceUrl && isGitHubUrl(options.sourceUrl))
     || Boolean(remoteUrl && isGitHubUrl(remoteUrl));
+  const isGitLabRepo = options?.sourceType === "gitlab"
+    || Boolean(options?.sourceUrl && isGitLabUrl(options.sourceUrl))
+    || Boolean(remoteUrl && isGitLabUrl(remoteUrl));
+  const isVCSRepo = isGitHubRepo || isGitLabRepo;
   const hasCommitsSinceBase = commitsSinceBase > 0;
-  const canCreatePullRequest = isGitHubRepo
+  const canCreatePullRequest = isVCSRepo
     && hasCommitsSinceBase
     && !hasUncommittedChanges
     && Boolean(branch)
@@ -1152,6 +1157,7 @@ export function getRepoDeliveryStatus(
     hasUncommittedChanges,
     remoteUrl,
     isGitHubRepo,
+    isGitLabRepo,
     canCreatePullRequest,
   };
 }
