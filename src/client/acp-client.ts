@@ -355,6 +355,7 @@ export class BrowserAcpClient {
 
   /**
    * Attach to an existing session ID (switch sessions).
+   * Skips SSE reconnection if the connection is already alive for this session.
    */
   attachSession(sessionId: string): void {
     if (this._sessionId !== sessionId) {
@@ -371,6 +372,14 @@ export class BrowserAcpClient {
         retryable: false,
         status: 409,
       });
+      return;
+    }
+    // Skip reconnect if SSE is already connected to this session
+    if (
+      this.eventSource
+      && this.eventSource.readyState !== EventSource.CLOSED
+      && this._sessionId === sessionId
+    ) {
       return;
     }
     this.connectSSE(sessionId);

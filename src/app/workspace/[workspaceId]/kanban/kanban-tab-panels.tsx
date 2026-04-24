@@ -834,6 +834,7 @@ export const KanbanTaskDetailOverlay = React.memo(function KanbanTaskDetailOverl
     const targetSessionInfo = sessionMap.get(activeSessionId);
     if (!targetSessionInfo?.cwd) return;
 
+    // Fast path: try resuming the existing session first
     try {
       const resumed = await acp.resumeSession(activeSessionId, targetSessionInfo.cwd, { throwOnError: true });
       if (resumed?.sessionId) {
@@ -848,21 +849,24 @@ export const KanbanTaskDetailOverlay = React.memo(function KanbanTaskDetailOverl
       }
     }
 
-    const transcript = await fetchSessionTranscriptForRestore(activeSessionId);
-    const replacement = await acp.createSession(
-      targetSessionInfo.cwd,
-      targetSessionInfo.provider ?? boardAutoProviderId ?? acp.selectedProvider,
-      targetSessionInfo.modeId,
-      targetSessionInfo.role,
-      targetSessionInfo.workspaceId || workspaceId,
-      targetSessionInfo.model,
-      undefined,
-      targetSessionInfo.specialistId,
-      undefined,
-      undefined,
-      undefined,
-      targetSessionInfo.branch,
-    );
+    // Slow path: fetch transcript and create new session in parallel
+    const [transcript, replacement] = await Promise.all([
+      fetchSessionTranscriptForRestore(activeSessionId),
+      acp.createSession(
+        targetSessionInfo.cwd,
+        targetSessionInfo.provider ?? boardAutoProviderId ?? acp.selectedProvider,
+        targetSessionInfo.modeId,
+        targetSessionInfo.role,
+        targetSessionInfo.workspaceId || workspaceId,
+        targetSessionInfo.model,
+        undefined,
+        targetSessionInfo.specialistId,
+        undefined,
+        undefined,
+        undefined,
+        targetSessionInfo.branch,
+      ),
+    ]);
 
     if (!replacement?.sessionId) return;
 
