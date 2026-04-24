@@ -2,7 +2,7 @@
 title: "Task-Adaptive summary CLI should publish a sanitized hotspot report to a GitHub issue"
 date: "2026-04-22"
 kind: issue
-status: open
+status: resolved
 severity: medium
 area: "devops"
 tags:
@@ -17,7 +17,7 @@ related_issues:
   - "docs/issues/2026-04-21-feature-explorer-hotspot-auto-retro-for-task-adaptive-memory.md"
   - "docs/issues/2026-03-12-gh-128-feedback-sync-github-issues-to-local-docs-issues-for-duplicate-detection.md"
 github_issue: 525
-github_state: "open"
+github_state: "closed"
 github_url: "https://github.com/phodal/routa/issues/525"
 ---
 
@@ -75,5 +75,16 @@ The published report should be safe to share in GitHub:
 
 - Local related issue: `docs/issues/2026-04-21-feature-explorer-hotspot-auto-retro-for-task-adaptive-memory.md`
 - Local related issue: `docs/issues/2026-03-12-gh-128-feedback-sync-github-issues-to-local-docs-issues-for-duplicate-detection.md`
+- Local follow-up issue: `docs/issues/2026-04-24-task-adaptive-issue-summary-should-rank-product-hotspots-and-recommend-follow-up-files.md`
 - GitHub issue: `https://github.com/phodal/routa/issues/525`
+- GitHub follow-up issue: `https://github.com/phodal/routa/issues/534`
 - First published summary comment: `https://github.com/phodal/routa/issues/525#issuecomment-4298046542`
+
+## Resolution
+
+- 2026-04-22: implemented a dedicated issue-summary builder in `src/core/harness/task-adaptive-issue-summary.ts`
+- 2026-04-22: added issue comment list/create/update helpers in `src/core/kanban/github-issues.ts`
+- 2026-04-22: added the local CLI `scripts/harness/publish-task-adaptive-issue-summary.ts` and exposed it via `npm run harness:publish-issue-summary`
+- 2026-04-22: published the first marked summary comment into GitHub issue `#525`
+- 2026-04-24: re-verified that the core CLI publish/upsert tests still pass
+- 2026-04-24: narrowed the remaining work to summary relevance and follow-up file recommendation quality; that work now tracks separately
