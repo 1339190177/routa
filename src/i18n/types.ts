@@ -817,6 +817,21 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     updatingRepository: string;
     defaultLabel: string;
     saving: string;
+    // Workspace title & danger zone
+    workspaceSettings: string;
+    workspaceTitle: string;
+    titleSaved: string;
+    dangerZone: string;
+    dangerZoneDescription: string;
+    archiveWorkspace: string;
+    deleteWorkspace: string;
+    cannotDeleteLast: string;
+    confirmDeleteTitle: string;
+    confirmDeleteMessage: string;
+    cascadeInfo: string;
+    cascadeNote: string;
+    confirmDelete: string;
+    deleting: string;
   };
 
   // Notifications

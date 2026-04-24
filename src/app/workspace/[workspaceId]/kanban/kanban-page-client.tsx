@@ -10,6 +10,8 @@ import { DesktopAppShell } from "@/client/components/desktop-app-shell";
 import { WorkspaceSwitcher } from "@/client/components/workspace-switcher";
 import { useTranslation } from "@/i18n";
 import { KanbanTab } from "./kanban-tab";
+import { WorkspaceSettingsTab } from "../workspace-settings-tab";
+import { Settings, X } from "lucide-react";
 import {
   localizeSpecialists,
   mapLocaleToKanbanSpecialistLanguage,
@@ -71,6 +73,48 @@ export function KanbanPageClient() {
   const syncInProgressRef = useRef(false);
   const codebasesRef = useRef<CodebaseData[]>(codebases);
   codebasesRef.current = codebases;
+
+  // ── Workspace Settings Panel ──
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+  const [worktreeRootDraft, setWorktreeRootDraft] = useState("");
+  const [worktreeRootState, setWorktreeRootState] = useState<{ saving: boolean; message: string | null; error: string | null }>({
+    saving: false, message: null, error: null,
+  });
+
+  // Initialize worktreeRootDraft from workspace metadata
+  useEffect(() => {
+    const ws = workspacesHook.workspaces.find((w) => w.id === workspaceId);
+    if (ws?.metadata?.worktreeRoot) {
+      setWorktreeRootDraft(ws.metadata.worktreeRoot);
+    }
+  }, [workspacesHook.workspaces, workspaceId]);
+
+  const displayedWorktreeRoot = useMemo(() => {
+    const ws = workspacesHook.workspaces.find((w) => w.id === workspaceId);
+    return ws?.metadata?.worktreeRoot ?? "";
+  }, [workspacesHook.workspaces, workspaceId]);
+
+  const defaultWorktreeRootHint = "~/.routa/workspace";
+
+  const handleSaveWorktreeRoot = useCallback(async () => {
+    setWorktreeRootState({ saving: true, message: null, error: null });
+    try {
+      const res = await desktopAwareFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata: { worktreeRoot: worktreeRootDraft } }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to save");
+      }
+      await workspacesHook.fetchWorkspaces();
+      setWorktreeRootState({ saving: false, message: "Saved", error: null });
+      setTimeout(() => setWorktreeRootState((s) => ({ ...s, message: null })), 2000);
+    } catch (err) {
+      setWorktreeRootState({ saving: false, message: null, error: err instanceof Error ? err.message : "Failed to save" });
+    }
+  }, [workspaceId, worktreeRootDraft, workspacesHook]);
 
   // Auto-connect ACP
   useEffect(() => {
@@ -496,6 +540,16 @@ export function KanbanPageClient() {
     <DesktopAppShell
       workspaceId={workspaceId}
       workspaceTitle={activeWorkspaceTitle}
+      titleBarRight={
+        <button
+          onClick={() => setShowWorkspaceSettings((v) => !v)}
+          className={`inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors ${showWorkspaceSettings ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-[#1f232f] dark:hover:text-slate-200"}`}
+          title={t.workspace.workspaceSettings ?? "Workspace Settings"}
+          data-testid="workspace-settings-toggle"
+        >
+          {showWorkspaceSettings ? <X className="h-3.5 w-3.5" /> : <Settings className="h-3.5 w-3.5" />}
+        </button>
+      }
       workspaceSwitcher={(
         <WorkspaceSwitcher
           workspaces={workspacesHook.workspaces}
@@ -511,23 +565,46 @@ export function KanbanPageClient() {
     >
       <div className="flex h-full flex-col overflow-hidden bg-desktop-bg-primary" data-testid="kanban-page-shell">
         <div className="flex-1 min-h-0 overflow-hidden">
-          <KanbanTab
-            workspaceId={workspaceId}
-            refreshSignal={refreshKey}
-            boards={boards}
-            tasks={tasks}
-            sessions={sessions}
-            providers={acp.providers}
-            specialists={localizedSpecialists}
-            specialistLanguage={specialistLanguage}
-            codebases={codebases}
-            onRefresh={handleRefresh}
-            acp={acp}
-            onAgentPrompt={handleAgentPrompt}
-            repoSync={repoSync}
-            repoChanges={repoChanges}
-            repoChangesLoading={repoChangesLoading}
-          />
+          {showWorkspaceSettings ? (
+            <div className="h-full overflow-y-auto px-6 py-4" data-testid="workspace-settings-panel">
+              <WorkspaceSettingsTab
+                workspaceId={workspaceId}
+                workspaceTitle={activeWorkspaceTitle}
+                codebases={codebases}
+                fetchCodebases={fetchCodebases}
+                worktreeRootDraft={worktreeRootDraft}
+                setWorktreeRootDraft={setWorktreeRootDraft}
+                worktreeRootState={worktreeRootState}
+                displayedWorktreeRoot={displayedWorktreeRoot}
+                defaultWorktreeRootHint={defaultWorktreeRootHint}
+                onSaveWorktreeRoot={handleSaveWorktreeRoot}
+                useWorkspacesHook={workspacesHook}
+              />
+            </div>
+          ) : (
+            <KanbanTab
+              workspaceId={workspaceId}
+              refreshSignal={refreshKey}
+              boards={boards}
+              tasks={tasks}
+              sessions={sessions}
+              providers={acp.providers}
+              specialists={localizedSpecialists}
+              specialistLanguage={specialistLanguage}
+              codebases={codebases}
+              onRefresh={handleRefresh}
+              acp={acp}
+              onAgentPrompt={handleAgentPrompt}
+              repoSync={repoSync}
+              repoChanges={repoChanges}
+              repoChangesLoading={repoChangesLoading}
+              workspacePanelProps={{
+                workspaceTitle: activeWorkspaceTitle,
+                useWorkspacesHook: workspacesHook,
+                fetchCodebases,
+              }}
+            />
+          )}
         </div>
       </div>
     </DesktopAppShell>
