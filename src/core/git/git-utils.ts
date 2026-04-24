@@ -990,7 +990,7 @@ export function getRepoDeliveryStatus(
   repoPath: string,
   options?: {
     baseBranch?: string | null;
-    sourceType?: "local" | "github";
+    sourceType?: "local" | "github" | "gitlab";
     sourceUrl?: string | null;
   },
 ): RepoDeliveryStatus {

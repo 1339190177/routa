@@ -14,6 +14,7 @@ import type {
   VCSBranch,
   VCSComment,
   VCSFileChange,
+  VCSIssue,
   VCSIssueListItem,
   VCSAccessStatus,
 } from "./vcs-provider";
