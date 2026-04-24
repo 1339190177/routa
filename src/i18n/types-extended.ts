@@ -1247,7 +1247,9 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     testCasesPlaceholder: string;
     testCasesHint: string;
     createLinkedGithubIssue: string;
+    createLinkedVcsIssue: string;
     noGithubLinked: string;
+    noVcsLinked: string;
     linkRepositories: string;
     noSelectionHint: string;
     create: string;
