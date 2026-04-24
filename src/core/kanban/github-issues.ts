@@ -1,5 +1,6 @@
 import { getServerBridge } from "@/core/platform";
 import { parseVCSUrl } from "../git/git-utils";
+import { getVCSProvider, type VCSIssue } from "../vcs/vcs-provider";
 
 export interface GitHubIssuePayload {
   title: string;
@@ -354,4 +355,23 @@ export async function updateGitHubIssue(repo: string, issueNumber: number, paylo
   if (!response.ok) {
     throw new Error(`GitHub issue update failed: ${response.status} ${await response.text()}`);
   }
+}
+
+/**
+ * Create an issue via the VCS abstraction layer.
+ * Works with both GitHub and GitLab depending on codebase source type.
+ */
+export async function createVcsIssue(
+  repo: string,
+  sourceType: string | undefined,
+  payload: GitHubIssuePayload,
+): Promise<VCSIssue> {
+  const provider = getVCSProvider();
+  return provider.createIssue({
+    repo,
+    title: payload.title,
+    body: payload.body,
+    labels: payload.labels,
+    assignees: payload.assignees,
+  });
 }
