@@ -140,6 +140,23 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
             continue;
           }
         }
+        // Done-lane PR-settled guard: cards in done-stage columns that already
+        // have a real PR URL are considered settled unless auto-merge is needed.
+        // This prevents the lane scanner from re-triggering cards that the
+        // WorkflowOrchestrator has already processed through the done-lane pipeline.
+        if (task.pullRequestUrl && columnStageMap.get(task.columnId ?? "") === "done") {
+          const isPRSettled = task.pullRequestMergedAt
+            || task.pullRequestUrl === "manual"
+            || task.pullRequestUrl === "already-merged";
+          if (isPRSettled) continue;
+          // PR not merged — only allow re-triggering if auto-merge is configured
+          const col = automatedColumns.find(
+            (c: { id: string }) => c.id === task.columnId,
+          );
+          const wantsAutoMerge = (col as { automation?: { deliveryRules?: { autoMergeAfterPR?: boolean } } })
+            ?.automation?.deliveryRules?.autoMergeAfterPR;
+          if (!wantsAutoMerge) continue;
+        }
         // Circuit-breaker / rate-limit: skip cards marked as failed, but auto-recover
         // after the cooldown period (SESSION_RETRY_RESET_MS, default 5 min).
         if (task.lastSyncError?.startsWith(CIRCUIT_BREAKER_MARKER) ||

@@ -50,13 +50,25 @@ function cleanOldLogs() {
 ensureLogDir();
 cleanOldLogs();
 
-const logFile = join(LOG_DIR, `${dateStamp()}.log`);
-const logStream = createWriteStream(logFile, { flags: "a" });
+let currentDate = dateStamp();
+let logStream = createWriteStream(join(LOG_DIR, `${currentDate}.log`), { flags: "a" });
 
-const prefix = `[${localTs()}] `;
-logStream.write(`${prefix}=== dev server starting ===\n`);
+logStream.write(`[${localTs()}] === dev server starting ===\n`);
 
-console.log(`[dev-logger] Teeing output to ${logFile}`);
+console.log(`[dev-logger] Teeing output to ${join(LOG_DIR, `${currentDate}.log`)}`);
+
+function rotateIfNeeded() {
+  const today = dateStamp();
+  if (today === currentDate) return;
+  const ts = localTs();
+  logStream.write(`[${ts}] === rotating log to ${today} ===\n`);
+  logStream.end();
+  currentDate = today;
+  ensureLogDir();
+  cleanOldLogs();
+  logStream = createWriteStream(join(LOG_DIR, `${currentDate}.log`), { flags: "a" });
+  logStream.write(`[${ts}] === log rotated from previous day ===\n`);
+}
 
 // Build the child command:
 //   node_modules/.bin/next dev --max-old-space-size=8192 [user args...]
@@ -86,6 +98,8 @@ function tee(data, source) {
   } else {
     process.stdout.write(text);
   }
+  // Rotate log file if date changed
+  rotateIfNeeded();
   // File (with timestamp prefix per line)
   const ts = localTs();
   const lines = text.replace(/\n$/, "").split("\n");

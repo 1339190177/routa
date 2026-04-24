@@ -37,6 +37,9 @@ import {
   isBareGitRepository,
 } from "@/core/git";
 
+const BRANCH_CACHE_TTL_MS = 30_000;
+const branchCache = new Map<string, { data: Record<string, unknown>; expiresAt: number }>();
+
 function buildBranchPayload(repoPath: string, _fetched = false) {
   const current = getCurrentBranch(repoPath) ?? "unknown";
   const local = listBranches(repoPath);
@@ -59,7 +62,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.json(buildBranchPayload(repoPath));
+  const cached = branchCache.get(repoPath);
+  if (cached && Date.now() < cached.expiresAt) {
+    return NextResponse.json(cached.data);
+  }
+
+  const data = buildBranchPayload(repoPath);
+  branchCache.set(repoPath, { data, expiresAt: Date.now() + BRANCH_CACHE_TTL_MS });
+  return NextResponse.json(data);
 }
 
 export async function POST(request: NextRequest) {
@@ -76,12 +86,14 @@ export async function POST(request: NextRequest) {
   // Fetch remote refs and fast-forward local branches to match origin
   // forceReset: base repos should always match remote, local changes have no value
   fetchAndFastForward(repoPath, { forceReset: true });
+  branchCache.delete(repoPath);
 
   return NextResponse.json(buildBranchPayload(repoPath, true));
 }
 
 export async function PATCH(request: NextRequest) {
   const body = await request.json();
+  branchCache.delete((body as { repoPath?: string }).repoPath ?? "");
   const { repoPath, branch, pull: doPull, action } = body as {
     repoPath?: string;
     branch?: string;
@@ -182,6 +194,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const body = await request.json();
+  branchCache.delete((body as { repoPath?: string }).repoPath ?? "");
   const { repoPath, branch } = body as {
     repoPath?: string;
     branch?: string;

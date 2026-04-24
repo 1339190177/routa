@@ -167,6 +167,8 @@ export class BrowserAcpClient {
   private readonly ownershipConflictBackoffMultiplier = 2;
   private readonly ownershipConflictRetryState = new Map<string, number>();
   private probeAbortController: AbortController | null = null;
+  /** Session IDs whose ownership lease has expired — skip probing on re-attach. */
+  private readonly expiredLeaseSessions = new Set<string>();
 
   constructor(baseUrl: string = "") {
     this.baseUrl = baseUrl;
@@ -266,6 +268,7 @@ export class BrowserAcpClient {
     this._sessionId = result.sessionId;
 
     // Connect SSE after we know the sessionId
+    this.expiredLeaseSessions.delete(result.sessionId);
     this.attachSession(result.sessionId);
 
     return result;
@@ -361,6 +364,15 @@ export class BrowserAcpClient {
       this.lastEventId = null;
     }
     this._sessionId = sessionId;
+    if (this.expiredLeaseSessions.has(sessionId)) {
+      this.emitConnectionIssue({
+        sessionId,
+        message: "Session ownership lease expired — not re-probing.",
+        retryable: false,
+        status: 409,
+      });
+      return;
+    }
     this.connectSSE(sessionId);
   }
 
@@ -633,6 +645,7 @@ export class BrowserAcpClient {
     this._sessionId = null;
     this.lastEventId = null;
     this.ownershipConflictRetryState.clear();
+    this.expiredLeaseSessions.clear();
     this.updateHandlers = [];
     this.connectionIssueHandlers = [];
   }
@@ -782,6 +795,10 @@ export class BrowserAcpClient {
 
       const isExpiredLease = response.status === 409
         && (message.includes("lease expired") || message.includes("cannot be resumed"));
+
+      if (isExpiredLease) {
+        this.expiredLeaseSessions.add(sessionId);
+      }
 
       return {
         sessionId,
