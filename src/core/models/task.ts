@@ -50,6 +50,10 @@ export interface TaskInvestValidation {
     small: TaskInvestCheckSummary;
     testable: TaskInvestCheckSummary;
   };
+  /** Effort band derived from structural signals (XS/S/M/L/XL) */
+  effortBand?: "XS" | "S" | "M" | "L" | "XL";
+  /** Raw effort score before band mapping */
+  effortScore?: number;
   issues: string[];
 }
 

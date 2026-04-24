@@ -10,6 +10,7 @@ import type {
   TaskStoryReadiness,
 } from "../models/task";
 import { parseCanonicalStory } from "./canonical-story";
+import { computeEffortBand, extractEffortSignals } from "./effort-band";
 
 interface ArtifactStoreLike {
   listByTask(taskId: string): Promise<Array<{ type: ArtifactType }>>;
@@ -154,9 +155,15 @@ function buildHeuristicInvestValidation(task: Task, issues: string[]): TaskInves
         },
   };
 
+  // Compute effort band from structural signals
+  const effortSignals = extractEffortSignals(task);
+  const effortResult = computeEffortBand(effortSignals);
+
   return {
     source: "heuristic",
     overallStatus: summarizeStatuses(INVEST_KEYS.map((key) => checks[key].status)),
+    effortBand: effortResult.band,
+    effortScore: effortResult.score,
     checks,
     issues,
   };
@@ -174,9 +181,23 @@ export function buildTaskInvestValidation(task: Task): TaskInvestValidation {
       testable: { ...parseResult.story.story.invest.testable },
     } satisfies Record<typeof INVEST_KEYS[number], TaskInvestCheckSummary>;
 
+    // Extract effort signals from canonical story fields
+    const story = parseResult.story.story;
+    const surfaceValues = story.surface_coverage ? Object.values(story.surface_coverage) : [];
+    const surfaceCoverageCount = surfaceValues.filter((v) => v === "covered").length;
+    const storySignals = {
+      affectedAreasCount: story.constraints_and_affected_areas.length,
+      surfaceCoverageCount,
+      hasExternalDependencies: story.dependencies_and_sequencing.depends_on.length > 0,
+    };
+    const effortSignals = extractEffortSignals(task, storySignals);
+    const effortResult = computeEffortBand(effortSignals);
+
     return {
       source: "canonical_story",
       overallStatus: summarizeStatuses(INVEST_KEYS.map((key) => checks[key].status)),
+      effortBand: effortResult.band,
+      effortScore: effortResult.score,
       checks,
       issues: parseResult.issues,
     };
