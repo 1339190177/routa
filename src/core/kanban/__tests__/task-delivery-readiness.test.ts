@@ -258,6 +258,6 @@ describe("task delivery readiness", () => {
     });
 
     expect(reviewLikeError).toContain("no committed changes detected");
-    expect(doneLikeError).toContain("GitHub repo is not PR-ready yet");
+    expect(doneLikeError).toContain("GitHub repo is not PR/MR-ready yet");
   });
 });
