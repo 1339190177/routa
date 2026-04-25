@@ -104,11 +104,11 @@ export function KanbanCodebaseModal({
     }),
     [codebases],
   );
-  const githubCodebaseCount = useMemo(
-    () => codebases.filter((codebase) => getCodebaseSourceType(codebase) === "github").length,
+  const vcsCodebaseCount = useMemo(
+    () => codebases.filter((codebase) => { const st = getCodebaseSourceType(codebase); return st === "github" || st === "gitlab"; }).length,
     [codebases],
   );
-  const localCodebaseCount = codebases.length - githubCodebaseCount;
+  const localCodebaseCount = codebases.length - vcsCodebaseCount;
   const healthIssuesCount = (repoHealth?.missingRepoTasks ?? 0) + (repoHealth?.cwdMismatchTasks ?? 0);
   const selectedCodebaseLabel = selectedCodebase ? getCodebaseDisplayName(selectedCodebase) : null;
   const showRepositoryRail = sortedCodebases.length > 1;
@@ -177,7 +177,7 @@ export function KanbanCodebaseModal({
                   value={defaultCodebase ? getCodebaseDisplayName(defaultCodebase) : "—"}
                 />
                 <CompactStat label={t.kanbanModals.localSourcesLabel} value={String(localCodebaseCount)} />
-                <CompactStat label={t.kanbanModals.githubSourcesLabel} value={String(githubCodebaseCount)} />
+                <CompactStat label={t.kanbanModals.vcsSourcesLabel} value={String(vcsCodebaseCount)} />
                 <CompactStat
                   label={t.kanbanModals.healthIssuesLabel}
                   value={String(healthIssuesCount)}
@@ -712,7 +712,7 @@ export function KanbanCodebaseModal({
                   )}
                 </InspectorSection>
 
-                {selectedCodebaseSourceType === "github" && selectedCodebase.sourceUrl ? (
+                {(selectedCodebaseSourceType === "github" || selectedCodebaseSourceType === "gitlab") && selectedCodebase.sourceUrl ? (
                   <InspectorSection
                     title={t.kanbanModals.recloneRepo}
                     hint={t.kanbanModals.recloneHint}
@@ -831,9 +831,11 @@ function getCodebaseDisplayName(codebase: CodebaseData): string {
   return codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath;
 }
 
-function getCodebaseSourceType(codebase: CodebaseData): "local" | "github" {
+function getCodebaseSourceType(codebase: CodebaseData): "local" | "github" | "gitlab" {
   if (codebase.sourceType === "github") return "github";
+  if (codebase.sourceType === "gitlab") return "gitlab";
   if (codebase.sourceUrl?.includes("github.com")) return "github";
+  if (codebase.sourceUrl?.includes("gitlab.com")) return "gitlab";
   if (looksLikeGitHubRepoLabel(codebase.label)) return "github";
   return "local";
 }
