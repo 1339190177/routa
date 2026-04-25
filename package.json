@@ -5,7 +5,7 @@
   "workspaces": [
     "apps/desktop"
   ],
-  "description": "Routa.js - Multi-Agent Coordination Platform for AI Development",
+  "description": "Workspace-first multi-agent coordination platform for AI development, with shared Specs, Kanban orchestration, and MCP/ACP/ A2A support across web and desktop.",
   "license": "MIT",
   "homepage": "https://github.com/phodal/routa#readme",
   "bugs": {
