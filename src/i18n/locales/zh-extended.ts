@@ -985,6 +985,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     defaultRepositoryLabel: "默认仓库",
     localSourcesLabel: "本地来源",
     githubSourcesLabel: "GitHub 来源",
+    vcsSourcesLabel: "VCS 来源",
     workspaceHealthTitle: "工作区仓库健康状态",
     addRepository: "添加仓库",
     addingRepository: "添加仓库中...",

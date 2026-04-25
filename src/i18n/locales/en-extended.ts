@@ -985,6 +985,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     defaultRepositoryLabel: "Default repository",
     localSourcesLabel: "Local sources",
     githubSourcesLabel: "GitHub sources",
+    vcsSourcesLabel: "VCS sources",
     workspaceHealthTitle: "Workspace repository health",
     addRepository: "Add repository",
     addingRepository: "Adding repository...",

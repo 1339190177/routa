@@ -990,6 +990,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     defaultRepositoryLabel: string;
     localSourcesLabel: string;
     githubSourcesLabel: string;
+    vcsSourcesLabel: string;
     workspaceHealthTitle: string;
     addRepository: string;
     addingRepository: string;
