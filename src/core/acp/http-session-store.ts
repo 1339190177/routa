@@ -1070,6 +1070,9 @@ class HttpSessionStore {
             leaseExpiresAt: undefined,
             createdAt: s.createdAt?.toISOString() ?? new Date().toISOString(),
           });
+          // Mark as terminated in sessionActivities so isTriggerSessionStale
+          // returns the correct stale state without relying on !activity.
+          this.setSessionTerminalState(s.id, "failed", `orphaned by instance ${s.ownerInstanceId}, cleaned up on startup by ${currentInstance}`);
         } else {
           this.upsertSession({
             sessionId: s.id,
@@ -1087,6 +1090,12 @@ class HttpSessionStore {
             leaseExpiresAt: s.leaseExpiresAt,
             createdAt: s.createdAt?.toISOString() ?? new Date().toISOString(),
           });
+          // Embedded sessions from a different instance are non-resumable —
+          // mark as terminated immediately so stale-trigger detection works
+          // without waiting for the lease to expire.
+          if (s.executionMode === "embedded" && s.ownerInstanceId && s.ownerInstanceId !== currentInstance) {
+            this.setSessionTerminalState(s.id, "failed", `embedded session from instance ${s.ownerInstanceId}, non-resumable on ${currentInstance}`);
+          }
         }
       }
     }

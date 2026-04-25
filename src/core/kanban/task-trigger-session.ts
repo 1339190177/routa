@@ -7,6 +7,7 @@
  */
 
 import { getHttpSessionStore } from "../acp/http-session-store";
+import { getAcpInstanceId } from "../acp/execution-backend";
 import type { Task } from "../models/task";
 import type { TaskStore } from "../store/task-store";
 import { getTaskLaneSession, markTaskLaneSessionStatus } from "./task-lane-history";
@@ -24,6 +25,16 @@ export function isTriggerSessionStale(
   const activity = sessionStore.getSessionActivity(triggerSessionId);
   if (!activity || activity.terminalState) {
     return triggerSessionId;
+  }
+
+  // Embedded sessions owned by a different instance are non-resumable
+  // even if the lease hasn't expired yet.
+  const session = sessionStore.getSession(triggerSessionId);
+  if (session?.executionMode === "embedded") {
+    const currentInstance = getAcpInstanceId();
+    if (session.ownerInstanceId && session.ownerInstanceId !== currentInstance) {
+      return triggerSessionId;
+    }
   }
 
   return undefined;

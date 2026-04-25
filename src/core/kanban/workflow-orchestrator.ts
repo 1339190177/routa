@@ -1056,10 +1056,20 @@ export class KanbanWorkflowOrchestrator {
                   lastSyncError: undefined,
                 });
                 if (!ok) {
-                  console.log(
-                    `[WorkflowOrchestrator] Terminal guard version conflict for ${cardId}, ` +
-                    `task was modified concurrently.`,
-                  );
+                  // Re-read and retry once — non-fatal if it fails again (watchdog will retry).
+                  const retryTask = await this.taskStore.get(cardId);
+                  if (retryTask && retryTask.version !== undefined && this.taskStore.atomicUpdate) {
+                    const retryOk = await this.taskStore.atomicUpdate(cardId, retryTask.version, {
+                      status: "COMPLETED" as import("../models/task").TaskStatus,
+                      lastSyncError: undefined,
+                    });
+                    if (!retryOk) {
+                      console.log(
+                        `[WorkflowOrchestrator] Terminal guard retry failed for ${cardId}, ` +
+                        `will retry on next scan.`,
+                      );
+                    }
+                  }
                 }
               } else {
                 freshTask.status = "COMPLETED" as import("../models/task").TaskStatus;
@@ -1872,10 +1882,34 @@ export class KanbanWorkflowOrchestrator {
           triggerSessionId: undefined,
         });
         if (!ok) {
-          console.warn(
-            `[WorkflowOrchestrator] autoAdvanceCard version conflict for ${cardId}, skipping.`,
-          );
-          return;
+          // Re-read and retry once — the card may still be in the source column
+          // due to a concurrent write (e.g. laneSessions merge from handleAgentCompletion).
+          const fresh = await this.taskStore.get(cardId);
+          if (fresh && fresh.columnId === automation.columnId && fresh.version !== undefined) {
+            const retryOk = await this.taskStore.atomicUpdate(cardId, fresh.version, {
+              columnId: nextColumn.id,
+              status: nextStatus,
+              triggerSessionId: undefined,
+            });
+            if (retryOk) {
+              console.log(
+                `[WorkflowOrchestrator] autoAdvanceCard retry succeeded for ${cardId}.`,
+              );
+              // Fall through to emit COLUMN_TRANSITION below.
+            } else {
+              console.warn(
+                `[WorkflowOrchestrator] autoAdvanceCard retry failed for ${cardId}, ` +
+                `will retry on next watchdog/lane-scanner tick.`,
+              );
+              return;
+            }
+          } else {
+            console.warn(
+              `[WorkflowOrchestrator] autoAdvanceCard version conflict for ${cardId}: ` +
+              `card already moved (now in ${fresh?.columnId}). Skipping.`,
+            );
+            return;
+          }
         }
       } else {
         // Fallback for stores without atomicUpdate

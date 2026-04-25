@@ -272,8 +272,36 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
                 && (s.status === "failed" || s.status === "timed_out"),
             );
 
-            if (!hasFailedAdvance) {
-              continue; // No error and no cross-column failures — genuinely done
+            // Detect "should have auto-advanced but didn't" — all steps completed,
+            // autoAdvanceOnSuccess is configured, yet the card is still in this column.
+            // This can happen when autoAdvanceCard loses a version-conflict race or
+            // the server restarts between session completion and the advance.
+            const shouldAutoAdvance = currentColumn?.automation?.autoAdvanceOnSuccess === true;
+            const stuckInColumn = shouldAutoAdvance;
+
+            if (!hasFailedAdvance && !stuckInColumn) {
+              continue; // No error, no cross-column failures, no pending advance — genuinely done
+            }
+
+            // Stuck-in-column with no cross-column failures: auto-advance was lost.
+            // Emit a COLUMN_TRANSITION so the orchestrator re-runs autoAdvanceCard.
+            if (stuckInColumn && !hasFailedAdvance) {
+              const stuckAttempts = countStepAttempts(laneSessions, task.columnId!, 0);
+              if (stuckAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
+                await safeAtomicSave(task, system.taskStore, {
+                  lastSyncError: buildAdvanceRecoveryError(
+                    `Max retries (${MAX_STEP_RESUME_ATTEMPTS}) reached. Card completed in "${currentColumn?.name}" but auto-advance kept failing.`,
+                  ),
+                  updatedAt: new Date(),
+                }, "stuck-advance limit");
+                continue;
+              }
+              console.log(
+                `[LaneScanner] Card ${task.id} completed all steps in "${currentColumn?.name}" ` +
+                `but is still in this column (autoAdvanceOnSuccess=true). Re-triggering advance.`,
+              );
+              // Fall through — emit COLUMN_TRANSITION below so the orchestrator
+              // runs autoAdvanceCard without re-executing the specialist step.
             }
 
             // Recovery: clear orphaned failed sessions from other columns and

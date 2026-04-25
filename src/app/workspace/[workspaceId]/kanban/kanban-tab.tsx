@@ -837,9 +837,15 @@ export function KanbanTab({
 
   const boardTasks = useMemo(() => {
     const effectiveBoardId = selectedBoardId ?? defaultBoardId;
+    const seen = new Set<string>();
     return localTasks
-      .filter((task) => task.creationSource !== "session")
-      .filter((task) => (task.boardId ?? defaultBoardId) === effectiveBoardId)
+      .filter((task) => {
+        if (task.creationSource === "session") return false;
+        if ((task.boardId ?? defaultBoardId) !== effectiveBoardId) return false;
+        if (seen.has(task.id)) return false;
+        seen.add(task.id);
+        return true;
+      })
       .sort((left, right) => (left.position ?? 0) - (right.position ?? 0));
   }, [defaultBoardId, localTasks, selectedBoardId]);
 
