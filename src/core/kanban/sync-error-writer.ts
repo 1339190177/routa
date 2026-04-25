@@ -1,0 +1,180 @@
+/**
+ * Sync Error Writer — Unified read/write for task.lastSyncError.
+ *
+ * All lastSyncError mutations and parsing should go through this module
+ * instead of ad-hoc string operations scattered across the codebase.
+ * This ensures consistent format, single source of truth for error types,
+ * and makes adding new error types a one-file change.
+ */
+
+// ─── Error Types ──────────────────────────────────────────────────────────────
+
+export type SyncErrorType =
+  | "circuit_breaker"
+  | "rate_limited"
+  | "repeat_limit"
+  | "advance_recovery"
+  | "done_stuck"
+  | "dependency_blocked"
+  | "gate_soft_fail";
+
+export interface SyncErrorPayload {
+  type: SyncErrorType;
+  message: string;
+  /** Circuit-breaker cooldown reset count (only for circuit_breaker type) */
+  resetCount?: number;
+  /** Cooldown duration in ms (only for types that support cooldown) */
+  cooldownMs?: number;
+  /** Embedded previous error (e.g. PR failure info preserved across resets) */
+  prev?: string;
+}
+
+// ─── Format / Parse ───────────────────────────────────────────────────────────
+
+/** Format a SyncErrorPayload into a machine-readable lastSyncError string. */
+export function formatSyncError(payload: SyncErrorPayload): string {
+  const parts: string[] = [];
+
+  switch (payload.type) {
+    case "circuit_breaker":
+      parts.push(`[circuit-breaker:reset=${payload.resetCount ?? 0}] ${payload.message}`);
+      break;
+    case "rate_limited":
+      parts.push(`[rate-limited] ${payload.message}`);
+      break;
+    case "repeat_limit":
+    case "advance_recovery":
+    case "done_stuck":
+    case "dependency_blocked":
+    case "gate_soft_fail":
+      parts.push(payload.message);
+      break;
+  }
+
+  if (payload.prev) {
+    parts.push(`| prev: ${payload.prev}`);
+  }
+
+  return parts.join(" ");
+}
+
+/** Parse a raw lastSyncError string back into a typed payload. */
+export function parseSyncError(raw: string | undefined): SyncErrorPayload | null {
+  if (!raw) return null;
+
+  // Circuit breaker: "[circuit-breaker:reset=N] ..."
+  const cbMatch = raw.match(/^\[circuit-breaker:reset=(\d+)\]\s*(.*?)(?:\s*\|\s*prev:\s*(.*))?$/s);
+  if (cbMatch) {
+    return {
+      type: "circuit_breaker",
+      resetCount: parseInt(cbMatch[1], 10),
+      message: cbMatch[2].trim(),
+      prev: cbMatch[3]?.trim(),
+    };
+  }
+
+  // Legacy circuit breaker without reset count
+  if (raw.startsWith("[circuit-breaker]")) {
+    return {
+      type: "circuit_breaker",
+      resetCount: 0,
+      message: raw.replace(/^\[circuit-breaker\]\s*/, "").trim(),
+    };
+  }
+
+  // Rate limited: "[rate-limited] ..."
+  if (raw.startsWith("[rate-limited]")) {
+    return {
+      type: "rate_limited",
+      message: raw.replace(/^\[rate-limited\]\s*/, "").trim(),
+    };
+  }
+
+  // Advance recovery: "[advance-recovery] ..."
+  if (raw.startsWith("[advance-recovery]")) {
+    return { type: "advance_recovery", message: raw.trim() };
+  }
+
+  // Done lane stuck: "[done-lane-stuck] ..."
+  if (raw.startsWith("[done-lane-stuck]")) {
+    return { type: "done_stuck", message: raw.trim() };
+  }
+
+  // Dependency blocked
+  if (raw.startsWith("Blocked by unfinished dependencies")) {
+    return { type: "dependency_blocked", message: raw.trim() };
+  }
+
+  // Repeat limit
+  if (raw.startsWith("Stopped Kanban automation")) {
+    return { type: "repeat_limit", message: raw.trim() };
+  }
+
+  // Gate soft fail
+  if (raw.includes("failed but soft-gated")) {
+    return { type: "gate_soft_fail", message: raw.trim() };
+  }
+
+  // Unknown format — return as generic
+  return { type: "circuit_breaker", message: raw };
+}
+
+// ─── Query helpers ────────────────────────────────────────────────────────────
+
+export function getErrorType(raw: string | undefined): SyncErrorType | null {
+  return parseSyncError(raw)?.type ?? null;
+}
+
+export function isCircuitBreaker(raw: string | undefined): boolean {
+  return getErrorType(raw) === "circuit_breaker";
+}
+
+export function isRateLimited(raw: string | undefined): boolean {
+  return getErrorType(raw) === "rate_limited";
+}
+
+/** Parse cooldown reset count from a circuit-breaker error string. */
+export function parseCbResetCount(raw: string | undefined): number {
+  return parseSyncError(raw)?.resetCount ?? 0;
+}
+
+/** Check if the error is in cooldown based on updatedAt timestamp. */
+export function isCooldownActive(
+  raw: string | undefined,
+  updatedAt: Date | string | number,
+  cooldownMs: number,
+): boolean {
+  if (!raw) return false;
+  const type = getErrorType(raw);
+  if (type !== "circuit_breaker" && type !== "rate_limited") return false;
+
+  const updatedMs = updatedAt instanceof Date
+    ? updatedAt.getTime()
+    : new Date(updatedAt).getTime();
+  return Date.now() - updatedMs < cooldownMs;
+}
+
+// ─── Convenience builders ─────────────────────────────────────────────────────
+
+export function buildCircuitBreakerError(resetCount: number, message: string, prev?: string): string {
+  return formatSyncError({ type: "circuit_breaker", resetCount, message, prev });
+}
+
+export function buildRateLimitedError(message: string): string {
+  return formatSyncError({ type: "rate_limited", message });
+}
+
+export function buildAdvanceRecoveryError(message: string): string {
+  return formatSyncError({ type: "advance_recovery", message });
+}
+
+export function buildDoneStuckError(message: string): string {
+  return formatSyncError({ type: "done_stuck", message });
+}
+
+export function buildDependencyBlockedError(pendingDeps: string[]): string {
+  return formatSyncError({
+    type: "dependency_blocked",
+    message: `Blocked by unfinished dependencies: ${pendingDeps.join(", ")}`,
+  });
+}

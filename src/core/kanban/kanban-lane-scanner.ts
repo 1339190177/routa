@@ -10,13 +10,21 @@
  */
 
 import type { RoutaSystem } from "../routa-system";
-import { hasExceededNonDevAutomationRepeatLimit, CIRCUIT_BREAKER_MARKER, RATE_LIMITED_MARKER, parseCbResetCount } from "./workflow-orchestrator";
+import { hasExceededNonDevAutomationRepeatLimit } from "./workflow-orchestrator";
 import { getHttpSessionStore } from "../acp/http-session-store";
 import { clearStaleTriggerSession } from "./task-trigger-session";
 import { getKanbanAutomationSteps, type KanbanColumnStage } from "../models/kanban";
 import { AgentEventType } from "../events/event-bus";
 import { PR_FAILURE_PREFIX } from "./pr-auto-create";
 import { verifyPrMergeStatus } from "./pr-status-verifier";
+import { shouldSkipTickForMemory } from "./memory-guard";
+import {
+  isCircuitBreaker,
+  isRateLimited,
+  parseCbResetCount,
+  buildCircuitBreakerError,
+  buildAdvanceRecoveryError,
+} from "./sync-error-writer";
 
 const SCAN_INTERVAL_MS = 30_000;
 const MAX_STEP_RESUME_ATTEMPTS = 3;
@@ -60,6 +68,11 @@ function getScannerState(): LaneScannerState {
  */
 export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScannerStats> {
   const state = getScannerState();
+
+  // Memory guard: skip tick if heap memory is approaching the limit
+  if (shouldSkipTickForMemory("LaneScanner")) {
+    return state.stats;
+  }
 
   // Prevent re-entry: if previous tick is still running, skip this one
   if (isScanning) {
@@ -165,8 +178,7 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
         }
         // Circuit-breaker / rate-limit: skip cards marked as failed, but auto-recover
         // after the cooldown period (SESSION_RETRY_RESET_MS, default 5 min).
-        if (task.lastSyncError?.startsWith(CIRCUIT_BREAKER_MARKER) ||
-            task.lastSyncError?.startsWith(RATE_LIMITED_MARKER)) {
+        if (isCircuitBreaker(task.lastSyncError) || isRateLimited(task.lastSyncError)) {
           const updatedAt = task.updatedAt instanceof Date
             ? task.updatedAt.getTime()
             : new Date(task.updatedAt as string | number).getTime();
@@ -175,8 +187,7 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
           );
           if (Date.now() - updatedAt < cooldownMs) continue;
           // Check if this card has exceeded the max cooldown reset count
-          const isCb = task.lastSyncError.startsWith(CIRCUIT_BREAKER_MARKER);
-          if (isCb) {
+          if (isCircuitBreaker(task.lastSyncError)) {
             const resetCount = parseCbResetCount(task.lastSyncError);
             const maxResets = parseInt(process.env.ROUTA_CB_MAX_COOLDOWN_RESETS ?? "5", 10);
             if (resetCount >= maxResets) {
@@ -191,12 +202,11 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
             // Preserve PR failure info if embedded in the previous lastSyncError
             const prMatch = task.lastSyncError?.match(new RegExp(`\\| prev: (${PR_FAILURE_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.+)`));
             const prFallback = task.lastSyncError?.includes(PR_FAILURE_PREFIX) ? task.lastSyncError : undefined;
-            task.lastSyncError = `[circuit-breaker:reset=${newResetCount}] pending retry.`;
-            if (prMatch?.[1]) {
-              task.lastSyncError += ` | prev: ${prMatch[1]}`;
-            } else if (prFallback) {
-              task.lastSyncError += ` | prev: ${prFallback}`;
-            }
+            task.lastSyncError = buildCircuitBreakerError(
+              newResetCount,
+              "pending retry.",
+              prMatch?.[1] ?? prFallback,
+            );
           } else {
             console.log(
               `[LaneScanner] Cooldown expired for card ${task.id}, clearing rate-limit marker.`,
@@ -244,8 +254,9 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
             // will retry the push to the next column.
             const advanceRecoveryAttempts = countStepAttempts(laneSessions, task.columnId!, 0);
             if (advanceRecoveryAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
-              task.lastSyncError = `[advance-recovery] Max retries (${MAX_STEP_RESUME_ATTEMPTS}) reached. ` +
-                `Card completed in "${currentColumn?.name}" but failed to advance.`;
+              task.lastSyncError = buildAdvanceRecoveryError(
+                `Max retries (${MAX_STEP_RESUME_ATTEMPTS}) reached. Card completed in "${currentColumn?.name}" but failed to advance.`,
+              );
               task.updatedAt = new Date();
               await system.taskStore.save(task);
               continue;

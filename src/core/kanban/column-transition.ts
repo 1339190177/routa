@@ -22,6 +22,8 @@ export interface ColumnTransitionData {
   toColumnName?: string;
   /** When set, start the automation from this step index instead of 0 (used by Lane Scanner resume). */
   resumeStepIndex?: number;
+  /** Internal: number of stale-queue retries already attempted (used by watchdog). */
+  staleRetryCount?: number;
 }
 
 /**

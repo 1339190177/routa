@@ -31,6 +31,14 @@ import { PR_FAILURE_PREFIX } from "./pr-auto-create";
 import { getTaskDevServerRegistry } from "./task-dev-server-registry";
 import type { WorktreeStore } from "../db/pg-worktree-store";
 import { onChildTaskStatusChanged } from "./parent-child-lifecycle";
+import { shouldSkipTickForMemory } from "./memory-guard";
+import {
+  parseCbResetCount,
+  buildCircuitBreakerError,
+  buildRateLimitedError,
+  buildDoneStuckError,
+  buildDependencyBlockedError,
+} from "./sync-error-writer";
 
 const WATCHDOG_SCAN_INTERVAL_MS = 30_000;
 const COMPLETED_AUTOMATION_CLEANUP_DELAY_MS = 30_000;
@@ -38,23 +46,12 @@ const STALE_QUEUED_THRESHOLD_MS = 60_000;
 const MAX_AUTOMATION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 hours
 const SESSION_RETRY_LIMIT = parseInt(process.env.ROUTA_SESSION_RETRY_LIMIT ?? "3", 10);
 const SESSION_RETRY_RESET_MS = parseInt(process.env.ROUTA_SESSION_RETRY_RESET_MS ?? `${5 * 60 * 1000}`, 10);
-/** Max cooldown resets before a card is permanently skipped. Prevents infinite circuit-breaker loops. */
-const CIRCUIT_BREAKER_MAX_COOLDOWN_RESETS = parseInt(process.env.ROUTA_CB_MAX_COOLDOWN_RESETS ?? "5", 10);
 export const CIRCUIT_BREAKER_MARKER = "[circuit-breaker]";
 export const RATE_LIMITED_MARKER = "[rate-limited]";
 
-/** Parse the cooldown reset count from a circuit-breaker lastSyncError string.
- *  Format: "[circuit-breaker:reset=N] ..." or legacy "[circuit-breaker] ..." */
-export function parseCbResetCount(lastSyncError: string | undefined): number {
-  if (!lastSyncError) return 0;
-  const match = lastSyncError.match(/\[circuit-breaker:reset=(\d+)\]/);
-  return match ? parseInt(match[1], 10) : (lastSyncError.startsWith(CIRCUIT_BREAKER_MARKER) ? 0 : 0);
-}
-
-/** Build a circuit-breaker marker string with embedded reset count. */
-function buildCbMarker(resetCount: number, message: string): string {
-  return `[circuit-breaker:reset=${resetCount}] ${message}`;
-}
+// Re-export parseCbResetCount from sync-error-writer for backward compatibility
+// (kanban-lane-scanner imports it from this module).
+export { parseCbResetCount } from "./sync-error-writer";
 
 const RATE_LIMIT_KEYWORDS = ["429", "rate limit", "速率限制"];
 
@@ -227,6 +224,8 @@ export interface ActiveAutomation {
   signaledSessionIds: Set<string>;
   /** Whether to automatically try the next fallback step on failure */
   enableAutomaticFallback?: boolean;
+  /** Number of times this automation has been re-triggered as stale */
+  staleRetryCount?: number;
 }
 
 /** Callback to create an agent session for a column automation */
@@ -407,6 +406,13 @@ export class KanbanWorkflowOrchestrator {
   }
 
   private async handleColumnTransitionData(data: ColumnTransitionData): Promise<void> {
+    // Anti-double-trigger: if a watchdog stale retry fires while LaneScanner
+    // already re-triggered this card, skip to prevent duplicate sessions.
+    const rawData = data as unknown as Record<string, unknown>;
+    if (rawData._source === "watchdog_stale_retry" && this.activeAutomations.has(data.cardId)) {
+      return;
+    }
+
     const board = await this.kanbanBoardStore.get(data.boardId);
     if (!board) return;
     const resolved = resolveTransitionAutomation(board, data);
@@ -551,12 +557,16 @@ export class KanbanWorkflowOrchestrator {
     if (task && task.dependencies.length > 0) {
       const depCheck = await checkDependencyGate(task, board.columns, this.taskStore);
       if (depCheck.blocked) {
-        task.lastSyncError = `Blocked by unfinished dependencies: ${depCheck.pendingDependencies.join(", ")}`;
+        const newError = buildDependencyBlockedError(depCheck.pendingDependencies);
+        // Only log when the blocked state changes (avoid repeating every 30s)
+        if (task.lastSyncError !== newError) {
+          console.warn(
+            `[WorkflowOrchestrator] Card ${data.cardId} blocked by dependencies: ${depCheck.pendingDependencies.join(", ")}`,
+          );
+        }
+        task.lastSyncError = newError;
         task.updatedAt = new Date();
         await this.taskStore.save(task);
-        console.warn(
-          `[WorkflowOrchestrator] Card ${data.cardId} blocked by dependencies: ${depCheck.pendingDependencies.join(", ")}`,
-        );
         return;
       }
     }
@@ -678,6 +688,7 @@ export class KanbanWorkflowOrchestrator {
       recoveryAttempts: 0,
       signaledSessionIds: new Set(),
       enableAutomaticFallback: task?.enableAutomaticFallback,
+      staleRetryCount: typeof data.staleRetryCount === "number" ? data.staleRetryCount : 0,
     };
 
     this.activeAutomations.set(data.cardId, automationEntry);
@@ -753,7 +764,7 @@ export class KanbanWorkflowOrchestrator {
               if (cbTask) {
                 const prevResets = parseCbResetCount(cbTask.lastSyncError);
                 const prError = cbTask.lastSyncError?.startsWith(PR_FAILURE_PREFIX) ? ` | prev: ${cbTask.lastSyncError}` : "";
-                cbTask.lastSyncError = buildCbMarker(prevResets, `Session creation failed ${newCount} times. Retry after cooldown.${prError}`);
+                cbTask.lastSyncError = buildCircuitBreakerError(prevResets, `Session creation failed ${newCount} times. Retry after cooldown.`, prError || undefined);
                 cbTask.updatedAt = new Date();
                 await this.taskStore.save(cbTask);
               }
@@ -778,7 +789,7 @@ export class KanbanWorkflowOrchestrator {
           );
           const rlTask = await this.taskStore.get(data.cardId);
           if (rlTask) {
-            rlTask.lastSyncError = `${RATE_LIMITED_MARKER} ${errMsg}`;
+            rlTask.lastSyncError = buildRateLimitedError(errMsg);
             rlTask.updatedAt = new Date();
             await this.taskStore.save(rlTask);
           }
@@ -791,7 +802,7 @@ export class KanbanWorkflowOrchestrator {
             const exTask = await this.taskStore.get(data.cardId);
             if (exTask) {
               const prevResets = parseCbResetCount(exTask.lastSyncError);
-              exTask.lastSyncError = buildCbMarker(prevResets, `Session creation failed ${newCount} times. Retry after cooldown.`);
+              exTask.lastSyncError = buildCircuitBreakerError(prevResets, `Session creation failed ${newCount} times. Retry after cooldown.`);
               exTask.updatedAt = new Date();
               await this.taskStore.save(exTask);
             }
@@ -866,7 +877,6 @@ export class KanbanWorkflowOrchestrator {
       // Review Guard) is responsible for the final APPROVED/REJECTED decision, so a
       // failed upstream QA check should not prevent it from running.
       const currentStepRole = automation.steps[automation.currentStepIndex]?.role?.toUpperCase();
-      const currentSpecialistId = automation.steps[automation.currentStepIndex]?.specialistId;
       const canSoftGateAdvance = !successEvent
         && currentStepRole === "GATE"
         && nextStepIndex < automation.steps.length;
@@ -1041,7 +1051,7 @@ export class KanbanWorkflowOrchestrator {
               && freshTask.pullRequestUrl !== "already-merged";
             const prMerged = Boolean(freshTask.pullRequestMergedAt);
             if (hasRealPR && !prMerged && !freshTask.lastSyncError) {
-              freshTask.lastSyncError = `[done-lane-stuck] Done-lane automation failed. PR awaiting merge: ${freshTask.pullRequestUrl}`;
+              freshTask.lastSyncError = buildDoneStuckError(`Done-lane automation failed. PR awaiting merge: ${freshTask.pullRequestUrl}`);
               freshTask.updatedAt = new Date();
               await this.taskStore.save(freshTask);
               console.log(
@@ -1123,6 +1133,11 @@ export class KanbanWorkflowOrchestrator {
   }
 
   private async scanForInactiveSessions(): Promise<void> {
+    // Memory guard: skip watchdog scan if heap memory is approaching the limit
+    if (shouldSkipTickForMemory("WorkflowOrchestratorWatchdog")) {
+      return;
+    }
+
     const sessionStore = getHttpSessionStore();
     const now = Date.now();
 
@@ -1274,13 +1289,29 @@ export class KanbanWorkflowOrchestrator {
       });
     }
 
-    // Detect stale "queued" automations that never got a session.
+    // ── Region: Stale Queued Automation Retry ─────────────────────────────────
+    await this.scanStaleQueuedAutomations(now);
+
+    // ── Region: Periodic Maintenance ──────────────────────────────────────────
+    this.runPeriodicMaintenance();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Region: Watchdog — Stale Queued Automation Retry
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Detect stale "queued" automations that never got a session and retry with exponential backoff. */
+  private async scanStaleQueuedAutomations(now: number): Promise<void> {
     // This can happen when createSession returned null or an async handler
     // failed silently (e.g. HMR restart during column transition processing).
+    const STALE_MAX_RETRIES = parseInt(process.env.ROUTA_STALE_MAX_RETRIES ?? "3", 10);
     for (const [cardId, automation] of this.activeAutomations.entries()) {
       if (automation.status !== "queued") continue;
+      const retryCount = automation.staleRetryCount ?? 0;
+      // Exponential backoff: 60s → 120s → 240s → give up
+      const staleThreshold = STALE_QUEUED_THRESHOLD_MS * Math.pow(2, retryCount);
       const queuedMs = now - automation.startedAt.getTime();
-      if (queuedMs < STALE_QUEUED_THRESHOLD_MS) continue;
+      if (queuedMs < staleThreshold) continue;
 
       // Circuit breaker: stop re-triggering cards that keep failing
       const failureCount = this.sessionFailureCounts.get(cardId) ?? 0;
@@ -1297,8 +1328,19 @@ export class KanbanWorkflowOrchestrator {
 
       console.warn(
         `[WorkflowOrchestrator] Stale queued automation for card ${cardId} ` +
-        `in column ${automation.columnId} (${queuedMs}ms old). Retrying.`,
+        `in column ${automation.columnId} (${queuedMs}ms old, stale retry ${retryCount + 1}/${STALE_MAX_RETRIES}). Retrying.`,
       );
+
+      // Check stale retry limit (separate from session circuit breaker)
+      if (retryCount >= STALE_MAX_RETRIES) {
+        console.warn(
+          `[WorkflowOrchestrator] Stale retry limit reached for card ${cardId}. Giving up.`,
+        );
+        automation.status = "failed";
+        this.cleanupCardSession?.(cardId);
+        this.activeAutomations.delete(cardId);
+        continue;
+      }
       automation.status = "failed";
       this.cleanupCardSession?.(cardId);
       this.activeAutomations.delete(cardId);
@@ -1320,42 +1362,51 @@ export class KanbanWorkflowOrchestrator {
             toColumnId: task.columnId,
             fromColumnName: "Watchdog",
             toColumnName: automation.columnName,
+            staleRetryCount: retryCount + 1,
+            _source: "watchdog_stale_retry",
           } as unknown as Record<string, unknown>,
           timestamp: new Date(),
         });
       }
     }
+  }
 
-    // ── Persistent stale-trigger scan ──────────────────────────────────────
-    // Run every 10th cycle (~5 minutes) to catch triggerSessionIds that point
-    // to sessions already evicted from HttpSessionStore (e.g. after restart).
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Region: Periodic Maintenance (stale trigger scan + dev server health)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Run periodic maintenance tasks: stale-trigger scan and dev server health checks. */
+  private runPeriodicMaintenance(): void {
+    // Stale-trigger scan: run every 10th cycle (~5 minutes) to catch
+    // triggerSessionIds pointing to evicted sessions (e.g. after restart).
     this.staleTriggerScanCycle++;
     if (this.staleTriggerScanner && this.staleTriggerScanCycle >= 10) {
       this.staleTriggerScanCycle = 0;
-      try {
-        const cleaned = await this.staleTriggerScanner();
-        if (cleaned > 0) {
-          console.log(`[WorkflowOrchestrator] Stale-trigger scan cleaned ${cleaned} tasks`);
-        }
-      } catch (err) {
-        console.error("[WorkflowOrchestrator] Stale-trigger scan failed:", err instanceof Error ? err.message : err);
-      }
+      void this.staleTriggerScanner()
+        .then((cleaned) => {
+          if (cleaned > 0) {
+            console.log(`[WorkflowOrchestrator] Stale-trigger scan cleaned ${cleaned} tasks`);
+          }
+        })
+        .catch((err) => {
+          console.error("[WorkflowOrchestrator] Stale-trigger scan failed:", err instanceof Error ? err.message : err);
+        });
     }
 
-    // ── Task dev server health check ────────────────────────────────────────
-    // Run every cycle for active task dev servers. Release ports that fail
-    // 3 consecutive health checks or exceed the 4-hour max age.
+    // Task dev server health check: release ports that fail 3 consecutive
+    // health checks or exceed the 4-hour max age.
     const registry = getTaskDevServerRegistry();
     for (const taskId of registry.getActiveTaskIds()) {
-      await registry.isHealthy(taskId);
-      if (registry.shouldRelease(taskId)) {
-        const record = registry.getForTask(taskId);
-        console.log(
-          `[WorkflowOrchestrator] Releasing task dev server for ${taskId}: ` +
-          `port ${record?.port}, failures=${record?.healthCheckFailures ?? 0}`,
-        );
-        registry.releaseForTask(taskId);
-      }
+      void registry.isHealthy(taskId).then(() => {
+        if (registry.shouldRelease(taskId)) {
+          const record = registry.getForTask(taskId);
+          console.log(
+            `[WorkflowOrchestrator] Releasing task dev server for ${taskId}: ` +
+            `port ${record?.port}, failures=${record?.healthCheckFailures ?? 0}`,
+          );
+          registry.releaseForTask(taskId);
+        }
+      });
     }
   }
 
