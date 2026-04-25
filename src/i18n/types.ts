@@ -194,6 +194,15 @@ export interface TranslationDictionary extends ExtendedTranslationDictionarySect
     spec: string;
   };
 
+  canvas: {
+    renderModeDynamic: string;
+    renderModePrebuilt: string;
+    viewerToggleLightTheme: string;
+    viewerToggleDarkTheme: string;
+    viewerCannotRender: string;
+    viewerCompilationError: string;
+  };
+
   featureExplorer: {
     title: string;
     subtitle: string;

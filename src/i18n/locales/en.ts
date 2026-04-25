@@ -188,6 +188,16 @@ const en: TranslationDictionary = {
     spec: "Spec",
   },
 
+  canvas: {
+    renderModeDynamic: "Dynamic",
+    renderModePrebuilt: "Prebuilt",
+    viewerToggleLightTheme: "Switch to light theme",
+    viewerToggleDarkTheme: "Switch to dark theme",
+    viewerCannotRender:
+      "Cannot render canvas: missing source for dynamic mode or canvasType for prebuilt mode.",
+    viewerCompilationError: "Canvas compilation error:",
+  },
+
   featureExplorer: {
     title: "Feature Explorer",
     subtitle: "Review feature-scoped changes, supporting context, screenshots, and related API probes.",

@@ -187,6 +187,16 @@ const zh: TranslationDictionary = {
     spec: "规格",
   },
 
+  canvas: {
+    renderModeDynamic: "动态",
+    renderModePrebuilt: "预置",
+    viewerToggleLightTheme: "切换到浅色主题",
+    viewerToggleDarkTheme: "切换到深色主题",
+    viewerCannotRender:
+      "无法渲染画布：动态模式缺少 source，或预置模式缺少 canvasType。",
+    viewerCompilationError: "Canvas 编译错误：",
+  },
+
   featureExplorer: {
     title: "特性浏览",
     subtitle: "按 feature 聚合查看改动文件、上下文说明、截图位与相关 API 探针。",
