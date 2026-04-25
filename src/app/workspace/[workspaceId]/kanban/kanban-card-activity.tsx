@@ -21,7 +21,17 @@ import type { KanbanSpecialistLanguage } from "./kanban-specialist-language";
 import { getKanbanSessionCopy } from "./i18n/kanban-session-copy";
 import { useTaskRuns } from "./use-task-runs";
 
-type ActivityTabId = "runs" | "handoffs" | "github";
+type ActivityTabId = "runs" | "handoffs" | "vcs";
+
+function resolveVcsLabel(vcsUrl?: string): string {
+  if (!vcsUrl) return "VCS";
+  try {
+    const host = new URL(vcsUrl).hostname;
+    if (host === "github.com" || host.endsWith(".github.com")) return "GitHub";
+    if (host === "gitlab.com" || host.includes("gitlab")) return "GitLab";
+  } catch { /* ignore */ }
+  return "VCS";
+}
 
 function formatTaskRunKind(kind: TaskRunInfo["kind"] | undefined): string {
   switch (kind) {
@@ -264,7 +274,7 @@ export function KanbanCardActivityPanel({
   const tabs: Array<{ id: ActivityTabId; label: string; count?: number }> = [
     { id: "runs", label: copy.runs, count: runs?.length ?? getOrderedSessionIds(task).length },
     ...((task.laneHandoffs?.length ?? 0) > 0 ? [{ id: "handoffs" as const, label: copy.handoffs, count: task.laneHandoffs?.length }] : []),
-    ...(task.vcsNumber ? [{ id: "github" as const, label: "GitHub" }] : []),
+    ...(task.vcsNumber ? [{ id: "vcs" as const, label: resolveVcsLabel(task.vcsUrl) }] : []),
   ];
   const [activeTab, setActiveTab] = useState<ActivityTabId>(tabs[0]?.id ?? "runs");
   const visibleTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : (tabs[0]?.id ?? "runs");
@@ -324,8 +334,8 @@ export function KanbanCardActivityPanel({
               compact={compact}
             />
           )}
-          {visibleTab === "github" && (
-            <GitHubPanel task={task} compact={compact} />
+          {visibleTab === "vcs" && (
+            <VCSPanel task={task} compact={compact} />
           )}
         </div>
       </div>
@@ -749,7 +759,7 @@ function HandoffPanel({ task, compact = false }: { task: TaskInfo; compact?: boo
   );
 }
 
-function GitHubPanel({ task, compact = false }: { task: TaskInfo; compact?: boolean }) {
+function VCSPanel({ task, compact = false }: { task: TaskInfo; compact?: boolean }) {
   const { t } = useTranslation();
   if (!task.vcsNumber) {
     return null;
@@ -757,7 +767,7 @@ function GitHubPanel({ task, compact = false }: { task: TaskInfo; compact?: bool
 
   return (
     <div className={`border-b border-slate-200/70 dark:border-slate-700/70 ${compact ? "px-3 py-3" : "px-4 py-4"}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">GitHub</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">{resolveVcsLabel(task.vcsUrl)}</div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
           {task.vcsState ?? t.kanban.linkedLabel}
