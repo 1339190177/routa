@@ -75,6 +75,7 @@ declare module "vscode" {
   export interface Webview {
     html: string;
     readonly cspSource: string;
+    onDidReceiveMessage(listener: (message: { type?: string }) => unknown): Disposable;
   }
 
   export interface WebviewPanel extends Disposable {
@@ -93,12 +94,13 @@ declare module "vscode" {
       options?: WebviewOptions,
     ): WebviewPanel;
     function showInformationMessage(message: string): Thenable<string | undefined>;
-    function showWarningMessage(message: string): Thenable<string | undefined>;
+    function showWarningMessage(message: string, ...items: string[]): Thenable<string | undefined>;
     function showErrorMessage(message: string): Thenable<string | undefined>;
   }
 
   export namespace commands {
     function registerCommand(command: string, callback: (...args: unknown[]) => unknown): Disposable;
+    function executeCommand<T = unknown>(command: string, ...rest: unknown[]): Thenable<T>;
   }
 
   export namespace env {

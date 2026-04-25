@@ -17,6 +17,7 @@
     "onCommand:routa.startServer",
     "onCommand:routa.stopServer",
     "onCommand:routa.openInBrowser",
+    "onCommand:routa.openWebviewDeveloperTools",
     "onCommand:routa.copyMcpEndpoint"
   ],
   "main": "./out/extension.js",
@@ -40,6 +41,11 @@
       {
         "command": "routa.openInBrowser",
         "title": "%routa.command.openInBrowser%",
+        "category": "Routa"
+      },
+      {
+        "command": "routa.openWebviewDeveloperTools",
+        "title": "%routa.command.openWebviewDeveloperTools%",
         "category": "Routa"
       },
       {

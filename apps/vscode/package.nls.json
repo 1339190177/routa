@@ -3,6 +3,7 @@
   "routa.command.startServer": "Start Routa Server",
   "routa.command.stopServer": "Stop Routa Server",
   "routa.command.openInBrowser": "Open Routa in Browser",
+  "routa.command.openWebviewDeveloperTools": "Open Routa Webview Developer Tools",
   "routa.command.copyMcpEndpoint": "Copy Routa MCP Endpoint",
   "routa.config.executablePath": "Path to the Routa CLI executable. Leave empty to use the bundled binary, the repository build output, or routa on PATH.",
   "routa.config.port": "Local Routa server port. Use 0 to choose an available random port.",

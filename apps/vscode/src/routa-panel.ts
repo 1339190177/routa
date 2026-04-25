@@ -29,6 +29,15 @@ export class RoutaPanel {
     RoutaPanel.currentPanel = new RoutaPanel(panel, baseUrl, workspaceContext);
   }
 
+  static reveal(): boolean {
+    if (!RoutaPanel.currentPanel) {
+      return false;
+    }
+
+    RoutaPanel.currentPanel.panel.reveal(vscode.ViewColumn.One);
+    return true;
+  }
+
   private constructor(
     private readonly panel: vscode.WebviewPanel,
     baseUrl: string,
@@ -37,6 +46,12 @@ export class RoutaPanel {
     this.update(baseUrl, workspaceContext);
     this.panel.onDidDispose(() => {
       RoutaPanel.currentPanel = undefined;
+    });
+    this.panel.webview.onDidReceiveMessage((message: { type?: string }) => {
+      if (message?.type !== "openWebviewDeveloperTools") {
+        return;
+      }
+      void vscode.commands.executeCommand("routa.openWebviewDeveloperTools");
     });
   }
 
@@ -58,8 +73,10 @@ function renderPanelHtml(
   workspaceContext: RoutaWorkspaceContext,
 ): string {
   const appUrl = routaWorkspaceUrl(baseUrl, workspaceContext.workspaceId);
+  const nonce = getNonce();
   const title = vscode.l10n.t("Routa workspace: {0}", workspaceContext.workspaceTitle);
   const serverLabel = vscode.l10n.t("Server");
+  const inspectLabel = vscode.l10n.t("Inspect");
   const browserLabel = vscode.l10n.t("Open in browser");
   const mcpLabel = vscode.l10n.t("MCP");
   const csp = [
@@ -67,6 +84,7 @@ function renderPanelHtml(
     `frame-src ${baseUrl}`,
     `style-src ${webview.cspSource} 'unsafe-inline'`,
     "img-src data: https: http:",
+    `script-src 'nonce-${nonce}'`,
   ].join("; ");
 
   return `<!doctype html>
@@ -132,6 +150,23 @@ function renderPanelHtml(
       text-decoration: underline;
     }
 
+    button {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--vscode-textLink-foreground);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover {
+      text-decoration: underline;
+    }
+
+    button:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+    }
+
     iframe {
       width: 100%;
       height: 100%;
@@ -147,6 +182,7 @@ function renderPanelHtml(
       <span class="meta">${escapeHtml(serverLabel)} ${escapeHtml(baseUrl)}</span>
       <span class="meta">${escapeHtml(mcpLabel)} ${escapeHtml(`${baseUrl}/api/mcp`)}</span>
       <span class="spacer"></span>
+      <button type="button" id="inspect-button">${escapeHtml(inspectLabel)}</button>
       <a href="${escapeAttribute(appUrl)}">${escapeHtml(browserLabel)}</a>
     </div>
     <iframe
@@ -155,8 +191,23 @@ function renderPanelHtml(
       sandbox="allow-downloads allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
     ></iframe>
   </main>
+  <script nonce="${escapeAttribute(nonce)}">
+    const vscode = acquireVsCodeApi();
+    document.getElementById("inspect-button")?.addEventListener("click", () => {
+      vscode.postMessage({ type: "openWebviewDeveloperTools" });
+    });
+  </script>
 </body>
 </html>`;
+}
+
+function getNonce(): string {
+  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let nonce = "";
+  for (let i = 0; i < 32; i += 1) {
+    nonce += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return nonce;
 }
 
 function escapeHtml(value: string): string {

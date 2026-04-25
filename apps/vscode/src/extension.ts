@@ -8,6 +8,8 @@ let serverManager: RoutaServerManager | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
 
+const WEBVIEW_DEVELOPER_TOOLS_COMMAND = "workbench.action.webview.openDeveloperTools";
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("Routa");
   const manager = new RoutaServerManager(context, output);
@@ -44,6 +46,9 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       await vscode.env.openExternal(vscode.Uri.parse(routaWorkspaceUrl(status.baseUrl, workspaceId)));
     }),
+    vscode.commands.registerCommand("routa.openWebviewDeveloperTools", async () => {
+      await openRoutaWebviewDeveloperTools(context, manager, output);
+    }),
     vscode.commands.registerCommand("routa.copyMcpEndpoint", async () => {
       const status = await manager.ensureStarted();
       if (!status.baseUrl) {
@@ -72,6 +77,34 @@ async function openRouta(
     throw new Error(vscode.l10n.t("Routa server URL is unavailable."));
   }
   RoutaPanel.show(context, status.baseUrl, workspaceContext);
+}
+
+async function openRoutaWebviewDeveloperTools(
+  context: vscode.ExtensionContext,
+  manager: RoutaServerManager,
+  output: vscode.OutputChannel,
+): Promise<void> {
+  if (!RoutaPanel.reveal()) {
+    await openRouta(context, manager, output);
+  }
+
+  try {
+    await vscode.commands.executeCommand(WEBVIEW_DEVELOPER_TOOLS_COMMAND);
+  } catch (error) {
+    output.appendLine(
+      `Unable to open Webview Developer Tools: ${error instanceof Error ? error.message : String(error)}`,
+    );
+
+    const openInBrowser = vscode.l10n.t("Open in Browser");
+    const selection = await vscode.window.showWarningMessage(
+      vscode.l10n.t("This VS Code host does not expose Webview Developer Tools. Open Routa in a browser instead."),
+      openInBrowser,
+    );
+
+    if (selection === openInBrowser) {
+      await vscode.commands.executeCommand("routa.openInBrowser");
+    }
+  }
 }
 
 async function ensureReady(
