@@ -215,7 +215,7 @@ export function KanbanTab({
     () => codebases.find((codebase) => codebase.isDefault) ?? codebases[0] ?? null,
     [codebases],
   );
-  const hasGitHubCodebase = useMemo(
+  const _hasGitHubCodebase = useMemo(
     () => codebases.some((codebase) => isLikelyGitHubCodebase(codebase)),
     [codebases],
   );
@@ -223,7 +223,7 @@ export function KanbanTab({
     () => codebases.some((codebase) => isLikelyVcsCodebase(codebase)),
     [codebases],
   );
-  const githubAvailable = isLikelyGitHubCodebase(defaultCodebase);
+  const _githubAvailable = isLikelyGitHubCodebase(defaultCodebase);
   const vcsAvailable = isLikelyVcsCodebase(defaultCodebase);
   const vcsPlatform = useMemo<VCSPlatform>(() => {
     const gitlabCodebase = codebases.find((cb) => cb.sourceType === "gitlab" || cb.sourceUrl?.includes("gitlab.com"));
