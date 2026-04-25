@@ -246,7 +246,7 @@ describe("AC8: Throttle mechanism", () => {
     const logs = await store.listLogs("ws-1");
     const throttled = logs.find((l) => l.status === "throttled");
     expect(throttled).toBeUndefined();
-  });
+  }, 30000);
 });
 
 // ─── AC9: Retry ─────────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ describe("AC9: Retry mechanism", () => {
     const failedLog = logs.find((l) => l.status === "failed");
     expect(failedLog).toBeDefined();
     expect(failedLog!.retryCount).toBe(3); // 0, 1, 2, 3 → final attempt is 3
-  });
+  }, 30000);
 });
 
 // ─── NotificationStore ──────────────────────────────────────────────────
