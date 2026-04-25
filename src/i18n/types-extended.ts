@@ -824,6 +824,8 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     baseComparison: string;
     worktreeSource: string;
     repoSource: string;
+    platformGitHub: string;
+    platformGitLab: string;
     dirty: string;
     clean: string;
     evidenceBundle: string;
