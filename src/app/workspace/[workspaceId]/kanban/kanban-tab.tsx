@@ -84,13 +84,6 @@ interface KanbanTabProps {
   };
 }
 
-function isLikelyGitHubCodebase(codebase: CodebaseData | null | undefined): boolean {
-  if (!codebase) return false;
-  if (codebase.sourceType === "github") return true;
-  if (codebase.sourceUrl?.includes("github.com")) return true;
-  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(codebase.label?.trim() ?? "");
-}
-
 function isLikelyVcsCodebase(codebase: CodebaseData | null | undefined): boolean {
   if (!codebase) return false;
   if (codebase.sourceType === "github" || codebase.sourceType === "gitlab") return true;
@@ -215,15 +208,10 @@ export function KanbanTab({
     () => codebases.find((codebase) => codebase.isDefault) ?? codebases[0] ?? null,
     [codebases],
   );
-  const _hasGitHubCodebase = useMemo(
-    () => codebases.some((codebase) => isLikelyGitHubCodebase(codebase)),
-    [codebases],
-  );
   const hasVcsCodebase = useMemo(
     () => codebases.some((codebase) => isLikelyVcsCodebase(codebase)),
     [codebases],
   );
-  const _githubAvailable = isLikelyGitHubCodebase(defaultCodebase);
   const vcsAvailable = isLikelyVcsCodebase(defaultCodebase);
   const vcsPlatform = useMemo<VCSPlatform>(() => {
     const gitlabCodebase = codebases.find((cb) => cb.sourceType === "gitlab" || cb.sourceUrl?.includes("gitlab.com"));
