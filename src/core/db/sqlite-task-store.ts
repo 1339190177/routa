@@ -215,6 +215,8 @@ export class SqliteTaskStore implements TaskStore {
         | "lastSyncError"
         | "pullRequestUrl"
         | "pullRequestMergedAt"
+        | "laneSessions"
+        | "updatedAt"
       >
     >,
   ): Promise<boolean> {

@@ -10,6 +10,7 @@
  */
 
 import type { RoutaSystem } from "../routa-system";
+import type { TaskStore } from "../store/task-store";
 import { hasExceededNonDevAutomationRepeatLimit } from "./workflow-orchestrator";
 import { getHttpSessionStore } from "../acp/http-session-store";
 import { clearStaleTriggerSession } from "./task-trigger-session";
@@ -35,6 +36,27 @@ let scanTimer: ReturnType<typeof setInterval> | null = null;
 let initialScanTimer: ReturnType<typeof setTimeout> | null = null;
 let isScanning = false;
 const GLOBAL_KEY = "__routa_kanban_lane_scanner__";
+
+type AtomicUpdateFields = Parameters<NonNullable<TaskStore["atomicUpdate"]>>[2];
+
+/** Use atomicUpdate with optimistic locking; fallback to save() for stores that lack it. */
+async function safeAtomicSave(
+  task: import("../models/task").Task,
+  taskStore: TaskStore,
+  fields: AtomicUpdateFields,
+  logLabel: string,
+): Promise<boolean> {
+  if (task.version !== undefined && taskStore.atomicUpdate) {
+    const ok = await taskStore.atomicUpdate(task.id, task.version, fields);
+    if (!ok) {
+      console.log(`[LaneScanner] Version conflict for card ${task.id} during ${logLabel}. Skipping.`);
+      return false;
+    }
+    return true;
+  }
+  await taskStore.save({ ...task, ...fields });
+  return true;
+}
 
 export interface LaneScannerStats {
   lastScanAt: Date | null;
@@ -164,10 +186,12 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
                     `[LaneScanner] Settled guard: PR actually merged on GitHub for card ${task.id}. ` +
                     `Syncing pullRequestMergedAt.`,
                   );
-                  task.pullRequestMergedAt = verification.mergedAt ? new Date(verification.mergedAt) : new Date();
-                  task.lastSyncError = undefined;
-                  task.updatedAt = new Date();
-                  await system.taskStore.save(task);
+                  const prSaved = await safeAtomicSave(task, system.taskStore, {
+                    pullRequestMergedAt: verification.mergedAt ? new Date(verification.mergedAt) : new Date(),
+                    lastSyncError: undefined,
+                    updatedAt: new Date(),
+                  }, "PR merge verification");
+                  if (!prSaved) continue;
                 }
               } catch {
                 // Verification failed silently — skip this card for now.
@@ -211,10 +235,13 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
             console.log(
               `[LaneScanner] Cooldown expired for card ${task.id}, clearing rate-limit marker.`,
             );
-            task.lastSyncError = undefined;
           }
-          task.updatedAt = new Date();
-          await system.taskStore.save(task);
+          const cbFields = {
+            lastSyncError: task.lastSyncError,
+            updatedAt: new Date(),
+          };
+          const cbSaved = await safeAtomicSave(task, system.taskStore, cbFields, "circuit-breaker reset");
+          if (!cbSaved) continue;
         }
         // Skip creation-source sessions (auto-generated from agent runs)
         if (task.creationSource === "session") continue;
@@ -254,11 +281,12 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
             // will retry the push to the next column.
             const advanceRecoveryAttempts = countStepAttempts(laneSessions, task.columnId!, 0);
             if (advanceRecoveryAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
-              task.lastSyncError = buildAdvanceRecoveryError(
-                `Max retries (${MAX_STEP_RESUME_ATTEMPTS}) reached. Card completed in "${currentColumn?.name}" but failed to advance.`,
-              );
-              task.updatedAt = new Date();
-              await system.taskStore.save(task);
+              await safeAtomicSave(task, system.taskStore, {
+                lastSyncError: buildAdvanceRecoveryError(
+                  `Max retries (${MAX_STEP_RESUME_ATTEMPTS}) reached. Card completed in "${currentColumn?.name}" but failed to advance.`,
+                ),
+                updatedAt: new Date(),
+              }, "advance recovery limit");
               continue;
             }
 
@@ -269,12 +297,15 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
 
             // Remove failed sessions from other columns — they're stale evidence
             // of previous failed advance attempts.
-            task.laneSessions = laneSessions.filter(
+            const filteredSessions = laneSessions.filter(
               (s: { columnId?: string; status: string }) =>
                 !(s.columnId !== task.columnId && (s.status === "failed" || s.status === "timed_out")),
             );
-            task.updatedAt = new Date();
-            await system.taskStore.save(task);
+            const advSaved = await safeAtomicSave(task, system.taskStore, {
+              laneSessions: filteredSessions,
+              updatedAt: new Date(),
+            }, "advance recovery cleanup");
+            if (!advSaved) continue;
             // Fall through — re-trigger current column automation (autoAdvance will push again)
           } else {
             // Stale-state recovery: lastSyncError set + all current-column steps
@@ -285,9 +316,11 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
             if (recoveryAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
               continue;
             }
-            task.lastSyncError = undefined;
-            task.updatedAt = new Date();
-            await system.taskStore.save(task);
+            const staleSaved = await safeAtomicSave(task, system.taskStore, {
+              lastSyncError: undefined,
+              updatedAt: new Date(),
+            }, "stale-state recovery");
+            if (!staleSaved) continue;
             // Fall through — resumeStepIndex stays undefined → step 0
           }
         }
@@ -316,7 +349,16 @@ export async function runLaneScannerTick(system: RoutaSystem): Promise<LaneScann
         // Trigger via COLUMN_TRANSITION event so the Workflow Orchestrator
         // manages the full multi-step flow (ActiveAutomation tracking,
         // laneSession status updates, terminal guard, etc.).
+        // Defensive check: verify the card hasn't been moved to a different
+        // column by a concurrent writer since we started processing it.
         try {
+          const freshCheck = await system.taskStore.get(task.id);
+          if (!freshCheck || freshCheck.columnId !== task.columnId) {
+            console.log(
+              `[LaneScanner] Card ${task.id} moved from ${task.columnId} to ${freshCheck?.columnId} during scan. Skipping trigger.`,
+            );
+            continue;
+          }
           system.eventBus.emit({
             type: AgentEventType.COLUMN_TRANSITION,
             agentId: "kanban-lane-scanner",

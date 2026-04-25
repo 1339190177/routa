@@ -13,6 +13,7 @@
 import type { RoutaSystem } from "../routa-system";
 import type { Task, TaskLaneSession } from "../models/task";
 import type { KanbanBoard } from "../models/kanban";
+import { shouldSkipTickForMemory } from "./memory-guard";
 import { verifyPrMergeStatus } from "./pr-status-verifier";
 import { parseCbResetCount } from "./workflow-orchestrator";
 import { AgentEventType } from "../events/event-bus";
@@ -516,6 +517,10 @@ export async function runDoneLaneRecoveryTick(
     completed: 0,
     errors: 0,
   };
+
+  if (shouldSkipTickForMemory("DoneLaneRecovery")) {
+    return summary;
+  }
 
   try {
     const workspaces = await system.workspaceStore.list();

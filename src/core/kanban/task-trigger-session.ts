@@ -32,7 +32,7 @@ export function isTriggerSessionStale(
 /**
  * Clear a stale triggerSessionId from a task.
  * Marks the associated lane session with an appropriate terminal status.
- * Mutates the task in place and saves to store.
+ * Uses atomicUpdate with optimistic locking to prevent TOCTOU races.
  * Returns true if the task was modified.
  */
 export async function clearStaleTriggerSession(
@@ -49,8 +49,45 @@ export async function clearStaleTriggerSession(
     markTaskLaneSessionStatus(task, staleId, terminalStatus);
   }
 
-  task.triggerSessionId = undefined;
-  task.updatedAt = new Date();
-  await taskStore.save(task);
+  // Use atomicUpdate to prevent overwriting concurrent changes (e.g. column transition)
+  if (task.version !== undefined && taskStore.atomicUpdate) {
+    const ok = await taskStore.atomicUpdate(task.id, task.version, {
+      triggerSessionId: undefined,
+      laneSessions: task.laneSessions,
+      updatedAt: new Date(),
+    });
+    if (!ok) {
+      // Version conflict — re-read and retry once
+      const fresh = await taskStore.get(task.id);
+      if (!fresh || fresh.triggerSessionId !== staleId) return false;
+      const freshLaneEntry = getTaskLaneSession(fresh, staleId);
+      if (freshLaneEntry?.status === "running") {
+        const terminalStatus = fresh.pullRequestUrl ? "completed" as const : "timed_out" as const;
+        markTaskLaneSessionStatus(fresh, staleId, terminalStatus);
+      }
+      if (fresh.version !== undefined && taskStore.atomicUpdate) {
+        const retryOk = await taskStore.atomicUpdate(fresh.id, fresh.version, {
+          triggerSessionId: undefined,
+          laneSessions: fresh.laneSessions,
+          updatedAt: new Date(),
+        });
+        if (!retryOk) {
+          console.warn(
+            `[clearStaleTriggerSession] Second atomicUpdate failed for task ${task.id}. ` +
+            `Will retry on next tick.`,
+          );
+          return false;
+        }
+      } else {
+        fresh.triggerSessionId = undefined;
+        fresh.updatedAt = new Date();
+        await taskStore.save(fresh);
+      }
+    }
+  } else {
+    task.triggerSessionId = undefined;
+    task.updatedAt = new Date();
+    await taskStore.save(task);
+  }
   return true;
 }

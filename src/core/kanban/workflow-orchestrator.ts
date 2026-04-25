@@ -18,7 +18,7 @@ import type {
   KanbanDevSessionSupervisionMode,
 } from "../models/kanban";
 import { getKanbanAutomationSteps, resolveTaskStatusForBoardColumn } from "../models/kanban";
-import { type Task, type TaskLaneSessionRecoveryReason, type TaskStatus } from "../models/task";
+import { type Task, type TaskLaneSession, type TaskLaneSessionRecoveryReason, type TaskStatus } from "../models/task";
 import type { KanbanBoardStore } from "../store/kanban-board-store";
 import type { TaskStore } from "../store/task-store";
 import type { ColumnTransitionData } from "./column-transition";
@@ -94,6 +94,26 @@ function isRecoveryMode(mode: KanbanDevSessionSupervisionMode): mode is "watchdo
 }
 
 const MAX_TURNS_STOP_REASONS = new Set(["tool_use", "max_turns"]);
+
+/**
+ * Merge two lane-session arrays: `overlay` entries overwrite `base` entries
+ * with the same sessionId (preserving session-status updates from the handler),
+ * and any session present in `overlay` but absent from `base` is appended.
+ */
+function mergeLaneSessions(
+  base: TaskLaneSession[],
+  overlay: TaskLaneSession[],
+): TaskLaneSession[] {
+  const result = base.map((s) => {
+    const o = overlay.find((x) => x.sessionId === s.sessionId);
+    return o ? { ...s, ...o } : { ...s };
+  });
+  const baseIds = new Set(base.map((s) => s.sessionId));
+  for (const s of overlay) {
+    if (!baseIds.has(s.sessionId)) result.push({ ...s });
+  }
+  return result;
+}
 
 function getRecoveryReason(event: AgentEvent, completionSatisfied: boolean, maxTurnsHit?: boolean): TaskLaneSessionRecoveryReason {
   if (event.type === AgentEventType.AGENT_TIMEOUT) {
@@ -965,13 +985,27 @@ export class KanbanWorkflowOrchestrator {
       // and emits a synchronous COLUMN_TRANSITION. Saving after would overwrite the
       // column change, triggerSessionId, and session state set by autoAdvanceCard
       // and the downstream session-creation chain.
+      // Use fresh read + atomicUpdate to avoid TOCTOU race with concurrent writers.
+      // Merge laneSessions: freshTask is the base, task's in-memory modifications
+      // (session status updates from this handler) overlay on top.
       if (task) {
-        if (!failedToAdvanceWithinLane && successEvent && completionSatisfied) {
-          task.lastSyncError = undefined;
-        } else if (!task.lastSyncError) {
-          task.lastSyncError = this.buildFailureMessage(automation, event, completionSatisfied);
+        const freshTask = await this.taskStore.get(cardId);
+        if (freshTask) {
+          const lastSyncError = (!failedToAdvanceWithinLane && successEvent && completionSatisfied)
+            ? undefined
+            : (freshTask.lastSyncError ?? this.buildFailureMessage(automation, event, completionSatisfied));
+          const mergedSessions = mergeLaneSessions(freshTask.laneSessions ?? [], task.laneSessions ?? []);
+          if (freshTask.version !== undefined && this.taskStore.atomicUpdate) {
+            await this.taskStore.atomicUpdate(cardId, freshTask.version, {
+              lastSyncError,
+              laneSessions: mergedSessions,
+            });
+          } else {
+            freshTask.lastSyncError = lastSyncError;
+            freshTask.laneSessions = mergedSessions;
+            await this.taskStore.save(freshTask);
+          }
         }
-        await this.taskStore.save(task);
       }
 
       // Auto-advance if configured and successful.

@@ -11,6 +11,7 @@ import type { RoutaSystem } from "../routa-system";
 import type { Task, TaskLaneSession } from "../models/task";
 import type { KanbanBoard, KanbanColumn } from "../models/kanban";
 import { archiveTask } from "./archive-task";
+import { shouldSkipTickForMemory } from "./memory-guard";
 
 /** Default number of days a card must sit in `done` before auto-archival. */
 export const DEFAULT_AUTO_ARCHIVE_DAYS = 30;
@@ -148,6 +149,10 @@ export async function runAutoArchiveTick(system: AutoArchiveSystem): Promise<Aut
     skipped: [],
     examined: 0,
   };
+
+  if (shouldSkipTickForMemory("AutoArchive")) {
+    return summary;
+  }
 
   try {
     const workspaces = await system.workspaceStore.list();

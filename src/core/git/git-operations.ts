@@ -84,8 +84,14 @@ async function gitExec(command: string, repoPath: string): Promise<string> {
 
   try {
     const { stdout, stderr } = await exec(command, { cwd: repoPath });
-    if (stderr && !stderr.includes("warning")) {
-      console.warn(`Git warning in ${repoPath}:`, stderr);
+    if (stderr) {
+      const GIT_NORMAL_STDERR_PATTERNS = ["warning", "INFO:"];
+      const abnormal = stderr.split("\n").filter(
+        (l) => l.trim() && !GIT_NORMAL_STDERR_PATTERNS.some(p => l.includes(p)),
+      );
+      if (abnormal.length > 0) {
+        console.warn(`Git warning in ${repoPath}:`, abnormal.join("\n"));
+      }
     }
     return stdout.trim();
   } catch (error) {

@@ -203,7 +203,7 @@ export class PgTaskStore implements TaskStore {
   async atomicUpdate(
     taskId: string,
     expectedVersion: number,
-    updates: Partial<Pick<Task, "status" | "columnId" | "triggerSessionId" | "completionSummary" | "verificationVerdict" | "verificationReport" | "assignedTo" | "lastSyncError" | "pullRequestUrl" | "pullRequestMergedAt">>
+    updates: Partial<Pick<Task, "status" | "columnId" | "triggerSessionId" | "completionSummary" | "verificationVerdict" | "verificationReport" | "assignedTo" | "lastSyncError" | "pullRequestUrl" | "pullRequestMergedAt" | "laneSessions" | "updatedAt">>
   ): Promise<boolean> {
     const result = await this.db
       .update(tasks)
