@@ -456,6 +456,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     planBacklog: string;
     planBacklogDescription: string;
     importGithubIssues: string;
+    importVcsIssues: string;
     boardSettings: string;
     // Card status
     queued: string;
@@ -1313,6 +1314,11 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     noPulls: string;
     pullsLoaded: string;
     importPullsFailed: string;
+    tabMergeRequests: string;
+    importMrsFailed: string;
+    noMergeRequests: string;
+    mergeRequestsLoaded: string;
+    loadingMergeRequests: string;
     draftBadge: string;
     mergedBadge: string;
     branchInfo: string;

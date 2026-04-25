@@ -5,6 +5,7 @@ import type { CodebaseData } from "@/client/hooks/use-workspaces";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import { useTranslation } from "@/i18n";
 import type { GitHubIssueListItemInfo, GitHubPRListItemInfo, TaskInfo } from "../types";
+import type { VCSPlatform } from "@/core/vcs/vcs-provider";
 
 type ImportTab = "issues" | "pulls";
 
@@ -32,6 +33,7 @@ interface KanbanGitHubImportModalProps {
   boardId?: string | null;
   codebases: CodebaseData[];
   tasks: TaskInfo[];
+  platform?: VCSPlatform;
   onClose: () => void;
   onImport: (codebaseId: string, issues: GitHubIssueListItemInfo[], repo: string, mergeAsSingleCard: boolean) => Promise<void>;
   onImportPulls: (codebaseId: string, pulls: GitHubPRListItemInfo[], repo: string, mergeAsSingleCard: boolean) => Promise<void>;
@@ -50,11 +52,13 @@ export function KanbanGitHubImportModal({
   boardId,
   codebases,
   tasks,
+  platform = "github",
   onClose,
   onImport,
   onImportPulls,
 }: KanbanGitHubImportModalProps) {
   const { t } = useTranslation();
+  const isGitLab = platform === "gitlab";
   const [activeTab, setActiveTab] = useState<ImportTab>("issues");
   const [selectedCodebaseId, setSelectedCodebaseId] = useState<string>("");
   const [issuesPayload, setIssuesPayload] = useState<GitHubIssuesResponse | null>(null);
@@ -66,7 +70,7 @@ export function KanbanGitHubImportModal({
   const [reloadNonce, setReloadNonce] = useState(0);
   const [mergeAsSingleCard, setMergeAsSingleCard] = useState(false);
 
-  const fallbackImportError = activeTab === "issues" ? t.kanbanImport.importFailed : t.kanbanImport.importPullsFailed;
+  const fallbackImportError = activeTab === "issues" ? t.kanbanImport.importFailed : (isGitLab ? t.kanbanImport.importMrsFailed : t.kanbanImport.importPullsFailed);
 
   useEffect(() => {
     if (!show) {
@@ -197,9 +201,9 @@ export function KanbanGitHubImportModal({
   const currentRepo = activeTab === "issues" ? issuesPayload?.repo : pullsPayload?.repo;
   const currentCount = activeTab === "issues" ? selectableIssues.length : selectablePulls.length;
   const currentSelectableIds = activeTab === "issues" ? selectableIssueIds : selectablePullIds;
-  const currentLoadingText = activeTab === "issues" ? t.kanbanImport.loading : t.kanbanImport.loadingPulls;
-  const currentNoItemsText = activeTab === "issues" ? t.kanbanImport.noIssues : t.kanbanImport.noPulls;
-  const currentItemsLoadedText = activeTab === "issues" ? t.kanbanImport.issuesLoaded : t.kanbanImport.pullsLoaded;
+  const currentLoadingText = activeTab === "issues" ? t.kanbanImport.loading : (isGitLab ? t.kanbanImport.loadingMergeRequests : t.kanbanImport.loadingPulls);
+  const currentNoItemsText = activeTab === "issues" ? t.kanbanImport.noIssues : (isGitLab ? t.kanbanImport.noMergeRequests : t.kanbanImport.noPulls);
+  const currentItemsLoadedText = activeTab === "issues" ? t.kanbanImport.issuesLoaded : (isGitLab ? t.kanbanImport.mergeRequestsLoaded : t.kanbanImport.pullsLoaded);
 
   if (!show) return null;
 
@@ -237,7 +241,7 @@ export function KanbanGitHubImportModal({
               : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             }`}
           >
-            {t.kanbanImport.tabPulls}
+            {isGitLab ? t.kanbanImport.tabMergeRequests : t.kanbanImport.tabPulls}
           </button>
         </div>
 

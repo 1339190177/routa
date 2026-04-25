@@ -18,6 +18,7 @@ import type {
   TaskInfo,
   WorktreeInfo,
 } from "../types";
+import type { VCSPlatform } from "@/core/vcs/vcs-provider";
 import { EMPTY_DRAFT, type TaskDraft } from "../kanban-create-modal";
 import { type ColumnAutomationConfig, type KanbanSettingsModalProps } from "./kanban-settings-modal";
 import type { UseWorkspacesReturn } from "@/client/hooks/use-workspaces";
@@ -218,8 +219,17 @@ export function KanbanTab({
     () => codebases.some((codebase) => isLikelyGitHubCodebase(codebase)),
     [codebases],
   );
+  const hasVcsCodebase = useMemo(
+    () => codebases.some((codebase) => isLikelyVcsCodebase(codebase)),
+    [codebases],
+  );
   const githubAvailable = isLikelyGitHubCodebase(defaultCodebase);
   const vcsAvailable = isLikelyVcsCodebase(defaultCodebase);
+  const vcsPlatform = useMemo<VCSPlatform>(() => {
+    const gitlabCodebase = codebases.find((cb) => cb.sourceType === "gitlab" || cb.sourceUrl?.includes("gitlab.com"));
+    if (gitlabCodebase) return "gitlab";
+    return "github";
+  }, [codebases]);
 
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(() => {
     const initialUrlState = getKanbanUrlState();
@@ -229,8 +239,8 @@ export function KanbanTab({
   const autoPatchedTasksRef = useRef(new Set<string>());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showGitHubImportModal, setShowGitHubImportModal] = useState(false);
-  const [githubAccessAvailable, setGitHubAccessAvailable] = useState(false);
-  const [githubAccessSource, setGitHubAccessSource] = useState<"board" | "env" | "gh" | "none">("none");
+  const [vcsAccessAvailable, setVcsAccessAvailable] = useState(false);
+  const [vcsAccessSource, setVcsAccessSource] = useState<"board" | "env" | "gh" | "none">("none");
   const [draft, setDraft] = useState<TaskDraft>({
     ...EMPTY_DRAFT,
     createVcsIssue: false,
@@ -475,17 +485,17 @@ export function KanbanTab({
   } | null>(null);
 
   useEffect(() => {
-    if (!hasGitHubCodebase) {
-      setGitHubAccessAvailable(false);
-      setGitHubAccessSource("none");
+    if (!hasVcsCodebase) {
+      setVcsAccessAvailable(false);
+      setVcsAccessSource("none");
       return;
     }
 
     const cacheKey = selectedBoardId ?? "__no-board__";
     const cached = gitHubAccessCacheRef.current;
     if (cached && cached.key === cacheKey && Date.now() < cached.expiry) {
-      setGitHubAccessAvailable(cached.result.available);
-      setGitHubAccessSource(cached.result.source);
+      setVcsAccessAvailable(cached.result.available);
+      setVcsAccessSource(cached.result.source);
       return;
     }
 
@@ -510,19 +520,19 @@ export function KanbanTab({
           : "none";
         const result = { available, source: available ? source : "none" as const };
         gitHubAccessCacheRef.current = { key: cacheKey, result, expiry: Date.now() + 60_000 };
-        setGitHubAccessAvailable(result.available);
-        setGitHubAccessSource(result.source);
+        setVcsAccessAvailable(result.available);
+        setVcsAccessSource(result.source);
       } catch {
         if (cancelled) return;
-        setGitHubAccessAvailable(false);
-        setGitHubAccessSource("none");
+        setVcsAccessAvailable(false);
+        setVcsAccessSource("none");
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [hasGitHubCodebase, selectedBoardId]);
+  }, [hasVcsCodebase, selectedBoardId]);
 
   useEffect(() => {
     setLocalBoards(boards);
@@ -1632,7 +1642,7 @@ export function KanbanTab({
         vcsRepo: repo,
         vcsState: issue.state,
       }),
-      createItemFallbackMessage: (issue) => `Failed to import GitHub issue #${issue.number}`,
+      createItemFallbackMessage: (issue) => `Failed to import issue #${issue.number}`,
     });
 
     if (importedTasks.length > 0) {
@@ -1681,7 +1691,7 @@ export function KanbanTab({
         vcsState: pull.state,
         isPullRequest: true,
       }),
-      createItemFallbackMessage: (pull) => `Failed to import GitHub pull request #${pull.number}`,
+      createItemFallbackMessage: (pull) => `Failed to import pull request #${pull.number}`,
     });
 
     if (importedTasks.length > 0) {
@@ -1963,8 +1973,10 @@ export function KanbanTab({
     boards: visibleBoards,
     selectedBoardId,
     onSelectBoard: handleSelectBoard,
-    githubImportVisible: hasGitHubCodebase && githubAccessAvailable,
+    githubImportVisible: hasVcsCodebase && vcsAccessAvailable,
+    vcsImportVisible: hasVcsCodebase && vcsAccessAvailable,
     onOpenGitHubImport: () => setShowGitHubImportModal(true),
+    onOpenVcsImport: () => setShowGitHubImportModal(true),
     onRefresh,
     onOpenSettings: board ? () => setShowSettings(true) : undefined,
     onOpenArchive: board ? () => setArchiveOpen(true) : undefined,
@@ -1995,8 +2007,8 @@ export function KanbanTab({
     availableProviders,
     specialists,
     specialistLanguage,
-    githubImportAvailable: hasGitHubCodebase && githubAccessAvailable,
-    githubAccessSource,
+    githubImportAvailable: hasVcsCodebase && vcsAccessAvailable,
+    githubAccessSource: vcsAccessSource,
     workspacePanelProps: workspacePanelProps ? {
       workspaceId,
       workspaceTitle: workspacePanelProps.workspaceTitle,
@@ -2175,6 +2187,7 @@ export function KanbanTab({
     boardId: board?.id,
     codebases,
     tasks: localTasks,
+    platform: vcsPlatform,
     onClose: () => setShowGitHubImportModal(false),
     onImport: importGitHubIssues,
     onImportPulls: importGitHubPulls,
