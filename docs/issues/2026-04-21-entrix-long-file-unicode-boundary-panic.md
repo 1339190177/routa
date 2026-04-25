@@ -2,7 +2,8 @@
 title: "Entrix long-file budget hook panics on Unicode comment boundaries"
 date: "2026-04-21"
 kind: issue
-status: open
+status: resolved
+resolved_at: "2026-04-25"
 severity: medium
 area: entrix
 tags:
@@ -56,3 +57,15 @@ The commit still completed, so this is not a hard blocker for shipping, but the 
 - commit-hook output becomes noisy and less trustworthy
 - real long-file guidance can be hidden behind panic text
 - future automation may misinterpret the hook result if the panic changes exit behavior
+
+## Resolution Notes
+
+- Replaced byte-index slicing in Entrix long-file comment preview formatting with character-safe truncation.
+- Added a regression test covering a long Unicode box-drawing comment banner like the one seen in commit-hook output.
+
+## Verification Notes
+
+- `cargo test -p entrix long_file -- --nocapture`
+  - PASS (`8 passed`)
+- `entrix run --tier fast`
+  - PASS
