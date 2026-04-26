@@ -220,6 +220,11 @@ export class SqliteTaskStore implements TaskStore {
       >
     >,
   ): Promise<boolean> {
+    // Drizzle ORM treats `undefined` as "skip this field" rather than "set to NULL".
+    // Convert undefined values to null so clearing fields (e.g. lastSyncError) works.
+    const sanitized = Object.fromEntries(
+      Object.entries(updates).map(([k, v]) => [k, v === undefined ? null : v]),
+    ) as typeof updates;
     const result = this.db
       .update(sqliteSchema.tasks)
       .set({
