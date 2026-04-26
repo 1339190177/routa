@@ -32,6 +32,7 @@ import { KanbanCardProviderOverrideDropdown } from "./kanban-card-provider-overr
 // import { TaskFileDiffPreview, TaskCommitDiffPreview, CommitRow } from "./kanban-diff-preview";
 import { StoryReadinessPanel, EvidenceBundlePanel, ReviewFeedbackPanel, TaskHierarchyPanel, DependenciesPanel } from "./kanban-detail-panels";
 import { getKanbanSessionCopy } from "./i18n/kanban-session-copy";
+import { resolveVcsLabel } from "./kanban-tab-helpers";
 import {
   findSpecialistById,
   getSpecialistDisplayName,
@@ -606,7 +607,7 @@ export function KanbanCardDetail({
               <MetaBadge label={t.kanbanDetail.evidenceBundle} value={evidenceValue} compact={compactMode} />
             )}
             {task.vcsNumber && (
-              <MetaBadge label="GitHub" value={`#${task.vcsNumber}`} compact={compactMode} />
+              <MetaBadge label={resolveVcsLabel({ vcsUrl: task.vcsUrl, sourceType: primaryCodebase?.sourceType })} value={`#${task.vcsNumber}`} compact={compactMode} />
             )}
             {task.deliveryReadiness?.hasCommitsSinceBase && task.deliveryReadiness.commitsSinceBase > 0 && (
               <MetaBadge

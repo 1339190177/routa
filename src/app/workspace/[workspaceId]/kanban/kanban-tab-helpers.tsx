@@ -2,6 +2,21 @@ import type { AcpProviderInfo } from "@/client/acp-client";
 import { resolveKanbanAutomationStep } from "@/core/kanban/effective-task-automation";
 import { getKanbanAutomationSteps, normalizeKanbanAutomation } from "@/core/models/kanban";
 import { createKanbanSpecialistResolver } from "./kanban-card-session-utils";
+
+/**
+ * Resolve a human-readable VCS platform label from a task's vcsUrl or a codebase's sourceType.
+ * Falls back to "VCS" when the platform cannot be determined.
+ */
+export function resolveVcsLabel(opts?: { vcsUrl?: string; sourceType?: string }): string {
+  const { vcsUrl, sourceType } = opts ?? {};
+  if (sourceType === "gitlab") return "GitLab";
+  if (sourceType === "github") return "GitHub";
+  if (vcsUrl) {
+    if (vcsUrl.includes("gitlab")) return "GitLab";
+    if (vcsUrl.includes("github")) return "GitHub";
+  }
+  return "VCS";
+}
 import {
   findSpecialistById,
   getSpecialistDisplayName,
