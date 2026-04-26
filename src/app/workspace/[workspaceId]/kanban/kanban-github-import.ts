@@ -1,7 +1,9 @@
 import type { GitHubIssueListItemInfo, GitHubPRListItemInfo, TaskInfo } from "../types";
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 
-export type GitHubImportItem = GitHubIssueListItemInfo | GitHubPRListItemInfo;
+export type VcsImportItem = GitHubIssueListItemInfo | GitHubPRListItemInfo;
+/** @deprecated Use VcsImportItem instead */
+export type GitHubImportItem = VcsImportItem;
 
 function summarizeImportedBody(body?: string): string | null {
   if (!body) return null;
@@ -11,7 +13,7 @@ function summarizeImportedBody(body?: string): string | null {
 }
 
 export function buildMergedImportObjective(
-  items: GitHubImportItem[],
+  items: VcsImportItem[],
   labels: { heading: string; summary: string },
 ): string {
   const lines: string[] = [labels.heading];
@@ -27,7 +29,7 @@ export function buildMergedImportObjective(
   return lines.join("\n").trim();
 }
 
-export function collectMergedImportLabels(items: GitHubImportItem[]): string[] {
+export function collectMergedImportLabels(items: VcsImportItem[]): string[] {
   return Array.from(new Set(items.flatMap((item) => item.labels)));
 }
 
@@ -47,7 +49,7 @@ export async function createImportedTask(
   return data.task as TaskInfo;
 }
 
-interface ImportGitHubItemsOptions<TItem extends GitHubImportItem> {
+interface ImportVcsItemsOptions<TItem extends VcsImportItem> {
   workspaceId: string;
   boardId: string | null;
   codebaseId: string;
@@ -59,9 +61,11 @@ interface ImportGitHubItemsOptions<TItem extends GitHubImportItem> {
   createItemPayload: (item: TItem) => Record<string, unknown>;
   createItemFallbackMessage: (item: TItem) => string;
 }
+/** @deprecated Use ImportVcsItemsOptions instead */
+type ImportGitHubItemsOptions<TItem extends VcsImportItem> = ImportVcsItemsOptions<TItem>;
 
-export async function importGitHubItems<TItem extends GitHubImportItem>(
-  options: ImportGitHubItemsOptions<TItem>,
+export async function importVcsItems<TItem extends VcsImportItem>(
+  options: ImportVcsItemsOptions<TItem>,
 ): Promise<TaskInfo[]> {
   const {
     workspaceId,
@@ -92,3 +96,6 @@ export async function importGitHubItems<TItem extends GitHubImportItem>(
     createImportedTask(createItemPayload(item), createItemFallbackMessage(item))
   ));
 }
+
+/** @deprecated Use importVcsItems instead */
+export const importGitHubItems = importVcsItems;

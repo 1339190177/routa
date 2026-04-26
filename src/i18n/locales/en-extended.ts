@@ -1282,10 +1282,14 @@ export const enExtended: ExtendedTranslationDictionarySections = {
 
   kanbanImport: {
     title: "Import GitHub Issues",
+    titleGitlab: "Import GitLab Issues",
     description: "Load issues from a linked repository and turn them into Kanban cards.",
+    descriptionGitlab: "Load issues from a linked GitLab project and turn them into Kanban cards.",
     repository: "Repository",
     loading: "Loading GitHub issues…",
+    loadingGitlab: "Loading GitLab issues…",
     loadFailed: "Failed to load GitHub issues.",
+    loadFailedGitlab: "Failed to load GitLab issues.",
     noIssues: "No issues available to import.",
     issuesLoaded: "issues loaded",
     selectAll: "Select all",
@@ -1293,6 +1297,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     importSelected: "Import selected",
     importing: "Importing…",
     importFailed: "Failed to import GitHub issues.",
+    importFailedGitlab: "Failed to import GitLab issues.",
     alreadyImported: "Already imported",
     updatedAt: "Updated",
     stateOpen: "Open",
@@ -1312,7 +1317,7 @@ export const enExtended: ExtendedTranslationDictionarySections = {
     draftBadge: "Draft",
     mergedBadge: "Merged",
     branchInfo: "→",
-    mergeAsSingleCard: "Merge into one card", mergeAsSingleCardHint: "Create a single task from the selected items and combine titles, links, and summaries into one description.", mergedIssuesTitle: "Merged GitHub issues", mergedPullsTitle: "Merged GitHub pull requests", mergedSourceListHeading: "Source links", mergedSummaryLabel: "Summary",
+    mergeAsSingleCard: "Merge into one card", mergeAsSingleCardHint: "Create a single task from the selected items and combine titles, links, and summaries into one description.", mergedIssuesTitle: "Merged GitHub issues", mergedIssuesTitleGitlab: "Merged GitLab issues", mergedPullsTitle: "Merged GitHub pull requests", mergedPullsTitleGitlab: "Merged GitLab merge requests", mergedSourceListHeading: "Source links", mergedSummaryLabel: "Summary",
   },
   kanbanBgAgent: {
     backgroundAgents: "Background Agents",

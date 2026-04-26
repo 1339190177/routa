@@ -1293,10 +1293,14 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
 
   kanbanImport: {
     title: string;
+    titleGitlab: string;
     description: string;
+    descriptionGitlab: string;
     repository: string;
     loading: string;
+    loadingGitlab: string;
     loadFailed: string;
+    loadFailedGitlab: string;
     noIssues: string;
     issuesLoaded: string;
     selectAll: string;
@@ -1304,6 +1308,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     importSelected: string;
     importing: string;
     importFailed: string;
+    importFailedGitlab: string;
     alreadyImported: string;
     updatedAt: string;
     stateOpen: string;
@@ -1323,7 +1328,7 @@ export interface ExtendedTranslationDictionarySections extends TailTranslationDi
     draftBadge: string;
     mergedBadge: string;
     branchInfo: string;
-    mergeAsSingleCard: string; mergeAsSingleCardHint: string; mergedIssuesTitle: string; mergedPullsTitle: string; mergedSourceListHeading: string; mergedSummaryLabel: string;
+    mergeAsSingleCard: string; mergeAsSingleCardHint: string; mergedIssuesTitle: string; mergedIssuesTitleGitlab: string; mergedPullsTitle: string; mergedPullsTitleGitlab: string; mergedSourceListHeading: string; mergedSummaryLabel: string;
   };
   // Kanban background agents
   kanbanBgAgent: {

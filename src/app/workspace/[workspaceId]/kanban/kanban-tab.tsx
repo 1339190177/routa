@@ -45,7 +45,7 @@ import {
   taskOwnsSession,
 } from "./kanban-tab-helpers";
 import {
-  importGitHubItems,
+  importVcsItems,
 } from "./kanban-github-import";
 import { getKanbanFileChangesSummary } from "./kanban-file-changes-panel";
 import { KanbanTabContent } from "./kanban-tab-content";
@@ -1600,14 +1600,14 @@ export function KanbanTab({
     onRefresh();
   }
 
-  async function importGitHubIssues(
+  async function importVcsIssues(
     codebaseId: string,
     issues: GitHubIssueListItemInfo[],
     repo: string,
     mergeAsSingleCard: boolean,
   ) {
     await ensureBoardAutoProviderPersisted();
-    const importedTasks = await importGitHubItems({
+    const importedTasks = await importVcsItems({
       workspaceId,
       boardId: selectedBoardId ?? defaultBoardId,
       codebaseId,
@@ -1648,14 +1648,14 @@ export function KanbanTab({
     }
   }
 
-  async function importGitHubPulls(
+  async function importVcsPulls(
     codebaseId: string,
     pulls: GitHubPRListItemInfo[],
     repo: string,
     mergeAsSingleCard: boolean,
   ) {
     await ensureBoardAutoProviderPersisted();
-    const importedTasks = await importGitHubItems({
+    const importedTasks = await importVcsItems({
       workspaceId,
       boardId: selectedBoardId ?? defaultBoardId,
       codebaseId,
@@ -2177,8 +2177,8 @@ export function KanbanTab({
     tasks: localTasks,
     platform: vcsPlatform,
     onClose: () => setShowGitHubImportModal(false),
-    onImport: importGitHubIssues,
-    onImportPulls: importGitHubPulls,
+    onImport: importVcsIssues,
+    onImportPulls: importVcsPulls,
   };
 
   const codebaseModalProps = {
