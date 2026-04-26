@@ -20,14 +20,6 @@ const JOB_KIND_STYLES: Record<JobKind, string> = {
   review: "border-amber-200 bg-amber-50 text-amber-700",
 };
 
-const JOB_KIND_ICON_COLORS: Record<JobKind, string> = {
-  build: "text-slate-500",
-  test: "text-emerald-600",
-  deploy: "text-violet-600",
-  security: "text-red-600",
-  review: "text-amber-600",
-};
-
 const STAGE_COLORS = [
   "border-sky-200 bg-sky-50/60 text-sky-700",
   "border-emerald-200 bg-emerald-50/60 text-emerald-700",

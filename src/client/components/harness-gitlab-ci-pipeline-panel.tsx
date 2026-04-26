@@ -7,15 +7,15 @@ import { HarnessGitLabCIPipelineGallery } from "@/client/components/harness-gitl
 import { desktopAwareFetch } from "@/client/utils/diagnostics";
 import { useTranslation } from "@/i18n";
 
-// Re-export types from canonical source for backward compatibility
-export type {
-  GitLabCIJob,
-  GitLabCIStage,
+import type {
   GitLabCIPipeline,
   GitLabCIResponse,
 } from "@/client/hooks/use-harness-settings-data";
 
-import type {
+// Re-export types from canonical source for backward compatibility
+export type {
+  GitLabCIJob,
+  GitLabCIStage,
   GitLabCIPipeline,
   GitLabCIResponse,
 } from "@/client/hooks/use-harness-settings-data";
