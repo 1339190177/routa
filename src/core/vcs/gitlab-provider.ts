@@ -114,7 +114,7 @@ export class GitLabProvider implements IVCSProvider {
       maxPages?: number;
     } = {}
   ): Promise<T[]> {
-    const { token, perPage = 100, maxPages = 50 } = options;
+    const { token, perPage = 100, maxPages = 100 } = options;
     const allItems: T[] = [];
     let page = 1;
     let hasMore = true;
@@ -161,11 +161,11 @@ export class GitLabProvider implements IVCSProvider {
 
   async listBranches(opts: { repo: string; token?: string }): Promise<VCSBranch[]> {
     const encodedPath = this.encodeProjectPath(opts.repo);
-    const data = await this.gitlabApi<Array<{
+    const data = await this.gitlabPaginate<{
       name: string;
       commit: { id: string };
       protected: boolean;
-    }>>(`/projects/${encodedPath}/repository/branches`, { token: opts.token });
+    }>(`/projects/${encodedPath}/repository/branches`, { token: opts.token });
 
     return data.map((branch) => ({
       name: branch.name,
@@ -438,7 +438,7 @@ export class GitLabProvider implements IVCSProvider {
     token?: string;
   }): Promise<Array<{ id: number; events: string[]; active: boolean; config: { url: string } }>> {
     const encodedPath = this.encodeProjectPath(opts.repo);
-    const data = await this.gitlabApi<Array<{
+    const data = await this.gitlabPaginate<{
       id: number;
       url: string;
       push_events: boolean;
@@ -454,7 +454,7 @@ export class GitLabProvider implements IVCSProvider {
       confidential_issues_events: boolean;
       confidential_note_events: boolean;
       enabled: boolean;
-    }>>(`/projects/${encodedPath}/hooks`, { token: opts.token });
+    }>(`/projects/${encodedPath}/hooks`, { token: opts.token });
 
     return data.map((hook) => ({
       id: hook.id,
