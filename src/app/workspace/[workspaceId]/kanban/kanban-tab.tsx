@@ -1607,15 +1607,16 @@ export function KanbanTab({
     mergeAsSingleCard: boolean,
   ) {
     await ensureBoardAutoProviderPersisted();
+    const isGitLabPlatform = vcsPlatform === "gitlab";
     const importedTasks = await importVcsItems({
       workspaceId,
       boardId: selectedBoardId ?? defaultBoardId,
       codebaseId,
       items: issues,
       mergeAsSingleCard,
-      mergedTitle: t.kanbanImport.mergedIssuesTitle,
+      mergedTitle: isGitLabPlatform ? t.kanbanImport.mergedIssuesTitleGitlab : t.kanbanImport.mergedIssuesTitle,
       mergedObjectiveLabels: { heading: t.kanbanImport.mergedSourceListHeading, summary: t.kanbanImport.mergedSummaryLabel },
-      mergeFallbackMessage: t.kanbanImport.importFailed,
+      mergeFallbackMessage: isGitLabPlatform ? t.kanbanImport.importFailedGitlab : t.kanbanImport.importFailed,
       createItemPayload: (issue) => ({
         workspaceId,
         boardId: selectedBoardId ?? defaultBoardId,
@@ -1655,15 +1656,16 @@ export function KanbanTab({
     mergeAsSingleCard: boolean,
   ) {
     await ensureBoardAutoProviderPersisted();
+    const isGitLabPlatform = vcsPlatform === "gitlab";
     const importedTasks = await importVcsItems({
       workspaceId,
       boardId: selectedBoardId ?? defaultBoardId,
       codebaseId,
       items: pulls,
       mergeAsSingleCard,
-      mergedTitle: t.kanbanImport.mergedPullsTitle,
+      mergedTitle: isGitLabPlatform ? t.kanbanImport.mergedPullsTitleGitlab : t.kanbanImport.mergedPullsTitle,
       mergedObjectiveLabels: { heading: t.kanbanImport.mergedSourceListHeading, summary: t.kanbanImport.mergedSummaryLabel },
-      mergeFallbackMessage: t.kanbanImport.importPullsFailed,
+      mergeFallbackMessage: isGitLabPlatform ? t.kanbanImport.importMrsFailed : t.kanbanImport.importPullsFailed,
       createItemPayload: (pull) => ({
         workspaceId,
         boardId: selectedBoardId ?? defaultBoardId,
