@@ -70,7 +70,9 @@ export function KanbanGitHubImportModal({
   const [reloadNonce, setReloadNonce] = useState(0);
   const [mergeAsSingleCard, setMergeAsSingleCard] = useState(false);
 
-  const fallbackImportError = activeTab === "issues" ? t.kanbanImport.importFailed : (isGitLab ? t.kanbanImport.importMrsFailed : t.kanbanImport.importPullsFailed);
+  const fallbackImportError = activeTab === "issues"
+    ? (isGitLab ? t.kanbanImport.importFailedGitlab : t.kanbanImport.importFailed)
+    : (isGitLab ? t.kanbanImport.importMrsFailed : t.kanbanImport.importPullsFailed);
 
   useEffect(() => {
     if (!show) {
@@ -201,7 +203,9 @@ export function KanbanGitHubImportModal({
   const currentRepo = activeTab === "issues" ? issuesPayload?.repo : pullsPayload?.repo;
   const currentCount = activeTab === "issues" ? selectableIssues.length : selectablePulls.length;
   const currentSelectableIds = activeTab === "issues" ? selectableIssueIds : selectablePullIds;
-  const currentLoadingText = activeTab === "issues" ? t.kanbanImport.loading : (isGitLab ? t.kanbanImport.loadingMergeRequests : t.kanbanImport.loadingPulls);
+  const currentLoadingText = activeTab === "issues"
+    ? (isGitLab ? t.kanbanImport.loadingGitlab : t.kanbanImport.loading)
+    : (isGitLab ? t.kanbanImport.loadingMergeRequests : t.kanbanImport.loadingPulls);
   const currentNoItemsText = activeTab === "issues" ? t.kanbanImport.noIssues : (isGitLab ? t.kanbanImport.noMergeRequests : t.kanbanImport.noPulls);
   const currentItemsLoadedText = activeTab === "issues" ? t.kanbanImport.issuesLoaded : (isGitLab ? t.kanbanImport.mergeRequestsLoaded : t.kanbanImport.pullsLoaded);
 
@@ -214,8 +218,8 @@ export function KanbanGitHubImportModal({
       <div className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-[#1c1f2e] dark:bg-[#12141c]">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t.kanbanImport.title}</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t.kanbanImport.description}</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{isGitLab ? t.kanbanImport.titleGitlab : t.kanbanImport.title}</h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{isGitLab ? t.kanbanImport.descriptionGitlab : t.kanbanImport.description}</p>
           </div>
           <button onClick={onClose} className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
             {t.common.close}
