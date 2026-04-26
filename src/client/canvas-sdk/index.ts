@@ -125,3 +125,23 @@ export {
   type PieChartProps,
   type PieChartEntry,
 } from "./charts";
+
+// Diff rendering
+export {
+  DiffStats,
+  DiffView,
+  type DiffStatsProps,
+  type DiffLineType,
+  type DiffLineData,
+  type DiffViewProps,
+} from "./diff-view";
+
+// DAG layout
+export {
+  computeDAGLayout,
+  type DAGLayoutOptions,
+  type DAGLayoutNode,
+  type DAGLayoutEdge,
+  type DAGLayoutRank,
+  type DAGLayoutResult,
+} from "./dag-layout";

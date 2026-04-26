@@ -68,6 +68,29 @@ export default function MyCanvas() {
     expect(result.ok).toBe(true);
   });
 
+  it("compiles Cursor-compatible diff and DAG helpers", () => {
+    const source = `
+import { Card, CardBody, DiffView, computeDAGLayout } from "routa/canvas";
+
+export default function MyCanvas() {
+  const layout = computeDAGLayout({
+    nodes: [{ id: "a" }, { id: "b" }],
+    edges: [{ from: "a", to: "b" }],
+  });
+  return (
+    <Card>
+      <CardBody>
+        <span>{layout.nodes.length}</span>
+        <DiffView path="demo.ts" lines={[{ type: "added", content: "const x = 1;", lineNumber: 1 }]} />
+      </CardBody>
+    </Card>
+  );
+}
+`;
+    const result = compileCanvasTsx(source);
+    expect(result.ok).toBe(true);
+  });
+
   it("compiles without explicit React import (JSX classic)", () => {
     const source = `
 import { H1 } from "@canvas-sdk";

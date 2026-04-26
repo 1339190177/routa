@@ -11,3 +11,5 @@ export { Table, Stat, Pill, Callout, type TableProps, type TableColumnAlign, typ
 export { Card, CardHeader, CardBody, type CardProps, type CardSize, type CardVariant, type CardHeaderProps, type CardBodyProps, } from "./containers";
 export { Button, TextInput, TextArea, Checkbox, Toggle, Select, IconButton, type ButtonProps, type ButtonVariant, type TextInputProps, type TextAreaProps, type CheckboxProps, type ToggleProps, type SelectOption, type SelectProps, type IconButtonProps, } from "./controls";
 export { BarChart, LineChart, PieChart, type BarChartProps, type BarChartEntry, type ChartDataPoint, type ChartSeries, type ChartTone, type LineChartProps, type PieChartProps, type PieChartEntry, } from "./charts";
+export { DiffStats, DiffView, type DiffStatsProps, type DiffLineType, type DiffLineData, type DiffViewProps, } from "./diff-view";
+export { computeDAGLayout, type DAGLayoutOptions, type DAGLayoutNode, type DAGLayoutEdge, type DAGLayoutRank, type DAGLayoutResult, } from "./dag-layout";

@@ -14,6 +14,8 @@ export function buildCanvasSdkPromptSection(): string {
     "resource://routa/canvas-sdk/defs/containers",
     "resource://routa/canvas-sdk/defs/controls",
     "resource://routa/canvas-sdk/defs/charts",
+    "resource://routa/canvas-sdk/defs/diff-view",
+    "resource://routa/canvas-sdk/defs/dag-layout",
   ];
   const definitionUris = preferredUris
     .filter((uri) => manifest.definitionResources.some((entry) => entry.resourceUri === uri))
