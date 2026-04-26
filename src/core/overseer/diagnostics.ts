@@ -6,7 +6,7 @@
  */
 
 import type { RoutaSystem } from "../routa-system";
-import type { Task } from "../store/task-store";
+import type { Task } from "../models/task";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -50,9 +50,8 @@ const MAX_VERSION_CONFLICT_RETRIES = 2;
 
 async function hasActiveSession(system: RoutaSystem, sessionId: string): Promise<boolean> {
   try {
-    const sessions = system.conversationStore;
-    // Check if session exists and has recent activity
-    const messages = await sessions.getMessages(sessionId);
+    // ConversationStore.getConversation(agentId) returns messages for that agent/session
+    const messages = await system.conversationStore.getConversation(sessionId);
     if (!messages || messages.length === 0) return false;
     const lastMsg = messages[messages.length - 1];
     const lastActivity = lastMsg.timestamp?.getTime() ?? 0;
@@ -72,32 +71,33 @@ export async function collectSystemDiagnostics(
 ): Promise<OverseerDiagnostic[]> {
   const diagnostics: OverseerDiagnostic[] = [];
 
-  // Get all tasks with potential issues
-  const allTasks = await system.taskStore.listTasks();
-  const workspaceIds = new Set(allTasks.map((t) => t.workspaceId));
+  // Collect tasks across all workspaces
+  const workspaces = await system.workspaceStore.list();
+  const allTasks: Task[] = [];
 
-  for (const workspaceId of workspaceIds) {
-    const tasks = await system.taskStore.listTasks({ workspaceId });
+  for (const ws of workspaces) {
+    const tasks = await system.taskStore.listByWorkspace(ws.id);
+    allTasks.push(...tasks);
+  }
 
-    for (const task of tasks) {
-      // AUTO: stale triggerSessionId
-      await checkStaleTriggerSession(system, task, diagnostics);
+  for (const task of allTasks) {
+    // AUTO: stale triggerSessionId
+    await checkStaleTriggerSession(system, task, diagnostics);
 
-      // AUTO: expired pending marker
-      checkExpiredPendingMarker(task, diagnostics);
+    // AUTO: expired pending marker
+    checkExpiredPendingMarker(task, diagnostics);
 
-      // AUTO: orphan worktree reference
-      await checkOrphanWorktree(system, task, diagnostics);
+    // AUTO: orphan worktree reference
+    await checkOrphanWorktree(system, task, diagnostics);
 
-      // AUTO: dependency block resolved
-      checkDependencyBlockResolved(task, tasks, diagnostics);
+    // AUTO: dependency block resolved
+    checkDependencyBlockResolved(task, allTasks, diagnostics);
 
-      // AUTO: version conflict retry
-      checkVersionConflictRetry(task, diagnostics);
+    // AUTO: version conflict retry
+    checkVersionConflictRetry(task, diagnostics);
 
-      // NOTIFY: orphan IN_PROGRESS status
-      checkOrphanInProgress(task, diagnostics);
-    }
+    // NOTIFY: orphan IN_PROGRESS status
+    checkOrphanInProgress(task, diagnostics);
   }
 
   return diagnostics;
@@ -163,7 +163,7 @@ async function checkOrphanWorktree(
   if (!task.worktreeId) return;
 
   try {
-    const worktree = await system.worktreeStore.getWorktree(task.worktreeId);
+    const worktree = await system.worktreeStore.get(task.worktreeId);
     if (!worktree) {
       diagnostics.push({
         pattern: "orphan-worktree",
@@ -222,7 +222,7 @@ function checkVersionConflictRetry(
   // Count how many times we've seen this
   const comments = task.comments ?? [];
   const conflictComments = comments.filter(
-    (c) => c.content?.toLowerCase().includes("version conflict") ?? false,
+    (c) => c.body?.toLowerCase().includes("version conflict") ?? false,
   );
 
   if (conflictComments.length <= MAX_VERSION_CONFLICT_RETRIES) {

@@ -7,22 +7,23 @@ import { createInMemoryOverseerStateStore } from "../overseer-state-store";
 import { OverseerCircuitBreaker } from "../circuit-breaker";
 import type { OverseerContext } from "../health-tick";
 
-// We need a minimal mock of RoutaSystem
-function createMockSystem() {
-  const tasks: Array<Record<string, unknown>> = [];
-
+// Minimal mock of RoutaSystem with all stores the diagnostics collector needs
+function createMockSystem(tasks: Array<Record<string, unknown>> = []) {
   return {
     isPersistent: false,
+    workspaceStore: {
+      list: vi.fn().mockResolvedValue([{ id: "default" }]),
+    },
     taskStore: {
-      listTasks: vi.fn().mockResolvedValue(tasks),
-      getTask: vi.fn().mockImplementation((id: string) => tasks.find((t) => t.id === id)),
-      updateTask: vi.fn().mockResolvedValue(undefined),
+      listByWorkspace: vi.fn().mockResolvedValue(tasks),
+      get: vi.fn().mockImplementation((id: string) => tasks.find((t) => t.id === id)),
+      save: vi.fn().mockResolvedValue(undefined),
     },
     conversationStore: {
-      getMessages: vi.fn().mockResolvedValue([]),
+      getConversation: vi.fn().mockResolvedValue([]),
     },
     worktreeStore: {
-      getWorktree: vi.fn().mockResolvedValue(null),
+      get: vi.fn().mockResolvedValue(null),
     },
     eventBus: {
       emit: vi.fn(),
@@ -35,7 +36,7 @@ describe("runOverseerHealthTick", () => {
     const store = createInMemoryOverseerStateStore();
     const cb = new OverseerCircuitBreaker(store);
     const ctx: OverseerContext = { stateStore: store, circuitBreaker: cb };
-    const system = createMockSystem();
+    const system = createMockSystem([]);
 
     const result = await runOverseerHealthTick(system as any, ctx);
     expect(result.examined).toBe(0);
@@ -52,7 +53,7 @@ describe("runOverseerHealthTick", () => {
     await cb.recordFailure("error 3");
 
     const ctx: OverseerContext = { stateStore: store, circuitBreaker: cb };
-    const system = createMockSystem();
+    const system = createMockSystem([]);
 
     const result = await runOverseerHealthTick(system as any, ctx);
     expect(result.examined).toBe(0);
@@ -63,9 +64,8 @@ describe("runOverseerHealthTick", () => {
     const cb = new OverseerCircuitBreaker(store);
     const ctx: OverseerContext = { stateStore: store, circuitBreaker: cb };
 
-    const system = createMockSystem();
     const staleTime = new Date(Date.now() - 45 * 60 * 1000); // 45 minutes ago
-    system.taskStore.listTasks.mockResolvedValue([
+    const tasks = [
       {
         id: "task-stale",
         title: "Stale Task",
@@ -74,18 +74,19 @@ describe("runOverseerHealthTick", () => {
         triggerSessionId: "old-session",
         updatedAt: staleTime,
         comment: "",
-        comments: [],
-        dependencies: [],
+        comments: [] as Array<{ id: string; body: string; createdAt: string }>,
+        dependencies: [] as string[],
       },
-    ]);
+    ];
+    const system = createMockSystem(tasks);
 
     const result = await runOverseerHealthTick(system as any, ctx);
     expect(result.examined).toBeGreaterThanOrEqual(1);
     expect(result.autoFixed).toBeGreaterThanOrEqual(1);
-    expect(system.taskStore.updateTask).toHaveBeenCalledWith(
-      "task-stale",
-      expect.objectContaining({ triggerSessionId: undefined }),
-    );
+    expect(system.taskStore.save).toHaveBeenCalled();
+    // The saved task should have triggerSessionId cleared
+    const savedTask = system.taskStore.save.mock.calls[0][0];
+    expect(savedTask.triggerSessionId).toBeUndefined();
   });
 
   it("should clear orphan worktree reference", async () => {
@@ -93,8 +94,7 @@ describe("runOverseerHealthTick", () => {
     const cb = new OverseerCircuitBreaker(store);
     const ctx: OverseerContext = { stateStore: store, circuitBreaker: cb };
 
-    const system = createMockSystem();
-    system.taskStore.listTasks.mockResolvedValue([
+    const tasks = [
       {
         id: "task-orphan",
         title: "Orphan WT",
@@ -103,16 +103,15 @@ describe("runOverseerHealthTick", () => {
         worktreeId: "wt-deleted",
         updatedAt: new Date(),
         comment: "",
-        comments: [],
-        dependencies: [],
+        comments: [] as Array<{ id: string; body: string; createdAt: string }>,
+        dependencies: [] as string[],
       },
-    ]);
+    ];
+    const system = createMockSystem(tasks);
 
     const result = await runOverseerHealthTick(system as any, ctx);
     expect(result.autoFixed).toBeGreaterThanOrEqual(1);
-    expect(system.taskStore.updateTask).toHaveBeenCalledWith(
-      "task-orphan",
-      expect.objectContaining({ worktreeId: undefined }),
-    );
+    const savedTask = system.taskStore.save.mock.calls[0][0];
+    expect(savedTask.worktreeId).toBeUndefined();
   });
 });

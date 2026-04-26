@@ -127,6 +127,7 @@ class SqliteOverseerStateStore {
     this.db.run(sql`
       INSERT INTO overseer_decisions (id, pattern, task_id, category, action, details, status, token, created_at, resolved_at)
       VALUES (${decision.id}, ${decision.pattern}, ${decision.taskId}, ${decision.category}, ${decision.action}, ${decision.details}, ${decision.status}, ${decision.token}, ${decision.createdAt}, ${decision.resolvedAt})
+      ON CONFLICT(id) DO UPDATE SET status = ${decision.status}, token = ${decision.token}, resolved_at = ${decision.resolvedAt}
     `);
   }
 

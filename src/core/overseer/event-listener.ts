@@ -8,6 +8,7 @@
  */
 
 import type { EventBus, AgentEvent } from "../events/event-bus";
+import { AgentEventType } from "../events/event-bus";
 import type { OverseerStateStore } from "./overseer-state-store";
 import { getWeChatWorkChannel } from "../notifications/wechat-work-channel";
 import crypto from "crypto";
@@ -91,7 +92,7 @@ export function registerOverseerEventListener(
   stateStore: OverseerStateStore,
 ): void {
   eventBus.on("overseer-event-listener", async (event: AgentEvent) => {
-    if (event.type !== ("OVERSEER_ALERT" as const)) return;
+    if (event.type !== AgentEventType.OVERSEER_ALERT) return;
 
     const data = event.data;
     const decisionId = data.decisionId as string;

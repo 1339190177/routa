@@ -18,6 +18,7 @@ import type { OverseerStateStore } from "./overseer-state-store";
 import type { ClassifiedDecision } from "./decision-classifier";
 import { OverseerCircuitBreaker } from "./circuit-breaker";
 import { getWeChatWorkChannel } from "../notifications/wechat-work-channel";
+import { AgentEventType } from "../events/event-bus";
 
 export interface OverseerContext {
   stateStore: OverseerStateStore;
@@ -88,7 +89,7 @@ export async function runOverseerHealthTick(
       try {
         await ctx.stateStore.saveDecision(toOverseerDecision(decision));
         system.eventBus.emit({
-          type: "OVERSEER_ALERT" as const,
+          type: AgentEventType.OVERSEER_ALERT,
           agentId: "overseer",
           workspaceId: "default",
           data: {
@@ -134,44 +135,57 @@ async function executeAutoDecision(
   decision: ClassifiedDecision,
 ): Promise<void> {
   switch (decision.action) {
-    case "clear-trigger-session":
-      await system.taskStore.updateTask(decision.taskId, { triggerSessionId: undefined });
-      console.log(`[Overseer] AUTO: Cleared stale triggerSessionId for task ${decision.taskId}`);
+    case "clear-trigger-session": {
+      const task = await system.taskStore.get(decision.taskId);
+      if (task) {
+        task.triggerSessionId = undefined;
+        await system.taskStore.save(task);
+        console.log(`[Overseer] AUTO: Cleared stale triggerSessionId for task ${decision.taskId}`);
+      }
       break;
+    }
 
     case "clear-pending-marker": {
-      const task = await system.taskStore.getTask(decision.taskId);
+      const task = await system.taskStore.get(decision.taskId);
       if (task) {
-        const cleanedComment = (task.comment ?? "")
+        task.comment = (task.comment ?? "")
           .replace(/\[auto-merger-pending\]/g, "")
           .replace(/\[automation-limit\]/g, "")
           .replace(/\[pending-review\]/g, "")
           .trim();
-        await system.taskStore.updateTask(decision.taskId, { comment: cleanedComment });
+        await system.taskStore.save(task);
         console.log(`[Overseer] AUTO: Cleared pending marker for task ${decision.taskId}`);
       }
       break;
     }
 
-    case "clear-worktree-ref":
-      await system.taskStore.updateTask(decision.taskId, { worktreeId: undefined });
-      console.log(`[Overseer] AUTO: Cleared orphan worktree ref for task ${decision.taskId}`);
+    case "clear-worktree-ref": {
+      const task = await system.taskStore.get(decision.taskId);
+      if (task) {
+        task.worktreeId = undefined;
+        await system.taskStore.save(task);
+        console.log(`[Overseer] AUTO: Cleared orphan worktree ref for task ${decision.taskId}`);
+      }
       break;
+    }
 
-    case "unblock-dependency":
-      await system.taskStore.updateTask(decision.taskId, { dependencyStatus: "resolved" });
-      console.log(`[Overseer] AUTO: Unblocked dependencies for task ${decision.taskId}`);
+    case "unblock-dependency": {
+      const task = await system.taskStore.get(decision.taskId);
+      if (task) {
+        task.dependencyStatus = "clear";
+        await system.taskStore.save(task);
+        console.log(`[Overseer] AUTO: Unblocked dependencies for task ${decision.taskId}`);
+      }
       break;
+    }
 
     case "retry-version-conflict": {
-      // Bump version to resolve conflict
-      const task = await system.taskStore.getTask(decision.taskId);
+      const task = await system.taskStore.get(decision.taskId);
       if (task) {
         const newVersion = (task.version ?? 1) + 1;
-        await system.taskStore.updateTask(decision.taskId, {
-          version: newVersion,
-          lastSyncError: undefined,
-        });
+        task.version = newVersion;
+        task.lastSyncError = undefined;
+        await system.taskStore.save(task);
         console.log(`[Overseer] AUTO: Retried version conflict for task ${decision.taskId} (v${newVersion})`);
       }
       break;
