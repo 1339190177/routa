@@ -26,6 +26,7 @@ import { withHeartbeat } from "./system-heartbeat-registry";
 let schedulerTask: ScheduledTask | null = null;
 let autoArchiveTask: ScheduledTask | null = null;
 let doneLaneRecoveryTask: ScheduledTask | null = null;
+let overseerHealthTask: ScheduledTask | null = null;
 let isStarted = false;
 
 export function startSchedulerService(): void {
@@ -117,6 +118,32 @@ export function startSchedulerService(): void {
     console.error("[Scheduler] Startup cleanup failed:", error);
   });
 
+  // Overseer health tick runs every 5 minutes for smart monitoring
+  overseerHealthTask = nodeCron.schedule("*/5 * * * *", () => {
+    void runWithSpan(
+      "routa.scheduler.overseer_health_tick",
+      {},
+      async (span) => {
+        await withHeartbeat("overseer-health-tick", async () => {
+          const { getOverseerContext, runOverseerHealthTick } = require("../overseer") as typeof import("../overseer");
+          const ctx = getOverseerContext();
+          if (!ctx) {
+            console.warn("[Scheduler] Overseer context not initialized — skipping tick");
+            return;
+          }
+          const result = await runOverseerHealthTick(getRoutaSystem(), ctx);
+          span.setAttribute("routa.overseer.examined", result.examined);
+          span.setAttribute("routa.overseer.auto_fixed", result.autoFixed);
+          span.setAttribute("routa.overseer.notified", result.notified);
+          span.setAttribute("routa.overseer.escalated", result.escalated);
+          span.setAttribute("routa.overseer.errors", result.errors);
+        });
+      },
+    ).catch((error) => {
+      console.error("[Scheduler] Overseer health tick failed:", error);
+    });
+  });
+
   isStarted = true;
 }
 
@@ -124,8 +151,10 @@ export function stopSchedulerService(): void {
   schedulerTask?.stop();
   autoArchiveTask?.stop();
   doneLaneRecoveryTask?.stop();
+  overseerHealthTask?.stop();
   schedulerTask = null;
   autoArchiveTask = null;
   doneLaneRecoveryTask = null;
+  overseerHealthTask = null;
   isStarted = false;
 }

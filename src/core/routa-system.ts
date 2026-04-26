@@ -395,6 +395,15 @@ export function getRoutaSystem(): RoutaSystem {
     // Placed here instead of instrumentation.node.ts to guarantee startup on all platforms.
     startSchedulerService();
 
+    // Start the overseer subsystem (smart monitoring: auto-fixes, notifications, escalations)
+    // Must run after scheduler so the health tick cron is registered.
+    try {
+      const { startOverseer } = require("./overseer") as typeof import("./overseer");
+      startOverseer(system);
+    } catch (err) {
+      console.error("[RoutaSystem] Failed to start overseer subsystem:", err);
+    }
+
     // Set up EventBus → KanbanEventBroadcaster bridge for file changes
     setupFileChangeBridge(system);
 
