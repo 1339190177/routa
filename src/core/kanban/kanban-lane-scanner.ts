@@ -315,9 +315,10 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
             }
 
             // Stuck-in-column with no cross-column failures: auto-advance was lost.
-            // Emit a COLUMN_TRANSITION so the orchestrator re-runs autoAdvanceCard.
+            // Emit an advance-only COLUMN_TRANSITION so the orchestrator retries
+            // autoAdvanceCard WITHOUT re-running the specialist step.
             if (stuckInColumn && !hasFailedAdvance) {
-              const stuckAttempts = countStepAttempts(laneSessions, task.columnId!, 0);
+              const stuckAttempts = countStepAttempts(laneSessions, task.columnId!, 0, { countCompleted: true });
               if (stuckAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
                 await safeAtomicSave(task, system.taskStore, {
                   lastSyncError: buildAdvanceRecoveryError(
@@ -329,16 +330,43 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
               }
               console.log(
                 `[LaneScanner] Card ${task.id} completed all steps in "${currentColumn?.name}" ` +
-                `but is still in this column (autoAdvanceOnSuccess=true). Re-triggering advance.`,
+                `but is still in this column (autoAdvanceOnSuccess=true). Emitting advance-only event (attempt ${stuckAttempts + 1}/${MAX_STEP_RESUME_ATTEMPTS}).`,
               );
-              // Fall through — emit COLUMN_TRANSITION below so the orchestrator
-              // runs autoAdvanceCard without re-executing the specialist step.
+              // Emit advance-only event — orchestrator will call autoAdvanceCard
+              // without re-running the specialist step.
+              try {
+                const freshCheck = await system.taskStore.get(task.id);
+                if (!freshCheck || freshCheck.columnId !== task.columnId) {
+                  continue;
+                }
+                system.eventBus.emit({
+                  type: AgentEventType.COLUMN_TRANSITION,
+                  agentId: "kanban-lane-scanner",
+                  workspaceId: task.workspaceId,
+                  data: {
+                    cardId: task.id,
+                    cardTitle: task.title,
+                    boardId: board.id,
+                    workspaceId: task.workspaceId,
+                    fromColumnId: task.columnId,
+                    toColumnId: task.columnId,
+                    _advanceOnly: true,
+                  } as Record<string, unknown>,
+                  timestamp: new Date(),
+                });
+              } catch (err) {
+                console.warn(
+                  `[LaneScanner] Failed to emit advance-only event for task ${task.id}:`,
+                  err instanceof Error ? err.message : err,
+                );
+              }
+              continue;
             }
 
             // Recovery: clear orphaned failed sessions from other columns and
             // re-trigger the current column's automation. The autoAdvance mechanism
             // will retry the push to the next column.
-            const advanceRecoveryAttempts = countStepAttempts(laneSessions, task.columnId!, 0);
+            const advanceRecoveryAttempts = countStepAttempts(laneSessions, task.columnId!, 0, { countCompleted: true });
             if (advanceRecoveryAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
               await safeAtomicSave(task, system.taskStore, {
                 lastSyncError: buildAdvanceRecoveryError(
@@ -558,18 +586,15 @@ function countStepAttempts(
   laneSessions: Array<{ columnId?: string; stepIndex?: number; status: string }>,
   columnId: string,
   stepIndex: number,
+  options?: { countCompleted?: boolean },
 ): number {
   let count = 0;
   for (const entry of laneSessions) {
-    // Only count failed/timed_out attempts — completed sessions where auto-advance
-    // subsequently failed should NOT consume the retry budget, because the specialist
-    // step itself succeeded. The version-conflict retry in autoAdvanceCard handles
-    // transient races independently.
     if (
       entry.columnId === columnId
       && typeof entry.stepIndex === "number"
       && entry.stepIndex === stepIndex
-      && entry.status !== "completed"
+      && (options?.countCompleted || entry.status !== "completed")
     ) {
       count++;
     }

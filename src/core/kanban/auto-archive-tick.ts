@@ -43,31 +43,25 @@ export function resolveAutoArchiveDays(metadata?: Record<string, string>): numbe
 /**
  * Check whether a task has been sitting in the done column long enough.
  *
- * Uses POST_MERGE_ARCHIVE_MS (1 hour) as the threshold when any of:
- *   - pullRequestMergedAt is set (PR merged)
- *   - pullRequestUrl is "manual" or "already-merged" (no real PR needed)
- *   - No pullRequestUrl at all (no PR was created)
+ * Two-phase threshold:
+ *   1. POST_MERGE_ARCHIVE_MS (1 hour) — minimum cooling-off after PR merge
+ *      or done-column entry, to avoid archiving while related operations are
+ *      still settling (e.g. DoneLaneRecovery, worktree cleanup).
+ *   2. archiveDays * DAY_MS — the configured dwell time in the done column
+ *      before the card becomes eligible for archival.
  *
- * All these mean the card is fully done — the only remaining question is
- * whether enough time has passed for the team to review before archiving.
- *
- * The configured archiveDays is only used as fallback for edge cases.
- *
- * Note: hasPendingAutomation() and hasOpenPR() are checked separately in the
- * tick loop, so the pipeline is guaranteed to be complete before archiving.
+ * Both thresholds must pass for the card to be considered old enough.
  */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export function isCardOldEnough(task: Task, archiveDays: number, now: Date = new Date()): boolean {
-  // Determine the start time for the archive countdown
   let anchorTime: number | undefined;
 
   if (task.pullRequestMergedAt) {
-    // PR merged → countdown from merge time
     anchorTime = task.pullRequestMergedAt instanceof Date
       ? task.pullRequestMergedAt.getTime()
       : new Date(task.pullRequestMergedAt as string | number).getTime();
   } else {
-    // No real PR (manual, already-merged, or never created) → countdown from
-    // when the card entered the done column
     const doneSessions = (task.laneSessions ?? []).filter(
       (s: TaskLaneSession) => s.columnId === task.columnId || s.columnId === "done",
     );
@@ -84,7 +78,8 @@ export function isCardOldEnough(task: Task, archiveDays: number, now: Date = new
   }
 
   if (anchorTime !== undefined) {
-    return now.getTime() - anchorTime >= POST_MERGE_ARCHIVE_MS;
+    const elapsed = now.getTime() - anchorTime;
+    return elapsed >= POST_MERGE_ARCHIVE_MS && elapsed >= archiveDays * DAY_MS;
   }
 
   return false;
@@ -149,6 +144,10 @@ export async function runAutoArchiveTick(system: AutoArchiveSystem): Promise<Aut
     skipped: [],
     examined: 0,
   };
+
+  if (process.env.ROUTA_AUTO_ARCHIVE_ENABLED !== "true") {
+    return summary;
+  }
 
   if (shouldSkipTickForMemory("AutoArchive")) {
     return summary;

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeAll, afterAll } from "vitest";
 
 import { createTask, TaskStatus, type Task, type TaskLaneSession } from "@/core/models/task";
 import {
@@ -198,6 +198,13 @@ describe("findArchivedColumn / findDoneColumn", () => {
 });
 
 describe("runAutoArchiveTick", () => {
+  const originalEnv = process.env.ROUTA_AUTO_ARCHIVE_ENABLED;
+  beforeAll(() => { process.env.ROUTA_AUTO_ARCHIVE_ENABLED = "true"; });
+  afterAll(() => {
+    if (originalEnv === undefined) delete process.env.ROUTA_AUTO_ARCHIVE_ENABLED;
+    else process.env.ROUTA_AUTO_ARCHIVE_ENABLED = originalEnv;
+  });
+
   async function setupSystem(options?: {
     archiveDays?: string;
     tasks?: Parameters<typeof makeTask>[0][];
@@ -341,7 +348,7 @@ describe("runAutoArchiveTick", () => {
 
   it("does not skip a card with a merged PR", async () => {
     const now = new Date();
-    const oldDate = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000).toISOString();
+    const mergedAt = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000);
 
     const system = await setupSystem({
       archiveDays: "30",
@@ -350,12 +357,12 @@ describe("runAutoArchiveTick", () => {
         columnId: "done",
         boardId: "board-1",
         pullRequestUrl: "https://github.com/org/repo/pull/1",
-        pullRequestMergedAt: now,
+        pullRequestMergedAt: mergedAt,
         laneSessions: [{
           sessionId: "s-1",
           columnId: "done",
           status: "completed",
-          startedAt: oldDate,
+          startedAt: mergedAt.toISOString(),
         }],
       }],
     });
@@ -380,9 +387,9 @@ describe("runAutoArchiveTick", () => {
 
   it("uses default archive days when workspace metadata has no config", async () => {
     const now = new Date();
-    // Exactly DEFAULT_AUTO_ARCHIVE_DAYS days old — boundary check
+    // Just past DEFAULT_AUTO_ARCHIVE_DAYS days old — must exceed both thresholds
     const boundaryDate = new Date(
-      now.getTime() - DEFAULT_AUTO_ARCHIVE_DAYS * 24 * 60 * 60 * 1000,
+      now.getTime() - (DEFAULT_AUTO_ARCHIVE_DAYS * 24 * 60 * 60 * 1000 + 1),
     ).toISOString();
 
     const system = await setupSystem({
@@ -400,7 +407,6 @@ describe("runAutoArchiveTick", () => {
     });
 
     const result = await runAutoArchiveTick(system);
-    // At exactly the boundary, the elapsed time equals the threshold
     expect(result.archived).toBe(1);
   });
 

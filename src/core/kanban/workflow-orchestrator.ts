@@ -452,6 +452,37 @@ export class KanbanWorkflowOrchestrator {
       return;
     }
 
+    // Advance-only: LaneScanner detected a stuck card (all steps completed but
+    // auto-advance failed). Skip full automation and only retry the card move.
+    if (rawData._advanceOnly) {
+      const task = await this.taskStore.get(data.cardId);
+      if (!task || !task.columnId) return;
+      const board = await this.kanbanBoardStore.get(data.boardId);
+      if (!board) return;
+      const column = board.columns.find((c) => c.id === task.columnId);
+      if (!column?.automation?.autoAdvanceOnSuccess) return;
+      const stage = column.stage ?? "backlog";
+      await this.autoAdvanceCard(data.cardId, {
+        cardId: data.cardId,
+        cardTitle: data.cardTitle,
+        boardId: data.boardId,
+        workspaceId: data.workspaceId,
+        columnId: task.columnId,
+        columnName: column.name,
+        stage: stage as KanbanColumnStage,
+        automation: column.automation,
+        steps: [],
+        currentStepIndex: 0,
+        startedAt: new Date(),
+        status: "completed",
+        supervision: getDefaultKanbanDevSessionSupervision(),
+        attempt: 0,
+        recoveryAttempts: 0,
+        signaledSessionIds: new Set(),
+      });
+      return;
+    }
+
     const board = await this.kanbanBoardStore.get(data.boardId);
     if (!board) return;
     const resolved = resolveTransitionAutomation(board, data);
@@ -1930,6 +1961,8 @@ export class KanbanWorkflowOrchestrator {
         if (!ok) {
           // Re-read and retry once — the card may still be in the source column
           // due to a concurrent write (e.g. laneSessions merge from handleAgentCompletion).
+          // Brief delay to reduce contention with concurrent clearStaleTriggerSession.
+          await new Promise((r) => setTimeout(r, 150));
           const fresh = await this.taskStore.get(cardId);
           if (fresh && fresh.columnId === automation.columnId && fresh.version !== undefined) {
             const retryOk = await this.taskStore.atomicUpdate(cardId, fresh.version, {
