@@ -1282,10 +1282,14 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
 
   kanbanImport: {
     title: "导入 GitHub Issues",
+    titleGitlab: "导入 GitLab Issues",
     description: "从已关联仓库加载 issue，并转换成看板卡片。",
+    descriptionGitlab: "从已关联的 GitLab 项目加载议题，并转换成看板卡片。",
     repository: "仓库",
     loading: "正在加载 GitHub issues…",
+    loadingGitlab: "正在加载 GitLab 议题…",
     loadFailed: "加载 GitHub issues 失败。",
+    loadFailedGitlab: "加载 GitLab 议题失败。",
     noIssues: "没有可导入的 issue。",
     issuesLoaded: "个 issue",
     selectAll: "全选",
@@ -1293,6 +1297,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     importSelected: "导入所选",
     importing: "导入中…",
     importFailed: "导入 GitHub issues 失败。",
+    importFailedGitlab: "导入 GitLab 议题失败。",
     alreadyImported: "已导入",
     updatedAt: "更新于",
     stateOpen: "开放",
@@ -1312,7 +1317,7 @@ export const zhExtended: ExtendedTranslationDictionarySections = {
     draftBadge: "草稿",
     mergedBadge: "已合并",
     branchInfo: "→",
-    mergeAsSingleCard: "合并为一张卡", mergeAsSingleCardHint: "把所选项创建为一个任务，并将标题、链接和摘要合并到同一段描述中。", mergedIssuesTitle: "合并导入的 GitHub issues", mergedPullsTitle: "合并导入的 GitHub pull requests", mergedSourceListHeading: "来源链接", mergedSummaryLabel: "摘要",
+    mergeAsSingleCard: "合并为一张卡", mergeAsSingleCardHint: "把所选项创建为一个任务，并将标题、链接和摘要合并到同一段描述中。", mergedIssuesTitle: "合并导入的 GitHub issues", mergedIssuesTitleGitlab: "合并导入的 GitLab 议题", mergedPullsTitle: "合并导入的 GitHub pull requests", mergedPullsTitleGitlab: "合并导入的 GitLab 合并请求", mergedSourceListHeading: "来源链接", mergedSummaryLabel: "摘要",
   },
   kanbanBgAgent: {
     backgroundAgents: "后台智能体",
