@@ -607,7 +607,7 @@ export function KanbanCardDetail({
               <MetaBadge label={t.kanbanDetail.evidenceBundle} value={evidenceValue} compact={compactMode} />
             )}
             {task.vcsNumber && (
-              <MetaBadge label={resolveVcsLabel({ vcsUrl: task.vcsUrl, sourceType: primaryCodebase?.sourceType })} value={`#${task.vcsNumber}`} compact={compactMode} />
+              <MetaBadge label={resolveVcsLabel({ vcsUrl: task.vcsUrl })} value={`#${task.vcsNumber}`} compact={compactMode} />
             )}
             {task.deliveryReadiness?.hasCommitsSinceBase && task.deliveryReadiness.commitsSinceBase > 0 && (
               <MetaBadge
