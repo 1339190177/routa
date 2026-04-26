@@ -315,6 +315,12 @@ export const zhTail: TailTranslationDictionarySections = {
     platformSwitcherLabel: "平台",
     platformGithub: "GitHub",
     platformGitlab: "GitLab",
+    // PR/MR 类型标签
+    prTypePr: "PR",
+    prTypeMr: "MR",
+    // 仓库类型标签
+    repoTypeRepository: "仓库",
+    repoTypeProject: "项目",
     // GitLab 专属字段
     gitlabRepository: "GitLab 仓库",
     gitlabToken: "GitLab Token",

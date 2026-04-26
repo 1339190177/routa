@@ -321,6 +321,12 @@ export const enTail: TailTranslationDictionarySections = {
     platformSwitcherLabel: "Platform",
     platformGithub: "GitHub",
     platformGitlab: "GitLab",
+    // PR/MR type labels
+    prTypePr: "PR",
+    prTypeMr: "MR",
+    // Repo type labels
+    repoTypeRepository: "repository",
+    repoTypeProject: "project",
     // GitLab-specific fields
     gitlabRepository: "GitLab Repository",
     gitlabToken: "GitLab Token",

@@ -319,6 +319,12 @@ export interface TailTranslationDictionarySections {
     platformSwitcherLabel: string;
     platformGithub: string;
     platformGitlab: string;
+    // PR/MR type labels
+    prTypePr: string;
+    prTypeMr: string;
+    // Repo type labels
+    repoTypeRepository: string;
+    repoTypeProject: string;
     // GitHub-specific fields
     githubRepository: string;
     // GitLab-specific fields

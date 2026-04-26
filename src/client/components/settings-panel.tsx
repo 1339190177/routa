@@ -664,7 +664,7 @@ function WebhooksTab() {
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
           {wt.webhookTriggerAutoDesc
             .replace("{platform}", webhookPlatform === "github" ? wt.platformGithub : wt.platformGitlab)
-            .replace("{prType}", webhookPlatform === "github" ? "PR" : "MR")}
+            .replace("{prType}", webhookPlatform === "github" ? wt.prTypePr : wt.prTypeMr)}
         </p>
         <div className={`rounded-lg px-3 py-2.5 mb-3 ${
           webhookPlatform === "github"
@@ -682,7 +682,7 @@ function WebhooksTab() {
           <p className={`text-xs mt-1 ${webhookPlatform === "github" ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}>
             {wt.webhookPointHint
               .replace("{platform}", webhookPlatform === "github" ? wt.platformGithub : wt.platformGitlab)
-              .replace("{repoType}", webhookPlatform === "github" ? "repository" : "project")}
+              .replace("{repoType}", webhookPlatform === "github" ? wt.repoTypeRepository : wt.repoTypeProject)}
           </p>
         </div>
         {isTauriEnv ? (
