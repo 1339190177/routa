@@ -19,6 +19,8 @@ import { fetchRemote, fetchAndFastForward } from "../git/git-utils";
 import type { RoutaSystem } from "../routa-system";
 import { getKanbanBranchRules, DEFAULT_BRANCH_RULES } from "./board-branch-rules";
 import { onChildTaskStatusChanged } from "./parent-child-lifecycle";
+import { parsePrUrl } from "./pr-status-verifier";
+import { getServerBridge } from "../platform";
 
 const HANDLER_KEY = "kanban-pr-merge-listener";
 const CLEANUP_DELAY_MS = 30_000;
@@ -78,7 +80,18 @@ export function startPrMergeListener(system: RoutaSystem): void {
       );
     }
 
-    // 3. Schedule worktree cleanup for the merged task (driven by lifecycle rules)
+    // 3a. Schedule remote branch deletion (independent of worktree)
+    if (rules.lifecycle.deleteBranchOnMerge && task.pullRequestUrl) {
+      const branchName = data.branch ?? await resolveBranchNameFromPR(task.pullRequestUrl);
+      if (branchName) {
+        const prUrl = task.pullRequestUrl;
+        pendingTimers.push(setTimeout(async () => {
+          await deleteRemoteBranch(prUrl, branchName);
+        }, CLEANUP_DELAY_MS));
+      }
+    }
+
+    // 3b. Schedule worktree cleanup (branch is handled independently above)
     if (task.worktreeId && rules.lifecycle.removeWorktreeOnMerge) {
       pendingTimers.push(setTimeout(() => {
         system.eventBus.emit({
@@ -89,7 +102,7 @@ export function startPrMergeListener(system: RoutaSystem): void {
             worktreeId: task.worktreeId,
             taskId: task.id,
             boardId: task.boardId,
-            deleteBranch: rules.lifecycle.deleteBranchOnMerge,
+            deleteBranch: false,
           },
           timestamp: new Date(),
         });
@@ -271,6 +284,44 @@ async function attemptDownstreamRebase(
       `[PrMergeListener] Rebase error for task ${taskId}:`,
       err,
     );
+  }
+}
+
+// ── Branch cleanup helpers ─────────────────────────────────────────────────
+
+const PROTECTED_BRANCHES = new Set(["main", "master", "private", "develop"]);
+
+async function resolveBranchNameFromPR(prUrl: string): Promise<string | undefined> {
+  const parsed = parsePrUrl(prUrl);
+  if (!parsed) return undefined;
+  try {
+    const bridge = getServerBridge();
+    if (!bridge.process.isAvailable()) return undefined;
+    const { stdout } = await bridge.process.exec(
+      `gh pr view ${parsed.prNumber} --repo ${parsed.owner}/${parsed.repo} --json headRefName --jq "."`,
+      { cwd: process.cwd(), timeout: 30_000 },
+    );
+    const data = JSON.parse(stdout.trim());
+    return data.headRefName;
+  } catch {
+    return undefined;
+  }
+}
+
+async function deleteRemoteBranch(prUrl: string, branchName: string): Promise<void> {
+  if (PROTECTED_BRANCHES.has(branchName)) return;
+  const parsed = parsePrUrl(prUrl);
+  if (!parsed) return;
+  try {
+    const bridge = getServerBridge();
+    if (!bridge.process.isAvailable()) return;
+    await bridge.process.exec(
+      `gh api repos/${parsed.owner}/${parsed.repo}/git/refs/heads/${encodeURIComponent(branchName)} -X DELETE`,
+      { cwd: process.cwd(), timeout: 30_000 },
+    );
+    console.log(`[PrMergeListener] Deleted remote branch "${branchName}".`);
+  } catch {
+    // Branch may already be deleted — not an error.
   }
 }
 

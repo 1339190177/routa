@@ -162,6 +162,10 @@ function getAutomationStepLabel(step: KanbanAutomationStep | undefined, stepInde
 const NON_DEV_AUTOMATION_REPEAT_LIMIT = 3;
 /** Blocked lane allows more retries but is still bounded to prevent infinite loops. */
 const BLOCKED_AUTOMATION_REPEAT_LIMIT = 10;
+/** Only failed lane sessions within this window count toward the repeat limit. Older failures expire. */
+const REPEAT_LIMIT_TIME_WINDOW_MS = parseInt(
+  process.env.ROUTA_REPEAT_LIMIT_TIME_WINDOW_MS ?? `${30 * 60 * 1000}`, 10,
+);
 
 export function getNonDevAutomationRunCount(
   task: Pick<Task, "laneSessions"> | undefined,
@@ -174,6 +178,7 @@ export function getNonDevAutomationRunCount(
   }
 
   const laneSessions = task.laneSessions ?? [];
+  const cutoffMs = Date.now() - REPEAT_LIMIT_TIME_WINDOW_MS;
   let runCount = 0;
 
   for (let index = laneSessions.length - 1; index >= 0; index -= 1) {
@@ -186,6 +191,13 @@ export function getNonDevAutomationRunCount(
     }
     // Infrastructure timeouts are not task failures — don't count them toward the loop limit
     if (entry.status === "timed_out") {
+      continue;
+    }
+    // Time-window decay: skip failed sessions older than the cutoff window.
+    // This prevents permanent blocking when the underlying issue has been resolved
+    // (e.g., service restart, rate-limit window expired, provider recovered).
+    const startedAtMs = entry.startedAt ? new Date(entry.startedAt).getTime() : 0;
+    if (startedAtMs > 0 && startedAtMs < cutoffMs) {
       continue;
     }
     runCount += 1;
@@ -249,6 +261,12 @@ export interface ActiveAutomation {
   staleRetryCount?: number;
 }
 
+/** Structured result from createAutomationSession — allows callers to distinguish queued vs failed. */
+export type CreateAutomationSessionResult = {
+  sessionId: string | null;
+  queued?: boolean;
+};
+
 /** Callback to create an agent session for a column automation */
 export type CreateAutomationSession = (params: {
   workspaceId: string;
@@ -260,7 +278,7 @@ export type CreateAutomationSession = (params: {
   step: KanbanAutomationStep;
   stepIndex: number;
   supervision?: AutomationSessionSupervisionContext;
-}) => Promise<string | null>;
+}) => Promise<string | CreateAutomationSessionResult | null>;
 
 /** Callback to clean up a card's session queue entry before auto-advancing or recovering */
 export type CleanupCardSession = (cardId: string) => void;
@@ -718,7 +736,7 @@ export class KanbanWorkflowOrchestrator {
     if (this.createSession) {
       try {
         const effectiveStep = steps[startStepIndex];
-        const sessionId = await this.createSession({
+        const rawResult = await this.createSession({
           workspaceId: data.workspaceId,
           cardId: data.cardId,
           cardTitle: data.cardTitle,
@@ -729,6 +747,10 @@ export class KanbanWorkflowOrchestrator {
           stepIndex: startStepIndex,
           supervision: this.buildSupervisionContext(automationEntry, laneObjective),
         });
+        const sessionId = typeof rawResult === "object" && rawResult !== null
+          ? rawResult.sessionId
+          : rawResult;
+        const isQueued = typeof rawResult === "object" && rawResult !== null && rawResult.queued === true;
         if (sessionId) {
           automationEntry.status = "running";
           automationEntry.sessionId = sessionId;
@@ -743,6 +765,11 @@ export class KanbanWorkflowOrchestrator {
               await this.taskStore.save(freshTask);
             }
           }
+        } else if (isQueued) {
+          automationEntry.status = "queued";
+          console.log(
+            `[WorkflowOrchestrator] Session queued for card ${data.cardId}, not counting as failure.`,
+          );
         } else {
           automationEntry.status = "failed";
           // Record a failed laneSession so that hasExceededNonDevAutomationRepeatLimit
@@ -1474,9 +1501,21 @@ export class KanbanWorkflowOrchestrator {
 
       const depCheck = await checkDependencyGate(t, board.columns, this.taskStore);
       if (!depCheck.blocked && t.lastSyncError?.startsWith("Blocked by unfinished dependencies")) {
-        t.lastSyncError = undefined;
-        t.updatedAt = new Date();
-        await this.taskStore.save(t);
+        const fields = { lastSyncError: undefined as string | undefined, updatedAt: new Date() };
+        // Use atomicUpdate to avoid overwriting concurrent changes
+        if (t.version !== undefined && this.taskStore.atomicUpdate) {
+          const ok = await this.taskStore.atomicUpdate(t.id, t.version, fields);
+          if (!ok) {
+            const fresh = await this.taskStore.get(t.id);
+            if (fresh && fresh.version !== undefined && this.taskStore.atomicUpdate) {
+              await this.taskStore.atomicUpdate(fresh.id, fresh.version, fields);
+            }
+          }
+        } else {
+          t.lastSyncError = undefined;
+          t.updatedAt = new Date();
+          await this.taskStore.save(t);
+        }
         newlyUnblocked.push(t.id);
 
         this.eventBus.emit({
@@ -1597,7 +1636,7 @@ export class KanbanWorkflowOrchestrator {
     automation.signaledSessionIds.clear();
 
     try {
-      const sessionId = await this.createSession({
+      const rawResult = await this.createSession({
         workspaceId: automation.workspaceId,
         cardId,
         cardTitle: automation.cardTitle,
@@ -1608,6 +1647,9 @@ export class KanbanWorkflowOrchestrator {
         stepIndex: nextStepIndex,
         supervision: this.buildSupervisionContext(automation, task.objective || automation.cardTitle),
       });
+      const sessionId = typeof rawResult === "object" && rawResult !== null
+        ? rawResult.sessionId
+        : rawResult;
 
       if (!sessionId) {
         automation.status = "failed";
@@ -1661,7 +1703,7 @@ export class KanbanWorkflowOrchestrator {
 
     try {
       const currentStep = automation.steps[automation.currentStepIndex];
-      const sessionId = await this.createSession({
+      const rawResult = await this.createSession({
         workspaceId: automation.workspaceId,
         cardId,
         cardTitle: automation.cardTitle,
@@ -1675,6 +1717,9 @@ export class KanbanWorkflowOrchestrator {
           recoveryReason: reason,
         }),
       });
+      const sessionId = typeof rawResult === "object" && rawResult !== null
+        ? rawResult.sessionId
+        : rawResult;
 
       if (!sessionId) {
         automation.status = "failed";

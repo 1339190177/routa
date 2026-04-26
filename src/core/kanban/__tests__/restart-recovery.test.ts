@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTask, TaskStatus, VerificationVerdict, type Task } from "@/core/models/task";
-import { reviveMissingEntryAutomations } from "../restart-recovery";
+import { reviveMissingEntryAutomations, sweepStuckTasksOnStartup } from "../restart-recovery";
 
 const notify = vi.fn();
 const processKanbanColumnTransition = vi.fn();
@@ -378,5 +378,186 @@ describe("kanban restart recovery", () => {
 
     expect(processKanbanColumnTransition).not.toHaveBeenCalled();
     expect(enqueueKanbanTaskSession).not.toHaveBeenCalled();
+  });
+});
+
+// ── sweepStuckTasksOnStartup ─────────────────────────────────────────────────
+
+describe("sweepStuckTasksOnStartup", () => {
+  const sweepTaskStore = {
+    listByWorkspace: vi.fn<(_: string) => Promise<Task[]>>(),
+    save: vi.fn<(task: Task) => Promise<void>>(),
+    atomicUpdate: vi.fn<(id: string, version: number, fields: Record<string, unknown>) => Promise<boolean>>(),
+  };
+
+  const sweepKanbanBoardStore = {
+    get: vi.fn(),
+  };
+
+  const sweepWorkspaceStore = {
+    list: vi.fn<() => Promise<Array<{ id: string }>>>(),
+  };
+
+  const sweepSystem = {
+    taskStore: sweepTaskStore,
+    kanbanBoardStore: sweepKanbanBoardStore,
+    workspaceStore: sweepWorkspaceStore,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sweepTaskStore.save.mockResolvedValue(undefined);
+    sweepTaskStore.atomicUpdate.mockResolvedValue(true);
+  });
+
+  it("clears repeat-limit error markers on startup", async () => {
+    const task = createTask({
+      id: "sweep-repeat",
+      title: "Repeat limit task",
+      objective: "Test",
+      workspaceId: "ws-1",
+      boardId: "board-1",
+      columnId: "review",
+      status: TaskStatus.IN_PROGRESS,
+    });
+    task.lastSyncError = 'Stopped Kanban automation for "Review" after 4 runs.';
+    task.laneSessions = [
+      { sessionId: "s1", columnId: "review", status: "failed", startedAt: new Date().toISOString() },
+    ];
+    task.version = 1;
+
+    sweepWorkspaceStore.list.mockResolvedValue([{ id: "ws-1" }]);
+    sweepTaskStore.listByWorkspace.mockResolvedValue([task]);
+
+    const result = await sweepStuckTasksOnStartup(sweepSystem as never);
+
+    expect(result.swept).toBe(1);
+    expect(sweepTaskStore.atomicUpdate).toHaveBeenCalledWith(
+      "sweep-repeat",
+      1,
+      expect.objectContaining({
+        lastSyncError: undefined,
+        laneSessions: [],
+      }),
+    );
+  });
+
+  it("clears step-resume-limit error markers", async () => {
+    const task = createTask({
+      id: "sweep-step-resume",
+      title: "Step resume limit",
+      objective: "Test",
+      workspaceId: "ws-1",
+      boardId: "board-1",
+      columnId: "backlog",
+      status: TaskStatus.PENDING,
+    });
+    task.lastSyncError = "[advance-recovery] Max retries (3) reached.";
+    task.version = 2;
+
+    sweepWorkspaceStore.list.mockResolvedValue([{ id: "ws-1" }]);
+    sweepTaskStore.listByWorkspace.mockResolvedValue([task]);
+
+    const result = await sweepStuckTasksOnStartup(sweepSystem as never);
+
+    expect(result.swept).toBe(1);
+    expect(sweepTaskStore.atomicUpdate).toHaveBeenCalledWith(
+      "sweep-step-resume",
+      2,
+      expect.objectContaining({ lastSyncError: undefined }),
+    );
+  });
+
+  it("clears CB max-resets error markers", async () => {
+    const task = createTask({
+      id: "sweep-cb-max",
+      title: "CB max resets",
+      objective: "Test",
+      workspaceId: "ws-1",
+      boardId: "board-1",
+      columnId: "dev",
+      status: TaskStatus.IN_PROGRESS,
+    });
+    task.lastSyncError = "[circuit-breaker:reset=5] pending retry.";
+    task.version = 3;
+
+    sweepWorkspaceStore.list.mockResolvedValue([{ id: "ws-1" }]);
+    sweepTaskStore.listByWorkspace.mockResolvedValue([task]);
+
+    const result = await sweepStuckTasksOnStartup(sweepSystem as never);
+
+    expect(result.swept).toBe(1);
+  });
+
+  it("fixes orphan IN_PROGRESS in done column to COMPLETED", async () => {
+    const task = createTask({
+      id: "sweep-orphan",
+      title: "Orphan in done",
+      objective: "Test",
+      workspaceId: "ws-1",
+      boardId: "board-1",
+      columnId: "done",
+      status: TaskStatus.IN_PROGRESS,
+    });
+    task.lastSyncError = 'Stopped Kanban automation for "Done" after 4 runs.';
+    task.version = 1;
+
+    sweepWorkspaceStore.list.mockResolvedValue([{ id: "ws-1" }]);
+    sweepTaskStore.listByWorkspace.mockResolvedValue([task]);
+    sweepKanbanBoardStore.get.mockResolvedValue({
+      id: "board-1",
+      columns: [{ id: "done", name: "Done", stage: "done", position: 0 }],
+    });
+
+    const result = await sweepStuckTasksOnStartup(sweepSystem as never);
+
+    expect(result.swept).toBe(1);
+    expect(sweepTaskStore.atomicUpdate).toHaveBeenCalledWith(
+      "sweep-orphan",
+      1,
+      expect.objectContaining({ status: "COMPLETED" }),
+    );
+  });
+
+  it("skips tasks without stuck error markers", async () => {
+    const healthyTask = createTask({
+      id: "sweep-healthy",
+      title: "Healthy task",
+      objective: "Test",
+      workspaceId: "ws-1",
+      boardId: "board-1",
+      columnId: "dev",
+    });
+
+    sweepWorkspaceStore.list.mockResolvedValue([{ id: "ws-1" }]);
+    sweepTaskStore.listByWorkspace.mockResolvedValue([healthyTask]);
+
+    const result = await sweepStuckTasksOnStartup(sweepSystem as never);
+
+    expect(result.swept).toBe(0);
+    expect(sweepTaskStore.save).not.toHaveBeenCalled();
+    expect(sweepTaskStore.atomicUpdate).not.toHaveBeenCalled();
+  });
+
+  it("falls back to save() when task has no version", async () => {
+    const task = createTask({
+      id: "sweep-no-version",
+      title: "No version",
+      objective: "Test",
+      workspaceId: "ws-1",
+      boardId: "board-1",
+      columnId: "review",
+    });
+    task.lastSyncError = 'Stopped Kanban automation for "Review" after 4 runs.';
+    delete (task as unknown as Record<string, unknown>).version;
+
+    sweepWorkspaceStore.list.mockResolvedValue([{ id: "ws-1" }]);
+    sweepTaskStore.listByWorkspace.mockResolvedValue([task]);
+
+    const result = await sweepStuckTasksOnStartup(sweepSystem as never);
+
+    expect(result.swept).toBe(1);
+    expect(sweepTaskStore.save).toHaveBeenCalled();
+    expect(sweepTaskStore.atomicUpdate).not.toHaveBeenCalled();
   });
 });

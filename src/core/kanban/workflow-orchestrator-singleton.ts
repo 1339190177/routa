@@ -126,7 +126,7 @@ async function createAutomationSession(
     stepIndex: number;
     supervision?: AutomationSessionSupervisionContext;
   },
-): Promise<string | null> {
+): Promise<string | import("./workflow-orchestrator").CreateAutomationSessionResult | null> {
   // Circuit breaker with TTL: skip cards that exceeded consecutive session
   // creation failures, but auto-reset after SESSION_RETRY_RESET_MS cooldown.
   const failures = getSessionFailures();
@@ -198,7 +198,7 @@ async function createAutomationSession(
       console.log(
         `[createAutomationSession] Session queued for card ${params.cardId}. Not counting as failure.`,
       );
-      return null;
+      return { sessionId: null, queued: true };
     }
 
     const prevCount = failures.get(params.cardId)?.count ?? 0;

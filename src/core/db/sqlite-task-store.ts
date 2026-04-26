@@ -107,7 +107,7 @@ export class SqliteTaskStore implements TaskStore {
           vcsRepo: task.vcsRepo,
           vcsState: task.vcsState,
           vcsSyncedAt: task.vcsSyncedAt,
-          lastSyncError: task.lastSyncError,
+          lastSyncError: task.lastSyncError ?? null,
           isPullRequest: task.isPullRequest,
           pullRequestUrl: task.pullRequestUrl ?? null,
           pullRequestMergedAt: task.pullRequestMergedAt ?? null,

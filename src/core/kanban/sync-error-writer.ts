@@ -178,3 +178,9 @@ export function buildDependencyBlockedError(pendingDeps: string[]): string {
     message: `Blocked by unfinished dependencies: ${pendingDeps.join(", ")}`,
   });
 }
+
+/** Parse retry count from a [done-lane-stuck] message containing "retry #N". */
+export function parseDoneStuckRetryCount(raw: string): number {
+  const match = raw.match(/retry #(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}

@@ -18,6 +18,21 @@ export interface CanMoveResult {
   message?: string;
 }
 
+/**
+ * Determine whether a dependency task is "truly done":
+ *   - status is COMPLETED or ARCHIVED (both are terminal states past done)
+ *   - OR the task sits in a "done" or "archived" column
+ *   - AND its PR (if any) has been merged
+ */
+export function isDependencySatisfied(depTask: Task): boolean {
+  const isCompleted = depTask.status === TaskStatus.COMPLETED
+    || depTask.status === TaskStatus.ARCHIVED
+    || depTask.columnId === "done"
+    || depTask.columnId === "archived";
+  const prMerged = !depTask.pullRequestUrl || Boolean(depTask.pullRequestMergedAt);
+  return isCompleted && prMerged;
+}
+
 export async function checkDependencyGate(
   task: { dependencies: string[] },
   boardColumns: Array<{ id: string; stage?: string }>,
@@ -27,21 +42,11 @@ export async function checkDependencyGate(
     return { blocked: false, pendingDependencies: [] };
   }
 
-  const doneColumnIds = new Set(
-    boardColumns
-      .filter((col) => col.stage === "done")
-      .map((col) => col.id),
-  );
-
   const pending: string[] = [];
   for (const depId of task.dependencies) {
     const depTask = await taskStore.get(depId);
     if (!depTask) continue;
-    const inDoneColumn = depTask.status === TaskStatus.COMPLETED
-      || doneColumnIds.has(depTask.columnId ?? "");
-    const prMerged = !depTask.pullRequestUrl || Boolean(depTask.pullRequestMergedAt);
-    const isDone = inDoneColumn && prMerged;
-    if (!isDone) {
+    if (!isDependencySatisfied(depTask)) {
       pending.push(depTask.title || depId);
     }
   }
@@ -135,7 +140,7 @@ export async function getDependencyStatus(
   for (const depId of deps) {
     const depTask = await taskStore.get(depId);
     if (depTask) {
-      const isCompleted = depTask.status === TaskStatus.COMPLETED || depTask.columnId === "done";
+      const isCompleted = isDependencySatisfied(depTask);
       if (!isCompleted) {
         isBlocked = true;
       }

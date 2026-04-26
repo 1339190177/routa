@@ -18,6 +18,7 @@ import { verifyPrMergeStatus } from "./pr-status-verifier";
 import { parseCbResetCount } from "./workflow-orchestrator";
 import { AgentEventType } from "../events/event-bus";
 import { enqueueKanbanTaskSession } from "./workflow-orchestrator-singleton";
+import { parseDoneStuckRetryCount } from "./sync-error-writer";
 
 /** Minimum age (ms) before a done-lane card is considered for recovery. */
 const PR_VERIFICATION_MIN_AGE_MS = 5 * 60 * 1000;
@@ -32,6 +33,8 @@ export interface DoneLaneRecoverySummary {
   conflictResolved: number;
   stuckMarked: number;
   completed: number;
+  /** Number of tasks whose permanent automation-limit markers were cleared. */
+  limitSwept: number;
   errors: number;
 }
 
@@ -40,8 +43,10 @@ type StuckPattern =
   | "cb_exhausted_pr_unmerged"
   | "webhook_missed"
   | "conflict_detected"
+  | "pr_closed_unmerged"
   | "orphan_in_progress"
-  | "no_pr_completed";
+  | "no_pr_completed"
+  | "automation_limit_exhausted";
 
 interface DetectedStuck {
   pattern: StuckPattern;
@@ -100,10 +105,11 @@ export function detectStuckPatterns(
   const hasPR = isRealPR(task);
   const prMerged = Boolean(task.pullRequestMergedAt);
 
-  // Skip if conflict-resolver/auto-merger is already in progress (idempotency guard).
+  // Skip if conflict-resolver/auto-merger/rebase-resolver is already in progress (idempotency guard).
   // Allow re-detection if the pending marker is stale (> 30 min).
   if (task.lastSyncError?.startsWith("[conflict-resolver-pending]")
-      || task.lastSyncError?.startsWith("[auto-merger-pending]")) {
+      || task.lastSyncError?.startsWith("[auto-merger-pending]")
+      || task.lastSyncError?.startsWith("[rebase-resolver-pending]")) {
     const match = task.lastSyncError.match(/Triggered at (.+?)[.\s]/);
     if (match) {
       const pendingAt = new Date(match[1]).getTime();
@@ -142,12 +148,34 @@ export function detectStuckPatterns(
     patterns.push({ pattern: "no_pr_completed", task });
   }
 
-  // Pattern: COMPLETED with [done-lane-stuck] diagnostic + real PR — needs conflict-resolver
+  // Pattern: COMPLETED with [done-lane-stuck] diagnostic + real PR — route by cause
   if (hasPR && !prMerged
       && task.status === "COMPLETED"
       && task.lastSyncError?.startsWith("[done-lane-stuck]")
       && ageMs > PR_VERIFICATION_MIN_AGE_MS) {
-    patterns.push({ pattern: "conflict_detected", task });
+    if (task.lastSyncError.includes("closed") || task.lastSyncError.includes("Closed")) {
+      // PR was closed without merging → rebase-resolver
+      patterns.push({ pattern: "pr_closed_unmerged", task });
+    } else if (task.lastSyncError.includes("conflict") || task.lastSyncError.includes("Conflict")) {
+      // Actual merge conflict → conflict-resolver specialist
+      patterns.push({ pattern: "conflict_detected", task });
+    } else if (parseDoneStuckRetryCount(task.lastSyncError) >= 3) {
+      // UNKNOWN retried 3 times → stop auto-retry, leave for manual intervention
+    } else {
+      // "mergeability unknown" or other transient state → re-verify via webhook_missed
+      patterns.push({ pattern: "webhook_missed", task });
+    }
+  }
+
+  // Pattern: automation limit exhausted (repeat-limit, step-resume-limit, or advance-recovery)
+  // These permanently block the task. After a cooldown window, clear the marker
+  // so the LaneScanner can re-trigger automation with a fresh attempt cycle.
+  if (task.lastSyncError
+      && (task.lastSyncError.includes("Stopped Kanban automation")
+          || task.lastSyncError.includes("Max retries")
+          || task.lastSyncError.includes("[advance-recovery]"))
+      && ageMs > ORPHAN_AGE_MS) {
+    patterns.push({ pattern: "automation_limit_exhausted", task });
   }
 
   return patterns;
@@ -189,8 +217,23 @@ async function recoverWebhookMissed(
     return true;
   }
 
-  // PR not merged on GitHub — check for conflicts, then set diagnostic
+  // PR not merged on GitHub — route by state
   if (verification.verified) {
+    // PR CLOSED without merging — base branch likely deleted.
+    // Trigger rebase-resolver to rebase onto workspace baseBranch and open a new PR.
+    if (verification.state === "closed" && !verification.merged) {
+      console.log(
+        `[DoneLaneRecovery] Card ${task.id} PR closed without merging. ` +
+        `Triggering rebase-resolver to rebase onto base branch.`,
+      );
+      task.lastSyncError = `[rebase-resolver-pending] Triggered at ${new Date().toISOString()}. Closed PR: ${task.pullRequestUrl}`;
+      task.triggerSessionId = undefined;
+      task.updatedAt = new Date();
+      await system.taskStore.save(task);
+      await triggerRebaseResolver(task, system);
+      return false;
+    }
+
     if (verification.mergeable === false) {
       // Has conflicts — trigger conflict-resolver
       console.log(
@@ -212,11 +255,17 @@ async function recoverWebhookMissed(
       await system.taskStore.save(task);
       await triggerAutoMerger(task, system);
     } else {
-      // mergeable=UNKNOWN or undefined — GitHub still calculating, set diagnostic
+      // mergeable=UNKNOWN or undefined — GitHub still calculating, set diagnostic with retry counter
+      const prevRetries = parseDoneStuckRetryCount(task.lastSyncError ?? "");
+      const nextRetry = prevRetries + 1;
       console.log(
-        `[DoneLaneRecovery] Card ${task.id} PR mergeability unknown. Setting diagnostic.`,
+        `[DoneLaneRecovery] Card ${task.id} PR mergeability unknown (retry #${nextRetry}). Setting diagnostic.`,
       );
-      task.lastSyncError = `[done-lane-stuck] PR mergeability unknown, will retry: ${task.pullRequestUrl}`;
+      if (nextRetry <= 3) {
+        task.lastSyncError = `[done-lane-stuck] PR mergeability unknown, retry #${nextRetry}: ${task.pullRequestUrl}`;
+      } else {
+        task.lastSyncError = `[done-lane-stuck] PR mergeability unknown after 3 retries. Manual check required: ${task.pullRequestUrl}`;
+      }
       task.updatedAt = new Date();
       await system.taskStore.save(task);
     }
@@ -435,6 +484,73 @@ async function triggerAutoMerger(
   }
 }
 
+/**
+ * Trigger rebase-resolver specialist when a PR was closed without merging.
+ * The specialist rebases the branch onto the workspace baseBranch and creates a new PR.
+ */
+async function triggerRebaseResolver(
+  task: Task,
+  system: RecoverySystem,
+): Promise<void> {
+  try {
+    const freshTask = await system.taskStore.get(task.id);
+    if (!freshTask) return;
+
+    // Idempotency: skip if already has active session or pending marker
+    if (freshTask.triggerSessionId) {
+      console.log(
+        `[DoneLaneRecovery] Skipping rebase-resolver for card ${task.id}: ` +
+        `already has active session ${freshTask.triggerSessionId}.`,
+      );
+      return;
+    }
+    if (freshTask.lastSyncError?.startsWith("[rebase-resolver-pending]")) {
+      const match = freshTask.lastSyncError.match(/Triggered at (.+?)[.\s]/);
+      if (match) {
+        const pendingAt = new Date(match[1]).getTime();
+        if (Date.now() - pendingAt < 30 * 60 * 1000) {
+          console.log(
+            `[DoneLaneRecovery] Skipping rebase-resolver for card ${task.id}: already pending.`,
+          );
+          return;
+        }
+      }
+    }
+
+    // Set pending marker before triggering
+    freshTask.lastSyncError = `[rebase-resolver-pending] Triggered at ${new Date().toISOString()}. Closed PR: ${freshTask.pullRequestUrl}`;
+    freshTask.updatedAt = new Date();
+    await system.taskStore.save(freshTask);
+
+    const result = await enqueueKanbanTaskSession(system as RoutaSystem, {
+      task: freshTask,
+      ignoreExistingTrigger: true,
+      bypassDependencyGate: true,
+      step: {
+        id: "rebase-resolver",
+        role: "DEVELOPER",
+        specialistId: "kanban-rebase-resolver",
+        specialistName: "Rebase Resolver",
+      },
+      stepIndex: 0,
+    });
+    if (result.sessionId) {
+      console.log(
+        `[DoneLaneRecovery] Rebase-resolver session ${result.sessionId} started for card ${task.id}.`,
+      );
+    } else {
+      console.warn(
+        `[DoneLaneRecovery] Failed to start rebase-resolver for card ${task.id}: ${result.error}`,
+      );
+    }
+  } catch (err) {
+    console.error(
+      `[DoneLaneRecovery] Error triggering rebase-resolver for card ${task.id}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 async function recoverOrphanInProgress(
   task: Task,
   system: RecoverySystem,
@@ -445,6 +561,30 @@ async function recoverOrphanInProgress(
   task.status = "COMPLETED" as typeof task.status;
   task.triggerSessionId = undefined;
   task.lastSyncError = undefined;
+  task.updatedAt = new Date();
+  await system.taskStore.save(task);
+  return true;
+}
+
+async function recoverAutomationLimitExhausted(
+  task: Task,
+  system: RecoverySystem,
+): Promise<boolean> {
+  console.log(
+    `[DoneLaneRecovery] Automation limit exhausted for card ${task.id} ` +
+    `(error: ${(task.lastSyncError ?? "").slice(0, 80)}). Clearing marker.`,
+  );
+  // Filter out failed lane sessions in the current column — they are stale
+  // evidence from a previous attempt cycle and would immediately re-trigger
+  // the repeat limit.
+  const filteredSessions = (task.laneSessions ?? []).filter((s) => {
+    if (s.columnId !== task.columnId) return true;
+    return s.status !== "failed";
+  });
+
+  task.lastSyncError = undefined;
+  task.laneSessions = filteredSessions;
+  task.triggerSessionId = undefined;
   task.updatedAt = new Date();
   await system.taskStore.save(task);
   return true;
@@ -515,6 +655,7 @@ export async function runDoneLaneRecoveryTick(
     conflictResolved: 0,
     stuckMarked: 0,
     completed: 0,
+    limitSwept: 0,
     errors: 0,
   };
 
@@ -601,6 +742,12 @@ export async function runDoneLaneRecoveryTick(
                 summary.conflictResolved++;
                 break;
               }
+              case "pr_closed_unmerged": {
+                // PR was closed without merging — trigger rebase-resolver
+                await triggerRebaseResolver(stuck.task, system);
+                summary.conflictResolved++;
+                break;
+              }
               case "orphan_in_progress": {
                 const ok = await recoverOrphanInProgress(stuck.task, system);
                 if (ok) summary.completed++;
@@ -608,6 +755,11 @@ export async function runDoneLaneRecoveryTick(
               }
               case "no_pr_completed": {
                 // Already COMPLETED — no action needed
+                break;
+              }
+              case "automation_limit_exhausted": {
+                const ok = await recoverAutomationLimitExhausted(stuck.task, system);
+                if (ok) summary.limitSwept++;
                 break;
               }
             }
@@ -634,7 +786,7 @@ export async function runDoneLaneRecoveryTick(
     `[DoneLaneRecovery] Tick complete: examined=${summary.examined}, ` +
     `recovered=${summary.recovered}, conflicts=${summary.conflictResolved}, ` +
     `stuck=${summary.stuckMarked}, completed=${summary.completed}, ` +
-    `errors=${summary.errors}`,
+    `limitSwept=${summary.limitSwept}, errors=${summary.errors}`,
   );
 
   return summary;
@@ -662,7 +814,9 @@ export async function cleanupOrphanPendingMarkers(
       for (const task of tasks) {
         const err = task.lastSyncError ?? "";
         if (!err.startsWith("[auto-merger-pending]")
-            && !err.startsWith("[conflict-resolver-pending]")) {
+            && !err.startsWith("[conflict-resolver-pending]")
+            && !err.startsWith("[rebase-resolver-pending]")
+            && !err.startsWith("[done-lane-stuck]")) {
           continue;
         }
         if (task.triggerSessionId) continue;
@@ -672,6 +826,12 @@ export async function cleanupOrphanPendingMarkers(
         );
         task.lastSyncError = undefined;
         task.updatedAt = new Date();
+        // Drizzle's onConflictDoUpdate skips undefined fields, so
+        // setting lastSyncError = undefined won't actually NULL the column.
+        // Use atomicUpdate when available — it still skips undefined, so
+        // we must pass an explicit marker. The save() below is kept as
+        // the authoritative write; any concurrent lane scanner write
+        // that re-sets the error will be re-cleared on next startup.
         await system.taskStore.save(task);
         cleaned++;
       }

@@ -198,6 +198,28 @@ export class EventBus {
     return events;
   }
 
+  /**
+   * Remove all state associated with an agent: subscriptions, pending events,
+   * and wait-group entries. Call when a session/agent ends its lifecycle.
+   */
+  removeAgent(agentId: string): void {
+    this.pendingEvents.delete(agentId);
+    // Remove subscriptions owned by this agent
+    for (const [subId, sub] of this.subscriptions.entries()) {
+      if (sub.agentId === agentId) {
+        this.subscriptions.delete(subId);
+      }
+    }
+    // Remove from wait groups
+    for (const [groupId, group] of this.waitGroups.entries()) {
+      group.expectedAgentIds = group.expectedAgentIds.filter(id => id !== agentId);
+      group.completedAgentIds.delete(agentId);
+      if (group.expectedAgentIds.length === 0) {
+        this.waitGroups.delete(groupId);
+      }
+    }
+  }
+
   // ─── Wait groups ────────────────────────────────────────────────────
 
   /**

@@ -60,13 +60,20 @@ export async function clearStaleTriggerSession(
     markTaskLaneSessionStatus(task, staleId, terminalStatus);
   }
 
+  // For COMPLETED tasks with a PR, skip the updatedAt bump to avoid
+  // resetting the done-lane recovery tick's age gate. The recovery tick
+  // uses updatedAt to determine when a task is old enough for re-verification;
+  // clearing a stale triggerSessionId should not restart that timer.
+  const skipUpdatedAtBump = task.status === "COMPLETED" && !!task.pullRequestUrl;
+
   // Use atomicUpdate to prevent overwriting concurrent changes (e.g. column transition)
+  const updateFields = {
+    triggerSessionId: undefined as string | undefined,
+    laneSessions: task.laneSessions,
+    ...(skipUpdatedAtBump ? {} : { updatedAt: new Date() }),
+  };
   if (task.version !== undefined && taskStore.atomicUpdate) {
-    const ok = await taskStore.atomicUpdate(task.id, task.version, {
-      triggerSessionId: undefined,
-      laneSessions: task.laneSessions,
-      updatedAt: new Date(),
-    });
+    const ok = await taskStore.atomicUpdate(task.id, task.version, updateFields);
     if (!ok) {
       // Version conflict — re-read and retry once
       const fresh = await taskStore.get(task.id);
@@ -76,12 +83,13 @@ export async function clearStaleTriggerSession(
         const terminalStatus = fresh.pullRequestUrl ? "completed" as const : "timed_out" as const;
         markTaskLaneSessionStatus(fresh, staleId, terminalStatus);
       }
+      const retryFields = {
+        triggerSessionId: undefined as string | undefined,
+        laneSessions: fresh.laneSessions,
+        ...(skipUpdatedAtBump ? {} : { updatedAt: new Date() }),
+      };
       if (fresh.version !== undefined && taskStore.atomicUpdate) {
-        const retryOk = await taskStore.atomicUpdate(fresh.id, fresh.version, {
-          triggerSessionId: undefined,
-          laneSessions: fresh.laneSessions,
-          updatedAt: new Date(),
-        });
+        const retryOk = await taskStore.atomicUpdate(fresh.id, fresh.version, retryFields);
         if (!retryOk) {
           console.warn(
             `[clearStaleTriggerSession] Second atomicUpdate failed for task ${task.id}. ` +
@@ -91,13 +99,13 @@ export async function clearStaleTriggerSession(
         }
       } else {
         fresh.triggerSessionId = undefined;
-        fresh.updatedAt = new Date();
+        if (!skipUpdatedAtBump) fresh.updatedAt = new Date();
         await taskStore.save(fresh);
       }
     }
   } else {
     task.triggerSessionId = undefined;
-    task.updatedAt = new Date();
+    if (!skipUpdatedAtBump) task.updatedAt = new Date();
     await taskStore.save(task);
   }
   return true;

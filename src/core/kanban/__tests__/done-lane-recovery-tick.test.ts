@@ -125,4 +125,55 @@ describe("detectStuckPatterns", () => {
     });
     expect(detectStuckPatterns(task, board)).toEqual([]);
   });
+
+  it("detects automation_limit_exhausted for repeat-limit errors", () => {
+    const task = makeTask({
+      id: "t-limit-1",
+      lastSyncError: 'Stopped Kanban automation for "Review" after 4 runs.',
+      updatedAt: new Date(Date.now() - 15 * 60 * 1000),
+    });
+    const patterns = detectStuckPatterns(task, board);
+    expect(patterns.some((p) => p.pattern === "automation_limit_exhausted")).toBe(true);
+  });
+
+  it("detects automation_limit_exhausted for advance-recovery errors", () => {
+    const task = makeTask({
+      id: "t-limit-2",
+      lastSyncError: "[advance-recovery] Max retries (3) reached.",
+      updatedAt: new Date(Date.now() - 15 * 60 * 1000),
+    });
+    const patterns = detectStuckPatterns(task, board);
+    expect(patterns.some((p) => p.pattern === "automation_limit_exhausted")).toBe(true);
+  });
+
+  it("detects automation_limit_exhausted for Max retries errors", () => {
+    const task = makeTask({
+      id: "t-limit-3",
+      lastSyncError: "Max retries (3) reached. Card completed but auto-advance kept failing.",
+      updatedAt: new Date(Date.now() - 15 * 60 * 1000),
+    });
+    const patterns = detectStuckPatterns(task, board);
+    expect(patterns.some((p) => p.pattern === "automation_limit_exhausted")).toBe(true);
+  });
+
+  it("does not detect automation_limit_exhausted for recent tasks", () => {
+    const task = makeTask({
+      id: "t-limit-recent",
+      lastSyncError: 'Stopped Kanban automation for "Review" after 4 runs.',
+      updatedAt: new Date(), // just now — too recent
+    });
+    const patterns = detectStuckPatterns(task, board);
+    expect(patterns.some((p) => p.pattern === "automation_limit_exhausted")).toBe(false);
+  });
+
+  it("does not detect automation_limit_exhausted for non-done columns", () => {
+    const task = makeTask({
+      id: "t-limit-notdone",
+      columnId: "dev",
+      lastSyncError: 'Stopped Kanban automation for "Review" after 4 runs.',
+      updatedAt: new Date(Date.now() - 15 * 60 * 1000),
+    });
+    const patterns = detectStuckPatterns(task, board);
+    expect(patterns.length).toBe(0);
+  });
 });

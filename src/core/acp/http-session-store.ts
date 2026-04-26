@@ -205,6 +205,7 @@ class HttpSessionStore {
 
   // ─── Memory-aware limits ─────────────────────────────────────────────────
   private static readonly MAX_HISTORY_PER_SESSION = 500; // Max messages per session
+  private static readonly MAX_TOTAL_HISTORY_MESSAGES = 5000; // Global budget across all sessions
   private static readonly MAX_PENDING_NOTIFICATIONS = 100; // Max buffered notifications
   private static readonly STALE_SESSION_MS = 60 * 60 * 1000; // 1 hour
   private static readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -314,6 +315,11 @@ class HttpSessionStore {
     this.agentEventSubscribers.delete(sessionId);
     // Detach SSE if connected
     this.sseControllers.delete(sessionId);
+    // Clean up EventBus state for this agent
+    const session = this.sessions.get(sessionId);
+    if (this.eventBus && session) {
+      this.eventBus.removeAgent(session.routaAgentId ?? sessionId);
+    }
     return this.sessions.delete(sessionId);
   }
 
@@ -879,6 +885,58 @@ class HttpSessionStore {
   }
 
   /**
+   * Enforce a global budget on total history messages across all sessions.
+   * When total exceeds MAX_TOTAL_HISTORY_MESSAGES, trims the oldest sessions'
+   * history first (LRU by lastAccessTime), keeping at least 50 recent entries per session.
+   */
+  private enforceGlobalHistoryBudget(): void {
+    let total = 0;
+    for (const history of this.messageHistory.values()) {
+      total += history.length;
+    }
+    if (total <= HttpSessionStore.MAX_TOTAL_HISTORY_MESSAGES) return;
+
+    console.warn(
+      `[HttpSessionStore] Global history budget exceeded: ${total}/${HttpSessionStore.MAX_TOTAL_HISTORY_MESSAGES} — trimming oldest sessions`
+    );
+
+    const sorted = Array.from(this.lastAccessTime.entries())
+      .sort(([, a], [, b]) => a - b);
+
+    for (const [sessionId] of sorted) {
+      if (total <= HttpSessionStore.MAX_TOTAL_HISTORY_MESSAGES) break;
+      const history = this.messageHistory.get(sessionId);
+      if (history && history.length > 50) {
+        const removed = history.length - 50;
+        this.messageHistory.set(sessionId, history.slice(removed));
+        total -= removed;
+      }
+    }
+  }
+
+  /**
+   * Trim heavy data (history, pending, assistant output) for a session
+   * without removing the session record itself.
+   */
+  private trimSessionData(sessionId: string): void {
+    const history = this.messageHistory.get(sessionId);
+    if (history && history.length > 50) {
+      this.messageHistory.set(sessionId, history.slice(history.length - 50));
+    }
+    this.pendingNotifications.delete(sessionId);
+    this.sessionAssistantOutput.delete(sessionId);
+    this.backgroundTaskCache.delete(sessionId);
+    this.backgroundTaskPending.delete(sessionId);
+    this.traceRecorder.cleanupSession(sessionId);
+  }
+
+  /** Check if a session has reached a terminal state. */
+  private isSessionTerminal(sessionId: string): boolean {
+    const activity = this.sessionActivities.get(sessionId);
+    return activity?.terminalState != null;
+  }
+
+  /**
    * Periodic cleanup check. Runs automatically every 5 minutes.
    * - Removes stale sessions (inactive for > 1 hour)
    * - Limits history and pending notification sizes
@@ -893,6 +951,22 @@ class HttpSessionStore {
     const removed = this.forceCleanup();
     if (removed > 0) {
       console.log(`[HttpSessionStore] Periodic cleanup: removed ${removed} stale sessions`);
+    }
+
+    this.enforceGlobalHistoryBudget();
+
+    // Proactive high-memory detection
+    const mem = process.memoryUsage();
+    const heapUsedMb = mem.heapUsed / (1024 * 1024);
+    const stats = this.getMemoryUsage();
+    if (heapUsedMb > 2000 && stats.totalHistoryMessages > 3000) {
+      console.warn(
+        `[HttpSessionStore] High memory: heap=${heapUsedMb.toFixed(0)}MB, ` +
+        `historyMessages=${stats.totalHistoryMessages}, sessions=${stats.sessionCount} — ` +
+        `triggering aggressive cleanup`
+      );
+      this.forceCleanup({ aggressive: true });
+      this.enforceGlobalHistoryBudget();
     }
   }
 
@@ -930,9 +1004,23 @@ class HttpSessionStore {
           continue;
         }
 
-        // Protect ROUTA orchestrator sessions — they are long-running and must not
-        // be evicted while child CRAFTERs / GATEs could still be running.
+        // Protect ROUTA orchestrator sessions while they have active child sessions.
+        // Once all children are gone, allow ROUTA sessions to expire with a 3x timeout
+        // extension, and only trim heavy data rather than deleting the session entirely.
         if (session?.role === "ROUTA") {
+          const hasActiveChildren = Array.from(this.sessions.values())
+            .some(s => s.parentSessionId === _sessionId
+              && !this.isSessionTerminal(s.sessionId));
+          if (hasActiveChildren) {
+            this.lastAccessTime.set(_sessionId, now);
+            continue;
+          }
+          // No active children — allow expiry with 3x timeout, but only trim data
+          const routeStaleThreshold = staleThreshold * 3;
+          if (now - lastAccess <= routeStaleThreshold) {
+            continue;
+          }
+          this.trimSessionData(_sessionId);
           this.lastAccessTime.set(_sessionId, now);
           continue;
         }
@@ -947,6 +1035,13 @@ class HttpSessionStore {
     for (const sessionId of this.sessions.keys()) {
       this.limitHistorySize(sessionId);
       this.limitPendingSize(sessionId);
+    }
+
+    // Aggressive mode: clear transient caches under memory pressure
+    if (options?.aggressive) {
+      this.backgroundTaskCache.clear();
+      this.backgroundTaskPending.clear();
+      this.sessionAssistantOutput.clear();
     }
 
     return removedCount;

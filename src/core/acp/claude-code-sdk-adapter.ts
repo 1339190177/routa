@@ -1141,8 +1141,11 @@ export class ClaudeCodeSdkAdapter {
    */
   async close(): Promise<void> {
     this.cancel();
+    this.completedUserInputResponses.clear();
     this.sessionId = null;
+    this.sdkSessionId = null;
     this._alive = false;
+    this.onNotification = () => {}; // Break callback reference to prevent closure retention
   }
 
   /**

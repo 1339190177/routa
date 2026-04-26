@@ -6,7 +6,7 @@
  * avoid OOM crashes. Uses `process.memoryUsage()` to sample RSS and heap.
  */
 
-const DEFAULT_HEAP_LIMIT_MB = 512;
+const DEFAULT_HEAP_LIMIT_MB = 4096;
 const SKIP_THRESHOLD_RATIO = 0.85;
 
 export function shouldSkipTickForMemory(label: string): boolean {

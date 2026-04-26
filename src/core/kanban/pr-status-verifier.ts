@@ -18,8 +18,14 @@ export interface PrMergeVerification {
   merged: boolean;
   /** ISO 8601 timestamp of the merge, if available. */
   mergedAt?: string;
+  /** ISO 8601 timestamp of closure, if closed (not merged). */
+  closedAt?: string;
   /** PR state: "open" | "closed" | "merged". */
   state?: string;
+  /** PR base branch name. */
+  baseRefName?: string;
+  /** PR head branch name. */
+  headRefName?: string;
   /** Whether GitHub considers the PR mergeable. */
   mergeable?: boolean;
   /** Conflict files reported by GitHub (if any). */
@@ -87,7 +93,7 @@ export async function verifyPrMergeStatus(
 
   try {
     const { stdout } = await execCommand(
-      `gh pr view ${prNumber} --repo ${owner}/${repo} --json state,mergedAt,mergeable,mergeStateStatus --jq "."`,
+      `gh pr view ${prNumber} --repo ${owner}/${repo} --json state,mergedAt,closedAt,mergeable,mergeStateStatus,baseRefName,headRefName --jq "."`,
       cwd,
       timeout,
     );
@@ -96,6 +102,7 @@ export async function verifyPrMergeStatus(
 
     const merged = data.state === "MERGED" || Boolean(data.mergedAt);
     const mergedAt = data.mergedAt ?? undefined;
+    const closedAt = data.closedAt ?? undefined;
 
     // gh returns mergeable as string: "MERGEABLE" | "CONFLICTING" | "UNKNOWN"
     // and mergeStateStatus as: "CLEAN" | "DIRTY" | "UNSTABLE" | "BLOCKED" | ...
@@ -111,7 +118,10 @@ export async function verifyPrMergeStatus(
     return {
       merged,
       mergedAt,
+      closedAt,
       state: data.state?.toLowerCase(),
+      baseRefName: data.baseRefName ?? undefined,
+      headRefName: data.headRefName ?? undefined,
       mergeable,
       verified: true,
     };

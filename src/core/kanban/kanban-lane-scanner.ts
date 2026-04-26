@@ -25,7 +25,9 @@ import {
   parseCbResetCount,
   buildCircuitBreakerError,
   buildAdvanceRecoveryError,
+  getErrorType,
 } from "./sync-error-writer";
+import { checkDependencyGate } from "./dependency-gate";
 import { withHeartbeat } from "../scheduling/system-heartbeat-registry";
 
 const SCAN_INTERVAL_MS = 30_000;
@@ -47,11 +49,35 @@ async function safeAtomicSave(
   fields: AtomicUpdateFields,
   logLabel: string,
 ): Promise<boolean> {
+  // Drizzle ORM treats `undefined` as "skip this field" rather than "set to NULL".
+  // Convert undefined values to null so clearing fields (e.g. lastSyncError) works.
+  const sanitizedFields = Object.fromEntries(
+    Object.entries(fields).map(([k, v]) => [k, v === undefined ? null : v]),
+  ) as AtomicUpdateFields;
   if (task.version !== undefined && taskStore.atomicUpdate) {
-    const ok = await taskStore.atomicUpdate(task.id, task.version, fields);
+    const ok = await taskStore.atomicUpdate(task.id, task.version, sanitizedFields);
     if (!ok) {
-      console.log(`[LaneScanner] Version conflict for card ${task.id} during ${logLabel}. Skipping.`);
-      return false;
+      // Version conflict — re-read the task and retry once with the fresh version.
+      const fresh = await taskStore.get(task.id);
+      if (!fresh) {
+        console.log(`[LaneScanner] Card ${task.id} deleted during ${logLabel}. Skipping.`);
+        return false;
+      }
+      if (fresh.version !== undefined && taskStore.atomicUpdate) {
+        const retryOk = await taskStore.atomicUpdate(fresh.id, fresh.version, sanitizedFields);
+        if (!retryOk) {
+          console.warn(
+            `[LaneScanner] Version conflict persisted after retry for card ${task.id} during ${logLabel}. Skipping.`,
+          );
+          return false;
+        }
+        // Sync version so downstream code sees the correct value
+        task.version = fresh.version;
+        return true;
+      }
+      // Fresh task has no version — fallback to save
+      await taskStore.save({ ...fresh, ...fields });
+      return true;
     }
     return true;
   }
@@ -158,7 +184,7 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
         // exclusively by the done-lane recovery tick (standalone conflict-resolver
         // sessions). The lane scanner must NOT reset them to IN_PROGRESS — doing
         // so creates a zombie loop: COMPLETED → IN_PROGRESS → pipeline → fail → COMPLETED → repeat.
-        if (task.status === "COMPLETED" || task.status === "BLOCKED") {
+        if (task.status === "COMPLETED" || task.status === "BLOCKED" || task.status === "CANCELLED") {
           continue;
         }
         // Done-lane PR-settled guard: cards in done-stage columns that already
@@ -345,6 +371,28 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
             // "transitioned"/"completed" means the card was returned to this column
             // after a downstream failure (e.g. worktree creation failed). Re-trigger
             // from step 0 with bounded retries.
+            // For dependency-blocked errors, re-check whether dependencies are now
+            // satisfied — the prerequisite task may have completed since last scan.
+            if (getErrorType(task.lastSyncError) === "dependency_blocked") {
+              if (task.dependencies.length > 0 && task.boardId) {
+                const board = await system.kanbanBoardStore.get(task.boardId);
+                if (board) {
+                  const depCheck = await checkDependencyGate(task, board.columns, system.taskStore);
+                  if (!depCheck.blocked) {
+                    const unblockSaved = await safeAtomicSave(task, system.taskStore, {
+                      lastSyncError: undefined,
+                      updatedAt: new Date(),
+                    }, "dependency unblock");
+                    if (unblockSaved) {
+                      console.log(
+                        `[LaneScanner] Dependency unblocked for card ${task.id}. Will re-trigger on next scan.`,
+                      );
+                    }
+                  }
+                }
+              }
+              continue;
+            }
             const recoveryAttempts = countStepAttempts(laneSessions, task.columnId!, 0);
             if (recoveryAttempts >= MAX_STEP_RESUME_ATTEMPTS) {
               continue;

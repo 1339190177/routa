@@ -18,6 +18,8 @@ import { getRoutaSystem } from "../routa-system";
 import { runScheduleTick } from "./run-schedule-tick";
 import { runAutoArchiveTick } from "../kanban/auto-archive-tick";
 import { runDoneLaneRecoveryTick, cleanupOrphanPendingMarkers } from "../kanban/done-lane-recovery-tick";
+import { sweepStuckTasksOnStartup } from "../kanban/restart-recovery";
+import { cleanupOrphanBranchesOnStartup } from "../kanban/orphan-branch-cleanup";
 import { runWithSpan } from "../telemetry/tracing";
 import { withHeartbeat } from "./system-heartbeat-registry";
 
@@ -103,7 +105,13 @@ export function startSchedulerService(): void {
     "routa.scheduler.startup_cleanup",
     {},
     async () => {
+      // Clean up orphan remote branches before marker cleanup, since
+      // branch deletion is independent of task state recovery.
+      await cleanupOrphanBranchesOnStartup();
       await cleanupOrphanPendingMarkers(getRoutaSystem());
+      // Sweep permanently-stuck tasks (repeat-limit, CB max resets, step-resume limit)
+      // so the LaneScanner and recovery ticks can re-evaluate on the fresh instance.
+      await sweepStuckTasksOnStartup(getRoutaSystem());
     },
   ).catch((error) => {
     console.error("[Scheduler] Startup cleanup failed:", error);
