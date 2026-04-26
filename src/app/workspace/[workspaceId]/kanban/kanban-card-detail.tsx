@@ -32,7 +32,7 @@ import { KanbanCardProviderOverrideDropdown } from "./kanban-card-provider-overr
 // import { TaskFileDiffPreview, TaskCommitDiffPreview, CommitRow } from "./kanban-diff-preview";
 import { StoryReadinessPanel, EvidenceBundlePanel, ReviewFeedbackPanel, TaskHierarchyPanel, DependenciesPanel } from "./kanban-detail-panels";
 import { getKanbanSessionCopy } from "./i18n/kanban-session-copy";
-import { resolveVcsLabel } from "./kanban-tab-helpers";
+import { resolveVcsDotColor, resolveVcsLabel } from "./kanban-tab-helpers";
 import {
   findSpecialistById,
   getSpecialistDisplayName,
@@ -1696,7 +1696,7 @@ function RepositoriesWorktreeRow({
           <div className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{t.kanbanDetail.repo}</div>
           {primaryCodebase ? (
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${primaryCodebase.sourceType === "github" ? "bg-blue-500" : "bg-emerald-500"}`} />
+              <span className={`h-2 w-2 shrink-0 rounded-full ${resolveVcsDotColor(primaryCodebase.sourceType)}`} />
               <span className="truncate text-slate-700 dark:text-slate-300">
                 {repoSummary}
               </span>
@@ -1828,7 +1828,7 @@ function RepositoriesWorktreeRow({
                         }`}
                       data-testid="detail-repo-toggle"
                     >
-                      <span className={`h-1.5 w-1.5 rounded-full ${codebase.sourceType === "github" ? "bg-blue-500" : "bg-emerald-500"}`} />
+                      <span className={`h-1.5 w-1.5 rounded-full ${resolveVcsDotColor(codebase.sourceType)}`} />
                       {codebase.label ?? codebase.repoPath.split("/").pop() ?? codebase.repoPath}
                     </button>
                   );

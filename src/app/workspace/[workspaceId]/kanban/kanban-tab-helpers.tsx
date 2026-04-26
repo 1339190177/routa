@@ -2,6 +2,13 @@ import type { AcpProviderInfo } from "@/client/acp-client";
 import { resolveKanbanAutomationStep } from "@/core/kanban/effective-task-automation";
 import { getKanbanAutomationSteps, normalizeKanbanAutomation } from "@/core/models/kanban";
 import { createKanbanSpecialistResolver } from "./kanban-card-session-utils";
+import {
+  findSpecialistById,
+  getSpecialistDisplayName,
+  type KanbanSpecialistLanguage,
+} from "./kanban-specialist-language";
+import type { ColumnAutomationConfig } from "./kanban-settings-modal";
+import type { KanbanBoardInfo, SessionInfo, TaskInfo } from "../types";
 
 /**
  * Resolve a human-readable VCS platform label from a task's vcsUrl or a codebase's sourceType.
@@ -17,13 +24,16 @@ export function resolveVcsLabel(opts?: { vcsUrl?: string; sourceType?: string })
   }
   return "VCS";
 }
-import {
-  findSpecialistById,
-  getSpecialistDisplayName,
-  type KanbanSpecialistLanguage,
-} from "./kanban-specialist-language";
-import type { ColumnAutomationConfig } from "./kanban-settings-modal";
-import type { KanbanBoardInfo, SessionInfo, TaskInfo } from "../types";
+
+/**
+ * Return a Tailwind dot-color class for the given sourceType.
+ * github → blue, gitlab → orange, other → emerald (local/generic).
+ */
+export function resolveVcsDotColor(sourceType?: string): string {
+  if (sourceType === "github") return "bg-blue-500";
+  if (sourceType === "gitlab") return "bg-orange-500";
+  return "bg-emerald-500";
+}
 
 interface SpecialistOption {
   id: string;
