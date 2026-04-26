@@ -665,6 +665,36 @@ function initializeSqliteTables(db: SqliteDatabase): void {
     ON notification_logs (workspace_id)
   `);
 
+  // ─── Overseer (smart monitoring agent) ───────────────────────────────
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS overseer_decisions (
+      id TEXT PRIMARY KEY,
+      pattern TEXT NOT NULL,
+      task_id TEXT,
+      category TEXT NOT NULL,
+      action TEXT NOT NULL,
+      details TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      token TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000),
+      resolved_at INTEGER
+    )
+  `);
+
+  db.run(sql`
+    CREATE INDEX IF NOT EXISTS idx_overseer_decisions_pattern_task
+    ON overseer_decisions (pattern, task_id, created_at DESC)
+  `);
+
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS overseer_state (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch('now') * 1000)
+    )
+  `);
+
   console.log("[SQLite] Tables initialized");
 }
 

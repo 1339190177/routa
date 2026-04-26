@@ -48,6 +48,8 @@ export enum AgentEventType {
   PR_MERGED = "pr_merged",
   /** Emitted when a task should automatically create a Pull Request */
   PR_CREATE_REQUESTED = "pr_create_requested",
+  /** Emitted by the overseer when an automated or escalation decision is made */
+  OVERSEER_ALERT = "OVERSEER_ALERT",
 }
 
 export interface AgentEvent {

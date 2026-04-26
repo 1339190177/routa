@@ -601,3 +601,37 @@ export const artifactRequests = sqliteTable("artifact_requests", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
+
+// ─── Overseer (smart monitoring agent) ────────────────────────────
+
+export type OverseerDecisionCategory = "AUTO" | "NOTIFY" | "ESCALATE";
+export type OverseerDecisionStatus = "pending" | "approved" | "rejected" | "expired" | "executed";
+
+export const overseerDecisions = sqliteTable("overseer_decisions", {
+  id: text("id").primaryKey(),
+  /** Pattern name (e.g., "stale-trigger-session") */
+  pattern: text("pattern").notNull(),
+  /** Associated task ID */
+  taskId: text("task_id"),
+  /** AUTO | NOTIFY | ESCALATE */
+  category: text("category").$type<OverseerDecisionCategory>().notNull(),
+  /** Action description */
+  action: text("action").notNull(),
+  /** JSON details about the decision */
+  details: text("details"),
+  /** pending | approved | rejected | expired | executed */
+  status: text("status").$type<OverseerDecisionStatus>().notNull().default("pending"),
+  /** HMAC approval token */
+  token: text("token"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  /** When the decision was resolved */
+  resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+});
+
+export const overseerState = sqliteTable("overseer_state", {
+  /** State key (e.g., "circuit_breaker", "dedup:<pattern>:<taskId>") */
+  key: text("key").primaryKey(),
+  /** JSON value */
+  value: text("value").notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+});

@@ -80,6 +80,13 @@ const SYSTEM_JOBS: SystemJobMeta[] = [
     group: "kanban",
     interval: "30s",
   },
+  {
+    id: "overseer-health-tick",
+    name: "Overseer Health Tick",
+    description: "Smart monitoring: auto-fixes stale sessions, orphan worktrees, and escalates critical issues",
+    group: "overseer",
+    interval: "*/5 * * * *",
+  },
 ];
 
 const MAX_RUNS_PER_JOB = 100;
