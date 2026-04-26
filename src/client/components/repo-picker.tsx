@@ -109,14 +109,31 @@ function buildRepoHoverTitle(selection: RepoSelection): string {
   return `${selection.name}\n${selection.path}`;
 }
 
-function isGitHubInput(text: string): boolean {
-  const t = text.trim();
-  return (
+export type VcsPlatform = "github" | "gitlab" | "unknown";
+
+export function detectVcsPlatform(url: string): VcsPlatform {
+  const t = url.trim();
+  if (!t) return "unknown";
+  if (
+    /^https?:\/\/gitlab\.com\//i.test(t) ||
+    /^git@gitlab\.com:/i.test(t) ||
+    /^gitlab\.com\//i.test(t)
+  ) {
+    return "gitlab";
+  }
+  if (
     /^https?:\/\/github\.com\//i.test(t) ||
     /^git@github\.com:/i.test(t) ||
     /^github\.com\//i.test(t) ||
     /^[a-zA-Z0-9\-_]+\/[a-zA-Z0-9\-_.]+$/.test(t)
-  );
+  ) {
+    return "github";
+  }
+  return "unknown";
+}
+
+function isGitHubInput(text: string): boolean {
+  return detectVcsPlatform(text) === "github";
 }
 
 function isLikelyLocalPath(text: string): boolean {
@@ -152,6 +169,9 @@ export function RepoPicker({
   const [localPath, setLocalPath] = useState("");
   const [loadingLocalRepo, setLoadingLocalRepo] = useState(false);
   const [localRepoError, setLocalRepoError] = useState<string | null>(null);
+
+  // Detect VCS platform from clone URL for dynamic tab label/prefix
+  const clonePlatform = useMemo<VcsPlatform>(() => detectVcsPlatform(cloneUrl), [cloneUrl]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -235,13 +255,18 @@ export function RepoPicker({
     setShowDropdown(true);
   }, []);
 
-  // ── Auto-detect GitHub URL in search → switch to clone tab ─────────
+  // ── Auto-detect GitHub/GitLab URL in search → switch to clone tab ───
 
   useEffect(() => {
-    if (allowClone && searchQuery && isGitHubInput(searchQuery)) {
-      setActiveTab("clone");
-      setCloneUrl(searchQuery);
-    } else if (searchQuery && isLikelyLocalPath(searchQuery)) {
+    if (allowClone && searchQuery) {
+      const platform = detectVcsPlatform(searchQuery);
+      if (platform === "github" || platform === "gitlab") {
+        setActiveTab("clone");
+        setCloneUrl(searchQuery);
+        return;
+      }
+    }
+    if (searchQuery && isLikelyLocalPath(searchQuery)) {
       setActiveTab("local");
       setLocalPath(searchQuery);
     }
@@ -578,7 +603,11 @@ export function RepoPicker({
                 }}
               >
                 <Download className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}/>
-                {t.repoPicker.cloneFromGitHub}
+                {clonePlatform === "gitlab"
+                  ? t.repoPicker.cloneFromGitLab
+                  : clonePlatform === "github"
+                    ? t.repoPicker.cloneFromGitHub
+                    : t.repoPicker.cloneFromUrl}
               </TabButton>
             ) : null}
             <TabButton
@@ -652,29 +681,25 @@ export function RepoPicker({
                 <div className="flex items-center gap-1.5">
                   <div className="flex-1 flex items-center rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#161922] overflow-hidden">
                     <span className="pl-2.5 text-[10px] text-slate-400 dark:text-slate-500 font-mono whitespace-nowrap">
-                      github.com/
+                      {clonePlatform === "gitlab"
+                        ? "gitlab.com/"
+                        : clonePlatform === "github"
+                          ? "github.com/"
+                          : ""}
                     </span>
                     <input
                       ref={cloneInputRef}
                       type="text"
-                      value={cloneUrl.replace(/^(https?:\/\/)?(www\.)?github\.com\//i, "")}
+                      value={cloneUrl.replace(/^(https?:\/\/)?(www\.)?(github|gitlab)\.com\//i, "")}
                       onChange={(e) => {
-                        const v = e.target.value;
-                        // Accept both "owner/repo" and full URL forms
-                        setCloneUrl(
-                          v.includes("github.com") ? v : v
-                        );
+                        setCloneUrl(e.target.value);
                         setCloneError(null);
                       }}
                       placeholder={clonePlaceholder ?? t.repoPicker.ownerRepo}
                       className="flex-1 px-1.5 py-2 bg-transparent text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 outline-none font-mono"
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && cloneUrl.trim()) {
-                          handleClone(
-                            cloneUrl.includes("github.com")
-                              ? cloneUrl
-                              : cloneUrl
-                          );
+                          handleClone(cloneUrl);
                         }
                         if (e.key === "Escape") setShowDropdown(false);
                       }}
@@ -716,13 +741,7 @@ export function RepoPicker({
               {/* Clone button */}
               <button
                 type="button"
-                onClick={() =>
-                  handleClone(
-                    cloneUrl.includes("github.com")
-                      ? cloneUrl
-                      : cloneUrl
-                  )
-                }
+                onClick={() => handleClone(cloneUrl)}
                 disabled={cloning || !cloneUrl.trim()}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
