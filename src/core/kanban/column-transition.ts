@@ -24,7 +24,19 @@ export interface ColumnTransitionData {
   resumeStepIndex?: number;
   /** Internal: number of stale-queue retries already attempted (used by watchdog). */
   staleRetryCount?: number;
+  /** Typed source identifying what triggered this transition. */
+  source?: ColumnTransitionSource;
 }
+
+/** Discriminated union identifying the origin of a COLUMN_TRANSITION event. */
+export type ColumnTransitionSource =
+  | { type: "user_action" }
+  | { type: "lane_scanner"; resumeStepIndex?: number }
+  | { type: "auto_advance"; fromColumnId: string }
+  | { type: "watchdog_retry"; staleRetryCount: number }
+  | { type: "advance_only" }
+  | { type: "restart_recovery" }
+  | { type: "dependency_unblock" };
 
 /**
  * Emit a COLUMN_TRANSITION event on the event bus.
@@ -33,6 +45,10 @@ export function emitColumnTransition(
   eventBus: EventBus,
   data: ColumnTransitionData,
 ): void {
+  // Default source to user_action when not explicitly provided
+  if (!data.source) {
+    (data as mutableColumnTransitionData).source = { type: "user_action" };
+  }
   const event: AgentEvent = {
     type: AgentEventType.COLUMN_TRANSITION,
     agentId: "kanban-system",
@@ -42,6 +58,9 @@ export function emitColumnTransition(
   };
   eventBus.emit(event);
 }
+
+/** Helper type to allow mutation of source field internally. */
+type mutableColumnTransitionData = { -readonly [K in keyof ColumnTransitionData]: ColumnTransitionData[K] };
 
 /** Callback invoked when a column transition should trigger an agent */
 export type TransitionTriggerCallback = (params: {

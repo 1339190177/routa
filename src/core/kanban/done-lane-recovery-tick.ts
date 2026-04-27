@@ -18,12 +18,15 @@ import { verifyPrMergeStatus } from "./pr-status-verifier";
 import { parseCbResetCount } from "./workflow-orchestrator";
 import { AgentEventType } from "../events/event-bus";
 import { enqueueKanbanTaskSession } from "./workflow-orchestrator-singleton";
-import { parseDoneStuckRetryCount } from "./sync-error-writer";
+import { clearStuckMarker, parseDoneStuckRetryCount } from "./sync-error-writer";
+import { getKanbanConfig } from "./kanban-config";
+
+const recoveryCfg = getKanbanConfig();
 
 /** Minimum age (ms) before a done-lane card is considered for recovery. */
-const PR_VERIFICATION_MIN_AGE_MS = 5 * 60 * 1000;
+const PR_VERIFICATION_MIN_AGE_MS = recoveryCfg.prVerificationMinAgeMs;
 /** Age threshold for orphan IN_PROGRESS detection (no active session). */
-const ORPHAN_AGE_MS = 10 * 60 * 1000;
+const ORPHAN_AGE_MS = recoveryCfg.orphanAgeMs;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -84,7 +87,7 @@ function getCbResetCount(task: Task): number {
 }
 
 function getMaxResets(): number {
-  return parseInt(process.env.ROUTA_CB_MAX_COOLDOWN_RESETS ?? "5", 10);
+  return recoveryCfg.cbMaxCooldownResets;
 }
 
 // ── Detection ──────────────────────────────────────────────────────────────
@@ -574,16 +577,10 @@ async function recoverAutomationLimitExhausted(
     `[DoneLaneRecovery] Automation limit exhausted for card ${task.id} ` +
     `(error: ${(task.lastSyncError ?? "").slice(0, 80)}). Clearing marker.`,
   );
-  // Filter out failed lane sessions in the current column — they are stale
-  // evidence from a previous attempt cycle and would immediately re-trigger
-  // the repeat limit.
-  const filteredSessions = (task.laneSessions ?? []).filter((s) => {
-    if (s.columnId !== task.columnId) return true;
-    return s.status !== "failed";
-  });
+  const cleaned = clearStuckMarker(task, "deep");
 
-  task.lastSyncError = undefined;
-  task.laneSessions = filteredSessions;
+  task.lastSyncError = cleaned.lastSyncError;
+  task.laneSessions = cleaned.laneSessions;
   task.triggerSessionId = undefined;
   task.updatedAt = new Date();
   await system.taskStore.save(task);

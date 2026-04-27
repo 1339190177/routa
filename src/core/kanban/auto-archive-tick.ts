@@ -12,12 +12,13 @@ import type { Task, TaskLaneSession } from "../models/task";
 import type { KanbanBoard, KanbanColumn } from "../models/kanban";
 import { archiveTask } from "./archive-task";
 import { shouldSkipTickForMemory } from "./memory-guard";
+import { getKanbanConfig } from "./kanban-config";
 
 /** Default number of days a card must sit in `done` before auto-archival. */
 export const DEFAULT_AUTO_ARCHIVE_DAYS = 30;
 
 /** Time (ms) after PR merge before a merged card becomes eligible for auto-archive. */
-export const POST_MERGE_ARCHIVE_MS = 60 * 60 * 1000; // 1 hour
+export const POST_MERGE_ARCHIVE_MS = getKanbanConfig().postMergeArchiveMs;
 
 export interface AutoArchiveSummary {
   /** Number of cards successfully archived. */

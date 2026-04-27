@@ -23,15 +23,31 @@ import {
   isCircuitBreaker,
   isRateLimited,
   parseCbResetCount,
+  parseSyncError,
   buildCircuitBreakerError,
   buildAdvanceRecoveryError,
   getErrorType,
 } from "./sync-error-writer";
 import { checkDependencyGate } from "./dependency-gate";
+import type { ColumnTransitionData } from "./column-transition";
+import { analyzeFlowForTasks, getTopFailureColumns } from "./flow-ledger";
 import { withHeartbeat } from "../scheduling/system-heartbeat-registry";
+import { getKanbanConfig } from "./kanban-config";
+
+const scannerCfg = getKanbanConfig();
 
 const SCAN_INTERVAL_MS = 30_000;
 const MAX_STEP_RESUME_ATTEMPTS = 3;
+
+/** Adaptive scan interval based on recent activity. */
+function computeScanInterval(stats: LaneScannerStats): number {
+  const IDLE_MS = 60_000;
+  const NORMAL_MS = 30_000;
+  const ERROR_MS = 15_000;
+  if (stats.errors > 0) return ERROR_MS;
+  if (stats.triggeredTasks === 0 && stats.errors === 0) return IDLE_MS;
+  return NORMAL_MS;
+}
 /** Minimum age (ms) before verifying PR merge status via GitHub API. */
 const PR_VERIFICATION_MIN_AGE_MS = 5 * 60 * 1000;
 
@@ -171,9 +187,24 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
         (t: { boardId?: string }) => (t.boardId ?? board.id) === board.id,
       );
 
+      // Flow-ledger feedback: skip columns with chronic high failure rates
+      let skipColumns: Set<string> | null = null;
+      try {
+        const report = analyzeFlowForTasks(boardTasks, {
+          workspaceId: board.workspaceId,
+          boardId: board.id,
+        });
+        const topFailures = getTopFailureColumns(report.laneMetrics, scannerCfg.flowFailureThreshold);
+        if (topFailures.length > 0) {
+          skipColumns = new Set(topFailures);
+        }
+      } catch { /* non-critical — continue without flow filtering */ }
+
       for (const task of boardTasks) {
         // Skip tasks not in an automated column
         if (!task.columnId || !automatedColumnIds.has(task.columnId)) continue;
+        // Flow-ledger: skip tasks in columns with chronic failure (>= 70% failure rate)
+        if (skipColumns && skipColumns.has(task.columnId) && !task.triggerSessionId) continue;
         // Skip tasks that already have an active trigger; clean up stale ones
         if (task.triggerSessionId) {
           const cleaned = await clearStaleTriggerSession(task, getHttpSessionStore(), system.taskStore);
@@ -237,14 +268,12 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
           const updatedAt = task.updatedAt instanceof Date
             ? task.updatedAt.getTime()
             : new Date(task.updatedAt as string | number).getTime();
-          const cooldownMs = parseInt(
-            process.env.ROUTA_SESSION_RETRY_RESET_MS ?? `${5 * 60 * 1000}`, 10,
-          );
+          const cooldownMs = scannerCfg.sessionRetryResetMs;
           if (Date.now() - updatedAt < cooldownMs) continue;
           // Check if this card has exceeded the max cooldown reset count
           if (isCircuitBreaker(task.lastSyncError)) {
             const resetCount = parseCbResetCount(task.lastSyncError);
-            const maxResets = parseInt(process.env.ROUTA_CB_MAX_COOLDOWN_RESETS ?? "5", 10);
+            const maxResets = scannerCfg.cbMaxCooldownResets;
             if (resetCount >= maxResets) {
               continue; // Permanently skip — too many cooldown resets
             }
@@ -255,12 +284,13 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
               `clearing circuit-breaker marker (reset ${newResetCount}/${maxResets}).`,
             );
             // Preserve PR failure info if embedded in the previous lastSyncError
-            const prMatch = task.lastSyncError?.match(new RegExp(`\\| prev: (${PR_FAILURE_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.+)`));
-            const prFallback = task.lastSyncError?.includes(PR_FAILURE_PREFIX) ? task.lastSyncError : undefined;
+            const prevPayload = parseSyncError(task.lastSyncError);
+            const prevInfo = prevPayload?.prev
+              ?? (task.lastSyncError?.includes(PR_FAILURE_PREFIX) ? task.lastSyncError : undefined);
             task.lastSyncError = buildCircuitBreakerError(
               newResetCount,
               "pending retry.",
-              prMatch?.[1] ?? prFallback,
+              prevInfo,
             );
           } else {
             console.log(
@@ -350,7 +380,7 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
                     workspaceId: task.workspaceId,
                     fromColumnId: task.columnId,
                     toColumnId: task.columnId,
-                    _advanceOnly: true,
+                    source: { type: "advance_only" },
                   } as Record<string, unknown>,
                   timestamp: new Date(),
                 });
@@ -480,6 +510,7 @@ async function runLaneScannerTickInner(system: RoutaSystem): Promise<LaneScanner
               fromColumnId: task.columnId,
               toColumnId: task.columnId,
               resumeStepIndex,
+              source: { type: "lane_scanner", resumeStepIndex },
             } as Record<string, unknown>,
             timestamp: new Date(),
           });
@@ -521,15 +552,24 @@ export function startLaneScanner(system: RoutaSystem): void {
   // Run initial scan after a short delay to let the system warm up
   initialScanTimer = setTimeout(() => {
     initialScanTimer = null;
-    void runLaneScannerTick(system);
+    scheduleNextTick(system);
   }, 5_000);
 
-  scanTimer = setInterval(() => {
-    void runLaneScannerTick(system);
-  }, SCAN_INTERVAL_MS);
-
   g[`${GLOBAL_KEY}_started`] = true;
-  console.log(`[LaneScanner] Started (interval: ${SCAN_INTERVAL_MS / 1000}s)`);
+  console.log("[LaneScanner] Started (adaptive interval: 15s–60s)");
+}
+
+/** Schedule the next tick based on current scanner stats. */
+function scheduleNextTick(system: RoutaSystem): void {
+  const interval = computeScanInterval(getScannerState().stats);
+  scanTimer = setTimeout(() => {
+    scanTimer = null;
+    void runLaneScannerTick(system).then(() => {
+      if ((globalThis as Record<string, unknown>)[`${GLOBAL_KEY}_started`]) {
+        scheduleNextTick(system);
+      }
+    });
+  }, interval);
 }
 
 /**
@@ -542,7 +582,7 @@ export function stopLaneScanner(): void {
     initialScanTimer = null;
   }
   if (scanTimer) {
-    clearInterval(scanTimer);
+    clearTimeout(scanTimer);
     scanTimer = null;
   }
   g[`${GLOBAL_KEY}_started`] = false;

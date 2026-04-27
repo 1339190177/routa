@@ -23,9 +23,10 @@ import type { TaskStore } from "../store/task-store";
 import type { WorktreeStore } from "../db/pg-worktree-store";
 import { shellQuote, isGitLabUrl, isGitHubUrl } from "../git/git-utils";
 import { getVCSProvider, getPlatform } from "../vcs";
+import { getKanbanConfig } from "./kanban-config";
 
 const HANDLER_KEY = "kanban-pr-auto-create";
-const PR_RETRY_LIMIT = parseInt(process.env.ROUTA_PR_RETRY_LIMIT ?? "3", 10);
+const PR_RETRY_LIMIT = getKanbanConfig().prRetryLimit;
 export const PR_FAILURE_PREFIX = "Auto PR creation failed";
 
 async function execCommand(

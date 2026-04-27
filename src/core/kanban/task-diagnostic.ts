@@ -67,10 +67,51 @@ const DEFAULT_RETRY_RESET_MS = 5 * 60 * 1000;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+/** Extract the human-readable message from a lastSyncError (JSON or legacy text). */
+function extractMessage(raw: string): string {
+  if (raw.startsWith("{")) {
+    try {
+      const obj = JSON.parse(raw);
+      if (obj?.message) return obj.message;
+    } catch { /* fall through */ }
+  }
+  return raw
+    .replace(/\[circuit-breaker:reset=\d+\]\s*/, "")
+    .replace(/\[circuit-breaker\]\s*/, "")
+    .replace(/\[rate-limited\]\s*/, "")
+    .replace(/\[done-lane-stuck\]\s*/, "");
+}
+
 function parseResetCount(lastSyncError: string | undefined): number {
   if (!lastSyncError) return 0;
+  // JSON format
+  if (lastSyncError.startsWith("{")) {
+    try {
+      const obj = JSON.parse(lastSyncError);
+      return obj?.resetCount ?? 0;
+    } catch { return 0; }
+  }
+  // Legacy text
   const match = lastSyncError.match(/\[circuit-breaker:reset=(\d+)\]/);
   return match ? parseInt(match[1], 10) : (lastSyncError.startsWith(CB_MARKER) ? 0 : 0);
+}
+
+/** Detect the structured error type from a lastSyncError string. */
+function detectErrorType(raw: string | undefined): string | null {
+  if (!raw) return null;
+  if (raw.startsWith("{")) {
+    try {
+      const obj = JSON.parse(raw);
+      return obj?.type ?? null;
+    } catch { return null; }
+  }
+  if (raw.startsWith(CB_MARKER) || raw.match(/^\[circuit-breaker:reset=\d+\]/)) return "circuit_breaker";
+  if (raw.startsWith(RATE_MARKER)) return "rate_limited";
+  if (raw.startsWith("Blocked by unfinished dependencies")) return "dependency_blocked";
+  if (raw.startsWith("Stopped Kanban automation")) return "repeat_limit";
+  if (raw.startsWith("[advance-recovery]")) return "advance_recovery";
+  if (raw.startsWith("[done-lane-stuck]")) return "done_stuck";
+  return null;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -87,7 +128,7 @@ export function parseTaskDiagnostic(
   const retryResetMs = options?.retryResetMs ?? DEFAULT_RETRY_RESET_MS;
 
   // 1. Circuit breaker
-  if (lastSyncError.startsWith(CB_MARKER)) {
+  if (detectErrorType(lastSyncError) === "circuit_breaker") {
     const resetCount = parseResetCount(lastSyncError);
     const permanentlySkipped = resetCount >= cbMaxResets;
 
@@ -109,7 +150,7 @@ export function parseTaskDiagnostic(
       shortLabel: "Circuit breaker",
       message: permanentlySkipped
         ? `熔断器已达到最大重置次数 (${resetCount}/${cbMaxResets})，任务被永久跳过。`
-        : lastSyncError.replace(/\[circuit-breaker:reset=\d+\]\s*/, ""),
+        : extractMessage(lastSyncError),
       rawError: lastSyncError,
       autoRecoverable: !permanentlySkipped,
       recoveryHint: permanentlySkipped ? undefined : recoveryHint,
@@ -121,11 +162,11 @@ export function parseTaskDiagnostic(
   }
 
   // 2. Rate limited
-  if (lastSyncError.startsWith(RATE_MARKER)) {
+  if (detectErrorType(lastSyncError) === "rate_limited") {
     return {
       category: "rate_limited",
       shortLabel: "Rate limited",
-      message: lastSyncError.replace(/\[rate-limited\]\s*/, ""),
+      message: extractMessage(lastSyncError),
       rawError: lastSyncError,
       autoRecoverable: true,
       recoveryHint: "API 限速恢复后自动重试",
@@ -134,8 +175,9 @@ export function parseTaskDiagnostic(
   }
 
   // 3. Dependency blocked
-  if (lastSyncError.startsWith("Blocked by unfinished dependencies")) {
-    const deps = lastSyncError
+  if (detectErrorType(lastSyncError) === "dependency_blocked") {
+    const msg = extractMessage(lastSyncError);
+    const deps = msg
       .replace("Blocked by unfinished dependencies:", "")
       .split(",")
       .map((s) => s.trim())
@@ -153,13 +195,14 @@ export function parseTaskDiagnostic(
   }
 
   // 4. Retry limit (non-dev automation repeat limit)
-  if (lastSyncError.startsWith("Stopped Kanban automation for")) {
-    const nameMatch = lastSyncError.match(/for "(.+?)"/);
-    const countMatch = lastSyncError.match(/after (\d+) runs/);
+  if (detectErrorType(lastSyncError) === "repeat_limit") {
+    const msg = extractMessage(lastSyncError);
+    const nameMatch = msg.match(/for "(.+?)"/);
+    const countMatch = msg.match(/after (\d+) runs/);
     return {
       category: "retry_limit",
       shortLabel: "Auto limit",
-      message: lastSyncError,
+      message: msg,
       rawError: lastSyncError,
       autoRecoverable: false,
       suggestions: ["手动将卡片移回前一列重置计数", "检查自动化配置是否有问题"],
@@ -171,7 +214,7 @@ export function parseTaskDiagnostic(
   }
 
   // 5. PR failure
-  if (lastSyncError.startsWith(PR_FAILURE_PREFIX) || lastSyncError.includes("Auto PR creation failed")) {
+  if (lastSyncError.includes(PR_FAILURE_PREFIX) || lastSyncError.includes("Auto PR creation failed")) {
     return {
       category: "pr_failure",
       shortLabel: "PR failed",
@@ -226,11 +269,11 @@ export function parseTaskDiagnostic(
   }
 
   // 9. Done-lane stuck (recovery tick diagnostic)
-  if (lastSyncError.startsWith("[done-lane-stuck]")) {
+  if (detectErrorType(lastSyncError) === "done_stuck") {
     return {
       category: "done_lane_stuck",
       shortLabel: "Done stuck",
-      message: lastSyncError.replace("[done-lane-stuck] ", ""),
+      message: extractMessage(lastSyncError),
       rawError: lastSyncError,
       autoRecoverable: true,
       recoveryHint: "恢复 tick 将在下次运行时验证 PR 状态并尝试恢复（每 10 分钟）",

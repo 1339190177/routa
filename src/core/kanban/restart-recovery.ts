@@ -12,7 +12,8 @@ import {
   enqueueKanbanTaskSession,
   processKanbanColumnTransition,
 } from "./workflow-orchestrator-singleton";
-import { parseCbResetCount } from "./sync-error-writer";
+import { clearStuckMarker, getErrorType, parseCbResetCount } from "./sync-error-writer";
+import { getKanbanConfig } from "./kanban-config";
 
 export interface RestartRecoveryOptions {
   sessionStore: ReturnType<typeof getHttpSessionStore>;
@@ -175,6 +176,7 @@ async function convergeRecoveredReviewTask(
     toColumnId: convergenceColumn.id,
     fromColumnName: currentColumnName,
     toColumnName: convergenceColumn.name,
+    source: { type: "restart_recovery" },
   });
   return true;
 }
@@ -261,6 +263,7 @@ export async function reviveMissingEntryAutomations(
       toColumnId: currentColumnId,
       fromColumnName: "Revive",
       toColumnName: column.name,
+      source: { type: "restart_recovery" },
     });
   }
 }
@@ -274,15 +277,14 @@ const ADVANCE_RECOVERY_PATTERN = "[advance-recovery]";
 
 function isPermanentlyStuckError(lastSyncError: string | undefined): boolean {
   if (!lastSyncError) return false;
-  // Repeat-limit: "Stopped Kanban automation for ..."
-  if (lastSyncError.includes(REPEAT_LIMIT_PATTERN)) return true;
-  // Step-resume limit: "Max retries (3) reached."
+  const errorType = getErrorType(lastSyncError);
+  if (errorType === "repeat_limit") return true;
+  if (errorType === "advance_recovery") return true;
+  // Step-resume limit: message contains "Max retries" (works for both JSON and legacy)
   if (lastSyncError.includes(STEP_RESUME_LIMIT_PATTERN)) return true;
-  // Advance-recovery limit: "[advance-recovery] Max retries ..."
-  if (lastSyncError.includes(ADVANCE_RECOVERY_PATTERN)) return true;
   // Circuit-breaker max resets exceeded
-  if (lastSyncError.includes("[circuit-breaker")) {
-    const maxResets = parseInt(process.env.ROUTA_CB_MAX_COOLDOWN_RESETS ?? "5", 10);
+  if (errorType === "circuit_breaker") {
+    const maxResets = getKanbanConfig().cbMaxCooldownResets;
     const resetCount = parseCbResetCount(lastSyncError);
     if (resetCount >= maxResets) return true;
   }
@@ -317,13 +319,7 @@ export async function sweepStuckTasksOnStartup(
         summary.scanned++;
 
         try {
-          // Filter out failed lane sessions in the current column — they are
-          // stale evidence from the previous service instance and would cause
-          // repeat-limit / step-resume-limit to re-trigger immediately.
-          const filteredSessions = (task.laneSessions ?? []).filter((s) => {
-            if (s.columnId !== task.columnId) return true;
-            return s.status !== "failed";
-          });
+          const cleaned = clearStuckMarker(task, "full");
 
           // Fix orphan IN_PROGRESS in done/archived columns
           let nextStatus: TaskStatus | undefined;
@@ -341,14 +337,14 @@ export async function sweepStuckTasksOnStartup(
 
           if (task.version !== undefined && system.taskStore.atomicUpdate) {
             await system.taskStore.atomicUpdate(task.id, task.version, {
-              lastSyncError: undefined,
-              laneSessions: filteredSessions,
+              lastSyncError: cleaned.lastSyncError,
+              laneSessions: cleaned.laneSessions,
               ...(nextStatus ? { status: nextStatus } : {}),
               updatedAt: new Date(),
             });
           } else {
-            task.lastSyncError = undefined;
-            task.laneSessions = filteredSessions;
+            task.lastSyncError = cleaned.lastSyncError;
+            task.laneSessions = cleaned.laneSessions;
             if (nextStatus) task.status = nextStatus;
             task.updatedAt = new Date();
             await system.taskStore.save(task);

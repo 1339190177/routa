@@ -44,7 +44,8 @@ export interface SystemJobStatus extends SystemJobMeta {
 
 // ─── Job Definitions ────────────────────────────────────────────────
 
-const SYSTEM_JOBS: SystemJobMeta[] = [
+/** Built-in jobs registered at module load. */
+const builtinJobs: SystemJobMeta[] = [
   {
     id: "schedule-tick",
     name: "Schedule Tick",
@@ -89,6 +90,20 @@ const SYSTEM_JOBS: SystemJobMeta[] = [
   },
 ];
 
+// ─── Health Rules ───────────────────────────────────────────────────
+
+export interface HealthRule {
+  /** Consecutive failures before alerting. */
+  consecutiveFailThreshold: number;
+  /** Minimum duration (ms) between repeated alerts for the same job. */
+  alertCooldownMs: number;
+}
+
+const DEFAULT_HEALTH_RULE: HealthRule = {
+  consecutiveFailThreshold: 3,
+  alertCooldownMs: 5 * 60 * 1000,
+};
+
 const MAX_RUNS_PER_JOB = 100;
 const GLOBAL_KEY = "__routa_system_heartbeat_registry__";
 
@@ -101,12 +116,14 @@ interface JobState {
   lastFinishedAt: number | null;
   lastDurationMs: number | null;
   lastError: string | null;
+  consecutiveFailures: number;
+  lastAlertAt: number | null;
 }
 
 function createRegistryState(): Map<string, JobState> {
   const map = new Map<string, JobState>();
-  for (const meta of SYSTEM_JOBS) {
-    map.set(meta.id, { meta, lastStatus: "idle", lastStartedAt: null, lastFinishedAt: null, lastDurationMs: null, lastError: null });
+  for (const meta of builtinJobs) {
+    map.set(meta.id, { meta, lastStatus: "idle", lastStartedAt: null, lastFinishedAt: null, lastDurationMs: null, lastError: null, consecutiveFailures: 0, lastAlertAt: null });
   }
   return map;
 }
@@ -115,9 +132,26 @@ function getRegistry(): Map<string, JobState> {
   const g = globalThis as Record<string, unknown>;
   if (!g[GLOBAL_KEY]) {
     g[GLOBAL_KEY] = createRegistryState();
-    console.log(`[HeartbeatRegistry] Registered ${SYSTEM_JOBS.length} system jobs: ${SYSTEM_JOBS.map((j) => j.id).join(", ")}`);
+    const ids = [...(g[GLOBAL_KEY] as Map<string, JobState>).keys()];
+    console.log(`[HeartbeatRegistry] Registered ${ids.length} system jobs: ${ids.join(", ")}`);
   }
   return g[GLOBAL_KEY] as Map<string, JobState>;
+}
+
+// ─── Dynamic Registration ───────────────────────────────────────────
+
+export function registerJob(meta: SystemJobMeta): void {
+  const registry = getRegistry();
+  if (registry.has(meta.id)) return;
+  registry.set(meta.id, { meta, lastStatus: "idle", lastStartedAt: null, lastFinishedAt: null, lastDurationMs: null, lastError: null, consecutiveFailures: 0, lastAlertAt: null });
+  console.log(`[HeartbeatRegistry] Registered dynamic job: ${meta.id}`);
+}
+
+export function unregisterJob(jobId: string): void {
+  const registry = getRegistry();
+  if (registry.delete(jobId)) {
+    console.log(`[HeartbeatRegistry] Unregistered job: ${jobId}`);
+  }
 }
 
 // ─── DB Operations ──────────────────────────────────────────────────
@@ -191,6 +225,17 @@ function queryRecentRuns(db: SqliteDatabase, jobId: string, limit: number): Syst
 
 // ─── DB Access Helper ───────────────────────────────────────────────
 
+function checkHealthAlert(jobId: string, state: JobState): void {
+  if (state.consecutiveFailures < DEFAULT_HEALTH_RULE.consecutiveFailThreshold) return;
+  const now = Date.now();
+  if (state.lastAlertAt && now - state.lastAlertAt < DEFAULT_HEALTH_RULE.alertCooldownMs) return;
+  state.lastAlertAt = now;
+  console.error(
+    `[HeartbeatRegistry] HEALTH ALERT: job "${jobId}" has failed ${state.consecutiveFailures} consecutive times. ` +
+    `Last error: ${state.lastError ?? "unknown"}`,
+  );
+}
+
 let tableEnsured = false;
 
 function getDb(): SqliteDatabase | null {
@@ -252,6 +297,7 @@ export async function withHeartbeat<T>(
     state.lastStatus = "success";
     state.lastFinishedAt = finishedAt;
     state.lastDurationMs = durationMs;
+    state.consecutiveFailures = 0;
 
     if (db) {
       try {
@@ -270,6 +316,10 @@ export async function withHeartbeat<T>(
     state.lastFinishedAt = finishedAt;
     state.lastDurationMs = durationMs;
     state.lastError = errorMsg;
+    state.consecutiveFailures++;
+
+    // Health alert on consecutive failures
+    checkHealthAlert(jobId, state);
 
     if (db) {
       try {
@@ -288,32 +338,32 @@ export async function withHeartbeat<T>(
 export function getSystemJobStatuses(): SystemJobStatus[] {
   const registry = getRegistry();
   const db = getDb();
+  const results: SystemJobStatus[] = [];
 
-  return SYSTEM_JOBS.map((meta) => {
-    const state = registry.get(meta.id)!;
+  for (const [id, state] of registry) {
     let recentRuns: SystemJobRun[] = [];
-
     if (db) {
       try {
-        recentRuns = queryRecentRuns(db, meta.id, 20);
-      } catch { /* swallow — return empty */ }
+        recentRuns = queryRecentRuns(db, id, 20);
+      } catch { /* swallow */ }
     }
-
-    return {
-      ...meta,
+    results.push({
+      ...state.meta,
       lastStatus: state.lastStatus,
       lastStartedAt: state.lastStartedAt,
       lastFinishedAt: state.lastFinishedAt,
       lastDurationMs: state.lastDurationMs,
       lastError: state.lastError,
       recentRuns,
-    };
-  });
+    });
+  }
+
+  return results;
 }
 
 /**
  * Get all registered job metadata (for startup logging).
  */
 export function getRegisteredJobs(): SystemJobMeta[] {
-  return [...SYSTEM_JOBS];
+  return [...getRegistry().values()].map((s) => s.meta);
 }

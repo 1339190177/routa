@@ -21,7 +21,7 @@ import { getKanbanAutomationSteps, resolveTaskStatusForBoardColumn } from "../mo
 import { type Task, type TaskLaneSession, type TaskLaneSessionRecoveryReason, type TaskStatus } from "../models/task";
 import type { KanbanBoardStore } from "../store/kanban-board-store";
 import type { TaskStore } from "../store/task-store";
-import type { ColumnTransitionData } from "./column-transition";
+import type { ColumnTransitionData, ColumnTransitionSource } from "./column-transition";
 import { resolveTransitionAutomation } from "./column-transition";
 import { getDefaultKanbanDevSessionSupervision } from "./board-session-supervision";
 import { markTaskLaneSessionStatus, upsertTaskLaneSession } from "./task-lane-history";
@@ -35,18 +35,25 @@ import { shouldSkipTickForMemory } from "./memory-guard";
 import { withHeartbeat } from "../scheduling/system-heartbeat-registry";
 import {
   parseCbResetCount,
+  parseSyncError,
+  getErrorType,
+  isCircuitBreaker,
+  formatSyncError,
   buildCircuitBreakerError,
   buildRateLimitedError,
   buildDoneStuckError,
   buildDependencyBlockedError,
 } from "./sync-error-writer";
+import { getKanbanConfig } from "./kanban-config";
 
-const WATCHDOG_SCAN_INTERVAL_MS = 30_000;
-const COMPLETED_AUTOMATION_CLEANUP_DELAY_MS = 30_000;
-const STALE_QUEUED_THRESHOLD_MS = 60_000;
-const MAX_AUTOMATION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 hours
-const SESSION_RETRY_LIMIT = parseInt(process.env.ROUTA_SESSION_RETRY_LIMIT ?? "3", 10);
-const SESSION_RETRY_RESET_MS = parseInt(process.env.ROUTA_SESSION_RETRY_RESET_MS ?? `${5 * 60 * 1000}`, 10);
+const cfg = getKanbanConfig();
+const WATCHDOG_SCAN_INTERVAL_MS = cfg.watchdogScanIntervalMs;
+const COMPLETED_AUTOMATION_CLEANUP_DELAY_MS = cfg.completedCleanupDelayMs;
+const STALE_QUEUED_THRESHOLD_MS = cfg.staleQueuedThresholdMs;
+const MAX_AUTOMATION_DURATION_MS = cfg.maxAutomationDurationMs;
+const SESSION_RETRY_LIMIT = cfg.sessionRetryLimit;
+const SESSION_RETRY_RESET_MS = cfg.sessionRetryResetMs;
+/** @deprecated Use isCircuitBreaker() from sync-error-writer instead. Kept for backward compat. */
 export const CIRCUIT_BREAKER_MARKER = "[circuit-breaker]";
 export const RATE_LIMITED_MARKER = "[rate-limited]";
 
@@ -71,6 +78,25 @@ interface RecoveryNotificationParams {
   reason: string;
   mode: KanbanDevSessionSupervisionMode;
   maxTurnsHit?: boolean;
+  /** Structured context from the failed/recovered session */
+  recoveryContext?: RecoverySessionContext;
+}
+
+/** Context about the previous session that triggered recovery. */
+export interface RecoverySessionContext {
+  /** Human-readable summary of what the previous session did */
+  previousSessionSummary?: string;
+  /** Specific error or failure detail */
+  failureDetail?: string;
+  /** How long the previous session ran, in ms */
+  previousDurationMs?: number;
+}
+
+function translateRecoveryReason(reason: string): string {
+  if (reason.includes("watchdog_inactivity")) return "Agent was inactive for too long (watchdog timeout)";
+  if (reason.includes("completion_criteria_not_met")) return "Agent stopped before completion criteria were met";
+  if (reason.includes("agent_failed")) return "Agent session failed";
+  return reason;
 }
 
 export type SendKanbanSessionPrompt = (params: {
@@ -133,22 +159,57 @@ function getRecoveryReason(event: AgentEvent, completionSatisfied: boolean, maxT
 }
 
 function buildKanbanRecoveryPrompt(params: RecoveryNotificationParams): string {
-  const mode = params.mode === "watchdog_retry" ? "watchdog_retry" : "ralph_loop";
   const lines = [
-    `hi，这里有一个 Agent（acp session id = ${params.sessionId}）很久没动了，你看看怎么回事，要不要继续？`,
-    `Card: ${params.cardTitle} (${params.cardId})`,
-    `Board: ${params.boardId}`,
-    `Column: ${params.columnId}`,
-    `Mode: ${mode}`,
-    `Reason: ${params.reason}`,
+    "## Recovery Alert",
+    "",
+    `A previous agent session (id: ${params.sessionId}) in this lane is no longer active.`,
+    `**Reason:** ${translateRecoveryReason(params.reason)}`,
+    `**Card:** ${params.cardTitle} (${params.cardId})`,
+    `**Board:** ${params.boardId}`,
+    `**Column:** ${params.columnId}`,
+    `**Recovery mode:** ${params.mode === "watchdog_retry" ? "watchdog_retry" : "ralph_loop"}`,
   ];
+
   if (params.maxTurnsHit) {
     lines.push(
-      "⚠️ Previous session hit the max-turns limit and was terminated mid-task.",
-      "IMPORTANT: Before continuing the implementation, first commit ALL uncommitted changes from the previous session using `git add` + `git commit`. This preserves partial progress in case this session also runs out of turns.",
+      "",
+      "## IMPORTANT: Max Turns Exceeded",
+      "The previous session hit the turn limit and was terminated mid-task.",
+      "Before continuing: commit ALL uncommitted changes using `git add` + `git commit` to preserve partial progress.",
     );
   }
-  lines.push("如果 session 还在，请直接处理并继续任务；否则尽快确认下一步重建策略。");
+
+  if (params.recoveryContext?.previousSessionSummary) {
+    lines.push(
+      "",
+      "## Previous Session Summary",
+      params.recoveryContext.previousSessionSummary,
+    );
+  }
+
+  if (params.recoveryContext?.failureDetail) {
+    lines.push(
+      "",
+      "## Failure Detail",
+      params.recoveryContext.failureDetail,
+    );
+  }
+
+  if (params.recoveryContext?.previousDurationMs != null) {
+    const minutes = Math.round(params.recoveryContext.previousDurationMs / 60000);
+    lines.push(
+      "",
+      `**Previous session duration:** ${minutes} minute(s)`,
+    );
+  }
+
+  lines.push(
+    "",
+    "## Your Task",
+    "Continue the objective of this card. Pick up where the previous session left off.",
+    "If the previous session made partial progress, do NOT redo completed work.",
+  );
+
   return lines.join("\\n");
 }
 
@@ -159,13 +220,11 @@ function getAutomationStepLabel(step: KanbanAutomationStep | undefined, stepInde
   return step.specialistName ?? step.specialistId ?? step.role ?? `Step ${stepIndex + 1}`;
 }
 
-const NON_DEV_AUTOMATION_REPEAT_LIMIT = 3;
+const NON_DEV_AUTOMATION_REPEAT_LIMIT = cfg.nonDevRepeatLimit;
 /** Blocked lane allows more retries but is still bounded to prevent infinite loops. */
-const BLOCKED_AUTOMATION_REPEAT_LIMIT = 10;
+const BLOCKED_AUTOMATION_REPEAT_LIMIT = cfg.blockedRepeatLimit;
 /** Only failed lane sessions within this window count toward the repeat limit. Older failures expire. */
-const REPEAT_LIMIT_TIME_WINDOW_MS = parseInt(
-  process.env.ROUTA_REPEAT_LIMIT_TIME_WINDOW_MS ?? `${30 * 60 * 1000}`, 10,
-);
+const REPEAT_LIMIT_TIME_WINDOW_MS = cfg.repeatLimitTimeWindowMs;
 
 export function getNonDevAutomationRunCount(
   task: Pick<Task, "laneSessions"> | undefined,
@@ -447,14 +506,18 @@ export class KanbanWorkflowOrchestrator {
   private async handleColumnTransitionData(data: ColumnTransitionData): Promise<void> {
     // Anti-double-trigger: if a watchdog stale retry fires while LaneScanner
     // already re-triggered this card, skip to prevent duplicate sessions.
-    const rawData = data as unknown as Record<string, unknown>;
-    if (rawData._source === "watchdog_stale_retry" && this.activeAutomations.has(data.cardId)) {
+    const source = data.source;
+    const isWatchdogRetry = source?.type === "watchdog_retry"
+      || (source === undefined && (data as unknown as Record<string, unknown>)._source === "watchdog_stale_retry");
+    if (isWatchdogRetry && this.activeAutomations.has(data.cardId)) {
       return;
     }
 
     // Advance-only: LaneScanner detected a stuck card (all steps completed but
     // auto-advance failed). Skip full automation and only retry the card move.
-    if (rawData._advanceOnly) {
+    const isAdvanceOnly = source?.type === "advance_only"
+      || (source === undefined && !!(data as unknown as Record<string, unknown>)._advanceOnly);
+    if (isAdvanceOnly) {
       const task = await this.taskStore.get(data.cardId);
       if (!task || !task.columnId) return;
       const board = await this.kanbanBoardStore.get(data.boardId);
@@ -788,7 +851,7 @@ export class KanbanWorkflowOrchestrator {
           this.sessionFailureCounts.delete(data.cardId);
           // Clear circuit breaker marker on success — reload to avoid overwriting
           // fields (triggerSessionId, laneSessions) modified by startKanbanTaskSession.
-          if (task?.lastSyncError?.startsWith(CIRCUIT_BREAKER_MARKER)) {
+          if (task?.lastSyncError && isCircuitBreaker(task.lastSyncError)) {
             const freshTask = await this.taskStore.get(data.cardId);
             if (freshTask) {
               freshTask.lastSyncError = undefined;
@@ -842,8 +905,10 @@ export class KanbanWorkflowOrchestrator {
               const cbTask = await this.taskStore.get(data.cardId);
               if (cbTask) {
                 const prevResets = parseCbResetCount(cbTask.lastSyncError);
-                const prError = cbTask.lastSyncError?.startsWith(PR_FAILURE_PREFIX) ? ` | prev: ${cbTask.lastSyncError}` : "";
-                cbTask.lastSyncError = buildCircuitBreakerError(prevResets, `Session creation failed ${newCount} times. Retry after cooldown.`, prError || undefined);
+                const existingPayload = parseSyncError(cbTask.lastSyncError);
+                const prError = existingPayload?.prev
+                  ?? (cbTask.lastSyncError?.includes(PR_FAILURE_PREFIX) ? cbTask.lastSyncError : undefined);
+                cbTask.lastSyncError = buildCircuitBreakerError(prevResets, `Session creation failed ${newCount} times. Retry after cooldown.`, prError);
                 cbTask.updatedAt = new Date();
                 await this.taskStore.save(cbTask);
               }
@@ -976,7 +1041,10 @@ export class KanbanWorkflowOrchestrator {
           `[WorkflowOrchestrator] Soft-gate: GATE step ${getAutomationStepLabel(automation.steps[automation.currentStepIndex], automation.currentStepIndex)} failed for card ${cardId}. Advancing to next step as soft-gate.`,
         );
         if (task.lastSyncError) {
-          task.lastSyncError = `${getAutomationStepLabel(automation.steps[automation.currentStepIndex], automation.currentStepIndex)} failed but soft-gated to next step.`;
+          task.lastSyncError = formatSyncError({
+            type: "gate_soft_fail",
+            message: `${getAutomationStepLabel(automation.steps[automation.currentStepIndex], automation.currentStepIndex)} failed but soft-gated to next step.`,
+          });
         }
         const startedNextStep = await this.startNextAutomationStep(cardId, automation, task, nextStepIndex);
         if (startedNextStep) {
@@ -1004,6 +1072,26 @@ export class KanbanWorkflowOrchestrator {
 
       if (task && shouldRecover) {
         const recoveryReason = getRecoveryReason(event, completionSatisfied, maxTurnsHit);
+
+        // Build structured recovery context from the failed session
+        const previousSession = task.laneSessions?.find(
+          (s) => s.sessionId === eventSessionId,
+        );
+        const recoveryContext: RecoverySessionContext | undefined = previousSession
+          ? {
+              previousSessionSummary: [
+                `Step ${typeof previousSession.stepIndex === "number" ? previousSession.stepIndex + 1 : "?"} in ${previousSession.columnName ?? previousSession.columnId ?? "unknown lane"}`,
+                previousSession.provider ? `provider: ${previousSession.provider}` : undefined,
+                previousSession.role ? `role: ${previousSession.role}` : undefined,
+              ].filter(Boolean).join(", "),
+              failureDetail: (typeof event.data?.error === "string" ? event.data.error : undefined)
+                ?? task.lastSyncError,
+              previousDurationMs: previousSession.completedAt && previousSession.startedAt
+                ? new Date(previousSession.completedAt).getTime() - new Date(previousSession.startedAt).getTime()
+                : undefined,
+            }
+          : undefined;
+
         await this.notifyKanbanAgent({
           workspaceId: automation.workspaceId,
           sessionId: eventSessionId,
@@ -1014,6 +1102,7 @@ export class KanbanWorkflowOrchestrator {
           reason: `Recovery reason: ${recoveryReason}.`,
           mode: automation.supervision.mode,
           maxTurnsHit,
+          recoveryContext,
         });
         const recovered = await this.recoverAutomation(cardId, automation, task, recoveryReason);
         if (recovered) {
@@ -1407,7 +1496,7 @@ export class KanbanWorkflowOrchestrator {
   private async scanStaleQueuedAutomations(now: number): Promise<void> {
     // This can happen when createSession returned null or an async handler
     // failed silently (e.g. HMR restart during column transition processing).
-    const STALE_MAX_RETRIES = parseInt(process.env.ROUTA_STALE_MAX_RETRIES ?? "3", 10);
+    const STALE_MAX_RETRIES = cfg.staleMaxRetries;
     for (const [cardId, automation] of this.activeAutomations.entries()) {
       if (automation.status !== "queued") continue;
       const retryCount = automation.staleRetryCount ?? 0;
@@ -1466,7 +1555,7 @@ export class KanbanWorkflowOrchestrator {
             fromColumnName: "Watchdog",
             toColumnName: automation.columnName,
             staleRetryCount: retryCount + 1,
-            _source: "watchdog_stale_retry",
+            source: { type: "watchdog_retry", staleRetryCount: retryCount + 1 },
           } as unknown as Record<string, unknown>,
           timestamp: new Date(),
         });
@@ -1531,7 +1620,7 @@ export class KanbanWorkflowOrchestrator {
       if (!t.dependencies.includes(completedCardId)) continue;
 
       const depCheck = await checkDependencyGate(t, board.columns, this.taskStore);
-      if (!depCheck.blocked && t.lastSyncError?.startsWith("Blocked by unfinished dependencies")) {
+      if (!depCheck.blocked && getErrorType(t.lastSyncError) === "dependency_blocked") {
         const fields = { lastSyncError: undefined as string | undefined, updatedAt: new Date() };
         // Use atomicUpdate to avoid overwriting concurrent changes
         if (t.version !== undefined && this.taskStore.atomicUpdate) {
@@ -1562,6 +1651,7 @@ export class KanbanWorkflowOrchestrator {
             toColumnId: t.columnId ?? "",
             fromColumnName: "",
             toColumnName: "",
+            source: { type: "dependency_unblock" },
           },
           timestamp: new Date(),
         });
@@ -1855,7 +1945,7 @@ export class KanbanWorkflowOrchestrator {
     }
   }
 
-  private static readonly WORKTREE_CLEANUP_DELAY_MS = 60_000;
+  private static readonly WORKTREE_CLEANUP_DELAY_MS = cfg.worktreeCleanupDelayMs;
 
   /**
    * Schedule delayed worktree cleanup for a completed task.
@@ -2020,6 +2110,7 @@ export class KanbanWorkflowOrchestrator {
           toColumnId: nextColumn.id,
           fromColumnName: currentColumn.name,
           toColumnName: nextColumn.name,
+          source: { type: "auto_advance", fromColumnId: automation.columnId },
         },
         timestamp: new Date(),
       });

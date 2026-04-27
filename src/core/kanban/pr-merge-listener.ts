@@ -18,6 +18,7 @@ import { rebaseBranchSafe } from "../git/git-operations";
 import { fetchRemote, fetchAndFastForward } from "../git/git-utils";
 import type { RoutaSystem } from "../routa-system";
 import { getKanbanBranchRules, DEFAULT_BRANCH_RULES } from "./board-branch-rules";
+import { getErrorType } from "./sync-error-writer";
 import { onChildTaskStatusChanged } from "./parent-child-lifecycle";
 import { parsePrUrl } from "./pr-status-verifier";
 import { getServerBridge } from "../platform";
@@ -205,9 +206,7 @@ async function handleDownstreamTasks(
     if (!depTask.dependencies.includes(mergedTask.id)) continue;
 
     // Re-check dependency gate — if all deps now satisfied, clear the block
-    if (
-      depTask.lastSyncError?.startsWith("Blocked by unfinished dependencies")
-    ) {
+    if (getErrorType(depTask.lastSyncError) === "dependency_blocked") {
       depTask.lastSyncError = undefined;
       depTask.updatedAt = new Date();
       await system.taskStore.save(depTask);

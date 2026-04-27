@@ -21,6 +21,16 @@ import type { FlowDiagnosisReport } from "./flow-ledger-types";
 import { formatFlowGuidanceForPrompt } from "./flow-ledger";
 import { isGitLab } from "../vcs/vcs-provider";
 
+/** Sanitize a user-supplied string before embedding it in a prompt. */
+function sanitizeForPrompt(input: string, maxLen = 2000): string {
+  if (!input) return input;
+  let s = input.length > maxLen ? input.slice(0, maxLen) + "…[truncated]" : input;
+  // Escape markdown header/blockquote markers that could hijack prompt structure
+  s = s.replace(/^(#{1,6}\s)/gm, "\\$1");
+  s = s.replace(/^(\s*>)/gm, "\\$1");
+  return s;
+}
+
 export interface TaskPromptSummaryContext {
   evidenceSummary?: TaskEvidenceSummary;
   storyReadiness?: TaskStoryReadiness;
@@ -205,7 +215,9 @@ export function buildTaskPrompt(
         "8. Do not call `report_to_parent`; this Kanban automation session is managed directly by the workflow",
       ];
 
-  const artifactGateSection = [
+  // Artifact Gates: skip for blocked, done, archived — not actionable there
+  const showArtifactGates = !isBacklogPlanning && currentColumnStage !== "blocked" && !isTerminalStage;
+  const artifactGateSection = showArtifactGates ? [
     "## Artifact Gates",
     "",
     `**Current lane gate:** ${transitionArtifacts.currentColumn?.name ?? currentColumnId} requires ${formatArtifactSummary(transitionArtifacts.currentRequiredArtifacts)} to enter.`,
@@ -220,7 +232,7 @@ export function buildTaskPrompt(
     "Use `list_artifacts` to confirm what already exists, then use `provide_artifact` or `capture_screenshot` to fill gaps.",
     "Do not treat `update_card` text as artifact evidence. Artifact gates are satisfied only by stored artifacts.",
     "",
-  ];
+  ] : [];
 
   // For terminal stages (done/archived), fall back to current column's delivery rules
   // so auto-merger and conflict-resolver specialists can see autoMergeAfterPR config.
@@ -252,7 +264,7 @@ export function buildTaskPrompt(
       ]
     : [];
 
-  const laneRunHistorySection = !isBacklogPlanning && previousLaneRun
+  const laneRunHistorySection = !isBacklogPlanning && !isTerminalStage && previousLaneRun
     ? [
         "## Current Lane History",
         "",
@@ -264,7 +276,7 @@ export function buildTaskPrompt(
       ]
     : [];
 
-  const laneHandoffSection = !isBacklogPlanning && (previousLaneSession || pendingLaneHandoffs.length > 0)
+  const laneHandoffSection = !isBacklogPlanning && !isTerminalStage && currentColumnStage !== "blocked" && (previousLaneSession || pendingLaneHandoffs.length > 0)
     ? [
         "## Lane Handoff Context",
         "",
@@ -394,7 +406,7 @@ export function buildTaskPrompt(
     : [];
 
   return [
-    `You are assigned to Kanban task: ${task.title}`,
+    `You are assigned to Kanban task: ${sanitizeForPrompt(task.title)}`,
     "",
     "## Context",
     "",
@@ -418,7 +430,7 @@ export function buildTaskPrompt(
     "",
     "## Objective",
     "",
-    task.objective,
+    sanitizeForPrompt(task.objective),
     "",
     ...(task.dependencies.length > 0
       ? [
@@ -592,16 +604,31 @@ async function triggerAcpTaskAgent(params: {
     sessionParams.env = { TASK_DEV_PORT: String(params.taskDevPort) };
   }
 
-  const newSessionResponse = await fetch(`${params.origin}/api/acp`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: uuidv4(),
-      method: "session/new",
-      params: sessionParams,
-    }),
-  });
+  const SESSION_CREATE_TIMEOUT_MS = 30_000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SESSION_CREATE_TIMEOUT_MS);
+
+  let newSessionResponse: Response;
+  try {
+    newSessionResponse = await fetch(`${params.origin}/api/acp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: uuidv4(),
+        method: "session/new",
+        params: sessionParams,
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return { error: `Session creation timed out after ${SESSION_CREATE_TIMEOUT_MS / 1000}s.` };
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   const newSessionBody = await newSessionResponse.json() as { result?: { sessionId?: string }; error?: { message?: string } };
   const sessionId = newSessionBody.result?.sessionId;

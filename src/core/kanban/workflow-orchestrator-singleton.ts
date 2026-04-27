@@ -8,9 +8,10 @@
 import {
   KanbanWorkflowOrchestrator,
   type AutomationSessionSupervisionContext,
-  CIRCUIT_BREAKER_MARKER,
   parseCbResetCount,
 } from "./workflow-orchestrator";
+import { buildCircuitBreakerError, buildRateLimitedError, isCircuitBreaker } from "./sync-error-writer";
+import { getKanbanConfig } from "./kanban-config";
 import type { RoutaSystem } from "../routa-system";
 import type {
   KanbanAutomationStep,
@@ -61,8 +62,9 @@ const QUEUE_KEY = "__routa_kanban_session_queue__";
 const ORCHESTRATOR_VERSION = 2;
 
 const FAILURES_KEY = "__routa_session_failure_counts__";
-const SESSION_RETRY_LIMIT = parseInt(process.env.ROUTA_SESSION_RETRY_LIMIT ?? "3", 10);
-const SESSION_RETRY_RESET_MS = parseInt(process.env.ROUTA_SESSION_RETRY_RESET_MS ?? `${5 * 60 * 1000}`, 10);
+const singletonCfg = getKanbanConfig();
+const SESSION_RETRY_LIMIT = singletonCfg.sessionRetryLimit;
+const SESSION_RETRY_RESET_MS = singletonCfg.sessionRetryResetMs;
 
 interface FailureRecord {
   count: number;
@@ -166,7 +168,7 @@ async function createAutomationSession(
   if (result.sessionId) {
     failures.delete(params.cardId);
     // Clear circuit breaker marker on success
-    if (task.lastSyncError?.startsWith(CIRCUIT_BREAKER_MARKER)) {
+    if (task.lastSyncError && isCircuitBreaker(task.lastSyncError)) {
       task.lastSyncError = undefined;
       task.updatedAt = new Date();
       await system.taskStore.save(task);
@@ -178,7 +180,7 @@ async function createAutomationSession(
         `[createAutomationSession] Rate-limited for card ${params.cardId}, not counting towards circuit breaker.`,
       );
       if (task) {
-        task.lastSyncError = `[rate-limited] ${result.error}`;
+        task.lastSyncError = buildRateLimitedError(result.error ?? "Rate limited");
         task.updatedAt = new Date();
         await system.taskStore.save(task);
       }
@@ -211,7 +213,7 @@ async function createAutomationSession(
     // Write circuit breaker marker to task when limit exceeded
     if (newCount >= SESSION_RETRY_LIMIT && task) {
       const prevResets = parseCbResetCount(task.lastSyncError);
-      task.lastSyncError = `[circuit-breaker:reset=${prevResets}] Session creation failed ${newCount} times. Retry after cooldown.`;
+      task.lastSyncError = buildCircuitBreakerError(prevResets, `Session creation failed ${newCount} times. Retry after cooldown.`);
       task.updatedAt = new Date();
       await system.taskStore.save(task);
     }
