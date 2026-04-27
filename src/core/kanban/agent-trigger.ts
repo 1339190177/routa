@@ -213,6 +213,21 @@ export function buildTaskPrompt(
           ? `7. Only call \`get_board\` if you truly need whole-board state, and if you do, pass boardId: "${boardId}". Do not call \`get_board\` with empty arguments.`
           : "7. Only call `get_board` if the task context already provides a concrete boardId. Do not call `get_board` with empty arguments or placeholder values.",
         "8. Do not call `report_to_parent`; this Kanban automation session is managed directly by the workflow",
+        // --- Column-specific guardrails ---
+        ...(currentColumnId === "dev" ? [
+          "9. Do not modify files outside this task's declared scope. If a change in an unrelated file seems necessary, report it via update_card instead of making the change yourself.",
+          "10. Remove all debug artifacts (console.log, print statements, TODO hacks, commented-out code) before calling move_card.",
+          "11. If the project has a lint, type-check, or test command documented in its configuration files, run it in the task worktree before calling move_card. Fix any failures before advancing the card.",
+          "12. Follow project-level instruction files (e.g., CLAUDE.md, AGENTS.md, .cursorrules) for project-specific coding standards and conventions.",
+          "13. When a tool call invokes an external service (e.g., shell commands that call remote APIs such as gh, git push, npm publish), do not batch it with other tool calls in the same response — execute such calls one at a time. Read-only file operations (Read, Grep, Glob) may be batched freely.",
+        ] : []),
+        ...(currentColumnId === "review" ? [
+          "9. Do not modify implementation code during review. If a bug is found, report it in update_card but do not fix it — describe the issue so the dev specialist can address it.",
+          "10. Do not commit changes during review. This column is read-only verification only.",
+        ] : []),
+        ...(currentColumnId === "todo" ? [
+          "9. When decomposing tasks, ensure each sub-task has clear acceptance criteria that can be independently verified. Vague or unscoped sub-tasks will cause downstream failures.",
+        ] : []),
       ];
 
   // Artifact Gates: skip for blocked, done, archived — not actionable there
