@@ -25,7 +25,9 @@ import type {
 } from "./vcs-provider";
 
 import { type GitLabAccessLevel, type InternalPermission, mapGitLabRoleToPermission, parseAccessLevel } from "./gitlab-permission";
-import { GIT_DEFAULT_BRANCH } from "../git/git-defaults";
+
+/** Default branch name when GitLab API returns null. Must match GIT_DEFAULT_BRANCH. */
+const GIT_DEFAULT_BRANCH = "main";
 
 /** Cached API version detection result */
 let apiVersionCache: { version: string; ce: boolean; detected: boolean } | null = null;
