@@ -20,6 +20,7 @@ import { getTaskDevServerRegistry } from "./task-dev-server-registry";
 import type { FlowDiagnosisReport } from "./flow-ledger-types";
 import { formatFlowGuidanceForPrompt } from "./flow-ledger";
 import { isGitLab } from "../vcs/vcs-provider";
+import { resolveBehavioralDiscipline } from "./behavioral-discipline-loader";
 
 /** Sanitize a user-supplied string before embedding it in a prompt. */
 function sanitizeForPrompt(input: string, maxLen = 2000): string {
@@ -104,7 +105,7 @@ export function getInternalApiOrigin(): string {
 export function buildTaskPrompt(
   task: Task,
   boardColumns: KanbanColumn[] = [],
-  options?: { currentSessionId?: string; summaryContext?: TaskPromptSummaryContext; branch?: string; baseBranch?: string; flowReport?: FlowDiagnosisReport },
+  options?: { currentSessionId?: string; summaryContext?: TaskPromptSummaryContext; branch?: string; baseBranch?: string; flowReport?: FlowDiagnosisReport; workspaceMetadata?: Record<string, string>; cwd?: string },
 ): string {
   const labels = task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : "Labels: none";
   const currentColumnId = task.columnId ?? "backlog";
@@ -478,6 +479,11 @@ export function buildTaskPrompt(
     "## Instructions",
     "",
     ...instructions,
+    "",
+    ...((): string[] => {
+      const discipline = resolveBehavioralDiscipline(options?.workspaceMetadata, options?.cwd);
+      return discipline.content ? [discipline.content] : [];
+    })(),
   ].join("\n");
 }
 
@@ -598,6 +604,7 @@ async function triggerAcpTaskAgent(params: {
   flowReport?: FlowDiagnosisReport;
   eventBus?: EventBus;
   taskDevPort?: number;
+  workspaceMetadata?: Record<string, string>;
 }): Promise<AutomationRunHandle | { error: string }> {
   const provider = resolveKanbanAutomationProvider(params.task.assignedProvider);
   const role = params.task.assignedRole ?? "CRAFTER";
@@ -666,6 +673,8 @@ async function triggerAcpTaskAgent(params: {
           branch: params.branch,
           baseBranch: params.baseBranch,
           flowReport: params.flowReport,
+          workspaceMetadata: params.workspaceMetadata,
+          cwd: params.cwd,
         }),
       }],
     });
@@ -712,6 +721,8 @@ async function triggerA2ATaskAgent(params: {
   summaryContext?: TaskPromptSummaryContext;
   flowReport?: FlowDiagnosisReport;
   eventBus?: EventBus;
+  workspaceMetadata?: Record<string, string>;
+  cwd?: string;
 }): Promise<AutomationRunHandle | { error: string }> {
   const agentCardUrl = params.step?.agentCardUrl?.trim();
   if (!agentCardUrl) {
@@ -753,6 +764,8 @@ async function triggerA2ATaskAgent(params: {
       currentSessionId: localSessionId,
       summaryContext: params.summaryContext,
       flowReport: params.flowReport,
+      workspaceMetadata: params.workspaceMetadata,
+      cwd: params.cwd,
     }),
     metadata,
   );
@@ -812,6 +825,7 @@ export async function triggerAssignedTaskAgent(params: {
   flowReport?: FlowDiagnosisReport;
   eventBus?: EventBus;
   taskDevPort?: number;
+  workspaceMetadata?: Record<string, string>;
 }): Promise<{ sessionId?: string; error?: string; transport?: KanbanTransport; externalTaskId?: string; contextId?: string; displayTarget?: string }> {
   const {
     origin,
@@ -827,6 +841,7 @@ export async function triggerAssignedTaskAgent(params: {
     flowReport,
     eventBus,
     taskDevPort,
+    workspaceMetadata,
   } = params;
   const transport = getStepTransport(step);
   const runHandle = transport === "a2a"
@@ -838,6 +853,8 @@ export async function triggerAssignedTaskAgent(params: {
         summaryContext,
         flowReport,
         eventBus,
+        workspaceMetadata,
+        cwd,
       })
     : await triggerAcpTaskAgent({
         origin,
@@ -852,6 +869,7 @@ export async function triggerAssignedTaskAgent(params: {
         flowReport,
         eventBus,
         taskDevPort,
+        workspaceMetadata,
       });
 
   if ("error" in runHandle) {

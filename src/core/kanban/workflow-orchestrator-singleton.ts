@@ -446,6 +446,7 @@ async function startKanbanTaskSession(
     flowReport,
     eventBus: system.eventBus,
     taskDevPort,
+    workspaceMetadata: workspace?.metadata,
   });
 
   if (triggerResult.sessionId) {
