@@ -633,21 +633,21 @@ export async function handleSessionPrompt({
   const { getRoutaOrchestrator } = await import("@/core/orchestration/orchestrator-singleton");
   const orchestrator = getRoutaOrchestrator();
   if (orchestrator) {
-    const sessionRecord = store.getSession(sessionId);
-    if (sessionRecord?.routaAgentId) {
+    const routaSession = store.getSession(sessionId);
+    if (routaSession?.routaAgentId) {
       const { getRoutaSystem } = await import("@/core/routa-system");
       const system = getRoutaSystem();
-      const agent = await system.agentStore.get(sessionRecord.routaAgentId);
+      const agent = await system.agentStore.get(routaSession.routaAgentId);
       if (agent?.role === AgentRole.ROUTA) {
-        const isFirstPrompt = !sessionRecord.firstPromptSent;
+        const isFirstPrompt = !routaSession.firstPromptSent;
         if (isFirstPrompt) {
           promptText = buildCoordinatorFirstPrompt({
             agentId: agent.id,
-            workspaceId: sessionRecord.workspaceId,
+            workspaceId: routaSession.workspaceId,
             userRequest: promptText,
-            specialistId: sessionRecord.specialistId,
-            specialistSystemPrompt: sessionRecord.specialistSystemPrompt,
-            provider: sessionRecord.provider,
+            specialistId: routaSession.specialistId,
+            specialistSystemPrompt: routaSession.specialistSystemPrompt,
+            provider: routaSession.provider,
           });
           store.markFirstPromptSent(sessionId);
         }
@@ -656,14 +656,14 @@ export async function handleSessionPrompt({
   }
 
   {
-    const sessionRecord = store.getSession(sessionId);
-    if (sessionRecord?.specialistSystemPrompt && !sessionRecord.firstPromptSent) {
-      promptText = sessionRecord.provider === "claude-code-sdk"
+    const specialistSession = store.getSession(sessionId);
+    if (specialistSession?.specialistSystemPrompt && !specialistSession.firstPromptSent) {
+      promptText = specialistSession.provider === "claude-code-sdk"
         ? promptText
-        : `${sessionRecord.specialistSystemPrompt}\n\n---\n\n${promptText}`;
+        : `${specialistSession.specialistSystemPrompt}\n\n---\n\n${promptText}`;
       store.markFirstPromptSent(sessionId);
       console.log(
-        `[ACP Route] Injected specialist systemPrompt for ${sessionRecord.specialistId} into session ${sessionId}`,
+        `[ACP Route] Injected specialist systemPrompt for ${specialistSession.specialistId} into session ${sessionId}`,
       );
     }
   }
