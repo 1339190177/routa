@@ -19,6 +19,16 @@ import { getServerBridge } from "@/core/platform";
 import { resolveGitIdentity } from "@/core/git/git-operations";
 
 /**
+ * Check if a path points to the main repo checkout (.routa/repos/<owner>--<repo>).
+ * Used to prevent accidental `git add -A` in the shared main checkout,
+ * which would pollute its index with staged changes from multiple tasks.
+ */
+function isMainCheckout(cwd: string): boolean {
+  const normalized = cwd.replace(/\\/g, "/");
+  return /\.routa\/repos\/[^/]+--[^/]+(\/)?$/.test(normalized);
+}
+
+/**
  * Execute a git command via the platform bridge.
  * Returns { stdout, stderr } like child_process.execFile.
  */
@@ -189,8 +199,14 @@ export class WorkspaceTools {
         );
       }
 
-      // Optionally stage all changes
+      // Optionally stage all changes — block if cwd is the main repo checkout
       if (params.stageAll) {
+        if (isMainCheckout(cwd)) {
+          return errorResult(
+            `Safety guard: refusing 'git add -A' in main checkout (${cwd}). ` +
+            `Use specific file paths or ensure cwd points to a task worktree.`
+          );
+        }
         await execFileAsync("git", ["add", "-A"], { cwd, timeout: 10000 });
       }
 

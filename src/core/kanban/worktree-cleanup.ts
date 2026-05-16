@@ -9,6 +9,7 @@
 import { AgentEvent, AgentEventType } from "../events/event-bus";
 import { GitWorktreeService } from "../git/git-worktree-service";
 import type { RoutaSystem } from "../routa-system";
+import { getServerBridge } from "../platform";
 import { safeAtomicSave } from "./atomic-task-update";
 
 const HANDLER_KEY = "kanban-worktree-cleanup";
@@ -24,6 +25,13 @@ export function startWorktreeCleanupListener(system: RoutaSystem): void {
       deleteBranch: boolean;
     };
 
+    // Cache codebaseId before worktree record is removed
+    let cachedCodebaseId: string | undefined;
+    try {
+      const existingWt = await system.worktreeStore.get(worktreeId);
+      cachedCodebaseId = existingWt?.codebaseId;
+    } catch { /* worktree may already be gone */ }
+
     try {
       const worktreeService = new GitWorktreeService(
         system.worktreeStore,
@@ -34,6 +42,22 @@ export function startWorktreeCleanupListener(system: RoutaSystem): void {
       console.log(
         `[WorktreeCleanup] Cleaned up worktree ${worktreeId} for task ${taskId}.`,
       );
+
+      // Clean main checkout index to remove staged residue left by agents
+      if (cachedCodebaseId) {
+        try {
+          const codebase = await system.codebaseStore.get(cachedCodebaseId);
+          if (codebase?.repoPath) {
+            const { exec } = getServerBridge().process;
+            await exec("git reset HEAD", { cwd: codebase.repoPath, timeout: 5000 });
+            await exec("git checkout -- .", { cwd: codebase.repoPath, timeout: 5000 });
+            console.info(`[WorktreeCleanup] Cleaned main checkout index for ${codebase.repoPath}`);
+          }
+        } catch (idxErr) {
+          // Non-critical: stale index doesn't break functionality
+          console.warn(`[WorktreeCleanup] Main checkout index cleanup failed: ${idxErr}`);
+        }
+      }
     } catch (err) {
       console.error(
         `[WorktreeCleanup] Failed to clean up worktree ${worktreeId}:`,
